@@ -14,8 +14,6 @@ import { getLeadsStats, getLeadQuality } from '@/lib/api/leads';
 import type { StatsLeadsByUser, LeadFilter } from '@/lib/api/leads';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { downloadCsv } from '@/lib/csv';
-import { Download } from 'lucide-react';
 
 const PRESETS: FilterPreset[] = [
   { id: 'all',       label: 'Barcha leadlar', pinned: true },
@@ -165,26 +163,6 @@ export default function LidlarPage() {
         sub={`Davr: ${values.start_date ?? '—'} → ${values.end_date ?? '—'}`}
         actions={
           <>
-            <Button
-              onClick={() => downloadCsv(
-                `lidlar-${values.start_date ?? ''}-${values.end_date ?? ''}`,
-                byUserFiltered.map(u => {
-                  const won = (u.by_status['CONVERTED'] ?? 0) + (u.by_status['WON'] ?? 0);
-                  return {
-                    masul: u.name || `User ${u.id}`,
-                    lidlar: u.total,
-                    daromad_usd: u.revenue,
-                    konversiya_pct: u.total ? ((won / u.total) * 100).toFixed(2) : '0',
-                  };
-                }),
-                [
-                  { key: 'masul', label: "Mas'ul" },
-                  { key: 'lidlar', label: 'Lidlar' },
-                  { key: 'daromad_usd', label: 'Daromad ($)' },
-                  { key: 'konversiya_pct', label: 'Konversiya (%)' },
-                ],
-              )}
-            ><Download className="w-3.5 h-3.5" /> CSV</Button>
             <Button onClick={() => statsQ.refetch()}>Yangilash</Button>
           </>
         }
