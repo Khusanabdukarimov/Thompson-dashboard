@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
+import { ErrorBoundary } from './ErrorBoundary';
+import { CommandPalette } from './CommandPalette';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 export function AppLayout() {
@@ -37,8 +39,11 @@ export function AppLayout() {
         >
           <Menu className="w-4 h-4 text-text" />
         </button>
-        <Outlet />
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
+      <CommandPalette />
     </div>
   );
 }

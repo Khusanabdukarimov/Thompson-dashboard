@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Search, X, Settings as Gear, Pin } from 'lucide-react';
+import { Search, X, Settings as Gear, Pin, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type FilterPreset = { id: string; label: string; pinned?: boolean };
+export type SavedFilter = { id: string; label: string; values: FilterValues; created_at: number };
 
 export type FilterField =
   | { key: string; label: string; type: 'text'; placeholder?: string }
@@ -33,6 +34,12 @@ type Props = {
   onActiveChipClear?: () => void;
 
   rightSlot?: ReactNode;
+
+  /** When set, "Save filter" button persists current values to localStorage under this key.
+   *  Saved filters appear in the preset sidebar. */
+  storageKey?: string;
+  /** Callback when a saved filter is selected — should set values from preset. */
+  onApplySavedFilter?: (values: FilterValues) => void;
 };
 
 export function FilterBar({
@@ -42,10 +49,44 @@ export function FilterBar({
   onClear, onApply,
   activeChipLabel, onActiveChipClear,
   rightSlot,
+  storageKey, onApplySavedFilter,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<'left' | 'right'>('left');
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Load saved filters from localStorage
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const raw = localStorage.getItem(`filter-saved.${storageKey}`);
+      if (raw) setSavedFilters(JSON.parse(raw) as SavedFilter[]);
+    } catch { /* ignore */ }
+  }, [storageKey]);
+
+  function saveFilter() {
+    if (!storageKey) return;
+    const name = prompt('Filtr nomi:');
+    if (!name?.trim()) return;
+    const newFilter: SavedFilter = {
+      id: `saved_${Date.now()}`,
+      label: name.trim(),
+      values: { ...values },
+      created_at: Date.now(),
+    };
+    const next = [...savedFilters, newFilter];
+    setSavedFilters(next);
+    try { localStorage.setItem(`filter-saved.${storageKey}`, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+
+  function deleteSavedFilter(id: string) {
+    const next = savedFilters.filter(f => f.id !== id);
+    setSavedFilters(next);
+    if (storageKey) {
+      try { localStorage.setItem(`filter-saved.${storageKey}`, JSON.stringify(next)); } catch { /* ignore */ }
+    }
+  }
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -122,7 +163,7 @@ export function FilterBar({
         )}>
           <div className="grid grid-cols-[200px_1fr]">
             {/* Saved presets */}
-            <div className="bg-bg3 border-r border-border p-2 flex flex-col gap-px">
+            <div className="bg-bg3 border-r border-border p-2 flex flex-col gap-px overflow-y-auto max-h-[480px]">
               {presets.map((p) => (
                 <div
                   key={p.id}
@@ -136,8 +177,30 @@ export function FilterBar({
                   <Pin className={cn('w-3 h-3', p.pinned ? 'opacity-100 text-blue' : 'opacity-30')} />
                 </div>
               ))}
+              {savedFilters.length > 0 && <div className="h-px bg-border my-2 mx-1" />}
+              {savedFilters.map((sf) => (
+                <div
+                  key={sf.id}
+                  onClick={() => {
+                    onApplySavedFilter?.(sf.values);
+                    onPresetChange(null);
+                    setOpen(false);
+                  }}
+                  className="group flex items-center justify-between px-2.5 py-2 rounded-[7px] cursor-pointer text-[12.5px] font-medium text-text2 hover:bg-bg2 hover:text-text transition-colors"
+                >
+                  <span className="truncate">{sf.label}</span>
+                  <button
+                    type="button"
+                    className="w-4 h-4 rounded opacity-0 group-hover:opacity-100 text-text3 hover:text-red flex items-center justify-center"
+                    onClick={(e) => { e.stopPropagation(); deleteSavedFilter(sf.id); }}
+                    aria-label="O'chirish"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
               <div className="h-px bg-border my-2 mx-1" />
-              <div className="px-2.5 py-2 text-[12px] text-blue cursor-pointer font-medium hover:bg-bg2 rounded-[7px]">+ Saqlangan filtr</div>
+              <div className="px-2.5 py-2 text-[12px] text-text3 italic">{savedFilters.length === 0 ? 'Saqlangan filtr yo\'q' : `${savedFilters.length} ta saqlangan`}</div>
             </div>
 
             {/* Body */}
@@ -152,7 +215,11 @@ export function FilterBar({
             {/* Footer (spans both cols) */}
             <div className="col-span-2 flex justify-between items-center px-[22px] py-3 border-t border-border">
               <div className="flex items-center gap-3.5">
-                <span className="text-[12px] text-blue cursor-pointer font-medium hover:underline">+ Filtrni saqlash</span>
+                {storageKey ? (
+                  <span className="text-[12px] text-blue cursor-pointer font-medium hover:underline" onClick={saveFilter}>+ Filtrni saqlash</span>
+                ) : (
+                  <span className="text-[12px] text-text3 italic">filtr saqlash o'chirilgan</span>
+                )}
                 <button className="w-7 h-7 rounded-full inline-flex items-center justify-center text-text3 hover:bg-bg3 hover:text-text" aria-label="Settings">
                   <Gear className="w-3.5 h-3.5" />
                 </button>

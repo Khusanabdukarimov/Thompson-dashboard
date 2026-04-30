@@ -79,18 +79,6 @@ def create_lead(fields: dict):
         print(f"Error creating lead: {e}")
     return None
 
-def get_timeman_status(user_id):
-    """Return timeman STATUS for a user: OPENED, PAUSED, CLOSED, or None if not found."""
-    url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/timeman.status.json"
-    params = {"USER_ID": user_id}
-    try:
-        res = requests.get(url, params=params)
-        if res.status_code == 200:
-            return res.json().get("result", {}).get("STATUS")
-    except Exception as e:
-        print(f"⚠️ timeman.status error for user {user_id}: {e}")
-    return None
-
 def get_stage_list(status_id, entity_type="deal"):
     """
     Deal yoki Lead uchun stage/status nomini olish.

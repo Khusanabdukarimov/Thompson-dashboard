@@ -59,10 +59,65 @@
     --shadow: 0 1px 3px rgba(15, 20, 30, .06), 0 1px 2px rgba(15, 20, 30, .04);
     --shadow-md: 0 6px 16px -4px rgba(15, 20, 30, .08), 0 2px 6px -2px rgba(15, 20, 30, .05);
     --shadow-lg: 0 18px 48px -12px rgba(15, 20, 30, .18), 0 8px 20px -6px rgba(15, 20, 30, .08);
+
+    color-scheme: light;
+  }
+
+  /* Dark mode — overrides only the surface/border/text + accent backgrounds.
+     Brand accent colors stay the same so charts and badges remain readable. */
+  :root.dark {
+    --bg: #0f1218;
+    --bg2: #161b24;
+    --bg3: #1d2330;
+    --bg4: #2a3245;
+
+    --border: #2a3245;
+    --border2: #3a455c;
+
+    --text: #f1f3f6;
+    --text2: #a0a8b8;
+    --text3: #6b7484;
+
+    --blue-bg: #1c2c4a;
+    --blue-border: #2c4a7e;
+    --green-bg: #0f2a20;
+    --green-border: #185538;
+    --amber-bg: #2a1f0c;
+    --amber-border: #523a14;
+    --red-bg: #2a1313;
+    --red-border: #5a2222;
+    --orange-bg: #2a1a0c;
+    --orange-border: #5a3416;
+    --purple-bg: #251c44;
+    --purple-border: #41327a;
+    --teal-bg: #0d2925;
+    --teal-border: #1a544a;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, .25);
+    --shadow: 0 1px 3px rgba(0, 0, 0, .35), 0 1px 2px rgba(0, 0, 0, .25);
+    --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, .45), 0 2px 6px -2px rgba(0, 0, 0, .35);
+    --shadow-lg: 0 18px 48px -12px rgba(0, 0, 0, .6), 0 8px 20px -6px rgba(0, 0, 0, .4);
+
+    color-scheme: dark;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { height: 100%; }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono, .tabular {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-feature-settings: "tnum";
+  }
 
   /* Shimmer animation for skeleton loaders */
   @keyframes shimmer {
@@ -79,20 +134,6 @@
     background-size: 800px 100%;
     animation: shimmer 1.5s ease-in-out infinite;
     border-radius: 4px;
-  }
-  body {
-    margin: 0;
-    font-family: 'Inter', system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 13px;
-    line-height: 1.5;
-    letter-spacing: -0.005em;
-    -webkit-font-smoothing: antialiased;
-  }
-  .mono, .tabular {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-feature-settings: "tnum";
   }
 
   /* Hide scrollbar but keep scrolling functionality */

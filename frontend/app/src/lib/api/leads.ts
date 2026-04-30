@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, authedFetch } from './client';
 
 export type LeadFilter = {
   start_date?: string;
@@ -92,4 +92,26 @@ export function listLeadsRich(filter: LeadsListFilter) {
     '/api/leads',
     { ...filter, enrich: filter.enrich ? 'true' : undefined } as Record<string, string | number | undefined>,
   );
+}
+
+// ── Create lead ──────────────────────────────────────────────────
+export type LeadCreateIn = {
+  client: string;
+  date?: string;
+  employee_id?: number;
+  source?: string;
+  amount?: number;
+  status?: string;
+  deal_id?: string;
+  notes?: string;
+};
+
+export async function createLead(body: LeadCreateIn): Promise<{ result: number }> {
+  const res = await authedFetch('/api/leads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
 }

@@ -2,9 +2,10 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, BarChart3, Users, Briefcase, DollarSign,
   TrendingUp, Wallet, ClipboardCheck, Award, GanttChart, Settings,
-  ChevronLeft, ChevronRight, X,
+  ChevronLeft, ChevronRight, X, Moon, Sun,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string };
 type NavSection = { title: string; items: NavItem[] };
@@ -51,6 +52,7 @@ type Props = {
 };
 
 export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClose }: Props) {
+  const { theme, toggle } = useDarkMode();
   return (
     <>
       {/* Mobile backdrop */}
@@ -103,7 +105,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
         </div>
 
         {/* Nav */}
-        <nav className="px-2 py-2.5 flex-1 overflow-y-auto">
+        <nav className="px-2 py-2.5 flex-1 overflow-y-auto flex flex-col">
           {NAV.map(section => (
             <div key={section.title}>
               {/* Section title — always shown on mobile; on desktop hidden when collapsed */}
@@ -143,6 +145,22 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
               })}
             </div>
           ))}
+
+          {/* Dark mode toggle — pinned to bottom of nav */}
+          <div className="mt-auto pt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={toggle}
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              className={cn(
+                'flex items-center gap-2.5 rounded text-[12.5px] text-text2 hover:bg-bg3 hover:text-text w-full transition-colors',
+                collapsed ? 'px-2.5 py-2 md:justify-center md:w-10 md:h-10 md:mx-auto md:px-0 md:py-0' : 'px-2.5 py-2',
+              )}
+            >
+              {theme === 'dark' ? <Sun className="w-[15px] h-[15px] shrink-0" /> : <Moon className="w-[15px] h-[15px] shrink-0" />}
+              <span className={cn('truncate', collapsed && 'md:hidden')}>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+            </button>
+          </div>
         </nav>
       </aside>
     </>

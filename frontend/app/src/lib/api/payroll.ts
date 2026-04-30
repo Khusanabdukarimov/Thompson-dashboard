@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, authedFetch } from './client';
 
 // ── Employees ─────────────────────────────────────────────────────
 export type Employee = {
@@ -29,7 +29,7 @@ export type EmployeeExtraIn = Partial<Pick<Employee,
 >>;
 
 export async function upsertEmployeeExtra(uid: number, body: EmployeeExtraIn): Promise<Employee> {
-  const res = await fetch(`/api/payroll/employees/${uid}`, {
+  const res = await authedFetch(`/api/payroll/employees/${uid}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -67,44 +67,44 @@ export type KpiRuleIn = {
   is_active?: boolean;
 };
 export async function createKpiRule(body: KpiRuleIn): Promise<KpiRule> {
-  const res = await fetch('/api/payroll/kpi-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await authedFetch('/api/payroll/kpi-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 export async function updateKpiRule(id: number, body: KpiRuleIn): Promise<KpiRule> {
-  const res = await fetch(`/api/payroll/kpi-rules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await authedFetch(`/api/payroll/kpi-rules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 export async function deleteKpiRule(id: number): Promise<void> {
-  const res = await fetch(`/api/payroll/kpi-rules/${id}`, { method: 'DELETE' });
+  const res = await authedFetch(`/api/payroll/kpi-rules/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 }
 
 export type BonusRuleIn = Omit<BonusRule, 'id' | 'created_at'>;
 export async function createBonusRule(body: BonusRuleIn): Promise<BonusRule> {
-  const res = await fetch('/api/payroll/bonus-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await authedFetch('/api/payroll/bonus-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 export async function updateBonusRule(id: number, body: BonusRuleIn): Promise<BonusRule> {
-  const res = await fetch(`/api/payroll/bonus-rules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await authedFetch(`/api/payroll/bonus-rules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 export async function deleteBonusRule(id: number): Promise<void> {
-  const res = await fetch(`/api/payroll/bonus-rules/${id}`, { method: 'DELETE' });
+  const res = await authedFetch(`/api/payroll/bonus-rules/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 }
 
 export type BonusAwardIn = Omit<BonusAward, 'id' | 'awarded_at'>;
 export async function createBonusAward(body: BonusAwardIn): Promise<BonusAward> {
-  const res = await fetch('/api/payroll/bonus-awards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await authedFetch('/api/payroll/bonus-awards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 export async function deleteBonusAward(id: number): Promise<void> {
-  const res = await fetch(`/api/payroll/bonus-awards/${id}`, { method: 'DELETE' });
+  const res = await authedFetch(`/api/payroll/bonus-awards/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
 }
 
@@ -190,7 +190,7 @@ export type LogEntryIn = {
   note?: string | null;
 };
 async function _put<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await authedFetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -203,7 +203,7 @@ export async function autoSyncLogs(year: number, month: number, mode: 'report' |
   url.searchParams.set('year', String(year));
   url.searchParams.set('month', String(month));
   url.searchParams.set('mode', mode);
-  const res = await fetch(url.pathname + url.search, { method: 'POST' });
+  const res = await authedFetch(url.pathname + url.search, { method: 'POST' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }

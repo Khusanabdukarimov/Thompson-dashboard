@@ -18,8 +18,12 @@ from datetime import date
 from app.services.bitrix import aggregate_deals_sum_total, get_visits_by_date, list_leads
 from app.db import init_db
 from app.api.routes import payroll as payroll_routes
+from app.core import auth as auth_module
 
 app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
+
+# Auth middleware (no-op unless AUTH_ENABLED=true env)
+auth_module.install_auth_middleware(app)
 
 
 @app.on_event("startup")
@@ -28,6 +32,7 @@ def _on_startup():
 
 
 app.include_router(payroll_routes.router)
+app.include_router(auth_module.router)
 
 
 @app.get("/api/config")

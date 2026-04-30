@@ -749,9 +749,23 @@ def _compute_penalty_uzs(uid: int, year: int, month: int, s: Session) -> tuple[i
 # Calculate payroll for an employee in a given month
 # ────────────────────────────────────────────────────────────────────
 def _compute_kpi_payout(rule: KpiRule, revenue_usd: float) -> tuple[float, dict]:
-    """Apply single-tier mode: whole revenue × percent of the matching tier."""
+    """Compute KPI commission payout based on rule.mode.
+
+    Modes:
+      - "single_tier": whole revenue × percent of the matching tier
+      - "multi_tier":  revenue accumulates per-tier (classic progressive bracket).
+                       For each tier [from, to), only the portion of revenue inside
+                       that range is multiplied by the tier's percent.
+    """
     if not rule or not rule.tiers:
-        return 0.0, {"matched_tier": None, "percent": 0.0}
+        return 0.0, {"matched_tier": None, "percent": 0.0, "mode": "single_tier", "breakdown": []}
+
+    if rule.mode == "multi_tier":
+        return _compute_multi_tier(rule, revenue_usd)
+    return _compute_single_tier(rule, revenue_usd)
+
+
+def _compute_single_tier(rule: KpiRule, revenue_usd: float) -> tuple[float, dict]:
     matched = None
     for t in rule.tiers:
         try:
@@ -765,10 +779,32 @@ def _compute_kpi_payout(rule: KpiRule, revenue_usd: float) -> tuple[float, dict]
             matched = {"from": lo, "to": hi if hi not in (None, "") else None, "percent": pct}
             break
     if not matched:
-        # If no tier matched (revenue below first tier), use 0
-        return 0.0, {"matched_tier": None, "percent": 0.0}
+        return 0.0, {"matched_tier": None, "percent": 0.0, "mode": "single_tier", "breakdown": []}
     payout = revenue_usd * matched["percent"] / 100.0
-    return payout, {"matched_tier": matched, "percent": matched["percent"]}
+    return payout, {"matched_tier": matched, "percent": matched["percent"], "mode": "single_tier", "breakdown": []}
+
+
+def _compute_multi_tier(rule: KpiRule, revenue_usd: float) -> tuple[float, dict]:
+    total = 0.0
+    breakdown: list[dict] = []
+    for t in rule.tiers:
+        try:
+            lo = float(t.get("from", 0) or 0)
+            hi = t.get("to")
+            hi_val = float(hi) if hi not in (None, "", "null") else float("inf")
+            pct = float(t.get("percent", 0) or 0)
+        except Exception:
+            continue
+        if revenue_usd <= lo:
+            break
+        portion = min(revenue_usd, hi_val) - lo
+        if portion <= 0:
+            continue
+        sub = portion * pct / 100.0
+        total += sub
+        breakdown.append({"from": lo, "to": hi if hi not in (None, "") else None, "percent": pct, "portion_usd": portion, "subtotal_usd": round(sub, 2)})
+
+    return total, {"matched_tier": None, "percent": 0.0, "mode": "multi_tier", "breakdown": breakdown}
 
 
 @router.get("/calculate")

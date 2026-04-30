@@ -13,12 +13,13 @@ import { Skeleton, MetricRowSkeleton } from '@/components/Skeleton';
 import { getMonthlyTarget, listEmployees, getWeeklyActuals } from '@/lib/api/payroll';
 import type { WeeklyActual } from '@/lib/api/payroll';
 import { getDealsStats } from '@/lib/api/deals';
-import { listLeadsRich, getLeadsStats } from '@/lib/api/leads';
-import type { LeadRow, LeadsListFilter } from '@/lib/api/leads';
+import { listLeadsRich, getLeadsStats, createLead } from '@/lib/api/leads';
+import type { LeadRow, LeadsListFilter, LeadCreateIn } from '@/lib/api/leads';
 import { fmtMoney, fmtNum, fmtPct, fmtDate } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import { getConfig } from '@/lib/api/config';
 import { useToast } from '@/components/Toast';
+import { authedFetch } from '@/lib/api/client';
 
 const now = new Date();
 const DEFAULT_YEAR = now.getFullYear();
@@ -60,7 +61,7 @@ export default function RejaPage() {
   const [filterValues, setFilterValues] = useState<FilterValues>({});
   const [editTarget, setEditTarget] = useState(false);
   const [viewLead, setViewLead] = useState<LeadRow | null>(null);
-  const toast = useToast();
+  const [createLeadOpen, setCreateLeadOpen] = useState(false);
 
   const startDate = isoFirstOfMonth(year, month);
   const endDate = isoLastOfMonth(year, month);
@@ -177,7 +178,7 @@ export default function RejaPage() {
               {[DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <Button onClick={() => setEditTarget(true)}>Reja o'zgartirish</Button>
-            <Button variant="primary" onClick={() => toast.info('Lead kiritish', "Hozircha Bitrix CRM'da to'g'ridan to'g'ri yarating — kelajakda bu yerda forma bo'ladi")}>+ Lead kiritish</Button>
+            <Button variant="primary" onClick={() => setCreateLeadOpen(true)}>+ Lead kiritish</Button>
           </>
         }
       />
@@ -247,6 +248,8 @@ export default function RejaPage() {
                 onApply={() => leadsQ.refetch()}
                 activeChipLabel={STATUS_PRESETS.find(p => p.id === activePreset)?.label}
                 onActiveChipClear={() => setActivePreset('all')}
+                storageKey="reja.leads"
+                onApplySavedFilter={(v) => setFilterValues(v)}
               />
             </div>
           </div>
@@ -270,6 +273,15 @@ export default function RejaPage() {
         <TargetModal year={year} month={month} initial={targetQ.data} onClose={() => setEditTarget(false)} />
       )}
       {viewLead && <LeadDetailModalWrapper lead={viewLead} onClose={() => setViewLead(null)} />}
+      {createLeadOpen && (
+        <LeadCreateModal
+          employees={statsQ.data?.users ?? []}
+          sources={statsQ.data?.sources ?? []}
+          statuses={statsQ.data?.status_names ?? {}}
+          onClose={() => setCreateLeadOpen(false)}
+          onCreated={() => leadsQ.refetch()}
+        />
+      )}
     </>
   );
 }
@@ -451,7 +463,7 @@ function TargetModal({
   async function save() {
     setSaving(true);
     try {
-      const res = await fetch('/api/payroll/target', {
+      const res = await authedFetch('/api/payroll/target', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ year, month, target_usd: target, weekly_breakdown: weekly }),
@@ -513,4 +525,114 @@ function TargetModal({
 }
 
 const fi = 'w-full px-2.5 py-2 rounded-[7px] border border-border bg-bg text-text text-[12.5px] focus:outline-none focus:border-blue focus:bg-bg2 focus:shadow-[0_0_0_3px_rgba(34,102,245,0.1)] disabled:opacity-60';
+
+// ────────────────────────────────────────────────────────────────
+// Lead create modal — POST /api/leads
+// ────────────────────────────────────────────────────────────────
+function LeadCreateModal({
+  employees, sources, statuses, onClose, onCreated,
+}: {
+  employees: { id: string; name: string }[];
+  sources: { id: string; label: string }[];
+  statuses: Record<string, string>;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const toast = useToast();
+  const [form, setForm] = useState<LeadCreateIn>({
+    client: '',
+    date: new Date().toISOString().slice(0, 10),
+    employee_id: undefined,
+    source: undefined,
+    amount: undefined,
+    status: 'NEW',
+    notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!form.client.trim()) {
+      toast.error('Mijoz nomi kerak');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await createLead({
+        ...form,
+        client: form.client.trim(),
+        notes: form.notes?.trim() || undefined,
+      });
+      toast.success('Lead yaratildi', `Bitrix ID: ${res.result}`);
+      onCreated();
+      onClose();
+    } catch (e) {
+      toast.error('Yaratishda xato', (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[300]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-bg2 border border-border rounded-xl p-6 w-[480px] max-w-[calc(100vw-32px)] max-h-[88vh] overflow-y-auto shadow-lg z-[301]">
+          <Dialog.Title className="text-[15px] font-semibold mb-4">Yangi lead kiritish</Dialog.Title>
+
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <FieldL label="Sana">
+              <input type="date" className={fi} value={form.date ?? ''} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} />
+            </FieldL>
+            <FieldL label="Mas'ul">
+              <select className={fi} value={form.employee_id ?? ''} onChange={(e) => setForm(f => ({ ...f, employee_id: e.target.value ? Number(e.target.value) : undefined }))}>
+                <option value="">— tanlanmagan —</option>
+                {employees.map(u => <option key={u.id} value={u.id}>{u.name || `User ${u.id}`}</option>)}
+              </select>
+            </FieldL>
+          </div>
+
+          <FieldL label="Mijoz nomi" className="mb-3">
+            <input className={fi} placeholder="Kompaniya yoki shaxs ismi" value={form.client} onChange={(e) => setForm(f => ({ ...f, client: e.target.value }))} autoFocus />
+          </FieldL>
+
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <FieldL label="Manba">
+              <select className={fi} value={form.source ?? ''} onChange={(e) => setForm(f => ({ ...f, source: e.target.value || undefined }))}>
+                <option value="">— tanlanmagan —</option>
+                {sources.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </FieldL>
+            <FieldL label="Summa ($)">
+              <input type="number" className={fi} placeholder="0" value={form.amount ?? ''} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value ? Number(e.target.value) : undefined }))} />
+            </FieldL>
+          </div>
+
+          <FieldL label="Status" className="mb-3">
+            <select className={fi} value={form.status ?? 'NEW'} onChange={(e) => setForm(f => ({ ...f, status: e.target.value }))}>
+              {Object.entries(statuses).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </FieldL>
+
+          <FieldL label="Izoh" className="mb-3">
+            <textarea className={fi} rows={2} value={form.notes ?? ''} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </FieldL>
+
+          <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-border">
+            <Button onClick={onClose}>Bekor</Button>
+            <Button variant="primary" disabled={saving} onClick={save}>{saving ? 'Yaratilmoqda…' : 'Yaratish'}</Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function FieldL({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="block text-[10px] text-text3 mb-1 uppercase tracking-wider font-medium">{label}</label>
+      {children}
+    </div>
+  );
+}
 

@@ -6,6 +6,8 @@ import { Topbar } from '@/components/Topbar';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
+import { EmptyState } from '@/components/EmptyState';
+import { Award } from 'lucide-react';
 import { listKpiRules, createKpiRule, updateKpiRule, deleteKpiRule } from '@/lib/api/payroll';
 import type { KpiRule, KpiRuleIn, KpiTier } from '@/lib/api/payroll';
 import { useToast } from '@/components/Toast';
@@ -42,14 +44,18 @@ export default function KpiRulesPage() {
               </div>
             ))}
           </div>
+        ) : (q.data?.rules ?? []).length === 0 ? (
+          <div className="bg-bg2 border border-border rounded-lg shadow">
+            <EmptyState
+              icon={<Award className="w-5 h-5" />}
+              title="Hozircha KPI qoidasi yo'q"
+              hint="Sotuv komissiyasini tier'lar bo'yicha sozlang. Misol: $0–5K → 1%, $5K–15K → 5%, $40K+ → 15%"
+              action={<Button variant="primary" onClick={() => setCreating(true)}>+ Birinchi qoidani yarating</Button>}
+            />
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {(q.data?.rules ?? []).length === 0 && (
-              <div className="col-span-2 text-center text-text3 text-[12.5px] py-12 bg-bg2 border border-border rounded-lg">
-                Hozircha qoida yo'q. "+ Yangi qoida" tugmasi orqali yarating.
-              </div>
-            )}
-            {(q.data?.rules ?? []).map(r => (
+            {q.data!.rules.map(r => (
               <RuleCard key={r.id} rule={r} onEdit={() => setEditing(r)} />
             ))}
           </div>
@@ -204,6 +210,17 @@ function RuleModal({ rule, onClose }: { rule: KpiRule | null; onClose: () => voi
                 <option value="monthly">Oylik</option>
                 <option value="weekly">Haftalik</option>
               </select>
+            </Field>
+            <Field label="Hisob rejimi" className="col-span-2">
+              <select className={fi} value={form.mode} onChange={(e) => setForm(f => ({ ...f, mode: e.target.value }))}>
+                <option value="single_tier">Single-tier — butun summa × mos tier %</option>
+                <option value="multi_tier">Multi-tier — progressive (har tier o'z foizi bilan)</option>
+              </select>
+              <div className="text-[10px] text-text3 mt-1 leading-tight">
+                {form.mode === 'single_tier'
+                  ? "Misol: $41,200 → tier $40K+ (15%) → $6,180"
+                  : "Misol: $41,200 → ($5K×1%) + ($10K×5%) + ($15K×9%) + ($10K×12%) + ($1.2K×15%) = $3,230"}
+              </div>
             </Field>
           </div>
 

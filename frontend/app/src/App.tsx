@@ -1,8 +1,11 @@
-import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { Skeleton } from '@/components/Skeleton';
 import Placeholder from '@/pages/Placeholder';
+import { getAuthStatus, getStoredToken } from '@/lib/auth';
+
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
 
 const LidlarPage       = lazy(() => import('@/pages/marketing/LidlarPage'));
 const SdelkalarPage    = lazy(() => import('@/pages/marketing/SdelkalarPage'));
@@ -43,10 +46,37 @@ function PageLoader() {
   );
 }
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const [authState, setAuthState] = useState<'loading' | 'ok' | 'login'>('loading');
+  const location = useLocation();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await getAuthStatus();
+        if (cancelled) return;
+        if (!status.enabled) { setAuthState('ok'); return; }
+        const token = getStoredToken();
+        if (!token) { setAuthState('login'); return; }
+        setAuthState('ok');
+      } catch {
+        if (!cancelled) setAuthState('ok'); // fail-open if status endpoint unreachable
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [location.pathname]);
+
+  if (authState === 'loading') return <PageLoader />;
+  if (authState === 'login') return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
+      <Route path="/login" element={<Suspense fallback={<PageLoader />}><LoginPage /></Suspense>} />
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/payroll/dashboard" replace />} />
 
         {/* Marketing */}
