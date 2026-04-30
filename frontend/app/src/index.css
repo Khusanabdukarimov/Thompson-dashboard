@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --bg: #f6f7f9;
+    --bg2: #ffffff;
+    --bg3: #f1f3f6;
+    --bg4: #e7eaef;
+
+    /* Borders */
+    --border: #e5e7ec;
+    --border2: #d2d6de;
+
+    /* Text */
+    --text: #101418;
+    --text2: #5b6470;
+    --text3: #8b94a3;
+
+    /* Accents */
+    --blue: #2266f5;
+    --blue2: #1a52d4;
+    --blue-bg: #eef4ff;
+    --blue-border: #c5d8ff;
+
+    --green: #04966b;
+    --green-bg: #ecfdf5;
+    --green-border: #a7f3d0;
+
+    --amber: #c97a07;
+    --amber-bg: #fffbeb;
+    --amber-border: #fde68a;
+
+    --red: #d83a3a;
+    --red-bg: #fef2f2;
+    --red-border: #fecaca;
+
+    --orange: #e26113;
+    --orange-bg: #fff7ed;
+    --orange-border: #fed7aa;
+
+    --purple: #7c3aed;
+    --purple-bg: #f5f3ff;
+    --purple-border: #ddd6fe;
+
+    --teal: #0d9488;
+    --teal-bg: #f0fdfa;
+    --teal-border: #99f6e4;
+
+    /* Radius */
+    --r: 8px;
+    --rlg: 11px;
+    --rxl: 14px;
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px rgba(15, 20, 30, .04);
+    --shadow: 0 1px 3px rgba(15, 20, 30, .06), 0 1px 2px rgba(15, 20, 30, .04);
+    --shadow-md: 0 6px 16px -4px rgba(15, 20, 30, .08), 0 2px 6px -2px rgba(15, 20, 30, .05);
+    --shadow-lg: 0 18px 48px -12px rgba(15, 20, 30, .18), 0 8px 20px -6px rgba(15, 20, 30, .08);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono, .tabular {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-feature-settings: "tnum";
+  }
+}

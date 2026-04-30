@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "/Users/mac/data365/mountain/backend/.venv/bin/uvicorn",
+      "runtimeArgs": ["app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "cwd": "/Users/mac/data365/mountain/backend",
+      "port": 8000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
+      "cwd": "/Users/mac/data365/mountain/frontend/app",
+      "port": 5173
+    }
+  ]
+}
