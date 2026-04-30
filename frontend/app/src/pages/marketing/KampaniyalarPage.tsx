@@ -117,7 +117,7 @@ export default function KampaniyalarPage() {
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-5 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" />
             <MetricCard label="Jami lidlar" value={fmtNum(totalLeads)} tone="green" />
             <MetricCard label="CPL (1 lid)" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / lidlar" />
@@ -126,7 +126,7 @@ export default function KampaniyalarPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           {q.isLoading && !q.data ? (
             <>
               <ChartCardSkeleton height={260} />

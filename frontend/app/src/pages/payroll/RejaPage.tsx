@@ -205,7 +205,7 @@ export default function RejaPage() {
 
         {/* ── METRICS ────────────────────────────────────────── */}
         {leadsQ.isLoading && !leadsQ.data ? <MetricRowSkeleton count={4} /> : (
-          <div className="grid grid-cols-4 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
             <div className="bg-bg2 border border-border rounded-lg px-4 py-3.5 shadow">
               <div className="text-[11px] text-text3 uppercase tracking-wider mb-1.5 font-medium">Davr lidlari</div>
               <div className="text-[22px] font-semibold mono text-blue">{fmtNum(leadsQ.data?.count ?? 0)}</div>
@@ -377,7 +377,7 @@ function RejaHeader({
         <span>{fmtMoney(target)}</span>
       </div>
 
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         {weeklyBreakdown.slice(0, 4).map((w, i) => {
           const reja = Number(w) || 0;
           const actual = actualsByWeek.get(i + 1);
@@ -468,7 +468,7 @@ function TargetModal({
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-bg2 border border-border rounded-xl p-6 w-[440px] max-h-[88vh] overflow-y-auto shadow-lg z-[301]">
           <Dialog.Title className="text-[15px] font-semibold mb-4">Oylik reja o'zgartirish</Dialog.Title>
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
             <div>
               <label className="block text-[10px] text-text3 mb-1 uppercase tracking-wider font-medium">Oy</label>
               <input className={fi} value={`${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year}`} disabled />

@@ -125,7 +125,7 @@ export default function DashboardPage() {
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {dealsQ.isLoading && !dealsQ.data ? <MetricRowSkeleton count={4} /> : (
-          <div className="grid grid-cols-4 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
             <MetricCard label="Oylik maqsad" value={fmtMoney(target)} tone="blue" hint={target ? '' : 'belgilanmagan'} />
             <MetricCard label="Hozirgi savdo" value={fmtMoney(wonRev)} tone="green" hint={target ? `${fmtPct(progress, 1)} bajarildi` : '—'} />
             <MetricCard label="Qolgan" value={fmtMoney(remaining)} tone={progress >= 100 ? 'green' : 'amber'} />
@@ -134,7 +134,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Trend + Top bonus row ───────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           {trendQ.isLoading && !trendQ.data ? <ChartCardSkeleton height={220} /> : (
             <CardChart title="Sotuv trendi" hint="oxirgi 6 oy · won daromad" height={220}>
               <SimpleBar data={trendData as never} dataKey="value" fill="var(--blue)" />
@@ -175,7 +175,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           <CardChart title={`${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year} — Maqsad bajarilishi`} hint={target ? fmtPct(progress, 1) : '—'} height={180}>
             <div className="h-full flex flex-col justify-center px-1">
               <div className="flex items-center justify-between text-[11px] text-text3 mb-1">

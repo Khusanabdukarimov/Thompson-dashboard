@@ -179,7 +179,7 @@ export default function SdelkalarPage() {
         </div>
 
         {statsQ.isLoading && !statsQ.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-5 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami sdelkalar" value={fmtNum(total)} tone="blue" />
             <MetricCard label="Yopildi (won)" value={fmtNum(won)} tone="green" />
             <MetricCard label="Yo'qotildi" value={fmtNum(lost)} tone="red" />
@@ -188,7 +188,7 @@ export default function SdelkalarPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           {statsQ.isLoading && !statsQ.data ? <ChartCardSkeleton height={260} /> : (
             <CardChart title="Bosqichlar bo'yicha" hint={`${stageChartData.length} ta bosqich`} height={260}>
               <SimpleBar data={stageChartData as never} dataKey="value" />

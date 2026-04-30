@@ -97,7 +97,7 @@ export default function PayrollCalcPage() {
 
         {activeEmp && (
           <>
-            <div className="grid grid-cols-4 gap-2.5 mb-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
               <MetricCard label="Fix base (oy)" value={fmtNum(activeEmp.fix_base_uzs)} tone="blue" hint="so'm" />
               <MetricCard label="KPI payout" value={calc ? fmtMoney(calc.kpi.payout_usd) : '—'} tone="green" hint={calc?.kpi.percent ? `${calc.kpi.percent}% × ${fmtMoney(calc.revenue_usd)}` : '—'} />
               <MetricCard label="Bonuslar" value={calc ? fmtMoney(calc.bonuses_total_usd) : '—'} tone="amber" hint={`${calc?.bonuses.length ?? 0} ta bonus`} />

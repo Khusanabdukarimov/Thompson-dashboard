@@ -13,6 +13,7 @@ import {
   getDisciplineStats, getPenaltyConfig, setPenaltyConfig,
   upsertReportLog, upsertAttendanceLog, listEmployees, autoSyncLogs,
 } from '@/lib/api/payroll';
+import { useToast } from '@/components/Toast';
 import type { DisciplineEmployee, LogBucket, PenaltyConfig } from '@/lib/api/payroll';
 import { fmtNum } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
@@ -47,16 +48,21 @@ export default function HisobotPage() {
   const [editPenalty, setEditPenalty] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const qcRoot = useQueryClient();
+  const toast = useToast();
 
   async function handleSync() {
     setSyncing(true);
     try {
       const r = await autoSyncLogs(year, month, mode);
       qcRoot.invalidateQueries({ queryKey: ['payroll/discipline-stats'] });
-      const note = r.note ? `\n\n${r.note}` : '';
-      alert(`Sync ${mode}:\n  yaratildi: ${r.created}\n  yangilandi: ${r.updated}\n  o'tkazib yuborildi: ${r.skipped_users}${note}`);
+      const summary = `${r.created} yaratildi · ${r.updated} yangilandi`;
+      if (r.note) {
+        toast.info(`${mode === 'report' ? 'Hisobot' : 'Davomat'} sinx`, `${summary}. ${r.note}`);
+      } else {
+        toast.success(`${mode === 'report' ? 'Hisobot' : 'Davomat'} sinx tugadi`, summary);
+      }
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Sinx xatosi', (e as Error).message);
     } finally {
       setSyncing(false);
     }
@@ -185,7 +191,7 @@ export default function HisobotPage() {
 
         {/* Metrics */}
         {statsQ.isLoading && !statsQ.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-5 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             {buckets.map(b => (
               <div key={b.id} className="bg-bg2 border border-border rounded-lg px-4 py-3.5 shadow">
                 <div className="text-[11px] text-text3 uppercase tracking-wider mb-1.5 font-medium truncate">{b.label.split('—')[0].split('(')[0].trim()}</div>
@@ -363,7 +369,7 @@ function PenaltyConfigModal({ initial, onClose }: { initial: PenaltyConfig; onCl
           <Dialog.Title className="text-[15px] font-semibold mb-4">Jarima tariflari (so'm/incident)</Dialog.Title>
 
           <div className="text-[11px] text-text3 mb-2 font-semibold uppercase tracking-wider">Davomat</div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
             <Field label="Kechroq"><input type="number" className={fi} value={form.attendance_late_soft_uzs} onChange={(e) => setForm(f => ({ ...f, attendance_late_soft_uzs: Number(e.target.value) }))} /></Field>
             <Field label="Kech"><input type="number" className={fi} value={form.attendance_late_uzs} onChange={(e) => setForm(f => ({ ...f, attendance_late_uzs: Number(e.target.value) }))} /></Field>
             <Field label="Juda kech ⚡"><input type="number" className={fi} value={form.attendance_penalty_uzs} onChange={(e) => setForm(f => ({ ...f, attendance_penalty_uzs: Number(e.target.value) }))} /></Field>

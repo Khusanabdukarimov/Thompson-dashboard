@@ -188,7 +188,7 @@ export default function LidlarPage() {
 
         {/* Metrics */}
         {statsQ.isLoading && !statsQ.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-5 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami lidlar" value={fmtNum(total)} tone="blue" />
             <MetricCard label="Jarayonda" value={fmtNum(jarayon)} tone="amber" />
             <MetricCard label="Konversiya" value={fmtNum(converted)} tone="green" />
@@ -198,7 +198,7 @@ export default function LidlarPage() {
         )}
 
         {/* Funnel + Status breakdown */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
               <span className="text-[13px] font-semibold">Voronka</span>
@@ -252,7 +252,7 @@ export default function LidlarPage() {
         />
 
         {/* Quality breakdowns */}
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           <QualityList title="Sifatsiz sabablari" items={qualityQ.data?.sifatsiz ?? []} loading={qualityQ.isLoading} />
           <QualityList title="Bekor sabablari"   items={qualityQ.data?.bekor    ?? []} loading={qualityQ.isLoading} />
           <QualityList title="Sandiq (junk)"     items={qualityQ.data?.sandiq   ?? []} loading={qualityQ.isLoading} />

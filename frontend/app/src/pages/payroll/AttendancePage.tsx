@@ -69,7 +69,7 @@ export default function AttendancePage() {
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-5 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami xodim" value={String(counts.all)} tone="blue" />
             <MetricCard label="Ishda" value={String(counts.opened)} tone="green" />
             <MetricCard label="Pauza" value={String(counts.paused)} tone="amber" />
@@ -93,7 +93,7 @@ export default function AttendancePage() {
         </div>
 
         {q.isLoading && !q.data ? <GridCardsSkeleton count={9} cols={3} /> : (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
           {filtered.length === 0 && (
             <div className="col-span-3 text-center text-text3 text-[12.5px] py-12 bg-bg2 border border-border rounded-lg">
               Hech narsa topilmadi

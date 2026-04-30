@@ -66,7 +66,7 @@ export default function KunlikPage() {
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {dayQ.isLoading && !dayQ.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-5 gap-2.5 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Sana" value={date} tone="default" hint={dayQ.isFetching ? 'yuklanmoqda…' : undefined} />
             <MetricCard label="Meta sarf" value={fmtMoney(fbSpend)} tone="orange" hint={`FB+IG account-level`} />
             <MetricCard label="Meta lidlar" value={fmtNum(fbLeads)} tone="amber" />
@@ -89,7 +89,7 @@ export default function KunlikPage() {
           </CardChart>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <span className="text-[13px] font-semibold">Meta (FB + IG)</span>
