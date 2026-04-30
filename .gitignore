@@ -1,0 +1,29 @@
+# Secrets and local config
+.env
+.env.*
+!.env.sample
+config.js
+config.local.js
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.python-version
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# Local scratch/debug files
+scratch/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

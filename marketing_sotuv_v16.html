@@ -1,0 +1,2217 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mountain — Marketing & Sotuv</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f5f7;--bg2:#fff;--bg3:#f0f1f4;--bg4:#e8eaee;--bg5:#eef0f4;
+  --border:#e2e4ea;--border2:#cbd0d9;
+  --text:#1a1d24;--text2:#64748b;--text3:#94a3b8;
+  --blue:#2563eb;--blue2:#1d4ed8;--blue-bg:#eff6ff;--blue-b:#bfdbfe;
+  --green:#059669;--green-bg:#ecfdf5;--green-b:#a7f3d0;
+  --red:#dc2626;--red-bg:#fef2f2;--red-b:#fecaca;
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-b:#fde68a;
+  --orange:#ea580c;--orange-bg:#fff7ed;--orange-b:#fed7aa;
+  --purple:#7c3aed;--purple-bg:#f5f3ff;--purple-b:#ddd6fe;
+  --teal:#0d9488;--teal-bg:#f0fdfa;--teal-b:#99f6e4;
+  --pink:#db2777;--pink-bg:#fdf2f8;--pink-b:#fbcfe8;
+  --sh:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
+  --sh2:0 4px 12px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.05);
+  --r:8px;--rlg:12px;--rxl:16px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;min-height:100vh}
+.mono{font-family:'DM Mono',monospace}
+
+/* TOP NAV */
+.topnav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:0;box-shadow:var(--sh);position:sticky;top:0;z-index:100}
+.tn-logo{display:flex;align-items:center;gap:9px;padding:13px 0;margin-right:24px;border-right:1px solid var(--border);padding-right:20px}
+.tn-icon{width:30px;height:30px;background:var(--blue2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff}
+.tn-name{font-size:13px;font-weight:700;color:var(--text)}
+.tn-sub{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace}
+.tn-tabs{display:flex;gap:0;flex:1}
+.tn-tab{padding:17px 18px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}
+.tn-tab:hover{color:var(--text);background:var(--bg3)}
+.tn-tab.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.tn-right{display:flex;gap:8px;align-items:center;margin-left:auto}
+
+/* LAYOUT */
+.container{max-width:1440px;margin:0 auto;padding:24px 32px}
+.page{display:none}.page.active{display:block}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rlg);box-shadow:var(--sh);overflow:hidden;margin-bottom:0}
+.card-head{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.card-title{font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.card-sub{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* METRIC CARDS */
+.metrics{display:grid;gap:12px;margin-bottom:20px}
+.m4{grid-template-columns:repeat(4,1fr)}
+.m3{grid-template-columns:repeat(3,1fr)}
+.m5{grid-template-columns:repeat(5,1fr)}
+.m6{grid-template-columns:repeat(6,1fr)}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rlg);padding:18px 20px;box-shadow:var(--sh);position:relative;overflow:hidden;transition:box-shadow .15s}
+.metric:hover{box-shadow:var(--sh2)}
+.metric::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:3px 3px 0 0}
+.metric.c-blue::after{background:var(--blue)}
+.metric.c-green::after{background:var(--green)}
+.metric.c-amber::after{background:var(--amber)}
+.metric.c-red::after{background:var(--red)}
+.metric.c-purple::after{background:var(--purple)}
+.metric.c-teal::after{background:var(--teal)}
+.metric .lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px}
+.metric .val{font-size:26px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace;line-height:1.1;letter-spacing:-.02em}
+.metric .hint{font-size:11.5px;color:var(--text3);margin-top:5px}
+.metric .delta{font-size:11.5px;font-weight:600;margin-top:4px}
+.delta.up{color:var(--green)}.delta.down{color:var(--red)}.delta.neutral{color:var(--text3)}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.b-green{background:var(--green-bg);color:var(--green);border-color:var(--green-b)}
+.b-red{background:var(--red-bg);color:var(--red);border-color:var(--red-b)}
+.b-blue{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-b)}
+.b-amber{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-b)}
+.b-orange{background:var(--orange-bg);color:var(--orange);border-color:var(--orange-b)}
+.b-purple{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-b)}
+.b-teal{background:var(--teal-bg);color:var(--teal);border-color:var(--teal-b)}
+.b-pink{background:var(--pink-bg);color:var(--pink);border-color:var(--pink-b)}
+.b-gray{background:var(--bg3);color:var(--text2);border-color:var(--border)}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse}
+th{padding:10px 16px;text-align:left;font-size:10px;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.08em;background:var(--bg5);white-space:nowrap}
+td{padding:11px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg3)}
+
+/* BUTTON */
+.btn{padding:7px 14px;border-radius:var(--r);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--bg2);color:var(--text);transition:all .15s;white-space:nowrap;box-shadow:var(--sh);font-family:'DM Sans',sans-serif}
+.btn:hover{background:var(--bg3)}
+.btn.primary{background:var(--blue2);border-color:var(--blue2);color:#fff;box-shadow:0 1px 3px rgba(29,78,216,.3)}
+.btn.primary:hover{background:#1e40af}
+.btn.sm{padding:4px 10px;font-size:11px;box-shadow:none}
+.btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--text2)}
+.btn.ghost:hover{background:var(--bg3);color:var(--text)}
+
+/* FORM */
+.fi{width:100%;padding:7px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12.5px;font-family:'DM Sans',sans-serif;transition:border .15s}
+.fi:focus{outline:none;border-color:var(--blue);background:var(--bg2)}
+.sel{padding:6px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;box-shadow:var(--sh)}
+.search-input{padding:7px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;width:180px;box-shadow:var(--sh)}
+.search-input::placeholder{color:var(--text3)}
+
+/* OVERLAY / MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(15,20,35,.5);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rxl);padding:22px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.15);position:relative}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:16px}
+.fg{margin-bottom:11px}
+.fl{font-size:10px;color:var(--text3);margin-bottom:4px;display:block;text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mfoot{display:flex;justify-content:flex-end;gap:7px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.close-x{position:absolute;top:16px;right:16px;width:26px;height:26px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--text2);transition:all .15s}
+.close-x:hover{background:var(--red-bg);color:var(--red);border-color:var(--red-b)}
+
+/* PROGRESS */
+.prog{height:7px;background:var(--bg4);border-radius:4px;overflow:hidden;margin-top:8px}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s}
+
+/* FUNNEL */
+.funnel-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+.funnel-step{position:relative;text-align:center;padding:14px 8px}
+.funnel-step:not(:last-child)::after{content:'→';position:absolute;right:-8px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text3);z-index:1}
+.fs-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-weight:500}
+.fs-val{font-size:20px;font-weight:700;font-family:'DM Mono',monospace}
+.fs-pct{font-size:10px;color:var(--text3);margin-top:3px}
+.fs-bar{height:4px;border-radius:2px;margin:6px auto 0;transition:width .4s}
+
+/* KUNLIK JADVAL */
+.daily-grid{overflow-x:auto}
+.daily-table{min-width:900px;border-collapse:collapse}
+.daily-table th{padding:6px 8px;font-size:10px;color:var(--text3);text-align:center;border-bottom:1px solid var(--border);background:var(--bg5);white-space:nowrap}
+.daily-table{border-collapse:collapse}
+.daily-table th{padding:5px 8px;font-size:10px;color:var(--text3);text-align:center;background:var(--bg5);white-space:nowrap;border:1px solid var(--border2)}
+.daily-table th:first-child{position:sticky;left:0;z-index:3;background:var(--bg5)}
+.daily-table td{padding:7px 10px;font-size:11.5px;text-align:center;border:1px solid var(--border2);font-family:'DM Mono',monospace;color:var(--text)}
+.daily-table td.row-label{text-align:left;font-family:'DM Sans',sans-serif;font-weight:500;font-size:12.5px;color:var(--text);background:var(--bg5);position:sticky;left:0;z-index:2;min-width:150px;padding:7px 14px;border-right:2px solid var(--border2)}
+.daily-table td.section-label{text-align:left;font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px;color:#fff;position:sticky;left:0;z-index:2;text-transform:uppercase;letter-spacing:.08em;padding:7px 14px;border:1px solid rgba(0,0,0,.15)}
+.daily-table td.section-spacer{border:1px solid rgba(0,0,0,.1)}
+.daily-table tr:hover td:not(.row-label):not(.section-label):not(.section-spacer){background:var(--blue-bg)}
+.daily-table td.editable{cursor:pointer;transition:background .1s}
+.daily-table td.editable:hover{background:var(--amber-bg) !important;outline:2px solid var(--amber);outline-offset:-2px}
+.daily-table td.has-val{color:var(--text)}
+.daily-table td.zero-val{color:var(--border2)}
+.daily-table td.today-col{background:rgba(59,130,246,.08) !important;color:var(--blue) !important;font-weight:600}
+.daily-table td.row-label.today-col{background:rgba(59,130,246,.08) !important}
+.source-header{color:#fff !important;font-weight:700;font-size:11px !important;padding:5px 8px !important}
+.source-header.target-h{background:var(--orange) !important}
+.source-header.instagram-h{background:var(--pink) !important}
+
+/* SECTION DIVIDER */
+.stitle{font-size:14px;font-weight:700;color:var(--text);margin:24px 0 12px;display:flex;align-items:center;gap:8px}
+.stitle-line{flex:1;height:1px;background:var(--border)}
+
+/* SOURCE TABS */
+.src-tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.src-tab{padding:7px 16px;border-radius:var(--r);font-size:12.5px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--bg2);color:var(--text2);transition:all .15s;box-shadow:var(--sh)}
+.src-tab:hover{background:var(--bg3);color:var(--text)}
+.src-tab.active{font-weight:600;box-shadow:var(--sh2)}
+.src-tab.all-tab.active{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-b)}
+.src-tab.target-tab.active{background:var(--orange-bg);color:var(--orange);border-color:var(--orange-b)}
+.src-tab.instagram-tab.active{background:var(--pink-bg);color:var(--pink);border-color:var(--pink-b)}
+
+/* SYNC STATUS */
+.sync-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);padding:6px 12px;background:var(--green-bg);border:1px solid var(--green-b);border-radius:var(--r)}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ROL BASED VISIBILITY */
+
+/* NOTIFICATION */
+.notif{position:fixed;bottom:20px;right:20px;background:var(--text);color:#fff;padding:10px 16px;border-radius:var(--r);font-size:12px;font-weight:500;z-index:1000;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none}
+.notif.show{opacity:1;transform:translateY(0)}
+
+/* TOOLTIP */
+.tip{position:relative;display:inline-block}
+.tip:hover .tiptext{visibility:visible;opacity:1}
+.tiptext{visibility:hidden;opacity:0;position:absolute;bottom:120%;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;font-size:10px;padding:4px 8px;border-radius:5px;white-space:nowrap;pointer-events:none;transition:opacity .15s;z-index:50}
+
+/* CHART BARS */
+.mini-chart{display:flex;align-items:flex-end;gap:2px;height:40px}
+.mini-bar{flex:1;border-radius:2px 2px 0 0;min-height:2px;transition:height .3s;cursor:pointer}
+.mini-bar:hover{opacity:.8}
+/* CAMPAIGN ANALYTICS */
+.camp-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);margin-top:20px}
+.camp-table-wrap{overflow-x:auto}
+.camp-table{width:100%;border-collapse:collapse}
+.camp-table th{background:var(--bg5);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.camp-table td{padding:12px 14px;font-size:12px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap}
+.camp-table tr:hover td{background:var(--bg2)}
+.camp-platform{font-size:9px;padding:2px 6px;border-radius:4px;font-weight:600;text-transform:uppercase;display:inline-block}
+.camp-platform.facebook{background:rgba(59,130,246,0.1);color:var(--blue)}
+.camp-platform.instagram{background:rgba(236,72,153,0.1);color:var(--pink)}
+.badge-objective{font-size:10px;padding:2px 6px;background:var(--bg4);color:var(--text2);border-radius:4px;border:1px solid var(--border)}
+.val-bold{font-weight:600;font-family:'DM Mono',monospace}
+
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="topnav">
+  <div class="tn-logo">
+    <div class="tn-icon">M</div>
+    <div><div class="tn-name">Mountain</div><div class="tn-sub">analytics</div></div>
+  </div>
+  <div class="tn-tabs">
+    <div class="tn-tab active" onclick="goPage('kunlik',this)">Kunlik hisobot</div>
+    <div class="tn-tab" onclick="goPage('campaigns',this)">Kampaniyalar</div>
+    <div class="tn-tab" onclick="goPage('lidlar',this)">Lidlar analitika</div>
+    <div class="tn-tab" onclick="goPage('sdelki',this)">Sdelkalar</div>
+    <div class="tn-tab" onclick="goPage('budget',this)">Byudjet</div>
+    <div class="tn-tab" onclick="goPage('settings',this)">Sozlamalar</div>
+  </div>
+  <div class="tn-right">
+    <select class="sel" id="month-sel" onchange="changeMonth(this.value)"></select>
+    <div style="display:flex;gap:4px;padding:4px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif"></div>
+
+<!-- ===== OVERVIEW ===== -->
+<!-- ===== KUNLIK HISOBOT ===== -->
+<div id="page-kunlik" class="page active">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:16px;font-weight:700">Kunlik hisobot — <span id="kunlik-month">Fevral 2025</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Sheets bilan bir xil tuzilma · Qo'lda yoki API orqali to'ldiriladi</div>
+      </div>
+      <div style="display:flex;gap:7px;align-items:center">
+        <!-- META LIVE LOADER — status badge + manual sync trigger -->
+        <span id="meta-sync-status" style="font-size:11px"></span>
+        <button class="btn sm ghost" onclick="metaSync()">⟳ Meta sync</button>
+        <!-- END META LIVE LOADER -->
+        <button class="btn primary" onclick="openM('m-manual-kunlik')">+ Qo'lda kiritish</button>
+      </div>
+      <!-- DASHBOARD DEBUG PANEL (dev) -->
+      <div id="dashboard-debug" style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <input type="date" id="dbg-date" class="fi" style="max-width:160px;padding:6px" />
+        <button class="btn sm" id="dbg-btn">Dashboard day</button>
+        <span id="dbg-status" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <div class="src-tabs" style="margin-bottom:0">
+        <div class="src-tab all-tab active" onclick="switchKunlikSrc('all',this)">Hammasi</div>
+        <div class="src-tab target-tab" onclick="switchKunlikSrc('target',this)">Target reklama</div>
+        <div class="src-tab instagram-tab" onclick="switchKunlikSrc('instagram',this)">Instagram</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:11px;color:var(--text3)">Davr:</span>
+        <button class="btn sm" id="week-btn-all"    onclick="filterWeek('all',this)"    style="background:var(--blue);color:#fff;border-color:var(--blue)">Barchasi</button>
+        <button class="btn sm" id="week-btn-thisweek" onclick="filterWeek('thisweek',this)">Bu hafta</button>
+        <button class="btn sm" id="week-btn-lastweek" onclick="filterWeek('lastweek',this)">O'tgan hafta</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Kunlik ma'lumotlar jadvali</div>
+          <div class="card-sub">Yashil — avtomatik · Sariq — qo'lda · Bo'sh — kiritilmagan · Bugun ustun ko'k bilan ajratilgan</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm ghost">CSV export</button>
+          <button class="btn sm ghost">Excel</button>
+        </div>
+      </div>
+      <div class="daily-grid">
+        <table class="daily-table" id="daily-table-all">
+          <thead id="daily-head"></thead>
+          <tbody id="daily-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BYUDJET (admin only) ===== -->
+<div id="page-budget" class="page">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:700">Byudjet — <span id="budget-month-title">Fevral 2025</span></div>
+    </div>
+    <div class="src-tabs">
+      <div class="src-tab all-tab active" onclick="switchBudgetSrc('all',this)">Hammasi</div>
+      <div class="src-tab target-tab" onclick="switchBudgetSrc('target',this)">Target reklama</div>
+      <div class="src-tab instagram-tab" onclick="switchBudgetSrc('instagram',this)">Instagram</div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Kanal bo'yicha byudjet</span>
+        <button class="btn sm primary" onclick="openM('m-budget-edit')">Tahrirlash</button>
+      </div>
+      <table>
+        <thead><tr><th>Kanal</th><th>Reja</th><th>Fakt</th><th>%</th><th>Holat</th></tr></thead>
+        <tbody id="budget-tbody">
+          <tr class="budget-row" data-src="target">
+            <td><span class="badge b-orange">Target reklama</span></td>
+            <td class="mono" id="bud-target-reja">$1,500</td>
+            <td class="mono" id="bud-target-fakt">—</td>
+            <td id="bud-target-pct"><div class="prog" style="width:80px"><div class="prog-fill" id="bud-target-bar" style="width:0%;background:var(--amber)"></div></div> <span id="bud-target-pct-val">—</span></td>
+            <td id="bud-target-holat"><span class="badge b-amber" id="bud-target-badge">Yuklanmoqda...</span></td>
+          </tr>
+          <tr class="budget-row" data-src="instagram"><td><span class="badge b-pink">Instagram</span></td><td class="mono">$1,200</td><td class="mono">$1,200</td><td><div class="prog" style="width:80px"><div class="prog-fill" style="width:100%;background:var(--green)"></div></div> 100%</td><td><span class="badge b-green">To'liq</span></td></tr>
+          <tr class="budget-row" data-src="sayt"><td><span class="badge b-blue">Sayt / SEO</span></td><td class="mono">$500</td><td class="mono">$397</td><td><div class="prog" style="width:80px"><div class="prog-fill" style="width:79%;background:var(--blue)"></div></div> 79%</td><td><span class="badge b-blue">Normal</span></td></tr>
+          <tr class="budget-row" data-src="google"><td><span class="badge b-purple">Google Ads</span></td><td class="mono">$800</td><td class="mono">$1,200</td><td><div class="prog" style="width:80px"><div class="prog-fill" style="width:100%;background:var(--red)"></div></div> 150%</td><td><span class="badge b-red">Oshib ketdi!</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SOZLAMALAR ===== -->
+<div id="page-settings" class="page">
+  <div class="container">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px">API va Integratsiya sozlamalari</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+      <div class="card">
+        <div class="card-head" style="background:var(--blue-bg)"><span class="card-title" style="color:var(--blue)">Meta Ads API</span><div style="display:flex;gap:6px;align-items:center"><span class="badge b-green">Ulangan</span><button class="btn sm" onclick="doSync('m-sync-target')">Sync</button></div></div>
+        <div style="padding:14px">
+          <div class="fg"><label class="fl">Access Token</label><input class="fi" type="password" value="••••••••••••••••••••" placeholder="Meta access token"></div>
+          <div class="fg"><label class="fl">Ad Account ID</label><input class="fi" value="act_123456789" placeholder="act_XXXXXXXXX"></div>
+          <div class="fg"><label class="fl">Sync chastotasi</label><select class="fi"><option>Har 15 daqiqada</option><option>Har soatda</option><option>Kundalik</option></select></div>
+          <div style="padding:8px 10px;background:var(--green-bg);border:1px solid var(--green-b);border-radius:var(--r);font-size:11px;color:var(--green);margin-top:4px">✓ Oxirgi sync: 5 min oldin · Lidlar, Byudjet, CPL avtomatik yangilanadi</div>
+          <div class="mfoot" style="padding-top:10px;margin-top:10px;border-top:1px solid var(--border)">
+            <button class="btn sm">Test qilish</button>
+            <button class="btn sm primary">Saqlash</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" style="background:var(--orange-bg)"><span class="card-title" style="color:var(--orange)">Bitrix24 API</span><div style="display:flex;gap:6px;align-items:center"><span class="badge b-green">Ulangan</span><button class="btn sm" onclick="doSync('m-sync-ig')">Sync</button></div></div>
+        <div style="padding:14px">
+          <div class="fg"><label class="fl">Webhook URL</label><input class="fi" value="https://mountain.bitrix24.ru/rest/1/..." placeholder="Bitrix24 webhook"></div>
+          <div class="fg"><label class="fl">Tortadigan ma'lumotlar</label>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" checked> Deals (Kelishuvlar)</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" checked> Leads (Lidlar)</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" checked> Contacts (Uchrashuvlar)</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox"> Tasks</label>
+            </div>
+          </div>
+          <div class="mfoot" style="padding-top:10px;margin-top:10px;border-top:1px solid var(--border)">
+            <button class="btn sm">Test qilish</button>
+            <button class="btn sm primary">Saqlash</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" style="background:var(--teal-bg)"><span class="card-title" style="color:var(--teal)">Google Analytics</span><span class="badge b-amber">Sozlanmagan</span></div>
+        <div style="padding:14px">
+          <div class="fg"><label class="fl">Property ID</label><input class="fi" placeholder="GA4 Property ID (G-XXXXXXXX)"></div>
+          <div class="fg"><label class="fl">Service Account JSON</label><textarea class="fi" rows="2" placeholder='{"type":"service_account",...}'></textarea></div>
+          <div class="mfoot" style="padding-top:10px;margin-top:10px;border-top:1px solid var(--border)">
+            <button class="btn sm primary">Ulash</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" style="background:var(--purple-bg)"><span class="card-title" style="color:var(--purple)">Google Sheets Sync</span><span class="badge b-green">Faol</span></div>
+        <div style="padding:14px">
+          <div class="fg"><label class="fl">Sheets ID</label><input class="fi" value="1AWS0dgX0jMeE1lu2KRDz_CbDxv9zs0MO6IhHRizuXb4"></div>
+          <div class="fg"><label class="fl">Yo'nalishi</label><select class="fi"><option>Bu tizim → Sheets (export)</option><option>Sheets → Bu tizim (import)</option><option>Ikki tomonlama</option></select></div>
+          <div class="mfoot" style="padding-top:10px;margin-top:10px;border-top:1px solid var(--border)">
+            <button class="btn sm">Hozir sync</button>
+            <button class="btn sm primary">Saqlash</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Qo'lda kiritish (overview) -->
+<div class="overlay" id="m-manual" onclick="bgClose(event,'m-manual')">
+  <div class="modal">
+    <div class="close-x" onclick="closeM('m-manual')">×</div>
+    <div class="modal-title">Qo'lda ma'lumot kiritish</div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Manba</label><select class="fi"><option>Target reklama</option><option>Instagram</option><option>Google Ads</option><option>Sayt</option></select></div>
+      <div class="fg"><label class="fl">Sana</label><input class="fi" type="date"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Byudjet ($)</label><input class="fi" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Lidlar soni</label><input class="fi" type="number" placeholder="0"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Maqsadli lidlar</label><input class="fi" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Uchrashuvlar</label><input class="fi" type="number" placeholder="0"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Kelishuvlar soni</label><input class="fi" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Kelishuvlar summasi ($)</label><input class="fi" type="number" placeholder="0"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Sotuvlar soni</label><input class="fi" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Sotuvlar summasi ($)</label><input class="fi" type="number" placeholder="0"></div>
+    </div>
+    <div class="fg"><label class="fl">Izoh</label><input class="fi" placeholder="Qo'shimcha ma'lumot..."></div>
+    <div style="padding:8px 10px;background:var(--amber-bg);border:1px solid var(--amber-b);border-radius:var(--r);font-size:11px;color:var(--amber)">
+      ⚠ Bu ma'lumot sariq rang bilan ko'rsatiladi (qo'lda kiritilgan). API orqali kelgan ma'lumotlar yashil bo'ladi.
+    </div>
+    <div class="mfoot"><button class="btn" onclick="closeM('m-manual')">Bekor</button><button class="btn primary" onclick="saveManual()">Saqlash</button></div>
+  </div>
+</div>
+
+<!-- Kunlik qo'lda kiritish -->
+<div class="overlay" id="m-manual-kunlik" onclick="bgClose(event,'m-manual-kunlik')">
+  <div class="modal">
+    <div class="close-x" onclick="closeM('m-manual-kunlik')">×</div>
+    <div class="modal-title">Kunlik ma'lumot kiritish</div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Kun</label><select class="fi" id="day-select"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select></div>
+      <div class="fg"><label class="fl">Manba</label><select class="fi" id="src-select"><option value="target">Target reklama</option><option value="instagram">Instagram</option></select></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Byudjet ($)</label><input class="fi" type="number" id="inp-budget" placeholder="0"></div>
+      <div class="fg"><label class="fl">Lidlar soni</label><input class="fi" type="number" id="inp-leads" placeholder="0"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Maqsadli lidlar</label><input class="fi" type="number" id="inp-qlead" placeholder="0"></div>
+      <div class="fg"><label class="fl">Uchrashuvlar</label><input class="fi" type="number" id="inp-meet" placeholder="0"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Kelishuvlar</label><input class="fi" type="number" id="inp-deal" placeholder="0"></div>
+      <div class="fg"><label class="fl">Sotuvlar soni</label><input class="fi" type="number" id="inp-sale" placeholder="0"></div>
+    </div>
+    <div class="fg"><label class="fl">Sotuvlar summasi ($)</label><input class="fi" type="number" id="inp-rev" placeholder="0"></div>
+    <div class="mfoot"><button class="btn" onclick="closeM('m-manual-kunlik')">Bekor</button><button class="btn primary" onclick="saveKunlik()">Saqlash</button></div>
+  </div>
+</div>
+
+<!-- Sync modals -->
+<div class="overlay" id="m-sync-target" onclick="bgClose(event,'m-sync-target')">
+  <div class="modal" style="width:380px">
+    <div class="close-x" onclick="closeM('m-sync-target')">×</div>
+    <div class="modal-title">Target reklama sync</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <div style="padding:10px;background:var(--green-bg);border:1px solid var(--green-b);border-radius:var(--r);font-size:11px;color:var(--green)">✓ Meta Ads ulangan · Oxirgi sync: 5 min oldin</div>
+      <div class="fg"><label class="fl">Sync qilinadigan davr</label><select class="fi"><option>Bugungi kun</option><option>Bu hafta</option><option>Bu oy</option><option>Maxsus sana</option></select></div>
+      <div style="font-size:11px;color:var(--text2)">Quyidagi ma'lumotlar Meta Ads API dan yangilanadi: Byudjet, Impressiyalar, Kliklr, CPL, Lidlar soni</div>
+    </div>
+    <div class="mfoot"><button class="btn" onclick="closeM('m-sync-target')">Bekor</button><button class="btn primary" onclick="doSync('m-sync-target')">Sync boshlash</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="m-sync-ig" onclick="bgClose(event,'m-sync-ig')">
+  <div class="modal" style="width:380px">
+    <div class="close-x" onclick="closeM('m-sync-ig')">×</div>
+    <div class="modal-title">Instagram sync</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <div style="padding:10px;background:var(--pink-bg);border:1px solid var(--pink-b);border-radius:var(--r);font-size:11px;color:var(--pink)">Instagram organik — qo'lda yoki Meta API orqali</div>
+      <div class="@"><label class="fl">Manba</label><select class="fi"><option>Meta API (organik reach)</option><option>Qo'lda kiritish</option></select></div>
+    </div>
+    <div class="mfoot"><button class="btn" onclick="closeM('m-sync-ig')">Bekor</button><button class="btn primary" onclick="doSync('m-sync-ig')">Sync</button></div>
+  </div>
+</div>
+
+<script>
+// === NAVIGATION ===
+function goPage(p, el) {
+  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  document.querySelectorAll('.tn-tab').forEach(x => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else document.querySelectorAll('.tn-tab').forEach(x => {
+    if (x.getAttribute('onclick') && x.getAttribute('onclick').includes("'" + p + "'")) x.classList.add('active');
+  });
+  if (p === 'kunlik') buildDailyTable();
+  if (p === 'funnel') buildFunnels();
+}
+
+// === MODAL ===
+function openM(id) { document.getElementById(id).classList.add('open'); }
+function closeM(id) { document.getElementById(id).classList.remove('open'); }
+function bgClose(e, id) { if (e.target === document.getElementById(id)) closeM(id); }
+
+
+// === NOTIFICATION ===
+function showNotif(msg) {
+  const n = document.getElementById('notif');
+  n.textContent = msg;
+  n.classList.add('show');
+  setTimeout(() => n.classList.remove('show'), 2500);
+}
+
+// === DATA ===
+const monthData = {
+  fevral: {
+    target: {
+      budget: [0,0,0,72,70,35,29,5,0,0,0,0,0,28,24,34,61,10,0,100,68,55,61,10,0,77,76,75,83,0,0],
+      leads:  [0,0,0,18,16,8,7,2,0,0,0,0,0,7,6,8,14,3,0,22,16,12,14,2,0,18,17,16,20,0,0],
+      qleads: [0,0,0,9,8,4,3,1,0,0,0,0,0,4,3,4,7,1,0,11,8,6,7,1,0,9,8,8,10,0,0],
+      meets:  [0,0,0,4,3,2,1,0,0,0,0,0,0,2,1,2,3,0,0,5,3,3,3,0,0,4,4,3,4,0,0],
+      deals:  [0,0,0,2,1,1,1,0,0,0,0,0,0,1,0,1,2,0,0,3,2,1,2,0,0,2,2,1,2,0,0],
+      sales:  [0,0,0,1,1,1,0,0,0,0,0,0,0,1,0,1,1,0,0,2,1,1,1,0,0,1,1,1,1,0,0],
+      rev:    [0,0,0,1500,1200,800,0,0,0,0,0,0,0,1800,0,1200,1500,0,0,2800,1500,1200,1500,0,0,1800,1200,1200,1400,0,0],
+    },
+    instagram: {
+      budget: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,500,300,200,200,0,0,0,0,0,0,0,0],
+      leads:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,1,2,0,0,0,0,0,0,0,0],
+      qleads: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,1,2,0,0,0,0,0,0,0,0],
+      meets:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,1,1,0,0,0,0,0,0,0,0],
+      deals:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0],
+      sales:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0],
+      rev:    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1800,0,0,1500,0,0,0,0,0,0,0,0],
+    }
+  }
+};
+
+// manual overrides: {month: {src: {day: {metric: val, manual: true}}}}
+const manualData = {};
+
+const _NOW       = new Date();
+const TODAY      = _NOW.getDate();
+const THIS_MONTH = _NOW.getMonth();   // 0-based
+const THIS_YEAR  = _NOW.getFullYear();
+const MONTH_UZ   = ['yanvar','fevral','mart','aprel','may','iyun','iyul','avgust','sentabr','oktabr','noyabr','dekabr'];
+const MONTH_LABEL= ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+
+function _daysInMonth(monthKey, year) {
+  const m = MONTH_UZ.indexOf(monthKey);
+  if (m < 0) return 30;
+  return new Date(year, m + 1, 0).getDate();
+}
+
+function _parseMonthSel(val) {
+  // val format: "aprel-2026"
+  const [mkey, yr] = val.split('-');
+  return { mkey, year: parseInt(yr) };
+}
+
+// Populate month selector — last 12 months
+(function _buildMonthSel() {
+  const sel = document.getElementById('month-sel');
+  const opts = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(THIS_YEAR, THIS_MONTH - i, 1);
+    const mIdx = d.getMonth();
+    const yr   = d.getFullYear();
+    const key  = MONTH_UZ[mIdx] + '-' + yr;
+    const lbl  = MONTH_LABEL[mIdx] + ' ' + yr;
+    opts.push(`<option value="${key}">${lbl}</option>`);
+  }
+  sel.innerHTML = opts.join('');
+})();
+
+function getData(month, src, metric) {
+  const base = (monthData[month] && monthData[month][src] && Array.isArray(monthData[month][src][metric])) 
+    ? monthData[month][src][metric] 
+    : Array(31).fill(0);
+  const result = [...base];
+  if (manualData[month] && manualData[month][src]) {
+    Object.entries(manualData[month][src]).forEach(([day, vals]) => {
+      if (vals[metric] !== undefined) result[parseInt(day)-1] = vals[metric];
+    });
+  }
+  return result;
+}
+
+function isManual(month, src, day, metric) {
+  return !!(manualData[month] && manualData[month][src] && manualData[month][src][day] && manualData[month][src][day][metric] !== undefined);
+}
+
+// === DAILY TABLE ===
+const metrics = [
+  {key:'budget', label:'Byudjet ($)', fmt: v => v ? '$'+v : ''},
+  {key:'leads',  label:'Lidlar soni', fmt: v => v || ''},
+  {key:'qleads', label:'Maqsadli lidlar', fmt: v => v || ''},
+  {key:'meets',  label:'Uchrashuvlar', fmt: v => v || ''},
+  {key:'deals',  label:'Kelishuvlar', fmt: v => v || ''},
+  {key:'sales',  label:'Sotuvlar soni', fmt: v => v || ''},
+  {key:'rev',    label:'Sotuvlar summasi', fmt: v => v ? '$'+v.toLocaleString() : ''},
+];
+
+const sourceConfig = {
+  all: [{src:'target',label:'TARGET REKLAMA',cls:'source-header target-h'},{src:'instagram',label:'INSTAGRAM',cls:'source-header instagram-h'}],
+  target: [{src:'target',label:'TARGET REKLAMA',cls:'source-header target-h'}],
+  instagram: [{src:'instagram',label:'INSTAGRAM',cls:'source-header instagram-h'}],
+};
+
+let currentSrc = 'all';
+let weekFilter = 'all'; // 'all' | 'thisweek' | 'lastweek'
+
+const metaCampaigns = {}; // Store { 'aprel-2026': [rows...] }
+
+function buildCampaignsTable() {
+  const { mkey: month, year: selYear } = _parseMonthSel(document.getElementById('month-sel').value);
+  const key = month + '-' + selYear;
+  const rows = metaCampaigns[key] || [];
+  
+  const label = document.getElementById('camp-month-label');
+  if (label) label.innerText = (MONTH_LABEL[MONTH_UZ.indexOf(month)] || month) + ' ' + selYear;
+
+  const body = document.getElementById('campaigns-body');
+  if (!body) return;
+
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text3)">Bu oy uchun ma\'lumot yo\'q. "Yangilash" tugmasini bosing.</td></tr>';
+    return;
+  }
+
+  // Sort by date descending
+  const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date));
+
+  let html = '';
+  let tSpend = 0, tImp = 0, tReach = 0, tLeads = 0, tClicks = 0;
+
+  sorted.forEach(r => {
+    tSpend += r.spend;
+    tImp += r.impressions;
+    tReach += r.reach;
+    tLeads += r.leads;
+    tClicks += r.clicks;
+
+    html += `
+      <tr>
+        <td class="val-bold">${r.date}</td>
+        <td style="max-width:300px;white-space:normal;font-weight:500">${r.name}</td>
+        <td><span class="camp-platform ${r.platform}">${r.platform}</span></td>
+        <td><span class="badge-objective">${r.objective}</span></td>
+        <td class="val-bold">$${r.spend.toFixed(2)}</td>
+        <td class="val-bold">${r.impressions.toLocaleString()}</td>
+        <td class="val-bold">${r.reach.toLocaleString()}</td>
+        <td class="val-bold" style="color:var(--blue)">${r.leads}</td>
+        <td class="val-bold">${r.clicks}</td>
+        <td class="val-bold">${r.frequency.toFixed(2)}</td>
+      </tr>
+    `;
+  });
+
+  body.innerHTML = html;
+
+  const foot = document.getElementById('campaigns-foot');
+  if (foot) {
+    foot.innerHTML = `
+      <tr style="background:var(--bg5);font-weight:700">
+        <td colspan="4">JAMI</td>
+        <td class="val-bold">$${tSpend.toFixed(2)}</td>
+        <td class="val-bold">${tImp.toLocaleString()}</td>
+        <td class="val-bold">${tReach.toLocaleString()}</td>
+        <td class="val-bold" style="color:var(--blue)">${tLeads}</td>
+        <td class="val-bold">${tClicks}</td>
+        <td>-</td>
+      </tr>
+    `;
+  }
+}
+
+function filterWeek(mode, el) {
+  weekFilter = mode;
+  document.querySelectorAll('[id^="week-btn-"]').forEach(b => {
+    b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+  });
+  el.style.background = 'var(--blue)';
+  el.style.color = '#fff';
+  el.style.borderColor = 'var(--blue)';
+  buildDailyTable();
+}
+
+function _weekRange() {
+  // Returns {from, to} — 1-based day numbers for the filter
+  const now = new Date();
+  const todayD = now.getDate();
+  const dow = now.getDay(); // 0=Sun
+  const mondayOffset = (dow === 0 ? -6 : 1 - dow);
+  if (weekFilter === 'thisweek') {
+    const from = todayD + mondayOffset;
+    const to   = todayD + mondayOffset + 6;
+    return { from: Math.max(1, from), to };
+  }
+  if (weekFilter === 'lastweek') {
+    const from = todayD + mondayOffset - 7;
+    const to   = todayD + mondayOffset - 1;
+    return { from: Math.max(1, from), to };
+  }
+  return { from: 1, to: 31 };
+}
+
+function buildDailyTable() {
+  buildCampaignsTable();
+  const { mkey: month, year: selYear } = _parseMonthSel(document.getElementById('month-sel').value);
+  const daysInMonth = _daysInMonth(month, selYear);
+  const isCurrentMonth = (month === MONTH_UZ[THIS_MONTH] && selYear === THIS_YEAR);
+  const head = document.getElementById('daily-head');
+  const body = document.getElementById('daily-body');
+
+  const wRange = _weekRange();
+
+  // Header
+  let hRow = '<tr><th style="position:sticky;left:0;z-index:3;background:var(--bg5)">Manba / Ko\'rsatkich</th>';
+  hRow += '<th>Oylik</th>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isT    = isCurrentMonth && d === TODAY;
+    const dimmed = weekFilter !== 'all' && (d < wRange.from || d > wRange.to);
+    hRow += `<th class="${isT ? 'today-col' : ''}" style="${dimmed ? 'opacity:.25' : ''}">${d}</th>`;
+  }
+  hRow += '</tr>';
+  head.innerHTML = hRow;
+
+  // Body
+  let html = '';
+  const srcs = sourceConfig[currentSrc];
+
+  srcs.forEach(({src, label, cls}) => {
+    // Section header
+    html += `<tr><td class="section-label ${cls}" colspan="${daysInMonth+2}">${label}</td></tr>`;
+
+    metrics.forEach(m => {
+      const vals = getData(month, src, m.key);
+      const total = vals.reduce((a,b) => a+b, 0);
+      html += `<tr>`;
+      html += `<td class="row-label">${m.label}</td>`;
+      // Monthly total
+      html += `<td class="mono has-val" style="font-weight:600">${total ? m.fmt(total) : '—'}</td>`;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const v = vals[d-1];
+        const man    = isManual(month, src, d, m.key);
+        const isT    = isCurrentMonth && d === TODAY;
+        const dimmed = weekFilter !== 'all' && (d < wRange.from || d > wRange.to);
+        const autoColor = dimmed ? 'opacity:.2' : man ? 'background:var(--amber-bg)' : (v ? 'background:var(--green-bg)' : '');
+        html += `<td class="editable ${v ? 'has-val' : 'zero-val'} ${isT ? 'today-col' : ''}" 
+          style="${autoColor}" 
+          onclick="editCell('${month}','${src}',${d},'${m.key}',${v})"
+          title="${man ? 'Qo\'lda kiritilgan' : v ? 'API dan' : 'Bo\'sh \u2014 bosing'}"
+        >${v ? m.fmt(v) : ''}</td>`;
+      }
+      html += `</tr>`;
+    });
+
+    // Conversion rows
+    html += `<tr><td class="row-label" style="color:var(--text3);font-size:11px">Lid→Maq.lid %</td><td class="mono" style="color:var(--text2)">—</td>`;
+    const leadsArr = getData(month, src, 'leads');
+    const qArr = getData(month, src, 'qleads');
+    for (let d = 1; d <= daysInMonth; d++) {
+      const l = leadsArr[d-1], q = qArr[d-1];
+      const pct = l ? Math.round(q/l*100) : 0;
+      html += `<td style="font-size:10px;color:${pct>=55?'var(--green)':pct>0?'var(--amber)':'var(--text3)'}">${pct ? pct+'%' : ''}</td>`;
+    }
+    html += `</tr>`;
+
+    html += `<tr><td class="row-label" style="color:var(--text3);font-size:11px;border-bottom:2px solid var(--border2)">ROAS</td><td class="mono" style="color:var(--text2)">—</td>`;
+    const budArr = getData(month, src, 'budget');
+    const revArr = getData(month, src, 'rev');
+    for (let d = 1; d <= daysInMonth; d++) {
+      const b = budArr[d-1], r = revArr[d-1];
+      const roas = b ? (r/b).toFixed(1) : 0;
+      html += `<td style="font-size:10px;color:${roas>30?'var(--green)':roas>0?'var(--amber)':'var(--text3)'}">${roas > 0 ? roas+'x' : ''}</td>`;
+    }
+    html += `</tr>`;
+  });
+
+  body.innerHTML = html;
+}
+
+function switchKunlikSrc(src, el) {
+  currentSrc = src;
+  document.querySelectorAll('#page-kunlik .src-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  buildDailyTable();
+}
+
+function switchBudgetSrc(src, el) {
+  document.querySelectorAll('#page-budget .src-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.budget-row').forEach(row => {
+    if (src === 'all') {
+      row.style.display = '';
+    } else {
+      row.style.display = row.dataset.src === src ? '' : 'none';
+    }
+  });
+}
+
+// Edit cell inline
+function editCell(month, src, day, metric, current) {
+  const val = prompt(`${metric} — ${day}-kun (${src}):\nJoriy qiymat: ${current || 'bo\'sh'}\n\nYangi qiymat kiriting:`, current || '');
+  if (val === null) return;
+  const num = parseFloat(val);
+  if (isNaN(num) && val !== '') return showNotif('Raqam kiriting!');
+  if (!manualData[month]) manualData[month] = {};
+  if (!manualData[month][src]) manualData[month][src] = {};
+  if (!manualData[month][src][day]) manualData[month][src][day] = {};
+  manualData[month][src][day][metric] = num || 0;
+  buildDailyTable();
+  showNotif(`✓ ${day}-kun ${metric} saqlandi`);
+}
+
+// Save from modal
+function saveKunlik() {
+  const month = _parseMonthSel(document.getElementById('month-sel').value).mkey;
+  const day = parseInt(document.getElementById('day-select').value);
+  const src = document.getElementById('src-select').value;
+  const fields = {budget:'inp-budget',leads:'inp-leads',qleads:'inp-qlead',meets:'inp-meet',deals:'inp-deal',sales:'inp-sale',rev:'inp-rev'};
+  if (!manualData[month]) manualData[month] = {};
+  if (!manualData[month][src]) manualData[month][src] = {};
+  if (!manualData[month][src][day]) manualData[month][src][day] = {};
+  Object.entries(fields).forEach(([k,id]) => {
+    const v = parseFloat(document.getElementById(id).value);
+    if (!isNaN(v) && v > 0) manualData[month][src][day][k] = v;
+  });
+  closeM('m-manual-kunlik');
+  buildDailyTable();
+  showNotif(`✓ ${day}-kun ma'lumotlari saqlandi`);
+}
+
+function saveManual() { closeM('m-manual'); showNotif('✓ Ma\'lumot saqlandi'); }
+
+// Sync simulation
+function doSync(id) {
+  closeM(id);
+  showNotif('⟳ Sync boshlandi...');
+  setTimeout(() => showNotif('✓ Sync tugadi — ma\'lumotlar yangilandi'), 1500);
+}
+
+function changeMonth(v) {
+  const { mkey, year } = _parseMonthSel(v);
+  const mIdx = MONTH_UZ.indexOf(mkey);
+  const label = (mIdx >= 0 ? MONTH_LABEL[mIdx] : mkey) + ' ' + year;
+  document.getElementById('kunlik-month').textContent = label;
+  fetchMetaInsights(mkey, year);
+}
+
+// === FUNNEL BUILDER ===
+function buildFunnels() {
+  buildFunnelChart('funnel-target', [
+    {label:'Lidlar', val:550, color:'var(--orange)'},
+    {label:'Maqsadli', val:275, pct:'50%', color:'var(--amber)'},
+    {label:'Uchrashuv', val:116, pct:'42%', color:'var(--purple)'},
+    {label:'Kelishuv', val:50, pct:'43%', color:'var(--blue)'},
+    {label:'Sotuv', val:31, pct:'62%', color:'var(--green)'},
+  ]);
+  buildFunnelChart('funnel-ig', [
+    {label:'Lidlar', val:50, color:'var(--pink)'},
+    {label:'Maqsadli', val:40, pct:'80%', color:'var(--purple)'},
+    {label:'Uchrashuv', val:27, pct:'68%', color:'var(--blue)'},
+    {label:'Kelishuv', val:22, pct:'81%', color:'var(--teal)'},
+    {label:'Sotuv', val:14, pct:'64%', color:'var(--green)'},
+  ]);
+}
+
+function buildFunnelChart(id, steps) {
+  const max = steps[0].val;
+  let html = '<div style="display:flex;flex-direction:column;gap:6px">';
+  steps.forEach(s => {
+    const w = Math.round(s.val/max*100);
+    html += `<div style="display:flex;align-items:center;gap:10px">
+      <div style="min-width:80px;font-size:11px;color:var(--text2);text-align:right">${s.label}</div>
+      <div style="flex:1;background:var(--bg4);border-radius:4px;height:28px;overflow:hidden;position:relative">
+        <div style="height:100%;width:${w}%;background:${s.color};opacity:.85;border-radius:4px;transition:width .4s;display:flex;align-items:center;padding-left:8px">
+          <span style="font-size:12px;font-weight:700;color:#fff;font-family:'DM Mono',monospace">${s.val}</span>
+        </div>
+      </div>
+      ${s.pct ? `<div style="min-width:36px;font-size:11px;font-weight:600;color:${s.color}">${s.pct}</div>` : '<div style="min-width:36px"></div>'}
+    </div>`;
+  });
+  html += '</div>';
+  document.getElementById(id).innerHTML = html;
+}
+</script>
+
+<!-- ===== LIDLAR ANALITIKA ===== -->
+<!-- CAMPAIGN ANALYTICS PAGE -->
+<div id="page-campaigns" class="page">
+  <div class="h-row">
+    <div class="h-left">
+      <h1 class="h-title">Kampaniyalar tahlili — <span id="camp-month-label">...</span></h1>
+      <p class="h-sub">Har bir kampaniya bo'yicha batafsil Meta Ads statistikasi</p>
+    </div>
+    <div class="h-right">
+      <button class="btn primary" onclick="loadMetaLive()">
+        <svg style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        Yangilash
+      </button>
+    </div>
+  </div>
+
+  <div class="camp-card">
+    <div class="camp-table-wrap">
+      <table class="camp-table" id="campaigns-table">
+        <thead>
+          <tr>
+            <th>Sana</th>
+            <th>Kampaniya nomi</th>
+            <th>Platforma</th>
+            <th>Maqsad</th>
+            <th>Xarajat ($)</th>
+            <th>Impressiya</th>
+            <th>Reach</th>
+            <th>Lidlar</th>
+            <th>Kliklar</th>
+            <th>Chastota</th>
+          </tr>
+        </thead>
+        <tbody id="campaigns-body">
+          <tr>
+            <td colspan="10" style="text-align:center;padding:40px;color:var(--text3)">Ma'lumotlar yuklanmoqda...</td>
+          </tr>
+        </tbody>
+        <tfoot id="campaigns-foot">
+          <!-- Totals will go here -->
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="page-lidlar" class="page">
+  <div class="container">
+
+    <!-- FILTERS -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--rlg);padding:10px 14px;margin-bottom:14px;box-shadow:var(--sh)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text3);font-weight:500;min-width:80px">Sana:</div>
+        <input type="date" id="lid-f-from" class="sel" value="2024-04-25" style="font-size:11px" onchange="fetchLidlarStats()">
+        <span style="color:var(--text3)">—</span>
+        <input type="date" id="lid-f-to" class="sel" value="2026-04-25" style="font-size:11px" onchange="fetchLidlarStats()">
+        <select id="lid-f-user" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">Ma'sul xodim — barchasi</option></select>
+        <select id="lid-f-status" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">Bosqich — barchasi</option></select>
+        <select id="lid-f-source" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">Manba — barchasi</option></select>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div style="font-size:11px;color:var(--text3);font-weight:500;min-width:80px">UTM:</div>
+        <select id="lid-f-utm-source" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">utm_source — barchasi</option></select>
+        <select id="lid-f-utm-medium" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">utm_medium — barchasi</option></select>
+        <select id="lid-f-utm-campaign" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">utm_campaign — barchasi</option></select>
+        <select id="lid-f-utm-content" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">utm_content — barchasi</option></select>
+        <select id="lid-f-utm-term" class="sel" style="font-size:11px" onchange="fetchLidlarStats()"><option value="">utm_term — barchasi</option></select>
+        <button class="btn sm" onclick="_clearLidFilters()">Tozalash</button>
+      </div>
+    </div>
+
+    <!-- TOP METRICS (DataLens style) -->
+    <div class="metrics" style="grid-template-columns:repeat(7,1fr);margin-bottom:14px">
+      <div class="metric c-blue" style="padding:12px 14px">
+        <div class="lbl" style="font-size:9px">Barcha lidlar</div>
+        <div class="val" style="font-size:26px;color:var(--blue)" id="lid-total">—</div>
+      </div>
+      <div class="metric c-amber" style="padding:12px 14px">
+        <div class="lbl" style="font-size:9px">Jarayonda</div>
+        <div class="val" style="font-size:26px;color:var(--amber)" id="lid-jarayon">—</div>
+      </div>
+      <div class="metric c-teal" style="padding:12px 14px">
+        <div class="lbl" style="font-size:9px">Uchrashuv belgilandi</div>
+        <div class="val" style="font-size:26px;color:var(--teal)" id="lid-uchrashuv">—</div>
+      </div>
+      <div class="metric c-red" style="padding:12px 14px">
+        <div class="lbl" style="font-size:9px">Bekor Bo'ldi</div>
+        <div class="val" style="font-size:26px;color:var(--red)" id="lid-bekor">—</div>
+      </div>
+      <div class="metric" style="padding:12px 14px;border-top:3px solid var(--orange)">
+        <div class="lbl" style="font-size:9px">Sifatsiz lid</div>
+        <div class="val" style="font-size:26px;color:var(--orange)" id="lid-sifatsiz">—</div>
+      </div>
+      <div class="metric c-green" style="padding:12px 14px">
+        <div class="lbl" style="font-size:9px">Konversiya</div>
+        <div class="val" style="font-size:26px;color:var(--green)" id="lid-konv">—</div>
+      </div>
+      <div class="metric c-purple" style="padding:12px 14px">
+        <div class="lbl" style="font-size:9px">Daromad (jami)</div>
+        <div class="val" style="font-size:26px;color:var(--purple)" id="lid-rev">—</div>
+      </div>
+    </div>
+
+    <!-- XODIMLAR JADVALI -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Lidlar (xodimlar kesimida)</div>
+          <div class="card-sub" id="lid-sync-label" style="color:var(--text3)">Bitrix24 dan yuklanmoqda...</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm" onclick="fetchLidlarStats()">↻ Yangilash</button>
+          <button class="btn sm ghost">Export</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="lidlar-table" style="min-width:800px">
+          <thead id="lidlar-thead"><tr>
+            <th style="position:sticky;left:0;background:var(--bg5);z-index:2;min-width:160px">Ma'sul xodim</th>
+            <th>Yuklanmoqda...</th>
+          </tr></thead>
+          <tbody id="lidlar-tbody"><tr><td colspan="2" style="text-align:center;padding:24px;color:var(--text3)">Yuklanmoqda...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LID VA KONVERSIYA -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head"><div class="card-title">Lid va Konversiya (xodimlar bo'yicha)</div></div>
+      <div style="overflow-x:auto">
+        <table style="min-width:900px">
+          <thead><tr>
+            <th style="min-width:160px">Ma'sul xodim</th>
+            <th>Umumiy lid</th><th>Jarayonda</th><th>Sifatsiz lid</th>
+            <th>Uchrashuv belgilandi</th><th>Konversiya</th>
+          </tr></thead>
+          <tbody id="conv-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- BOTTOM CHARTS 2x2 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+
+      <!-- SIFATSIZ LID SABABLARI -->
+      <div class="card">
+        <div class="card-head" style="border-left:4px solid var(--orange)">
+          <div class="card-title">Sifatsiz lid sababi (xodimlar kesimida)</div>
+        </div>
+        <div style="padding:12px 14px">
+          <div id="sifatsiz-chart"></div>
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:600">
+            <span>Itogo</span><span id="sifatsiz-itogo" class="mono">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- BEKOR BO'LISH SABABLARI -->
+      <div class="card">
+        <div class="card-head" style="border-left:4px solid var(--red)">
+          <div class="card-title">Bekor Bo'lish Sababi</div>
+        </div>
+        <div style="padding:12px 14px">
+          <div id="bekor-chart"></div>
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:600">
+            <span>Itogo</span><span id="bekor-itogo" class="mono">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SANDIQQA O'TKAZISH -->
+      <div class="card">
+        <div class="card-head" style="border-left:4px solid var(--teal)">
+          <div class="card-title">Sandiqqa o'tkazish sabablari</div>
+        </div>
+        <div style="padding:12px 14px">
+          <div id="sandiq-chart"></div>
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:600">
+            <span>Itogo</span><span id="sandiq-itogo" class="mono">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- UTM SOURCE -->
+      <div class="card">
+        <div class="card-head" style="border-left:4px solid var(--green)">
+          <div class="card-title">Utm source bo'yicha</div>
+        </div>
+        <div style="padding:12px 14px">
+          <div id="utm-chart"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== SDELKALAR ===== -->
+<div id="page-sdelki" class="page">
+  <div class="container">
+
+    <!-- TABS -->
+    <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:2px solid var(--border)">
+      <div class="sdel-subtab active" onclick="switchSdelTab('lidlar2',this)" style="padding:10px 18px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px">Lidlar</div>
+      <div class="sdel-subtab" onclick="switchSdelTab('sdelki2',this)" style="padding:10px 18px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-2px">Sdelkalar</div>
+      <div class="sdel-subtab" onclick="switchSdelTab('call',this)" style="padding:10px 18px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-2px">Call statistikasi</div>
+    </div>
+
+    <!-- FILTERS -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--rlg);padding:10px 14px;margin-bottom:14px;box-shadow:var(--sh)">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--text2);font-weight:500">Sana:</span>
+        <input type="date" id="sdel-f-from" class="sel" value="2024-04-25" style="font-size:11px" onchange="fetchSdelkiStats()">
+        <span style="color:var(--text3)">—</span>
+        <input type="date" id="sdel-f-to" class="sel" value="2026-04-25" style="font-size:11px" onchange="fetchSdelkiStats()">
+        <select id="sdel-f-user" class="sel" style="font-size:11px" onchange="fetchSdelkiStats()">
+          <option value="">Ma'sul xodim — barchasi</option>
+        </select>
+        <select id="sdel-f-stage" class="sel" style="font-size:11px" onchange="fetchSdelkiStats()">
+          <option value="">Bosqich — barchasi</option>
+        </select>
+        <select id="sdel-f-source" class="sel" style="font-size:11px" onchange="fetchSdelkiStats()">
+          <option value="">Manba — barchasi</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- OVERVIEW SUMMARY METRICS -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--text3)" id="sdel-sync-label">Bitrix24 dan yuklanmoqda...</div>
+      <button class="btn sm" onclick="fetchSdelkiStats()">↻ Yangilash</button>
+    </div>
+    <div class="metrics m6" style="margin-bottom:20px">
+      <div class="metric c-blue">
+        <div class="lbl">Jami sdelkalar</div>
+        <div class="val mono" id="sdel-total">—</div>
+        <div class="hint">Bitrix24 CRM</div>
+      </div>
+      <div class="metric c-green">
+        <div class="lbl">Jami daromad (WON)</div>
+        <div class="val mono" id="sdel-sotuv">—</div>
+        <div class="hint">Yutilgan sdelkalar</div>
+      </div>
+      <div class="metric c-teal">
+        <div class="lbl">Konversiya</div>
+        <div class="val mono" id="sdel-konv">—</div>
+        <div class="hint">WON / Jami</div>
+      </div>
+      <div class="metric c-amber">
+        <div class="lbl">Yutildi (WON)</div>
+        <div class="val mono" id="sdel-won">—</div>
+        <div class="hint">Muvaffaqiyatli</div>
+      </div>
+      <div class="metric c-red">
+        <div class="lbl">Yutqizildi (LOSE)</div>
+        <div class="val mono" id="sdel-lost">—</div>
+        <div class="hint">Bekor qilindi</div>
+      </div>
+      <div class="metric c-purple">
+        <div class="lbl">O'rtacha chek</div>
+        <div class="val mono" id="sdel-chek">—</div>
+        <div class="hint">WON / won_count</div>
+      </div>
+    </div>
+
+    <!-- TOP METRICS — STAGE BREAKDOWN -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head">
+        <div class="card-title">Bosqichlar bo'yicha</div>
+      </div>
+      <div style="padding:14px 20px" id="sdel-stage-chart">
+        <div style="color:var(--text3);text-align:center;padding:12px">Yuklanmoqda...</div>
+      </div>
+    </div>
+
+    <!-- DINAMIKA JADVALI -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head">
+        <div class="card-title">Dinamika (xodimlar + bosqichlar bo'yicha)</div>
+        <button class="btn sm" onclick="fetchSdelkiStats()">↻ Yangilash</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="min-width:800px" id="sdelki-table">
+          <thead id="sdelki-thead"><tr>
+            <th style="min-width:160px;position:sticky;left:0;background:var(--bg5);z-index:2">Ma'sul xodim</th>
+            <th>Yuklanmoqda...</th>
+          </tr></thead>
+          <tbody id="sdelki-tbody"><tr><td colspan="2" style="text-align:center;padding:24px;color:var(--text3)">Yuklanmoqda...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MANBALAR SDELKALAR -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head"><div class="card-title">Sdelkalar manbalar bo'yicha</div></div>
+      <div style="padding:16px 20px"><div id="sdelki-src-chart"></div></div>
+    </div>
+
+    <!-- KONVERSIYA MANBALAR -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head"><div class="card-title">Konversiya manbalar bo'yicha</div></div>
+      <div style="padding:16px 20px"><div id="konv-src-chart"></div></div>
+    </div>
+
+    <!-- DAROMAD MANBALAR BO'YICHA -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head"><div class="card-title">Daromad (Выручка) manbalar bo'yicha</div></div>
+      <div style="padding:16px 20px"><div id="revenue-chart"></div></div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+/* DataLens bar chart styles */
+.dl-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:2px 0}
+.dl-label{min-width:200px;font-size:12.5px;color:var(--text);text-align:right;flex-shrink:0}
+.dl-label-left{min-width:180px;font-size:12.5px;color:var(--text);text-align:left;flex-shrink:0}
+.dl-bar-wrap{flex:1;height:22px;background:var(--bg4);border-radius:4px;overflow:hidden;position:relative}
+.dl-bar{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:8px;transition:width .4s}
+.dl-bar span{font-size:11px;font-weight:600;color:#fff;white-space:nowrap;font-family:'DM Mono',monospace}
+.dl-val{min-width:56px;font-size:12.5px;font-family:'DM Mono',monospace;font-weight:600;text-align:right;flex-shrink:0;color:var(--text)}
+.sdel-subtab{transition:all .15s}
+.sdel-subtab:hover{background:var(--bg3)}
+
+/* Xodimlar table mini bars */
+.mini-tbar{display:inline-flex;align-items:center;gap:4px}
+.mini-tbar-fill{height:12px;border-radius:3px}
+</style>
+
+<script>
+// ===== LIDLAR DEMO DATA =====
+const xodimlarData = [
+  {name:'Diyoraxon',           qong:0,  yangi:32,  ish:0,   qa1:0,  qa2:52,  qa3:0, qiz:0,  oylab:35,  ofis:35, sandiq:21,  bekor:84,  sifatsiz:610, uchrashuv:53,  total:2091},
+  {name:'Mashhurbonu Safaeva', qong:0,  yangi:24,  ish:0,   qa1:0,  qa2:94,  qa3:0, qiz:0,  oylab:91,  ofis:59, sandiq:254, bekor:106, sifatsiz:113, uchrashuv:0,   total:3982},
+  {name:'Nozima',              qong:0,  yangi:23,  ish:0,   qa1:0,  qa2:96,  qa3:0, qiz:0,  oylab:56,  ofis:56, sandiq:58,  bekor:165, sifatsiz:434, uchrashuv:309, total:1325},
+  {name:'Ruxshona',            qong:1,  yangi:4,   ish:0,   qa1:0,  qa2:82,  qa3:0, qiz:0,  oylab:78,  ofis:78, sandiq:127, bekor:324, sifatsiz:839, uchrashuv:258, total:2979},
+  {name:'Sarvinoz',            qong:0,  yangi:12,  ish:0,   qa1:0,  qa2:169, qa3:0, qiz:0,  oylab:61,  ofis:61, sandiq:140, bekor:330, sifatsiz:762, uchrashuv:957, total:3001},
+  {name:'Gigu Andijon',        qong:13, yangi:0,   ish:0,   qa1:0,  qa2:0,   qa3:0, qiz:0,  oylab:0,   ofis:0,  sandiq:0,   bekor:0,   sifatsiz:0,   uchrashuv:0,   total:20},
+  {name:'Jamol Ergashev',      qong:0,  yangi:1,   ish:2,   qa1:0,  qa2:0,   qa3:0, qiz:0,  oylab:0,   ofis:0,  sandiq:0,   bekor:0,   sifatsiz:0,   uchrashuv:0,   total:2},
+  {name:'Samarqand | Admin',   qong:0,  yangi:0,   ish:0,   qa1:0,  qa2:0,   qa3:0, qiz:0,  oylab:0,   ofis:0,  sandiq:0,   bekor:0,   sifatsiz:0,   uchrashuv:0,   total:3},
+];
+
+const convData = [
+  {name:'Diyoraxon',           total:2091, jarayon:0,  sifatsiz:1053, uchrashuv:0,   konv:'8,13%'},
+  {name:'Mashhurbonu Safaeva', total:3982, jarayon:0,  sifatsiz:174,  uchrashuv:119, konv:'68,87%'},
+  {name:'Nozima',              total:1325, jarayon:0,  sifatsiz:137,  uchrashuv:309, konv:'8,70%'},
+  {name:'Ruxshona',            total:2979, jarayon:0,  sifatsiz:209,  uchrashuv:1218,konv:'6,48%'},
+  {name:'Sarvinoz',            total:3001, jarayon:0,  sifatsiz:295,  uchrashuv:957, konv:'8,20%'},
+  {name:'Gigu Andijon',        total:20,   jarayon:0,  sifatsiz:0,    uchrashuv:0,   konv:'0,00%'},
+  {name:'Aziza | Admin',       total:12,   jarayon:0,  sifatsiz:10,   uchrashuv:0,   konv:'8,33%'},
+];
+
+const sifatsizData = [
+  {label:'Boshqa joyga tushib dedi', val:697, color:'var(--orange)'},
+  {label:'Boshqa joyga tushdi, Raqam noto\'g\'ri', val:10, color:'var(--orange)'},
+  {label:'Dubi', val:608, color:'var(--red)'},
+  {label:'Raqam noto\'g\'ri', val:1638, color:'var(--red)'},
+  {label:'Raqam noto\'g\'ri, Boshqa joyga tushdi', val:7, color:'var(--red)'},
+];
+
+const bekorData = [
+  {label:'Joylashuv mos kelmadi', val:868, color:'var(--red)'},
+  {label:'Juda qimmat', val:179, color:'var(--red)'},
+  {label:'Keyinroq o\'qishni rejalayapti', val:244, color:'var(--red)'},
+  {label:'Konsultatsiyadan keyin rad etdi', val:361, color:'var(--red)'},
+  {label:'Oila a\'zolari ruxsat bermadi', val:344, color:'var(--red)'},
+  {label:'Rejalari o\'zgardi', val:354, color:'var(--red)'},
+  {label:'Vaqti to\'g\'ri kelmadi', val:502, color:'var(--red)'},
+];
+
+const sandiqData = [
+  {label:'Keyinroq o\'qiydi', val:1274, color:'var(--teal)'},
+  {label:'Keyinroq o\'qiydi, Vaqti to\'g\'ri kelmadi', val:37, color:'var(--teal)'},
+  {label:'Rejasi o\'zgardi', val:53, color:'var(--teal)'},
+  {label:'Rejasi o\'zgardi, Keyinroq o\'qiydi', val:5, color:'var(--teal)'},
+  {label:'Rejasi o\'zgardi, Vaqti to\'g\'ri kelmadi', val:1, color:'var(--teal)'},
+  {label:'Vaqti to\'g\'ri kelmadi', val:101, color:'var(--teal)'},
+  {label:'Vaqti to\'g\'ri kelmadi, Keyinroq o\'qiydi', val:8, color:'var(--teal)'},
+  {label:'Vaqti to\'g\'ri kelmadi, Rejasi o\'zgardi', val:1, color:'var(--teal)'},
+];
+
+const utmData = [
+  {label:'an', val:19, color:'var(--blue)'},
+  {label:'asosiy sayt ads', val:137, color:'var(--blue)'},
+  {label:'facebook', val:2030, color:'var(--blue)'},
+  {label:'fb', val:113, color:'var(--blue)'},
+  {label:'gigu', val:1, color:'var(--blue)'},
+  {label:'gigu telegram ads', val:198, color:'var(--blue)'},
+  {label:'google', val:2, color:'var(--blue)'},
+  {label:'ig', val:2016, color:'var(--green)'},
+];
+
+// ===== SDELKALAR DEMO DATA =====
+const sdelkiXodim = [
+  {name:'Diyoraxon',           ofis:4,  yoq:0,  malumot:19, demo:48, kurs:15, qisman:5,  sotmadi:15, toladi:25,  total:171},
+  {name:'Mashhurbonu Safaeva', ofis:20, yoq:15, malumot:23, demo:44, kurs:14, qisman:45, sotmadi:51, toladi:96,  total:490},
+  {name:'Nozima',              ofis:17, yoq:0,  malumot:5,  demo:26, kurs:6,  qisman:14, sotmadi:10, toladi:15,  total:313},
+  {name:'Ruxshona',            ofis:52, yoq:9,  malumot:15, demo:47, kurs:12, qisman:28, sotmadi:26, toladi:36,  total:473},
+  {name:'Sarvinoz',            ofis:48, yoq:6,  malumot:30, demo:45, kurs:12, qisman:29, sotmadi:20, toladi:52,  total:404},
+  {name:'Gigu Andijon',        ofis:0,  yoq:0,  malumot:1,  demo:2,  kurs:0,  qisman:0,  sotmadi:0,  toladi:0,   total:10},
+  {name:'Jamol Ergashev',      ofis:9,  yoq:0,  malumot:0,  demo:3,  kurs:3,  qisman:0,  sotmadi:0,  toladi:0,   total:142},
+];
+
+const sdelkiSrc = [
+  {label:'Veb-sayt', ishlaydi:675, provodka:145, success:381},
+  {label:'Zvonok',   ishlaydi:41,  provodka:36,  success:200},
+  {label:'Instagram Direct', ishlaydi:10, provodka:5, success:15},
+  {label:'Chatbot',  ishlaydi:8,   provodka:3,   success:12},
+  {label:'amoCRM',   ishlaydi:5,   provodka:2,   success:8},
+  {label:'Telegram Academy', ishlaydi:4, provodka:2, success:6},
+  {label:'gigu telegram ads', ishlaydi:3, provodka:1, success:4},
+];
+
+const konvSrc = [
+  {label:'Telegram – chat', val:1.0, pct:'100%'},
+  {label:'GIGU Design Instagram', val:1.0, pct:'100%'},
+  {label:'amoCRM', val:0.58, pct:'58.0%'},
+  {label:'7–11 jajji qizlar', val:0.42, pct:'41.7%'},
+  {label:'Telegram Academy', val:0.41, pct:'41.2%'},
+  {label:'Zvonok', val:0.29, pct:'29.4%'},
+  {label:'Veb-sayt', val:0.22, pct:'22.2%'},
+  {label:'Chatbot', val:0.21, pct:'20.9%'},
+  {label:'Instagram Direct', val:0.15, pct:'14.7%'},
+  {label:'amoCRM import', val:0.08, pct:'8.48%'},
+  {label:'illustratsiya kursi', val:0.05, pct:'4.9%'},
+];
+
+const revenueData = [
+  {label:'Веб-сайт',           val:273436432},
+  {label:'Звонок',             val:167200000},
+  {label:'Chatbot',            val:25500000},
+  {label:'amoCRM',             val:12400000},
+  {label:'amoCRM import',      val:7500000},
+  {label:'Instagram Direct',   val:6000000},
+  {label:'Telegram Academy',   val:5200000},
+  {label:'7–11 jajji qizlar',  val:2500000},
+  {label:'Telegram – chat',    val:2000000},
+  {label:'GIGU Design Instagram', val:2000000},
+];
+
+// ===== BUILDERS =====
+function buildBarChart(containerId, data, maxVal, color) {
+  const max = maxVal || Math.max(...data.map(d => d.val));
+  let html = '';
+  data.forEach(d => {
+    const w = max ? Math.round(d.val / max * 100) : 0;
+    html += `<div class="dl-row">
+      <div class="dl-label-left" style="min-width:220px">${d.label}</div>
+      <div class="dl-bar-wrap">
+        <div class="dl-bar" style="width:${w}%;background:${d.color || color || 'var(--blue)'}">
+          ${w > 8 ? `<span>${d.val.toLocaleString()}</span>` : ''}
+        </div>
+      </div>
+      <div class="dl-val">${d.val.toLocaleString()}</div>
+    </div>`;
+  });
+  document.getElementById(containerId).innerHTML = html;
+}
+
+function buildLidlarTable() {
+  const max = Math.max(...xodimlarData.map(d => d.total));
+  let html = '';
+  xodimlarData.forEach(d => {
+    const barW = Math.round(d.total / max * 80);
+    html += `<tr>
+      <td style="font-weight:500;position:sticky;left:0;background:var(--bg2);z-index:1">${d.name}</td>
+      <td class="mono">${d.qong || 0}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.yangi,1)*2}px;background:var(--blue)"></div><span class="mono" style="font-size:11px"> ${d.yangi}</span></div></td>
+      <td class="mono">${d.ish}</td>
+      <td class="mono">${d.qa1}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.qa2/10,1)}px;background:var(--amber)"></div><span class="mono" style="font-size:11px"> ${d.qa2}</span></div></td>
+      <td class="mono">${d.qa3}</td>
+      <td class="mono">${d.qiz}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.oylab/3,1)}px;background:var(--orange)"></div><span class="mono" style="font-size:11px"> ${d.oylab}</span></div></td>
+      <td class="mono">${d.ofis}</td>
+      <td class="mono">${d.sandiq}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.bekor/5,1)}px;background:var(--red)"></div><span class="mono" style="font-size:11px"> ${d.bekor}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.sifatsiz/10,1)}px;background:var(--orange)"></div><span class="mono" style="font-size:11px"> ${d.sifatsiz}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.uchrashuv/10,1)}px;background:var(--green)"></div><span class="mono" style="font-size:11px"> ${d.uchrashuv}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${barW}px;background:var(--blue)"></div><span class="mono" style="font-size:11px"> ${d.total.toLocaleString()}</span></div></td>
+    </tr>`;
+  });
+  document.getElementById('lidlar-tbody').innerHTML = html;
+}
+
+function buildConvTable() {
+  const maxTotal = Math.max(...convData.map(d => d.total));
+  const maxSif = Math.max(...convData.map(d => d.sifatsiz));
+  const maxUch = Math.max(...convData.map(d => d.uchrashuv));
+  let html = '';
+  convData.forEach(d => {
+    const konvNum = parseFloat(d.konv.replace(',', '.'));
+    const konvColor = konvNum > 20 ? 'var(--green)' : konvNum > 10 ? 'var(--amber)' : 'var(--red)';
+    html += `<tr>
+      <td style="font-weight:500">${d.name}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.round(d.total/maxTotal*120)}px;background:var(--blue)"></div><span class="mono" style="font-size:11px"> ${d.total.toLocaleString()}</span></div></td>
+      <td class="mono">${d.jarayon}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${d.sifatsiz ? Math.round(d.sifatsiz/maxSif*100) : 0}px;background:var(--orange)"></div><span class="mono" style="font-size:11px"> ${d.sifatsiz}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${d.uchrashuv ? Math.round(d.uchrashuv/maxUch*100) : 0}px;background:var(--teal)"></div><span class="mono" style="font-size:11px"> ${d.uchrashuv}</span></div></td>
+      <td><span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${konvColor}">${d.konv}</span></td>
+    </tr>`;
+  });
+  document.getElementById('conv-tbody').innerHTML = html;
+}
+
+function buildSdelkiTable() {
+  let html = '';
+  sdelkiXodim.forEach(d => {
+    html += `<tr>
+      <td style="font-weight:500;position:sticky;left:0;background:var(--bg2);z-index:1">${d.name}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.ofis*2,2)}px;background:var(--amber)"></div><span class="mono" style="font-size:11px"> ${d.ofis}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.yoq*3,2)}px;background:var(--pink)"></div><span class="mono" style="font-size:11px"> ${d.yoq}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.malumot*2,2)}px;background:var(--orange)"></div><span class="mono" style="font-size:11px"> ${d.malumot}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.demo*2,2)}px;background:var(--green)"></div><span class="mono" style="font-size:11px"> ${d.demo}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.kurs*3,2)}px;background:var(--teal)"></div><span class="mono" style="font-size:11px"> ${d.kurs}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.qisman*2,2)}px;background:var(--purple)"></div><span class="mono" style="font-size:11px"> ${d.qisman}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.sotmadi*2,2)}px;background:var(--red)"></div><span class="mono" style="font-size:11px"> ${d.sotmadi}</span></div></td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.max(d.toladi*2,2)}px;background:var(--blue)"></div><span class="mono" style="font-size:11px"> ${d.toladi}</span></div></td>
+      <td style="font-weight:600;color:var(--blue);font-family:'DM Mono',monospace">${d.total}</td>
+    </tr>`;
+  });
+  document.getElementById('sdelki-tbody').innerHTML = html;
+}
+
+function buildSdelkiSrcChart() {
+  const max = Math.max(...sdelkiSrc.map(d => d.ishlaydi + d.provodka + d.success));
+  let html = '';
+  sdelkiSrc.forEach(d => {
+    const total = d.ishlaydi + d.provodka + d.success;
+    const w1 = Math.round(d.ishlaydi / max * 560);
+    const w2 = Math.round(d.provodka / max * 560);
+    const w3 = Math.round(d.success / max * 560);
+    html += `<div class="dl-row">
+      <div class="dl-label-left">${d.label}</div>
+      <div style="display:flex;gap:2px;align-items:center">
+        <div style="height:18px;width:${w1}px;background:var(--blue);border-radius:2px;display:flex;align-items:center;padding:0 4px"><span style="font-size:10px;color:#fff;font-family:'DM Mono'">${d.ishlaydi||''}</span></div>
+        <div style="height:18px;width:${w2}px;background:var(--amber);border-radius:2px;display:flex;align-items:center;padding:0 4px"><span style="font-size:10px;color:#fff;font-family:'DM Mono'">${d.provodka||''}</span></div>
+        <div style="height:18px;width:${w3}px;background:var(--green);border-radius:2px;display:flex;align-items:center;padding:0 4px"><span style="font-size:10px;color:#fff;font-family:'DM Mono'">${d.success||''}</span></div>
+      </div>
+      <div class="dl-val">${total}</div>
+    </div>`;
+  });
+  html += `<div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
+    <span><span style="color:var(--blue);font-weight:700">■</span> Ishlamoqda</span>
+    <span><span style="color:var(--amber);font-weight:700">■</span> Provodka</span>
+    <span><span style="color:var(--green);font-weight:700">■</span> Muvaffaqiyat</span>
+  </div>`;
+  document.getElementById('sdelki-src-chart').innerHTML = html;
+}
+
+function buildKonvSrcChart() {
+  let html = '';
+  konvSrc.forEach(d => {
+    const w = Math.round(d.val * 700);
+    const c = d.val >= 0.5 ? 'var(--green)' : d.val >= 0.2 ? 'var(--blue)' : 'var(--amber)';
+    html += `<div class="dl-row">
+      <div class="dl-label-left">${d.label}</div>
+      <div class="dl-bar-wrap">
+        <div class="dl-bar" style="width:${w}px;background:${c}">
+          ${w > 40 ? `<span>${d.pct}</span>` : ''}
+        </div>
+      </div>
+      <div class="dl-val">${d.pct}</div>
+    </div>`;
+  });
+  document.getElementById('konv-src-chart').innerHTML = html;
+}
+
+function buildRevenueChart() {
+  const max = revenueData[0].val;
+  let html = '';
+  revenueData.forEach(d => {
+    const w = Math.round(d.val / max * 500);
+    const fmtVal = (d.val >= 1000000) ? (d.val / 1000000).toFixed(1) + 'M' : d.val.toLocaleString();
+    const displayVal = d.val.toLocaleString('ru-RU') + ',00';
+    html += `<div class="dl-row" style="margin-bottom:7px">
+      <div class="dl-label-left" style="min-width:160px">${d.label}</div>
+      <div style="flex:1;max-width:520px;height:22px;background:var(--bg4);border-radius:3px;overflow:hidden;position:relative">
+        <div style="height:100%;width:${w}px;max-width:520px;background:var(--blue);border-radius:3px;display:flex;align-items:center;padding-left:8px">
+          <span style="font-size:11px;font-weight:600;color:#fff;font-family:'DM Mono',monospace;white-space:nowrap">${displayVal}</span>
+        </div>
+      </div>
+      <div style="min-width:80px;font-size:11px;font-family:'DM Mono',monospace;text-align:right;color:var(--text2)">${fmtVal}</div>
+    </div>`;
+  });
+  document.getElementById('revenue-chart').innerHTML = html;
+}
+
+// Init on page load — charts populated by fetchLidlarStats()
+function initLidlar() {
+  buildLidlarTable();
+  buildConvTable();
+}
+
+function initSdelki() {
+  buildSdelkiTable();
+}
+
+function switchSdelTab(tab, el) {
+  document.querySelectorAll('.sdel-subtab').forEach(t => {
+    t.style.color = 'var(--text2)';
+    t.style.borderBottomColor = 'transparent';
+  });
+  el.style.color = 'var(--blue)';
+  el.style.borderBottomColor = 'var(--blue)';
+}
+
+function switchBudgetSrc(src, el) {
+  document.querySelectorAll('#page-budget .src-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.budget-row').forEach(row => {
+    row.style.display = (src === 'all' || row.dataset.src === src) ? '' : 'none';
+  });
+}
+
+// Override goPage to init new pages
+const _origGoPage = goPage;
+function goPage(p, el) {
+  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  document.querySelectorAll('.tn-tab').forEach(x => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else document.querySelectorAll('.tn-tab').forEach(x => {
+    if (x.getAttribute('onclick') && x.getAttribute('onclick').includes("'" + p + "'")) x.classList.add('active');
+  });
+  if (p === 'kunlik') buildDailyTable();
+  if (p === 'funnel') buildFunnels();
+  if (p === 'lidlar') initLidlar();
+  if (p === 'sdelki') initSdelki();
+}
+</script>
+
+<script>
+// =============================================================
+// BITRIX24 INTEGRATION — marketing_sotuv
+// =============================================================
+
+function _s(id, v) { const e = document.getElementById(id); if (e) e.textContent = v; }
+function fmtNum(n) { return Number(n).toLocaleString('ru-RU'); }
+function fmtMoney(n) { return n >= 1000000 ? '$' + (n/1000000).toFixed(1)+'M' : '$' + fmtNum(Math.round(n)); }
+
+// ── LIDLAR STATS ──────────────────────────────────────────────
+let _lidDropdownsReady = false;
+
+function _lidFilterQS() {
+  const p = new URLSearchParams();
+  const from        = document.getElementById('lid-f-from')?.value;
+  const to          = document.getElementById('lid-f-to')?.value;
+  const uid         = document.getElementById('lid-f-user')?.value;
+  const status      = document.getElementById('lid-f-status')?.value;
+  const src         = document.getElementById('lid-f-source')?.value;
+  const utmSrc      = document.getElementById('lid-f-utm-source')?.value;
+  const utmMed      = document.getElementById('lid-f-utm-medium')?.value;
+  const utmCamp     = document.getElementById('lid-f-utm-campaign')?.value;
+  const utmCont     = document.getElementById('lid-f-utm-content')?.value;
+  const utmTerm     = document.getElementById('lid-f-utm-term')?.value;
+  if (from)    p.set('start_date', from + 'T00:00:00');
+  if (to)      p.set('end_date', to + 'T23:59:59');
+  if (uid)     p.set('assigned_by', uid);
+  if (status)  p.set('status_id', status);
+  if (src)     p.set('source_id', src);
+  if (utmSrc)  p.set('utm_source', utmSrc);
+  if (utmMed)  p.set('utm_medium', utmMed);
+  if (utmCamp) p.set('utm_campaign', utmCamp);
+  if (utmCont) p.set('utm_content', utmCont);
+  if (utmTerm) p.set('utm_term', utmTerm);
+  return p.toString() ? '?' + p.toString() : '';
+}
+
+function _populateLidlarDropdowns(d) {
+  const userSel = document.getElementById('lid-f-user');
+  if (userSel && !_lidDropdownsReady) {
+    const cur = userSel.value;
+    const opts = ['<option value="">Ma\'sul xodim — barchasi</option>'];
+    (d.users || []).forEach(u => {
+      opts.push(`<option value="${u.id}"${String(u.id) === cur ? ' selected' : ''}>${u.name}</option>`);
+    });
+    userSel.innerHTML = opts.join('');
+  }
+
+  const statusSel = document.getElementById('lid-f-status');
+  if (statusSel) {
+    const cur = statusSel.value;
+    const snames = d.status_names || {};
+    const opts = ['<option value="">Bosqich — barchasi</option>'];
+    (d.all_statuses || []).forEach(s => {
+      opts.push(`<option value="${s}"${s === cur ? ' selected' : ''}>${snames[s] || s}</option>`);
+    });
+    statusSel.innerHTML = opts.join('');
+  }
+
+  const srcSel = document.getElementById('lid-f-source');
+  if (srcSel) {
+    const cur = srcSel.value;
+    const opts = ['<option value="">Manba — barchasi</option>'];
+    (d.sources || []).forEach(s => {
+      opts.push(`<option value="${s.id}"${s.id === cur ? ' selected' : ''}>${s.label}</option>`);
+    });
+    srcSel.innerHTML = opts.join('');
+  }
+
+  const _populateUtm = (elId, values, label) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const cur = el.value;
+    const opts = [`<option value="">${label} — barchasi</option>`];
+    (values || []).forEach(v => opts.push(`<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`));
+    el.innerHTML = opts.join('');
+  };
+  _populateUtm('lid-f-utm-source',   d.utm_sources,   'utm_source');
+  _populateUtm('lid-f-utm-medium',   d.utm_mediums,   'utm_medium');
+  _populateUtm('lid-f-utm-campaign', d.utm_campaigns, 'utm_campaign');
+  _populateUtm('lid-f-utm-content',  d.utm_contents,  'utm_content');
+  _populateUtm('lid-f-utm-term',     d.utm_terms,     'utm_term');
+
+  _lidDropdownsReady = true;
+}
+
+function _clearLidFilters() {
+  const today = new Date().toISOString().slice(0, 10);
+  ['lid-f-from','lid-f-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id === 'lid-f-from' ? '2024-04-25' : today;
+  });
+  ['lid-f-user','lid-f-status','lid-f-source',
+   'lid-f-utm-source','lid-f-utm-medium','lid-f-utm-campaign',
+   'lid-f-utm-content','lid-f-utm-term'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  _lidDropdownsReady = false;
+  fetchLidlarStats();
+}
+
+async function fetchLidlarStats() {
+  _s('lid-sync-label', 'Yuklanmoqda...');
+  const qs = _lidFilterQS();
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch('/api/stats/leads' + qs),
+      fetch('/api/stats/lead-quality' + qs),
+    ]);
+    if (!r1.ok) throw new Error(r1.status);
+    const d = await r1.json();
+    _renderLidlarMetrics(d);
+    _renderLidlarTable(d);
+    _populateLidlarDropdowns(d);
+    if (r2.ok) {
+      const q = await r2.json();
+      _renderQualityCharts(q, d.by_status || {});
+    }
+    const now = new Date().toLocaleTimeString('uz-UZ');
+    _s('lid-sync-label', `Bitrix24 · ${fmtNum(d.total)} ta lid · Yangilandi: ${now}`);
+  } catch(e) {
+    _s('lid-sync-label', 'Xato: ' + e.message);
+    console.warn('fetchLidlarStats:', e);
+  }
+}
+
+function _renderQualityCharts(q, byStatus) {
+  byStatus = byStatus || {};
+  const COLORS   = {sifatsiz:'var(--orange)', bekor:'var(--red)', sandiq:'var(--teal)', utm:'var(--blue)'};
+  const STATUS_ID = {sifatsiz:'UC_F8K4GI', bekor:'UC_NAZK5J', sandiq:'JUNK'};
+  ['sifatsiz','bekor','sandiq','utm'].forEach(key => {
+    const data = (q[key] || []).map(d => ({label: d.label, val: d.val}));
+    const el = document.getElementById(key + '-chart');
+    if (!el) return;
+    if (!data.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:12px 0">Ma\'lumot topilmadi</div>';
+    } else {
+      buildBarChart(key + '-chart', data, null, COLORS[key]);
+    }
+    const itogoEl = document.getElementById(key + '-itogo');
+    if (itogoEl) {
+      const total = data.length
+        ? data.reduce((s, d) => s + d.val, 0)
+        : (byStatus[STATUS_ID[key]] || 0);
+      itogoEl.textContent = fmtNum(total);
+    }
+  });
+}
+
+function _renderLidlarMetrics(d) {
+  _s('lid-total',     fmtNum(d.total));
+  _s('lid-rev',       fmtMoney(d.total_revenue));
+  _s('lid-konv',      d.conversion_rate + '%');
+
+  const bs = d.by_status || {};
+  const jarayon   = d.jarayon_total || 0;
+  const bekor     = bs['UC_NAZK5J'] || 0;
+  const sifatsiz  = bs['UC_F8K4GI'] || 0;
+  const converted = d.converted || 0;
+
+  _s('lid-jarayon',   fmtNum(jarayon));
+  _s('lid-bekor',     fmtNum(bekor));
+  _s('lid-sifatsiz',  fmtNum(sifatsiz));
+  _s('lid-uchrashuv', fmtNum(converted));
+}
+
+function _renderLidlarTable(d) {
+  const thead = document.getElementById('lidlar-thead');
+  const tbody = document.getElementById('lidlar-tbody');
+  if (!thead || !tbody) return;
+
+  const statuses = d.all_statuses || [];
+  const users    = d.by_user || [];
+
+  const snames = d.status_names || {};
+
+  // Build thead
+  thead.innerHTML = `<tr>
+    <th style="position:sticky;left:0;background:var(--bg5);z-index:2;min-width:160px">Ma'sul xodim</th>
+    ${statuses.map(s => `<th style="font-size:9px">${snames[s] || s}</th>`).join('')}
+    <th style="background:var(--blue-bg);color:var(--blue)">JAMI</th>
+  </tr>`;
+
+  // Build tbody
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="${statuses.length+2}" style="text-align:center;padding:24px;color:var(--text3)">Ma'lumot topilmadi</td></tr>`;
+    return;
+  }
+  const maxTotal = Math.max(...users.map(u => u.total), 1);
+  tbody.innerHTML = users.map(u => {
+    const cells = statuses.map(s => {
+      const v = (u.by_status || {})[s] || 0;
+      return `<td class="mono" style="color:${v ? 'var(--text)' : 'var(--border2)'}">${v || ''}</td>`;
+    }).join('');
+    const barW = Math.round(u.total / maxTotal * 80);
+    return `<tr>
+      <td style="font-weight:500;position:sticky;left:0;background:var(--bg2);z-index:1">${u.name}</td>
+      ${cells}
+      <td><div class="mini-tbar">
+        <div class="mini-tbar-fill" style="width:${barW}px;background:var(--blue)"></div>
+        <span class="mono" style="font-size:11px"> ${fmtNum(u.total)}</span>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  // Also rebuild conv table
+  _renderConvTable(d);
+}
+
+function _renderConvTable(d) {
+  const tbody = document.getElementById('conv-tbody');
+  if (!tbody) return;
+  const users = d.by_user || [];
+  if (!users.length) return;
+  const JARAYON_IDS = ['NEW','IN_PROCESS','PROCESSED','UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW','UC_L28G68'];
+  const maxTotal = Math.max(...users.map(u => u.total), 1);
+  tbody.innerHTML = users.map(u => {
+    const bs      = u.by_status || {};
+    const jarayon = JARAYON_IDS.reduce((s, id) => s + (bs[id] || 0), 0);
+    const sifatsiz = bs['UC_F8K4GI'] || 0;
+    const conv    = bs['CONVERTED'] || bs['CLOSED'] || 0;
+    const pct     = u.total ? (conv / u.total * 100).toFixed(1) : '0.0';
+    const c       = parseFloat(pct) > 20 ? 'var(--green)' : parseFloat(pct) > 10 ? 'var(--amber)' : 'var(--red)';
+    return `<tr>
+      <td style="font-weight:500">${u.name}</td>
+      <td><div class="mini-tbar"><div class="mini-tbar-fill" style="width:${Math.round(u.total/maxTotal*120)}px;background:var(--blue)"></div><span class="mono" style="font-size:11px"> ${fmtNum(u.total)}</span></div></td>
+      <td class="mono">${fmtNum(jarayon)}</td>
+      <td class="mono" style="color:var(--orange)">${fmtNum(sifatsiz)}</td>
+      <td class="mono" style="color:var(--teal)">${fmtNum(conv)}</td>
+      <td><span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${c}">${pct}%</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── SDELKALAR STATS ───────────────────────────────────────────
+function _sdelkiFilterQS() {
+  const p = new URLSearchParams();
+  const from  = document.getElementById('sdel-f-from')?.value;
+  const to    = document.getElementById('sdel-f-to')?.value;
+  const uid   = document.getElementById('sdel-f-user')?.value;
+  const stage = document.getElementById('sdel-f-stage')?.value;
+  const src   = document.getElementById('sdel-f-source')?.value;
+  if (from)  p.set('start_date', from);
+  if (to)    p.set('end_date', to);
+  if (uid)   p.set('assigned_by', uid);
+  if (stage) p.set('stage_id', stage);
+  if (src)   p.set('source_id', src);
+  return p.toString() ? '?' + p.toString() : '';
+}
+
+let _sdelkiDropdownsReady = false;
+
+function _populateSdelkiDropdowns(d, srcData) {
+  // Users — populate once, preserve selection
+  const userSel = document.getElementById('sdel-f-user');
+  if (userSel && !_sdelkiDropdownsReady) {
+    const cur = userSel.value;
+    const opts = ['<option value="">Ma\'sul xodim — barchasi</option>'];
+    (d.users || []).forEach(u => {
+      opts.push(`<option value="${u.id}"${u.id == cur ? ' selected' : ''}>${u.name}</option>`);
+    });
+    userSel.innerHTML = opts.join('');
+  }
+
+  // Stages — update from live data, preserve selection
+  const stageSel = document.getElementById('sdel-f-stage');
+  if (stageSel) {
+    const cur = stageSel.value;
+    const snames = d.stage_names || {};
+    const opts = ['<option value="">Bosqich — barchasi</option>'];
+    (d.all_stages || []).forEach(s => {
+      const label = snames[s] || s;
+      opts.push(`<option value="${s}"${s === cur ? ' selected' : ''}>${label}</option>`);
+    });
+    stageSel.innerHTML = opts.join('');
+  }
+
+  // Sources — update from live data, preserve selection
+  const srcSel = document.getElementById('sdel-f-source');
+  if (srcSel) {
+    const cur = srcSel.value;
+    const opts = ['<option value="">Manba — barchasi</option>'];
+    (srcData || []).forEach(s => {
+      opts.push(`<option value="${s.id}"${s.id === cur ? ' selected' : ''}>${s.label}</option>`);
+    });
+    srcSel.innerHTML = opts.join('');
+  }
+
+  _sdelkiDropdownsReady = true;
+}
+
+async function fetchSdelkiStats() {
+  _s('sdel-sync-label', 'Yuklanmoqda...');
+  const qs = _sdelkiFilterQS();
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch('/api/stats/deals' + qs),
+      fetch('/api/stats/deals/by-source' + qs),
+    ]);
+    if (!r1.ok) throw new Error(r1.status);
+    const d = await r1.json();
+    const srcData = r2.ok ? (await r2.json()).sources || [] : [];
+    _renderSdelkiMetrics(d);
+    _renderSdelkiTable(d);
+    _renderStageChart(d);
+    _renderSdelkiSrcCharts(srcData);
+    _populateSdelkiDropdowns(d, srcData);
+    const now = new Date().toLocaleTimeString('uz-UZ');
+    _s('sdel-sync-label', `Bitrix24 · ${fmtNum(d.total)} ta sdelka · Yangilandi: ${now}`);
+  } catch(e) {
+    _s('sdel-sync-label', 'Xato: ' + e.message);
+    console.warn('fetchSdelkiStats:', e);
+  }
+}
+
+function _renderSdelkiMetrics(d) {
+  _s('sdel-total', fmtNum(d.total));
+  _s('sdel-sotuv', fmtMoney(d.total_won_revenue));
+  _s('sdel-konv',  d.conversion_rate + '%');
+  _s('sdel-won',   fmtNum(d.won_count));
+  _s('sdel-lost',  fmtNum(d.lost_count));
+  const avg = d.won_count ? Math.round(d.total_won_revenue / d.won_count) : 0;
+  _s('sdel-chek',  avg ? fmtMoney(avg) : '—');
+}
+
+function _renderStageChart(d) {
+  const el = document.getElementById('sdel-stage-chart');
+  if (!el) return;
+  const bs = d.by_stage || {};
+  const snames = d.stage_names || {};
+  const entries = Object.entries(bs).sort((a,b) => b[1]-a[1]);
+  if (!entries.length) {
+    el.innerHTML = '<div style="color:var(--text3);text-align:center;padding:16px">Ma\'lumot topilmadi</div>';
+    return;
+  }
+  const max = entries[0][1] || 1;
+  el.innerHTML = entries.map(([stage, cnt]) => {
+    const w = Math.round(cnt / max * 100);
+    const up = stage.toUpperCase();
+    const c = up.includes('WON') ? 'var(--green)' : up.includes('LOSE') ? 'var(--red)' : 'var(--blue)';
+    const label = snames[stage] || stage;
+    return `<div class="dl-row">
+      <div class="dl-label-left" style="min-width:200px;font-size:11px">${label}</div>
+      <div class="dl-bar-wrap"><div class="dl-bar" style="width:${w}%;background:${c}">
+        ${w > 8 ? `<span>${fmtNum(cnt)}</span>` : ''}
+      </div></div>
+      <div class="dl-val">${fmtNum(cnt)}</div>
+    </div>`;
+  }).join('');
+}
+
+function _renderSdelkiTable(d) {
+  const thead = document.getElementById('sdelki-thead');
+  const tbody = document.getElementById('sdelki-tbody');
+  if (!thead || !tbody) return;
+
+  const stages  = d.all_stages  || [];
+  const users   = d.by_user    || [];
+  const snames  = d.stage_names || {};
+
+  thead.innerHTML = `<tr>
+    <th style="min-width:160px;position:sticky;left:0;background:var(--bg5);z-index:2">Ma'sul xodim</th>
+    ${stages.map(s => `<th style="font-size:9px">${snames[s] || s}</th>`).join('')}
+    <th>Daromad</th>
+    <th style="background:var(--blue-bg);color:var(--blue)">JAMI</th>
+  </tr>`;
+
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="${stages.length+3}" style="text-align:center;padding:24px;color:var(--text3)">Ma'lumot topilmadi</td></tr>`;
+    return;
+  }
+  const maxTotal = Math.max(...users.map(u => u.total), 1);
+  tbody.innerHTML = users.map(u => {
+    const cells = stages.map(s => {
+      const v = (u.by_stage || {})[s] || 0;
+      const c = s.includes('WON') ? 'var(--green)' : s.includes('LOSE') ? 'var(--red)' : 'var(--text)';
+      return `<td class="mono" style="color:${v?c:'var(--border2)'}">${v||''}</td>`;
+    }).join('');
+    const barW = Math.round(u.total / maxTotal * 80);
+    const rev  = u.won_revenue ? fmtMoney(u.won_revenue) : '—';
+    return `<tr>
+      <td style="font-weight:500;position:sticky;left:0;background:var(--bg2);z-index:1">${u.name}</td>
+      ${cells}
+      <td class="mono" style="color:var(--green);font-weight:600">${rev}</td>
+      <td><div class="mini-tbar">
+        <div class="mini-tbar-fill" style="width:${barW}px;background:var(--blue)"></div>
+        <span class="mono" style="font-size:11px"> ${fmtNum(u.total)}</span>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function _renderSdelkiSrcCharts(sources) {
+  // ── Sdelkalar manbalar bo'yicha (stacked: ishlaydi / provodka / success) ──
+  const srcEl = document.getElementById('sdelki-src-chart');
+  if (srcEl) {
+    if (!sources.length) {
+      srcEl.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:12px 0">Ma\'lumot topilmadi</div>';
+    } else {
+      const max = Math.max(...sources.map(s => s.total), 1);
+      let html = '';
+      sources.forEach(s => {
+        const scale = 560;
+        const w1 = Math.round(s.ishlaydi / max * scale);
+        const w2 = Math.round(s.provodka / max * scale);
+        const w3 = Math.round(s.success  / max * scale);
+        html += `<div class="dl-row">
+          <div class="dl-label-left">${s.label}</div>
+          <div style="display:flex;gap:2px;align-items:center">
+            <div style="height:18px;width:${w1}px;background:var(--blue);border-radius:2px;display:flex;align-items:center;padding:0 4px;min-width:${s.ishlaydi?'18px':'0'}"><span style="font-size:10px;color:#fff;font-family:'DM Mono'">${s.ishlaydi||''}</span></div>
+            <div style="height:18px;width:${w2}px;background:var(--amber);border-radius:2px;display:flex;align-items:center;padding:0 4px;min-width:${s.provodka?'18px':'0'}"><span style="font-size:10px;color:#fff;font-family:'DM Mono'">${s.provodka||''}</span></div>
+            <div style="height:18px;width:${w3}px;background:var(--green);border-radius:2px;display:flex;align-items:center;padding:0 4px;min-width:${s.success?'18px':'0'}"><span style="font-size:10px;color:#fff;font-family:'DM Mono'">${s.success||''}</span></div>
+          </div>
+          <div class="dl-val">${fmtNum(s.total)}</div>
+        </div>`;
+      });
+      html += `<div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
+        <span><span style="color:var(--blue);font-weight:700">■</span> Ishlamoqda</span>
+        <span><span style="color:var(--amber);font-weight:700">■</span> Provodka</span>
+        <span><span style="color:var(--green);font-weight:700">■</span> Muvaffaqiyat</span>
+      </div>`;
+      srcEl.innerHTML = html;
+    }
+  }
+
+  // ── Konversiya manbalar bo'yicha ──
+  const konvEl = document.getElementById('konv-src-chart');
+  if (konvEl) {
+    const withConv = sources.filter(s => s.total > 0).sort((a,b) => b.conversion - a.conversion);
+    if (!withConv.length) {
+      konvEl.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:12px 0">Ma\'lumot topilmadi</div>';
+    } else {
+      konvEl.innerHTML = withConv.map(s => {
+        const pct = s.conversion;
+        const w = Math.round(pct / 100 * 700);
+        const c = pct >= 50 ? 'var(--green)' : pct >= 20 ? 'var(--blue)' : 'var(--amber)';
+        return `<div class="dl-row">
+          <div class="dl-label-left">${s.label}</div>
+          <div class="dl-bar-wrap">
+            <div class="dl-bar" style="width:${w}px;max-width:100%;background:${c}">
+              ${w > 40 ? `<span>${pct}%</span>` : ''}
+            </div>
+          </div>
+          <div class="dl-val">${pct}%</div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Daromad manbalar bo'yicha ──
+  const revEl = document.getElementById('revenue-chart');
+  if (revEl) {
+    const withRev = sources.filter(s => s.revenue > 0).sort((a,b) => b.revenue - a.revenue);
+    if (!withRev.length) {
+      revEl.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:12px 0">Ma\'lumot topilmadi</div>';
+    } else {
+      const maxRev = withRev[0].revenue;
+      revEl.innerHTML = withRev.map(s => {
+        const w = Math.round(s.revenue / maxRev * 500);
+        const fmtVal = s.revenue >= 1000000 ? (s.revenue/1000000).toFixed(1)+'M' : fmtNum(Math.round(s.revenue));
+        return `<div class="dl-row" style="margin-bottom:7px">
+          <div class="dl-label-left" style="min-width:160px">${s.label}</div>
+          <div style="flex:1;max-width:520px;height:22px;background:var(--bg4);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${w}px;max-width:520px;background:var(--blue);border-radius:3px;display:flex;align-items:center;padding-left:8px">
+              <span style="font-size:11px;font-weight:600;color:#fff;font-family:'DM Mono',monospace">${fmtNum(Math.round(s.revenue))}</span>
+            </div>
+          </div>
+          <div style="min-width:80px;font-size:11px;font-family:'DM Mono',monospace;text-align:right;color:var(--text2)">${fmtVal}</div>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+// ── WIRE INTO NAVIGATION ──────────────────────────────────────
+const _mktOrigGoPage = goPage;
+window.goPage = function(p, el) {
+  _mktOrigGoPage(p, el);
+  if (p === 'lidlar')  fetchLidlarStats();
+  if (p === 'sdelki')  fetchSdelkiStats();
+  if (p === 'budget')  fetchBudgetData();
+};
+
+// ── INIT ──────────────────────────────────────────────────────
+async function fetchMetaInsights(month, year) {
+  try {
+    const res = await fetch(`/api/meta/insights?month=${month}&year=${year}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    const d = json.data || {};
+    if (!monthData[month]) monthData[month] = {};
+    ['target', 'instagram'].forEach(src => {
+      if (!d[src]) return;
+      if (!monthData[month][src]) monthData[month][src] = {};
+      ['budget', 'leads', 'clicks', 'impressions'].forEach(key => {
+        if (d[src][key]) monthData[month][src][key] = d[src][key];
+      });
+    });
+    buildDailyTable();
+  } catch(e) {
+    console.warn('Meta insights fetch failed:', e);
+  }
+}
+
+// ── BYUDJET PAGE — Meta real spend ────────────────────────────
+async function fetchBudgetData() {
+  const month = MONTH_UZ[THIS_MONTH];
+  const year  = THIS_YEAR;
+  try {
+    const res = await fetch(`/api/meta/insights?month=${month}&year=${year}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    const budget = (json.data?.target?.budget) || [];
+    const totalSpend = budget.reduce((a, b) => a + b, 0);
+
+    // Read planned budget from the Reja cell (strip $ and commas)
+    const rejaEl = document.getElementById('bud-target-reja');
+    const reja   = rejaEl ? parseFloat(rejaEl.textContent.replace(/[$,]/g, '')) || 0 : 0;
+
+    const pct    = reja > 0 ? Math.round(totalSpend / reja * 100) : 0;
+    const barW   = Math.min(pct, 100);
+
+    let barColor, badgeClass, badgeText;
+    if (pct >= 100)      { barColor = 'var(--red)';   badgeClass = 'b-red';   badgeText = 'Oshib ketdi!'; }
+    else if (pct >= 80)  { barColor = 'var(--green)'; badgeClass = 'b-green'; badgeText = 'Normal'; }
+    else if (pct >= 50)  { barColor = 'var(--amber)'; badgeClass = 'b-amber'; badgeText = 'Kam sarflandi'; }
+    else                 { barColor = 'var(--orange)'; badgeClass = 'b-orange'; badgeText = 'Juda kam'; }
+
+    const faktEl = document.getElementById('bud-target-fakt');
+    if (faktEl) faktEl.textContent = '$' + totalSpend.toLocaleString('en-US', {maximumFractionDigits: 0});
+
+    const barEl = document.getElementById('bud-target-bar');
+    if (barEl) { barEl.style.width = barW + '%'; barEl.style.background = barColor; }
+
+    const pctEl = document.getElementById('bud-target-pct-val');
+    if (pctEl) pctEl.textContent = pct + '%';
+
+    const badgeEl = document.getElementById('bud-target-badge');
+    if (badgeEl) { badgeEl.textContent = badgeText; badgeEl.className = 'badge ' + badgeClass; }
+
+  } catch(e) {
+    console.warn('fetchBudgetData:', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const lidTo = document.getElementById('lid-f-to');
+  if (lidTo) lidTo.value = today;
+  const sdelTo = document.getElementById('sdel-f-to');
+  if (sdelTo) sdelTo.value = today;
+
+  // Set header title to current month
+  const mIdx = THIS_MONTH;
+  document.getElementById('kunlik-month').textContent = MONTH_LABEL[mIdx] + ' ' + THIS_YEAR;
+
+  buildDailyTable();
+  fetchLidlarStats();
+  fetchSdelkiStats();
+  fetchMetaInsights(MONTH_UZ[THIS_MONTH], THIS_YEAR);
+  fetchBudgetData();
+
+  // Auto-refresh: check every hour if the day has changed, reload if so
+  let _lastDay = TODAY;
+  setInterval(() => {
+    const now = new Date();
+    if (now.getDate() !== _lastDay) {
+      _lastDay = now.getDate();
+      fetchMetaInsights(MONTH_UZ[now.getMonth()], now.getFullYear());
+      fetchLidlarStats();
+      fetchSdelkiStats();
+    }
+  }, 60 * 60 * 1000); // check every hour
+});
+
+// ================================================================
+// META ADS LIVE LOADER — Added
+// Imports meta-api.js → merges real spend+leads into monthData →
+// rebuilds the existing table. Only writes: budget, leads.
+// Never touches: qleads, meets, deals, sales, rev.
+// ================================================================
+(function () {
+  function setStatus(html) {
+    const el = document.getElementById('meta-sync-status');
+    if (el) el.innerHTML = html;
+  }
+
+  async function loadMetaLive(monthKey, year) {
+    setStatus('<span class="badge b-blue" style="font-size:10px">⟳ Yuklanmoqda...</span>');
+
+    let fetchFn;
+    try {
+      const mod = await import('/meta-api.js?t=' + Date.now());
+      fetchFn = mod.fetchMetaAdsData;
+    } catch (e) {
+      setStatus('<span class="badge b-amber" style="font-size:10px">⚠ meta-api.js topilmadi</span>');
+      console.warn('[MetaLive] import failed:', e);
+      return;
+    }
+
+    try {
+      const data = await fetchFn(monthKey, year);
+
+      if (!monthData[monthKey]) monthData[monthKey] = {};
+      ['target', 'instagram'].forEach(function (src) {
+        if (!data[src]) return;
+        // If this src doesn't exist yet, seed ALL metric keys with zeros so
+        // getData()'s [...base] spread never hits undefined
+        if (!monthData[monthKey][src]) {
+          monthData[monthKey][src] = {};
+          ['budget','leads','qleads','meets','deals','sales','rev'].forEach(function (k) {
+            monthData[monthKey][src][k] = Array(31).fill(0);
+          });
+        }
+        // Only overwrite budget and leads — leave qleads/meets/deals/sales/rev untouched
+        monthData[monthKey][src].budget = data[src].budget;
+        monthData[monthKey][src].leads  = data[src].leads;
+      });
+
+      if (data.campaigns) {
+        metaCampaigns[monthKey + '-' + year] = data.campaigns;
+      }
+
+      buildDailyTable();
+
+      const t = new Date();
+      const ts = t.getHours() + ':' + String(t.getMinutes()).padStart(2, '0');
+      setStatus('<span class="badge b-green" style="font-size:10px">✓ Meta ' + ts + '</span>');
+
+    } catch (err) {
+      const msgs = {
+        token_expired:    'Token muddati tugagan',
+        rate_limit:       'Rate limit — keyinroq urinib ko\'ring',
+        permission_denied:"Ruxsat yo'q: ads_read kerak",
+        network_error:    'Tarmoq xatosi — demo rejim',
+        bad_input:        'Noto\'g\'ri oy kaliti',
+        api_error:        'Meta API xato',
+      };
+      let detail = '';
+      if (err.kind)    detail = msgs[err.kind] || err.kind;
+      else if (err.message) detail = err.message.slice(0, 60);
+      else detail = String(err).slice(0, 60);
+      if (err.code)    detail += ' (' + err.code + ')';
+      setStatus('<span class="badge b-red" style="font-size:10px" title="' + detail + '">⚠ ' + detail + '</span>');
+      console.error('[MetaLive] kind=' + err.kind + ' code=' + err.code + ' msg=' + (err.message || JSON.stringify(err)), err);
+    }
+  }
+
+  // Called by the "⟳ Meta sync" button
+  window.metaSync = function () {
+    const val = document.getElementById('month-sel').value;
+    const parts = val.split('-');
+    loadMetaLive(parts[0], parseInt(parts[1], 10));
+  };
+
+  // Auto-load on page ready
+  document.addEventListener('DOMContentLoaded', function () {
+    const val = document.getElementById('month-sel').value;
+    const parts = val.split('-');
+    loadMetaLive(parts[0], parseInt(parts[1], 10));
+  });
+
+  // Reload when user changes the month selector
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('month-sel').addEventListener('change', function (e) {
+      const parts = e.target.value.split('-');
+      loadMetaLive(parts[0], parseInt(parts[1], 10));
+    });
+  });
+}());
+// ================================================================
+// END META ADS LIVE LOADER
+// ================================================================
+</script>
+<script>
+// Dashboard debug helper: fetch combined data for a single day and show JSON
+async function fetchDashboardDay(dateStr) {
+  const statusEl = document.getElementById('dbg-status');
+  try {
+    statusEl.textContent = 'Loading...';
+    const d = dateStr || document.getElementById('dbg-date').value;
+    if (!d) {
+      statusEl.textContent = 'Select a date';
+      return;
+    }
+    const res = await fetch('/api/dashboard/daily?date=' + encodeURIComponent(d));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    // compact pretty print
+    statusEl.innerHTML = '<pre style="font-size:11px;white-space:pre-wrap;max-width:680px;max-height:220px;overflow:auto">' + JSON.stringify(json, null, 2) + '</pre>';
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + (err.message || err);
+    console.error('fetchDashboardDay error', err);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const btn = document.getElementById('dbg-btn');
+  const dateInput = document.getElementById('dbg-date');
+  // default to today
+  const today = new Date().toISOString().slice(0,10);
+  if (dateInput && !dateInput.value) dateInput.value = today;
+  if (btn) btn.addEventListener('click', () => fetchDashboardDay(dateInput.value));
+});
+</script>
+</body>
+</html>
