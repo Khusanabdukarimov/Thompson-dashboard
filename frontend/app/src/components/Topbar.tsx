@@ -9,7 +9,7 @@ export function Topbar({ title, sub, actions }: { title: string; sub?: string; a
         {sub && <div className="text-[11px] text-text3 mt-px truncate">{sub}</div>}
       </div>
       {actions && (
-        <div className="flex gap-1.5 items-center overflow-x-auto whitespace-nowrap scrollbar-hide">
+        <div className="flex gap-2 items-center overflow-x-auto whitespace-nowrap scrollbar-hide -mx-2 px-2">
           {actions}
         </div>
       )}

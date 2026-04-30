@@ -8,7 +8,7 @@ import { CardChart, MultiLine } from '@/components/charts';
 import { MetricRowSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
 import { getDashboardDaily, getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
-import { fmtNum, fmtMoney } from '@/lib/utils';
+import { fmtNum, fmtMoney, fmtDate } from '@/lib/utils';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const monthOf = (iso: string): MonthKey => MONTH_KEYS[Number(iso.slice(5, 7)) - 1];
@@ -67,7 +67,7 @@ export default function KunlikPage() {
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {dayQ.isLoading && !dayQ.data ? <MetricRowSkeleton count={5} /> : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
-            <MetricCard label="Sana" value={date} tone="default" hint={dayQ.isFetching ? 'yuklanmoqda…' : undefined} />
+            <MetricCard label="Sana" value={fmtDate(date, 'long')} tone="default" hint={dayQ.isFetching ? 'yuklanmoqda…' : undefined} />
             <MetricCard label="Meta sarf" value={fmtMoney(fbSpend)} tone="orange" hint={`FB+IG account-level`} />
             <MetricCard label="Meta lidlar" value={fmtNum(fbLeads)} tone="amber" />
             <MetricCard label="Bitrix tashriflar" value={fmtNum(bx?.visits_count)} tone="blue" />

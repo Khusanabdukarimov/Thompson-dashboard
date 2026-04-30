@@ -15,7 +15,7 @@ import type { WeeklyActual } from '@/lib/api/payroll';
 import { getDealsStats } from '@/lib/api/deals';
 import { listLeadsRich, getLeadsStats } from '@/lib/api/leads';
 import type { LeadRow, LeadsListFilter } from '@/lib/api/leads';
-import { fmtMoney, fmtNum, fmtPct } from '@/lib/utils';
+import { fmtMoney, fmtNum, fmtPct, fmtDate } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import { getConfig } from '@/lib/api/config';
 
@@ -49,10 +49,7 @@ function isoLastOfMonth(year: number, month: number) {
   const d = new Date(year, month, 0).getDate();
   return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
-function fmtShortDate(iso: string | null) {
-  if (!iso) return '—';
-  return iso.slice(0, 10);
-}
+const fmtShortDate = (iso: string | null) => fmtDate(iso, 'short');
 
 export default function RejaPage() {
   const [year, setYear] = useState(DEFAULT_YEAR);

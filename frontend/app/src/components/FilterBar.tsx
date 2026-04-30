@@ -44,6 +44,7 @@ export function FilterBar({
   rightSlot,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<'left' | 'right'>('left');
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,6 +55,19 @@ export function FilterBar({
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
+
+  // Smart anchor: align popover to right edge of wrap if not enough space on right
+  useEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const POPOVER_W = 720;
+    // If left-anchored popover would extend past viewport, use right anchor
+    if (rect.left + POPOVER_W > window.innerWidth - 16) {
+      setAnchor('right');
+    } else {
+      setAnchor('left');
+    }
+  }, [open]);
 
   return (
     <div ref={wrapRef} className="relative w-full max-w-[560px]">
@@ -102,7 +116,10 @@ export function FilterBar({
       </div>
 
       {open && (
-        <div className="absolute top-[calc(100%+6px)] left-0 right-auto bg-bg2 border border-border rounded-xl shadow-lg z-50 overflow-hidden w-[720px] max-w-[calc(100vw-60px)]">
+        <div className={cn(
+          'absolute top-[calc(100%+6px)] bg-bg2 border border-border rounded-xl shadow-lg z-50 overflow-hidden w-[720px] max-w-[calc(100vw-32px)]',
+          anchor === 'left' ? 'left-0 right-auto' : 'right-0 left-auto',
+        )}>
           <div className="grid grid-cols-[200px_1fr]">
             {/* Saved presets */}
             <div className="bg-bg3 border-r border-border p-2 flex flex-col gap-px">

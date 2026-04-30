@@ -175,19 +175,33 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── Maqsad bajarilishi + Voronka ─────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
-          <CardChart title={`${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year} — Maqsad bajarilishi`} hint={target ? fmtPct(progress, 1) : '—'} height={180}>
-            <div className="h-full flex flex-col justify-center px-1">
-              <div className="flex items-center justify-between text-[11px] text-text3 mb-1">
-                <span>Bajarildi: <strong className="text-blue">{fmtMoney(wonRev)}</strong></span>
-                <span className="font-semibold text-text">{target ? fmtPct(progress, 1) : '—'} · {fmtMoney(target)} maqsad</span>
-                <span>Qoldi: <strong className="text-amber">{fmtMoney(remaining)}</strong></span>
+          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <span className="text-[13px] font-semibold">{MONTH_LABELS[MONTH_KEYS[month - 1]]} {year} — Maqsad bajarilishi</span>
+              <span className="text-[12px] mono font-semibold text-text">{target ? fmtPct(progress, 1) : '—'}</span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-3 gap-3 text-[11px] mb-3">
+                <div>
+                  <div className="text-text3 uppercase tracking-wider mb-1">Bajarildi</div>
+                  <div className="mono text-blue font-semibold text-[14px]">{fmtMoney(wonRev)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-text3 uppercase tracking-wider mb-1">Maqsad</div>
+                  <div className="mono text-text font-semibold text-[14px]">{target > 0 ? fmtMoney(target) : 'belgilanmagan'}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-text3 uppercase tracking-wider mb-1">Qoldi</div>
+                  <div className="mono text-amber font-semibold text-[14px]">{fmtMoney(remaining)}</div>
+                </div>
               </div>
               <div className="h-2.5 bg-bg4 rounded overflow-hidden">
-                <div className="h-full rounded bg-gradient-to-r from-blue-2 to-cyan-400" style={{ width: `${Math.min(100, progress)}%` }} />
+                <div className="h-full rounded bg-gradient-to-r from-blue-2 to-cyan-400 transition-all" style={{ width: `${Math.min(100, progress)}%` }} />
               </div>
             </div>
-          </CardChart>
+          </div>
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
               <span className="text-[13px] font-semibold">Voronka</span>
