@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
@@ -10,8 +9,6 @@ import os
 
 APP_DIR = Path(__file__).resolve().parent          # backend/app/
 BACKEND_DIR = APP_DIR.parent                       # backend/
-PROJECT_ROOT = BACKEND_DIR.parent                  # mountain/
-FRONTEND_LEGACY = PROJECT_ROOT / "frontend" / "legacy"
 
 load_dotenv(BACKEND_DIR / ".env")
 
@@ -50,9 +47,8 @@ def api_config():
     }
 
 
-@app.get("/")
-def serve_index():
-    return FileResponse(FRONTEND_LEGACY / "marketing.html")
+# Legacy HTML root removed — React SPA at /var/www/mountain/frontend/app/dist
+# is served by nginx. Backend is API-only.
 
 
 class LeadCreate(BaseModel):
@@ -102,30 +98,9 @@ def api_get_lead(lead_id: int):
     return lead
 
 
-@app.get("/api/payroll/{emp_id}")
-def api_get_payroll(emp_id: str):
-    # The frontend expects payroll values for the selected employee.
-    # For now, use the static JS payData in the HTML via a simple mapping.
-    # Attempt to map common employee keys used in HTML: sb, dy, bt, nk, zr
-    demo = {
-        "sb": {
-            "name": "Shahzod Botirov",
-            "fix": "5,200,000",
-            "kpi": "$6,180",
-            "bonus": "$530",
-            "penalty": "0",
-            "total": "\u2248 14,200,000 so'm + $6,710"
-        },
-        "dy": {
-            "name": "Dilnoza Yusupova",
-            "fix": "5,200,000",
-            "kpi": "$0",
-            "bonus": "\u2014",
-            "penalty": "0",
-            "total": "\u2248 5,940,000 so'm"
-        }
-    }
-    return demo.get(emp_id, {"error": "unknown emp id"})
+# Removed: legacy demo /api/payroll/{emp_id} endpoint with hardcoded data.
+# Use /api/payroll/calculate?bitrix_user_id=&year=&month= for real payroll
+# (Bitrix won-deal revenue \u00d7 KPI tier + bonuses \u2212 penalties).
 
 
 @app.get("/api/leads")
@@ -207,16 +182,6 @@ def api_users_timeman():
 def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Optional[str] = None):
     res = bitrix.aggregate_deals_sum_by_user(user_id, start_date, end_date, stage_filter=stage)
     return res
-
-
-@app.get("/marketing")
-def serve_marketing():
-    return FileResponse(FRONTEND_LEGACY / "marketing.html")
-
-
-@app.get("/payroll")
-def serve_payroll():
-    return FileResponse(FRONTEND_LEGACY / "payroll.html")
 
 
 @app.get("/api/stats/leads")
@@ -577,16 +542,6 @@ def api_meta_insights(
 
     data = meta_svc.insights_to_monthly(rows, month, year)
     return {"month": month, "year": year, "data": data}
-
-
-@app.get("/meta-api.js")
-def serve_meta_api_js():
-    return FileResponse(FRONTEND_LEGACY / "meta-api.js", media_type="application/javascript")
-
-
-@app.get("/config.js")
-def serve_config_js():
-    return FileResponse(FRONTEND_LEGACY / "config.js", media_type="application/javascript")
 
 
 if __name__ == "__main__":
