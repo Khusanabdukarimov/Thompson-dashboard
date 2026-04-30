@@ -8,20 +8,24 @@ import uvicorn
 import os
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+APP_DIR = Path(__file__).resolve().parent          # backend/app/
+BACKEND_DIR = APP_DIR.parent                       # backend/
+PROJECT_ROOT = BACKEND_DIR.parent                  # mountain/
+FRONTEND_LEGACY = PROJECT_ROOT / "frontend" / "legacy"
 
-from service import bitrix, meta as meta_svc
-from service.meta import MetaClient
+load_dotenv(BACKEND_DIR / ".env")
+
+from app.services import bitrix, meta as meta_svc
+from app.services.meta import MetaClient
 from datetime import date
-from service.bitrix import aggregate_deals_sum_total, get_visits_by_date, list_leads
+from app.services.bitrix import aggregate_deals_sum_total, get_visits_by_date, list_leads
 
 app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
 
 
 @app.get("/")
 def serve_index():
-    return FileResponse(BASE_DIR / "marketing_sotuv_v16.html")
+    return FileResponse(FRONTEND_LEGACY / "marketing.html")
 
 
 class LeadCreate(BaseModel):
@@ -141,7 +145,12 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
 
 @app.get("/marketing")
 def serve_marketing():
-    return FileResponse(BASE_DIR / "marketing_sotuv_v16.html")
+    return FileResponse(FRONTEND_LEGACY / "marketing.html")
+
+
+@app.get("/payroll")
+def serve_payroll():
+    return FileResponse(FRONTEND_LEGACY / "payroll.html")
 
 
 @app.get("/api/stats/leads")
@@ -506,12 +515,12 @@ def api_meta_insights(
 
 @app.get("/meta-api.js")
 def serve_meta_api_js():
-    return FileResponse(BASE_DIR / "meta-api.js", media_type="application/javascript")
+    return FileResponse(FRONTEND_LEGACY / "meta-api.js", media_type="application/javascript")
 
 
 @app.get("/config.js")
 def serve_config_js():
-    return FileResponse(BASE_DIR / "config.js", media_type="application/javascript")
+    return FileResponse(FRONTEND_LEGACY / "config.js", media_type="application/javascript")
 
 
 if __name__ == "__main__":

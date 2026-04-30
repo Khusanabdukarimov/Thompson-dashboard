@@ -1,11 +1,11 @@
-# Secrets and local config
-.env
-.env.*
-!.env.sample
-config.js
-config.local.js
+# ── Secrets and local config ───────────────────────────────
+backend/.env
+backend/.env.*
+!backend/.env.sample
+frontend/legacy/config.js
+frontend/**/config.local.js
 
-# Python
+# ── Python ─────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyd
@@ -16,13 +16,17 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Logs
+# ── Node / frontend build artifacts (for upcoming redesign) ─
+node_modules/
+frontend/**/dist/
+frontend/**/.next/
+frontend/**/.turbo/
+frontend/**/.vite/
+
+# ── Logs ───────────────────────────────────────────────────
 *.log
 
-# Local scratch/debug files
-scratch/
-
-# Editors and OS
+# ── Editors and OS ─────────────────────────────────────────
 .DS_Store
 .idea/
 .vscode/
