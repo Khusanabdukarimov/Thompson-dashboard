@@ -189,7 +189,7 @@ def get_campaign_insights(ad_account_id: str, since: str, until: str):
     url = f"{GRAPH}/{ad_account_id}/insights"
     params = {
         "access_token": _token(),
-        "fields": "publisher_platform,spend,impressions,clicks,reach,actions",
+        "fields": "spend,impressions,clicks,reach,actions",
         "level": "campaign",
         "breakdowns": "publisher_platform",
         "time_increment": 1,

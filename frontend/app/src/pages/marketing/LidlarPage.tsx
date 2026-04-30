@@ -8,9 +8,11 @@ import { Button } from '@/components/Button';
 import { FilterBar } from '@/components/FilterBar';
 import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { DataTable } from '@/components/DataTable';
+import { FunnelBars } from '@/components/charts';
 import { getLeadsStats, getLeadQuality } from '@/lib/api/leads';
 import type { StatsLeadsByUser, LeadFilter } from '@/lib/api/leads';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 const PRESETS: FilterPreset[] = [
   { id: 'all',       label: 'Barcha leadlar', pinned: true },
@@ -26,9 +28,9 @@ const oneYearAgoISO = () => {
 };
 
 export default function LidlarPage() {
-  const [activePreset, setActivePreset] = useState<string | null>('all');
+  const [activePreset, setActivePreset] = useLocalStorage<string | null>('lidlar.preset', 'all');
   const [search, setSearch] = useState('');
-  const [values, setValues] = useState<FilterValues>({
+  const [values, setValues] = useLocalStorage<FilterValues>('lidlar.filter', {
     start_date: oneYearAgoISO(),
     end_date: todayISO(),
   });
@@ -128,6 +130,31 @@ export default function LidlarPage() {
   const jarayon = statsQ.data?.jarayon_total ?? 0;
   const conv = statsQ.data?.conversion_rate ?? 0;
 
+  const funnelSteps = useMemo(() => {
+    const byStatus = statsQ.data?.by_status ?? {};
+    const statusNames = statsQ.data?.status_names ?? {};
+    const sifatsiz = byStatus['UC_F8K4GI'] ?? 0;
+    const bekor    = byStatus['UC_NAZK5J'] ?? 0;
+    const junk     = byStatus['JUNK']      ?? 0;
+    return [
+      { label: 'Jami lidlar', value: total,     color: 'var(--blue)' },
+      { label: 'Jarayonda',   value: jarayon,   color: 'var(--amber)' },
+      { label: statusNames['UC_F8K4GI'] || 'Sifatsiz', value: sifatsiz, color: 'var(--orange)' },
+      { label: statusNames['UC_NAZK5J'] || 'Bekor',    value: bekor,    color: 'var(--red)' },
+      { label: 'Sandiq (junk)', value: junk,    color: 'var(--text3)' },
+      { label: 'Konversiya',    value: converted, color: 'var(--green)' },
+    ];
+  }, [statsQ.data, total, jarayon, converted]);
+
+  const topStatuses = useMemo(() => {
+    const byStatus = statsQ.data?.by_status ?? {};
+    const statusNames = statsQ.data?.status_names ?? {};
+    return Object.entries(byStatus)
+      .map(([k, v]) => ({ label: statusNames[k] || k, val: v }))
+      .sort((a, b) => b.val - a.val)
+      .slice(0, 8);
+  }, [statsQ.data]);
+
   return (
     <>
       <Topbar
@@ -165,6 +192,40 @@ export default function LidlarPage() {
           <MetricCard label="Konversiya" value={fmtNum(converted)} tone="green" />
           <MetricCard label="Konv. foiz" value={fmtPct(conv, 2)} />
           <MetricCard label="Daromad" value={fmtMoney(revenue)} tone="green" />
+        </div>
+
+        {/* Funnel + Status breakdown */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <span className="text-[13px] font-semibold">Voronka</span>
+              <span className="text-[11px] text-text3 ml-2">jami → jarayon → konversiya</span>
+            </div>
+            <div className="p-4">
+              <FunnelBars steps={funnelSteps} />
+            </div>
+          </div>
+          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <span className="text-[13px] font-semibold">Status bo'yicha (top 8)</span>
+              <span className="text-[11px] text-text3 ml-2">{topStatuses.length} ta</span>
+            </div>
+            <div className="p-4">
+              {topStatuses.length === 0 && <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>}
+              {topStatuses.map((it, i) => {
+                const max = Math.max(1, ...topStatuses.map(s => s.val));
+                return (
+                  <div key={i} className="flex items-center gap-3 py-1.5">
+                    <span className="text-[12px] text-text2 flex-1 truncate">{it.label}</span>
+                    <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">
+                      <div className="h-full rounded bg-blue" style={{ width: `${(it.val / max) * 100}%` }} />
+                    </div>
+                    <span className="mono text-[12px] font-semibold w-10 text-right">{fmtNum(it.val)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Mas'ullar kesimida */}
