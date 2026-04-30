@@ -112,15 +112,54 @@ def api_get_payroll(emp_id: str):
 
 
 @app.get("/api/leads")
-def api_list_leads(assigned_by: Optional[int] = None, start_date: Optional[str] = None, end_date: Optional[str] = None):
+def api_list_leads(
+    assigned_by: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status_id: Optional[str] = None,
+    source_id: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    enrich: bool = False,
+):
+    """List leads with optional filters and enrichment.
+
+    enrich=true → include status_name, source_name, assigned_name resolved server-side.
+    """
     f = {}
-    select = ["ID", "TITLE", "ASSIGNED_BY_ID", "OPPORTUNITY", "STATUS_ID", "UF_CRM_1774413003006", "DATE_CREATE"]
-    if assigned_by:
-        f["ASSIGNED_BY_ID"] = assigned_by
-    if start_date and end_date:
-        f["%s" % bitrix.TASHRIF_DATE] = None
+    select = [
+        "ID", "TITLE", "NAME", "LAST_NAME", "SECOND_NAME",
+        "ASSIGNED_BY_ID", "OPPORTUNITY", "STATUS_ID", "SOURCE_ID",
+        "DATE_CREATE", "DATE_MODIFY",
+        "PHONE", "EMAIL", "COMMENTS",
+        "UF_CRM_1774413003006",
+    ]
+    if assigned_by:  f["ASSIGNED_BY_ID"] = assigned_by
+    if status_id:    f["STATUS_ID"] = status_id
+    if source_id:    f["SOURCE_ID"] = source_id
+    if start_date:   f[">=DATE_CREATE"] = start_date
+    if end_date:     f["<=DATE_CREATE"] = end_date
+    if search:       f["%TITLE"] = search   # Bitrix substring filter
+
     leads = bitrix.list_leads(filter_dict=f, select=select)
-    return {"count": len(leads), "leads": leads}
+    total = len(leads)
+
+    # Optional pagination (server-side after Bitrix-side filtering)
+    if limit:
+        leads = leads[offset: offset + limit]
+
+    if enrich:
+        status_names = bitrix.get_lead_status_names()
+        source_names = bitrix.get_deal_source_names()
+        users = {str(u["ID"]): f"{u.get('NAME','') or ''} {u.get('LAST_NAME','') or ''}".strip() or f"User {u['ID']}"
+                 for u in bitrix.list_users()}
+        for ld in leads:
+            ld["_status_name"]  = status_names.get(ld.get("STATUS_ID") or "", ld.get("STATUS_ID") or "")
+            ld["_source_name"]  = source_names.get(ld.get("SOURCE_ID") or "", ld.get("SOURCE_ID") or "")
+            ld["_assigned_name"] = users.get(str(ld.get("ASSIGNED_BY_ID") or ""), "")
+
+    return {"count": total, "leads": leads, "offset": offset, "limit": limit}
 
 
 @app.get("/api/users/timeman")

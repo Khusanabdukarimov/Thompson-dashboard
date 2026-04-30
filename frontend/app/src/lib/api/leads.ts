@@ -54,3 +54,42 @@ export function getLeadsStats(filter: LeadFilter) {
 export function getLeadQuality(filter: LeadFilter) {
   return apiGet<LeadQualityResponse>('/api/stats/lead-quality', filter);
 }
+
+// ── Lead list (raw + enriched) ───────────────────────────────────
+export type LeadRow = {
+  ID: string;
+  TITLE: string | null;
+  NAME: string | null;
+  LAST_NAME: string | null;
+  ASSIGNED_BY_ID: string | null;
+  OPPORTUNITY: string | null;
+  STATUS_ID: string | null;
+  SOURCE_ID: string | null;
+  DATE_CREATE: string | null;
+  DATE_MODIFY: string | null;
+  PHONE: string | null;
+  EMAIL: string | null;
+  COMMENTS: string | null;
+  _status_name?: string;
+  _source_name?: string;
+  _assigned_name?: string;
+};
+
+export type LeadsListFilter = {
+  start_date?: string;
+  end_date?: string;
+  assigned_by?: number;
+  status_id?: string;
+  source_id?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+  enrich?: boolean;
+};
+
+export function listLeadsRich(filter: LeadsListFilter) {
+  return apiGet<{ count: number; leads: LeadRow[]; offset: number; limit: number | null }>(
+    '/api/leads',
+    { ...filter, enrich: filter.enrich ? 'true' : undefined } as Record<string, string | number | undefined>,
+  );
+}

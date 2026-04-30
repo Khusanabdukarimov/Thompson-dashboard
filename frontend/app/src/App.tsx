@@ -11,6 +11,7 @@ import AttendancePage from '@/pages/payroll/AttendancePage';
 import PayrollCalcPage from '@/pages/payroll/PayrollCalcPage';
 import KpiRulesPage from '@/pages/payroll/KpiRulesPage';
 import BonusPage from '@/pages/payroll/BonusPage';
+import RejaPage from '@/pages/payroll/RejaPage';
 import Placeholder from '@/pages/Placeholder';
 
 export default function App() {
@@ -28,7 +29,7 @@ export default function App() {
 
         {/* Payroll */}
         <Route path="/payroll/dashboard"  element={<DashboardPage />} />
-        <Route path="/payroll/reja"       element={<Placeholder title="Reja & Leadlar" sub="Tez kunda — Bitrix-style filter + Lead jadvali" />} />
+        <Route path="/payroll/reja"       element={<RejaPage />} />
         <Route path="/payroll/employees"  element={<EmployeesPage />} />
         <Route path="/payroll/attendance" element={<AttendancePage />} />
         <Route path="/payroll/hisobot"    element={<Placeholder title="Hisobot intizomi" sub="Tez kunda — kunlik hisobot deadline tracking" />} />
