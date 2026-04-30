@@ -116,13 +116,14 @@ export default function KampaniyalarPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
+        {q.isLoading && !q.data ? <MetricRowSkeleton count={6} /> : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-4">
             <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" />
             <MetricCard label="Jami lidlar" value={fmtNum(totalLeads)} tone="green" />
-            <MetricCard label="CPL (1 lid)" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / lidlar" />
-            <MetricCard label="CTR" value={totals.impr ? `${ctr.toFixed(2)}%` : '—'} tone="blue" hint="klik / impressiya" />
-            <MetricCard label="Klik / Impr." value={`${fmtNum(totals.clicks)} / ${fmtNum(totals.impr)}`} hint="jami" />
+            <MetricCard label="CPL" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / 1 lid" />
+            <MetricCard label="CTR" value={totals.impr ? `${ctr.toFixed(2)}%` : '—'} tone="blue" hint="klik/impr" />
+            <MetricCard label="Klikllar" value={fmtNum(totals.clicks)} hint="jami klik" />
+            <MetricCard label="Impressiyalar" value={fmtNum(totals.impr)} hint="ko'rishlar" />
           </div>
         )}
 

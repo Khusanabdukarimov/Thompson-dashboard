@@ -9,6 +9,7 @@ import { Avatar } from '@/components/Avatar';
 import { DataTable } from '@/components/DataTable';
 // skeleton handled inside DataTable via loading prop
 import { listEmployees, listKpiRules, upsertEmployeeExtra } from '@/lib/api/payroll';
+import { useToast } from '@/components/Toast';
 import type { Employee, EmployeeExtraIn } from '@/lib/api/payroll';
 import { fmtNum } from '@/lib/utils';
 
@@ -126,6 +127,7 @@ function EditModal({
   employee, kpiRules, onClose,
 }: { employee: Employee; kpiRules: { id: number; name: string }[]; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState<EmployeeExtraIn>({
     role: employee.role,
     status: employee.status,
@@ -144,9 +146,10 @@ function EditModal({
     try {
       await upsertEmployeeExtra(employee.id, form);
       qc.invalidateQueries({ queryKey: ['payroll/employees'] });
+      toast.success('Saqlandi', `${employee.name} ma'lumotlari yangilandi`);
       onClose();
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Saqlashda xato', (e as Error).message);
     } finally {
       setSaving(false);
     }

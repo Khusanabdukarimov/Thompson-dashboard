@@ -18,6 +18,7 @@ import type { LeadRow, LeadsListFilter } from '@/lib/api/leads';
 import { fmtMoney, fmtNum, fmtPct, fmtDate } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import { getConfig } from '@/lib/api/config';
+import { useToast } from '@/components/Toast';
 
 const now = new Date();
 const DEFAULT_YEAR = now.getFullYear();
@@ -59,6 +60,7 @@ export default function RejaPage() {
   const [filterValues, setFilterValues] = useState<FilterValues>({});
   const [editTarget, setEditTarget] = useState(false);
   const [viewLead, setViewLead] = useState<LeadRow | null>(null);
+  const toast = useToast();
 
   const startDate = isoFirstOfMonth(year, month);
   const endDate = isoLastOfMonth(year, month);
@@ -175,7 +177,7 @@ export default function RejaPage() {
               {[DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <Button onClick={() => setEditTarget(true)}>Reja o'zgartirish</Button>
-            <Button variant="primary" onClick={() => alert("Lead kiritish — Bitrix CRM'ga yo'naltiring")}>+ Lead kiritish</Button>
+            <Button variant="primary" onClick={() => toast.info('Lead kiritish', "Hozircha Bitrix CRM'da to'g'ridan to'g'ri yarating — kelajakda bu yerda forma bo'ladi")}>+ Lead kiritish</Button>
           </>
         }
       />
@@ -227,9 +229,11 @@ export default function RejaPage() {
         {/* ── LEAD JADVALI ───────────────────────────────────── */}
         <div className="bg-bg2 border border-border rounded-lg shadow mb-4">
           <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-wrap">
-            <span className="text-[13px] font-semibold whitespace-nowrap">Lead jadvali</span>
-            <span className="text-[11px] text-text3 whitespace-nowrap">{leadsQ.isFetching ? 'yuklanmoqda…' : `${leadsQ.data?.count ?? 0} ta`}</span>
-            <div className="flex-1 flex justify-end min-w-[280px]">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] font-semibold whitespace-nowrap">Lead jadvali</span>
+              <span className="text-[11px] text-text3 whitespace-nowrap">{leadsQ.isFetching ? 'yuklanmoqda…' : `${leadsQ.data?.count ?? 0} ta`}</span>
+            </div>
+            <div className="flex-1 w-full sm:w-auto flex justify-end min-w-0 sm:min-w-[280px]">
               <FilterBar
                 presets={STATUS_PRESETS}
                 activePreset={activePreset}
@@ -361,7 +365,10 @@ function RejaHeader({
             Qoldi: <strong className="text-amber">{fmtMoney(remaining)}</strong>
           </div>
         </div>
-        <Badge tone={progress >= 100 ? 'green' : progress >= 70 ? 'amber' : 'red'} className="text-[12px] px-3 py-1">
+        <Badge
+          tone={!target ? 'gray' : progress >= 100 ? 'green' : progress >= 70 ? 'amber' : 'orange'}
+          className="text-[12px] px-3 py-1"
+        >
           {target ? `${fmtPct(progress, 1)} bajarildi` : 'maqsad belgilanmagan'}
         </Badge>
       </div>
@@ -426,6 +433,7 @@ function TargetModal({
   year, month, initial, onClose,
 }: { year: number; month: number; initial: { target_usd: number; weekly_breakdown: number[] } | undefined; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [target, setTarget] = useState<number>(initial?.target_usd ?? 0);
   const [weekly, setWeekly] = useState<number[]>(
     (initial?.weekly_breakdown && initial.weekly_breakdown.length > 0)
@@ -450,9 +458,10 @@ function TargetModal({
       });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       qc.invalidateQueries({ queryKey: ['payroll/target', year, month] });
+      toast.success('Maqsad saqlandi', `$${target.toLocaleString('en-US')} oylik reja`);
       onClose();
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Saqlashda xato', (e as Error).message);
     } finally {
       setSaving(false);
     }

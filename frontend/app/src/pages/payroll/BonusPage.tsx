@@ -14,6 +14,7 @@ import {
   listEmployees,
 } from '@/lib/api/payroll';
 import type { BonusRule, BonusRuleIn, BonusAward, BonusAwardIn } from '@/lib/api/payroll';
+import { useToast } from '@/components/Toast';
 import { fmtMoney } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 
@@ -30,6 +31,7 @@ export default function BonusPage() {
   const [editingRule, setEditingRule] = useState<BonusRule | null>(null);
   const [creatingRule, setCreatingRule] = useState(false);
   const [creatingAward, setCreatingAward] = useState(false);
+  const toast = useToast();
 
   const ruleColumns = useMemo<ColumnDef<BonusRule, unknown>[]>(() => [
     { header: 'Nomi', accessorKey: 'name', cell: (c) => <span className="font-medium">{c.getValue<string>()}</span> },
@@ -48,7 +50,11 @@ export default function BonusPage() {
           <Button size="sm" onClick={() => setEditingRule(c.row.original)}><Pencil className="w-3 h-3" /></Button>
           <Button size="sm" variant="danger" onClick={async () => {
             if (!confirm(`"${c.row.original.name}" qoidasini o'chirish?`)) return;
-            try { await deleteBonusRule(c.row.original.id); rulesQ.refetch(); } catch (e) { alert((e as Error).message); }
+            try {
+              await deleteBonusRule(c.row.original.id);
+              rulesQ.refetch();
+              toast.success('O\'chirildi', `"${c.row.original.name}"`);
+            } catch (e) { toast.error('O\'chirishda xato', (e as Error).message); }
           }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       ),
@@ -82,7 +88,11 @@ export default function BonusPage() {
       cell: (c) => (
         <Button size="sm" variant="danger" onClick={async () => {
           if (!confirm(`O'chirish?`)) return;
-          try { await deleteBonusAward(c.row.original.id); awardsQ.refetch(); } catch (e) { alert((e as Error).message); }
+          try {
+            await deleteBonusAward(c.row.original.id);
+            awardsQ.refetch();
+            toast.success('Bonus o\'chirildi');
+          } catch (e) { toast.error('O\'chirishda xato', (e as Error).message); }
         }}><Trash2 className="w-3 h-3" /></Button>
       ),
     },
@@ -177,6 +187,7 @@ function Field({ label, children, className = '' }: { label: string; children: R
 
 function RuleModal({ rule, onClose }: { rule: BonusRule | null; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState<BonusRuleIn>({
     name: rule?.name ?? '',
     trigger_text: rule?.trigger_text ?? '',
@@ -190,14 +201,19 @@ function RuleModal({ rule, onClose }: { rule: BonusRule | null; onClose: () => v
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!form.name.trim()) { alert('Qoida nomi kerak'); return; }
+    if (!form.name.trim()) { toast.error('Qoida nomi kerak'); return; }
     setSaving(true);
     try {
-      if (rule) await updateBonusRule(rule.id, form);
-      else await createBonusRule(form);
+      if (rule) {
+        await updateBonusRule(rule.id, form);
+        toast.success('Saqlandi', `"${form.name}" yangilandi`);
+      } else {
+        await createBonusRule(form);
+        toast.success('Yaratildi', `"${form.name}" qo'shildi`);
+      }
       qc.invalidateQueries({ queryKey: ['payroll/bonus-rules'] });
       onClose();
-    } catch (e) { alert(`Xato: ${(e as Error).message}`); }
+    } catch (e) { toast.error('Saqlashda xato', (e as Error).message); }
     finally { setSaving(false); }
   }
 
@@ -261,6 +277,7 @@ function AwardModal({
   period, rules, employees, onClose,
 }: { period: string; rules: BonusRule[]; employees: { id: number; name: string }[]; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState<BonusAwardIn>({
     bitrix_user_id: employees[0]?.id ?? 0,
     rule_id: rules[0]?.id ?? null,
@@ -278,13 +295,15 @@ function AwardModal({
   }
 
   async function save() {
-    if (!form.bitrix_user_id) { alert('Xodim tanlang'); return; }
+    if (!form.bitrix_user_id) { toast.error('Xodim tanlang'); return; }
     setSaving(true);
     try {
       await createBonusAward(form);
+      const empName = employees.find(e => e.id === form.bitrix_user_id)?.name ?? 'xodim';
+      toast.success('Bonus berildi', `${empName}: +$${form.amount_usd}`);
       qc.invalidateQueries({ queryKey: ['payroll/bonus-awards'] });
       onClose();
-    } catch (e) { alert(`Xato: ${(e as Error).message}`); }
+    } catch (e) { toast.error('Saqlashda xato', (e as Error).message); }
     finally { setSaving(false); }
   }
 

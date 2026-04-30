@@ -8,6 +8,7 @@ import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { listKpiRules, createKpiRule, updateKpiRule, deleteKpiRule } from '@/lib/api/payroll';
 import type { KpiRule, KpiRuleIn, KpiTier } from '@/lib/api/payroll';
+import { useToast } from '@/components/Toast';
 import { fmtMoney } from '@/lib/utils';
 
 const ROLE_OPTIONS = [
@@ -73,13 +74,15 @@ export default function KpiRulesPage() {
 
 function RuleCard({ rule, onEdit }: { rule: KpiRule; onEdit: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   async function handleDelete() {
     if (!confirm(`"${rule.name}" qoidasini o'chirishni tasdiqlaysizmi?`)) return;
     try {
       await deleteKpiRule(rule.id);
       qc.invalidateQueries({ queryKey: ['payroll/kpi-rules'] });
+      toast.success('O\'chirildi', `"${rule.name}" qoidasi o'chirildi`);
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('O\'chirishda xato', (e as Error).message);
     }
   }
 
@@ -124,6 +127,7 @@ function RuleCard({ rule, onEdit }: { rule: KpiRule; onEdit: () => void }) {
 
 function RuleModal({ rule, onClose }: { rule: KpiRule | null; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState<KpiRuleIn>(() => ({
     name: rule?.name ?? '',
     role: rule?.role ?? 'closer',
@@ -154,22 +158,26 @@ function RuleModal({ rule, onClose }: { rule: KpiRule | null; onClose: () => voi
   }
 
   async function save() {
-    if (!form.name.trim()) { alert("Qoida nomi kerak"); return; }
+    if (!form.name.trim()) { toast.error('Qoida nomi kerak'); return; }
     setSaving(true);
     try {
-      // Sanitize tiers: numbers only
       const cleanTiers = form.tiers.map(t => ({
         from: Number(t.from) || 0,
         to: t.to == null || t.to === undefined || (t.to as unknown) === '' ? null : Number(t.to),
         percent: Number(t.percent) || 0,
       }));
       const body = { ...form, tiers: cleanTiers };
-      if (rule) await updateKpiRule(rule.id, body);
-      else await createKpiRule(body);
+      if (rule) {
+        await updateKpiRule(rule.id, body);
+        toast.success('Saqlandi', `"${form.name}" yangilandi`);
+      } else {
+        await createKpiRule(body);
+        toast.success('Yaratildi', `"${form.name}" qo'shildi`);
+      }
       qc.invalidateQueries({ queryKey: ['payroll/kpi-rules'] });
       onClose();
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Saqlashda xato', (e as Error).message);
     } finally {
       setSaving(false);
     }

@@ -271,6 +271,7 @@ function LogEntryModal({
   mode, year, month, employee, onClose,
 }: { mode: Mode; year: number; month: number; employee: { employeeId: number; name: string }; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const today = new Date();
   const defaultDay = today.getFullYear() === year && today.getMonth() + 1 === month
     ? today.toISOString().slice(0, 10)
@@ -292,9 +293,10 @@ function LogEntryModal({
       if (mode === 'report') await upsertReportLog(body);
       else await upsertAttendanceLog(body);
       qc.invalidateQueries({ queryKey: ['payroll/discipline-stats'] });
+      toast.success('Log saqlandi', `${employee.name} · ${day} · ${bucket}`);
       onClose();
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Saqlashda xato', (e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -336,6 +338,7 @@ function LogEntryModal({
 // ─── Penalty config modal ────────────────────────────────────────────
 function PenaltyConfigModal({ initial, onClose }: { initial: PenaltyConfig; onClose: () => void }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState({
     attendance_late_soft_uzs: initial.attendance_late_soft_uzs,
     attendance_late_uzs:      initial.attendance_late_uzs,
@@ -353,9 +356,10 @@ function PenaltyConfigModal({ initial, onClose }: { initial: PenaltyConfig; onCl
     try {
       await setPenaltyConfig(form);
       qc.invalidateQueries({ queryKey: ['payroll/penalty-config'] });
+      toast.success('Tariflar saqlandi');
       onClose();
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Saqlashda xato', (e as Error).message);
     } finally {
       setSaving(false);
     }

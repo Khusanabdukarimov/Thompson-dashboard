@@ -4,6 +4,7 @@ import { Topbar } from '@/components/Topbar';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { getPenaltyConfig, setPenaltyConfig } from '@/lib/api/payroll';
+import { useToast } from '@/components/Toast';
 import type { PenaltyConfig } from '@/lib/api/payroll';
 import { getConfig } from '@/lib/api/config';
 import { fmtNum } from '@/lib/utils';
@@ -83,6 +84,7 @@ function Item({ label, value, mono = false }: { label: string; value: string; mo
 
 function PenaltyForm({ initial }: { initial: PenaltyConfig }) {
   const qc = useQueryClient();
+  const toast = useToast();
   const [form, setForm] = useState({
     attendance_late_soft_uzs: initial.attendance_late_soft_uzs,
     attendance_late_uzs:      initial.attendance_late_uzs,
@@ -102,8 +104,9 @@ function PenaltyForm({ initial }: { initial: PenaltyConfig }) {
       await setPenaltyConfig(form);
       qc.invalidateQueries({ queryKey: ['payroll/penalty-config'] });
       setSavedAt(new Date().toLocaleTimeString('uz-UZ'));
+      toast.success('Tariflar saqlandi', 'Yangi jarima qiymatlari hisob-kitobda qo\'llaniladi');
     } catch (e) {
-      alert(`Xato: ${(e as Error).message}`);
+      toast.error('Saqlashda xato', (e as Error).message);
     } finally {
       setSaving(false);
     }
