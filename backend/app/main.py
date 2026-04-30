@@ -19,8 +19,18 @@ from app.services import bitrix, meta as meta_svc
 from app.services.meta import MetaClient
 from datetime import date
 from app.services.bitrix import aggregate_deals_sum_total, get_visits_by_date, list_leads
+from app.db import init_db
+from app.api.routes import payroll as payroll_routes
 
 app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
+
+
+@app.on_event("startup")
+def _on_startup():
+    init_db()
+
+
+app.include_router(payroll_routes.router)
 
 
 @app.get("/")

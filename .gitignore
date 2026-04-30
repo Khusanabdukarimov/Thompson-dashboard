@@ -23,6 +23,11 @@ frontend/**/.next/
 frontend/**/.turbo/
 frontend/**/.vite/
 
+# ── App data (SQLite, persist across deploys) ──────────────
+backend/data/
+*.db
+*.db-journal
+
 # ── Logs ───────────────────────────────────────────────────
 *.log
 
