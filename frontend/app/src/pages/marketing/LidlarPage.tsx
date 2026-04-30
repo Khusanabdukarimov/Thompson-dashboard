@@ -9,6 +9,7 @@ import { FilterBar } from '@/components/FilterBar';
 import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { DataTable } from '@/components/DataTable';
 import { FunnelBars } from '@/components/charts';
+import { MetricRowSkeleton, FunnelSkeleton } from '@/components/Skeleton';
 import { getLeadsStats, getLeadQuality } from '@/lib/api/leads';
 import type { StatsLeadsByUser, LeadFilter } from '@/lib/api/leads';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
@@ -186,13 +187,15 @@ export default function LidlarPage() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-5 gap-2.5 mb-4">
-          <MetricCard label="Jami lidlar" value={fmtNum(total)} tone="blue" />
-          <MetricCard label="Jarayonda" value={fmtNum(jarayon)} tone="amber" />
-          <MetricCard label="Konversiya" value={fmtNum(converted)} tone="green" />
-          <MetricCard label="Konv. foiz" value={fmtPct(conv, 2)} />
-          <MetricCard label="Daromad" value={fmtMoney(revenue)} tone="green" />
-        </div>
+        {statsQ.isLoading && !statsQ.data ? <MetricRowSkeleton count={5} /> : (
+          <div className="grid grid-cols-5 gap-2.5 mb-4">
+            <MetricCard label="Jami lidlar" value={fmtNum(total)} tone="blue" />
+            <MetricCard label="Jarayonda" value={fmtNum(jarayon)} tone="amber" />
+            <MetricCard label="Konversiya" value={fmtNum(converted)} tone="green" />
+            <MetricCard label="Konv. foiz" value={fmtPct(conv, 2)} />
+            <MetricCard label="Daromad" value={fmtMoney(revenue)} tone="green" />
+          </div>
+        )}
 
         {/* Funnel + Status breakdown */}
         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -202,17 +205,28 @@ export default function LidlarPage() {
               <span className="text-[11px] text-text3 ml-2">jami → jarayon → konversiya</span>
             </div>
             <div className="p-4">
-              <FunnelBars steps={funnelSteps} />
+              {statsQ.isLoading && !statsQ.data ? <FunnelSkeleton rows={6} /> : <FunnelBars steps={funnelSteps} />}
             </div>
           </div>
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
               <span className="text-[13px] font-semibold">Status bo'yicha (top 8)</span>
-              <span className="text-[11px] text-text3 ml-2">{topStatuses.length} ta</span>
+              <span className="text-[11px] text-text3 ml-2">{statsQ.isLoading && !statsQ.data ? 'yuklanmoqda…' : `${topStatuses.length} ta`}</span>
             </div>
             <div className="p-4">
-              {topStatuses.length === 0 && <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>}
-              {topStatuses.map((it, i) => {
+              {statsQ.isLoading && !statsQ.data ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 py-1.5">
+                      <div className="skeleton h-3 flex-1" style={{ maxWidth: 140 + (i * 12) }} />
+                      <div className="skeleton h-1.5 w-24" />
+                      <div className="skeleton h-3 w-10" />
+                    </div>
+                  ))}
+                </div>
+              ) : topStatuses.length === 0 ? (
+                <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>
+              ) : topStatuses.map((it, i) => {
                 const max = Math.max(1, ...topStatuses.map(s => s.val));
                 return (
                   <div key={i} className="flex items-center gap-3 py-1.5">
@@ -234,7 +248,7 @@ export default function LidlarPage() {
           columns={userColumns}
           data={byUserFiltered}
           pageSize={10}
-          emptyMessage={statsQ.isLoading ? 'Yuklanmoqda…' : 'Hech narsa topilmadi'}
+          loading={statsQ.isLoading}
         />
 
         {/* Quality breakdowns */}
@@ -273,8 +287,19 @@ function QualityList({ title, items, loading }: { title: string; items: { label:
         <span className="text-[11px] text-text3 ml-2">{loading ? 'yuklanmoqda…' : `${items.length} ta`}</span>
       </div>
       <div className="p-3">
-        {items.length === 0 && !loading && <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>}
-        {items.map((it, i) => (
+        {loading && items.length === 0 ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-1.5">
+                <div className="skeleton h-3 flex-1" style={{ maxWidth: 100 + (i * 18) }} />
+                <div className="skeleton h-1.5 w-24" />
+                <div className="skeleton h-3 w-10" />
+              </div>
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>
+        ) : items.map((it, i) => (
           <div key={i} className="flex items-center gap-3 py-1.5">
             <span className="text-[12px] text-text2 flex-1 truncate">{it.label}</span>
             <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">

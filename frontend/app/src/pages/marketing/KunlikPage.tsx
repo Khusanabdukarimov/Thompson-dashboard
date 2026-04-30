@@ -5,6 +5,7 @@ import { MetricCard } from '@/components/MetricCard';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { CardChart, MultiLine } from '@/components/charts';
+import { MetricRowSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
 import { getDashboardDaily, getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
 import { fmtNum, fmtMoney } from '@/lib/utils';
@@ -64,25 +65,29 @@ export default function KunlikPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        <div className="grid grid-cols-5 gap-2.5 mb-4">
-          <MetricCard label="Sana" value={date} tone="default" hint={dayQ.isFetching ? 'yuklanmoqda…' : undefined} />
-          <MetricCard label="Meta sarf" value={fmtMoney(fbSpend)} tone="orange" hint={`FB+IG account-level`} />
-          <MetricCard label="Meta lidlar" value={fmtNum(fbLeads)} tone="amber" />
-          <MetricCard label="Bitrix tashriflar" value={fmtNum(bx?.visits_count)} tone="blue" />
-          <MetricCard label="Bitrix yopilgan" value={fmtMoney(bx?.closed_deals.sum)} tone="green" hint={`${bx?.closed_deals.count ?? 0} ta deal`} />
-        </div>
+        {dayQ.isLoading && !dayQ.data ? <MetricRowSkeleton count={5} /> : (
+          <div className="grid grid-cols-5 gap-2.5 mb-4">
+            <MetricCard label="Sana" value={date} tone="default" hint={dayQ.isFetching ? 'yuklanmoqda…' : undefined} />
+            <MetricCard label="Meta sarf" value={fmtMoney(fbSpend)} tone="orange" hint={`FB+IG account-level`} />
+            <MetricCard label="Meta lidlar" value={fmtNum(fbLeads)} tone="amber" />
+            <MetricCard label="Bitrix tashriflar" value={fmtNum(bx?.visits_count)} tone="blue" />
+            <MetricCard label="Bitrix yopilgan" value={fmtMoney(bx?.closed_deals.sum)} tone="green" hint={`${bx?.closed_deals.count ?? 0} ta deal`} />
+          </div>
+        )}
 
-        <CardChart title={`${MONTH_LABELS[monthOf(date)]} ${yearOf(date)} — kunlik trend (oydagi 1-${dayOf(date)} kunlar)`} height={300}>
-          <MultiLine
-            data={trendData}
-            lines={[
-              { dataKey: 'FB sarf', stroke: 'var(--blue)' },
-              { dataKey: 'IG sarf', stroke: 'var(--purple)' },
-              { dataKey: 'FB lid',  stroke: 'var(--green)' },
-              { dataKey: 'IG lid',  stroke: 'var(--amber)' },
-            ]}
-          />
-        </CardChart>
+        {monthQ.isLoading && !monthQ.data ? <ChartCardSkeleton height={300} /> : (
+          <CardChart title={`${MONTH_LABELS[monthOf(date)]} ${yearOf(date)} — kunlik trend (oydagi 1-${dayOf(date)} kunlar)`} height={300}>
+            <MultiLine
+              data={trendData}
+              lines={[
+                { dataKey: 'FB sarf', stroke: 'var(--blue)' },
+                { dataKey: 'IG sarf', stroke: 'var(--purple)' },
+                { dataKey: 'FB lid',  stroke: 'var(--green)' },
+                { dataKey: 'IG lid',  stroke: 'var(--amber)' },
+              ]}
+            />
+          </CardChart>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">

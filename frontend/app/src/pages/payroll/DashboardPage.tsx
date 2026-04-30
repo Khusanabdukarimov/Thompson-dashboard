@@ -6,6 +6,7 @@ import { Badge } from '@/components/Badge';
 import { Avatar } from '@/components/Avatar';
 import { MetricCard } from '@/components/MetricCard';
 import { CardChart, FunnelBars } from '@/components/charts';
+import { MetricRowSkeleton, FunnelSkeleton, DataTableSkeleton } from '@/components/Skeleton';
 import { listEmployees, getMonthlyTarget, listTimeman } from '@/lib/api/payroll';
 import type { TimemanUser } from '@/lib/api/payroll';
 import { getDealsStats } from '@/lib/api/deals';
@@ -97,12 +98,14 @@ export default function DashboardPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        <div className="grid grid-cols-4 gap-2.5 mb-4">
-          <MetricCard label="Oylik maqsad" value={fmtMoney(target)} tone="blue" hint={target ? '' : 'belgilanmagan'} />
-          <MetricCard label="Hozirgi savdo" value={fmtMoney(wonRev)} tone="green" hint={target ? `${fmtPct(progress, 1)} bajarildi` : '—'} />
-          <MetricCard label="Qolgan" value={fmtMoney(remaining)} tone={progress >= 100 ? 'green' : 'amber'} />
-          <MetricCard label="Xodimlar" value={fmtNum(empQ.data?.count ?? 0)} hint="aktiv + ta'tilda" />
-        </div>
+        {dealsQ.isLoading && !dealsQ.data ? <MetricRowSkeleton count={4} /> : (
+          <div className="grid grid-cols-4 gap-2.5 mb-4">
+            <MetricCard label="Oylik maqsad" value={fmtMoney(target)} tone="blue" hint={target ? '' : 'belgilanmagan'} />
+            <MetricCard label="Hozirgi savdo" value={fmtMoney(wonRev)} tone="green" hint={target ? `${fmtPct(progress, 1)} bajarildi` : '—'} />
+            <MetricCard label="Qolgan" value={fmtMoney(remaining)} tone={progress >= 100 ? 'green' : 'amber'} />
+            <MetricCard label="Xodimlar" value={fmtNum(empQ.data?.count ?? 0)} hint="aktiv + ta'tilda" />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <CardChart title={`${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year} — Maqsad bajarilishi`} hint={target ? fmtPct(progress, 1) : '—'} height={180}>
@@ -123,7 +126,7 @@ export default function DashboardPage() {
               <span className="text-[11px] text-text3 ml-2">maqsad → savdo → won/lost</span>
             </div>
             <div className="p-4">
-              <FunnelBars steps={funnelSteps} />
+              {dealsQ.isLoading && !dealsQ.data ? <FunnelSkeleton rows={4} /> : <FunnelBars steps={funnelSteps} />}
             </div>
           </div>
         </div>
@@ -134,6 +137,7 @@ export default function DashboardPage() {
               <span className="text-[13px] font-semibold">Top savdo — {MONTH_LABELS[MONTH_KEYS[month - 1]]}</span>
               <span className="text-[11px] text-text3 ml-2">won daromad bo'yicha</span>
             </div>
+            {dealsQ.isLoading && !dealsQ.data ? <DataTableSkeleton rows={5} cols={4} /> : (
             <table className="w-full">
               <thead>
                 <tr className="bg-bg3 text-text3 text-[11px] uppercase tracking-wider">
@@ -145,7 +149,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {topSellers.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-text3 text-[12.5px]">{dealsQ.isLoading ? 'Yuklanmoqda…' : 'Bu oy savdo topilmadi'}</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-text3 text-[12.5px]">Bu oy savdo topilmadi</td></tr>
                 )}
                 {topSellers.map((u, i) => (
                   <tr key={u.id} className="border-b border-border last:border-0 hover:bg-bg3">
@@ -162,6 +166,7 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
+            )}
           </div>
 
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
@@ -169,6 +174,7 @@ export default function DashboardPage() {
               <span className="text-[13px] font-semibold">Bugungi davomat</span>
               <span className="text-[11px] text-text3">realtime · {tmQ.isFetching ? 'yangilanmoqda…' : '30s da yangilanadi'}</span>
             </div>
+            {tmQ.isLoading && !tmQ.data ? <DataTableSkeleton rows={5} cols={3} /> : (
             <table className="w-full">
               <thead>
                 <tr className="bg-bg3 text-text3 text-[11px] uppercase tracking-wider">
@@ -179,7 +185,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {todayUsers.length === 0 && (
-                  <tr><td colSpan={3} className="px-4 py-8 text-center text-text3 text-[12.5px]">{tmQ.isLoading ? 'Yuklanmoqda…' : '—'}</td></tr>
+                  <tr><td colSpan={3} className="px-4 py-8 text-center text-text3 text-[12.5px]">—</td></tr>
                 )}
                 {todayUsers.map(u => {
                   const c = classifyTimeman(u);
@@ -198,6 +204,7 @@ export default function DashboardPage() {
                 })}
               </tbody>
             </table>
+            )}
           </div>
         </div>
       </div>

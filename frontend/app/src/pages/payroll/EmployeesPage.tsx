@@ -7,6 +7,7 @@ import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Avatar } from '@/components/Avatar';
 import { DataTable } from '@/components/DataTable';
+// skeleton handled inside DataTable via loading prop
 import { listEmployees, listKpiRules, upsertEmployeeExtra } from '@/lib/api/payroll';
 import type { Employee, EmployeeExtraIn } from '@/lib/api/payroll';
 import { fmtNum } from '@/lib/utils';
@@ -106,7 +107,8 @@ export default function EmployeesPage() {
           columns={columns}
           data={filtered}
           pageSize={25}
-          emptyMessage={empQ.isLoading ? 'Yuklanmoqda…' : 'Xodimlar topilmadi'}
+          loading={empQ.isLoading}
+          skeletonRows={8}
         />
         {editing && (
           <EditModal

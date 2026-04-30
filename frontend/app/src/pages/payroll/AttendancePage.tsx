@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Avatar } from '@/components/Avatar';
 import { MetricCard } from '@/components/MetricCard';
+import { MetricRowSkeleton, GridCardsSkeleton } from '@/components/Skeleton';
 import { listTimeman } from '@/lib/api/payroll';
 import type { TimemanUser } from '@/lib/api/payroll';
 
@@ -67,13 +68,15 @@ export default function AttendancePage() {
         actions={<Button onClick={() => q.refetch()}>{q.isFetching ? 'Yangilanmoqda…' : 'Yangilash'}</Button>}
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        <div className="grid grid-cols-5 gap-2.5 mb-4">
-          <MetricCard label="Jami xodim" value={String(counts.all)} tone="blue" />
-          <MetricCard label="Ishda" value={String(counts.opened)} tone="green" />
-          <MetricCard label="Pauza" value={String(counts.paused)} tone="amber" />
-          <MetricCard label="Yakunladi" value={String(counts.closed)} tone="default" />
-          <MetricCard label="Belgilanmagan" value={String(counts.unknown)} tone="default" />
-        </div>
+        {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
+          <div className="grid grid-cols-5 gap-2.5 mb-4">
+            <MetricCard label="Jami xodim" value={String(counts.all)} tone="blue" />
+            <MetricCard label="Ishda" value={String(counts.opened)} tone="green" />
+            <MetricCard label="Pauza" value={String(counts.paused)} tone="amber" />
+            <MetricCard label="Yakunladi" value={String(counts.closed)} tone="default" />
+            <MetricCard label="Belgilanmagan" value={String(counts.unknown)} tone="default" />
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-1.5 mb-3">
           {TABS.map(t => (
@@ -89,10 +92,11 @@ export default function AttendancePage() {
           ))}
         </div>
 
+        {q.isLoading && !q.data ? <GridCardsSkeleton count={9} cols={3} /> : (
         <div className="grid grid-cols-3 gap-2.5">
           {filtered.length === 0 && (
             <div className="col-span-3 text-center text-text3 text-[12.5px] py-12 bg-bg2 border border-border rounded-lg">
-              {q.isLoading ? 'Yuklanmoqda…' : 'Hech narsa topilmadi'}
+              Hech narsa topilmadi
             </div>
           )}
           {filtered.map(u => {
@@ -109,6 +113,7 @@ export default function AttendancePage() {
             );
           })}
         </div>
+        )}
 
         {q.error && (
           <div className="mt-4 p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">

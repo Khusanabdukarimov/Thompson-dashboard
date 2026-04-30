@@ -4,6 +4,7 @@ import { Topbar } from '@/components/Topbar';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { MetricCard } from '@/components/MetricCard';
+import { MetricRowSkeleton, Skeleton } from '@/components/Skeleton';
 import { listEmployees, calculatePayroll, getMonthlyTarget } from '@/lib/api/payroll';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
@@ -75,10 +76,23 @@ export default function PayrollCalcPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        {!activeEmp && (
-          <div className="text-center text-text3 py-16 text-[12.5px]">
-            {empQ.isLoading ? 'Yuklanmoqda…' : 'Xodim tanlang'}
-          </div>
+        {empQ.isLoading && !empQ.data && (
+          <>
+            <MetricRowSkeleton count={4} />
+            <div className="bg-bg2 border border-border rounded-lg shadow p-6 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-3">
+                  <Skeleton className="h-3 flex-1" style={{ maxWidth: 200 }} />
+                  <Skeleton className="h-1 w-32" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {!empQ.isLoading && !activeEmp && (
+          <div className="text-center text-text3 py-16 text-[12.5px]">Xodim tanlang</div>
         )}
 
         {activeEmp && (

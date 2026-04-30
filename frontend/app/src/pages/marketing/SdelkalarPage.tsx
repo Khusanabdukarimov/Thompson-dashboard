@@ -9,6 +9,7 @@ import { FilterBar } from '@/components/FilterBar';
 import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { DataTable } from '@/components/DataTable';
 import { CardChart, SimpleBar, FunnelBars } from '@/components/charts';
+import { MetricRowSkeleton, FunnelSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
 import { getDealsStats, getDealsBySource } from '@/lib/api/deals';
 import type { StatsDealsByUser, DealsBySource, DealsFilter } from '@/lib/api/deals';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
@@ -177,25 +178,29 @@ export default function SdelkalarPage() {
           />
         </div>
 
-        <div className="grid grid-cols-5 gap-2.5 mb-4">
-          <MetricCard label="Jami sdelkalar" value={fmtNum(total)} tone="blue" />
-          <MetricCard label="Yopildi (won)" value={fmtNum(won)} tone="green" />
-          <MetricCard label="Yo'qotildi" value={fmtNum(lost)} tone="red" />
-          <MetricCard label="Won daromad" value={fmtMoney(wonRev)} tone="green" />
-          <MetricCard label="Konversiya" value={fmtPct(conv, 1)} tone="amber" />
-        </div>
+        {statsQ.isLoading && !statsQ.data ? <MetricRowSkeleton count={5} /> : (
+          <div className="grid grid-cols-5 gap-2.5 mb-4">
+            <MetricCard label="Jami sdelkalar" value={fmtNum(total)} tone="blue" />
+            <MetricCard label="Yopildi (won)" value={fmtNum(won)} tone="green" />
+            <MetricCard label="Yo'qotildi" value={fmtNum(lost)} tone="red" />
+            <MetricCard label="Won daromad" value={fmtMoney(wonRev)} tone="green" />
+            <MetricCard label="Konversiya" value={fmtPct(conv, 1)} tone="amber" />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <CardChart title="Bosqichlar bo'yicha" hint={`${stageChartData.length} ta bosqich`} height={260}>
-            <SimpleBar data={stageChartData as never} dataKey="value" />
-          </CardChart>
+          {statsQ.isLoading && !statsQ.data ? <ChartCardSkeleton height={260} /> : (
+            <CardChart title="Bosqichlar bo'yicha" hint={`${stageChartData.length} ta bosqich`} height={260}>
+              <SimpleBar data={stageChartData as never} dataKey="value" />
+            </CardChart>
+          )}
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
               <span className="text-[13px] font-semibold">Voronka</span>
               <span className="text-[11px] text-text3 ml-2">jami → won/lost</span>
             </div>
             <div className="p-4">
-              <FunnelBars steps={funnelSteps} />
+              {statsQ.isLoading && !statsQ.data ? <FunnelSkeleton rows={4} /> : <FunnelBars steps={funnelSteps} />}
             </div>
           </div>
         </div>
@@ -205,7 +210,7 @@ export default function SdelkalarPage() {
           columns={userColumns}
           data={byUserFiltered}
           pageSize={10}
-          emptyMessage={statsQ.isLoading ? 'Yuklanmoqda…' : 'Hech narsa topilmadi'}
+          loading={statsQ.isLoading}
         />
 
         <div className="mt-4">
@@ -214,7 +219,7 @@ export default function SdelkalarPage() {
             columns={sourceColumns}
             data={sourceQ.data?.sources ?? []}
             pageSize={10}
-            emptyMessage={sourceQ.isLoading ? 'Yuklanmoqda…' : 'Hech narsa topilmadi'}
+            loading={sourceQ.isLoading}
           />
         </div>
 

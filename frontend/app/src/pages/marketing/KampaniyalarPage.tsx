@@ -6,6 +6,7 @@ import { MetricCard } from '@/components/MetricCard';
 import { Button } from '@/components/Button';
 import { CardChart, MultiLine, StackedBar } from '@/components/charts';
 import { DataTable } from '@/components/DataTable';
+import { MetricRowSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
 import { getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
 import { fmtNum, fmtMoney } from '@/lib/utils';
@@ -115,29 +116,40 @@ export default function KampaniyalarPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        <div className="grid grid-cols-5 gap-2.5 mb-4">
-          <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" />
-          <MetricCard label="Jami lidlar" value={fmtNum(totalLeads)} tone="green" />
-          <MetricCard label="CPL (1 lid)" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / lidlar" />
-          <MetricCard label="CTR" value={totals.impr ? `${ctr.toFixed(2)}%` : '—'} tone="blue" hint="klik / impressiya" />
-          <MetricCard label="Klik / Impr." value={`${fmtNum(totals.clicks)} / ${fmtNum(totals.impr)}`} hint="jami" />
-        </div>
+        {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
+          <div className="grid grid-cols-5 gap-2.5 mb-4">
+            <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" />
+            <MetricCard label="Jami lidlar" value={fmtNum(totalLeads)} tone="green" />
+            <MetricCard label="CPL (1 lid)" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / lidlar" />
+            <MetricCard label="CTR" value={totals.impr ? `${ctr.toFixed(2)}%` : '—'} tone="blue" hint="klik / impressiya" />
+            <MetricCard label="Klik / Impr." value={`${fmtNum(totals.clicks)} / ${fmtNum(totals.impr)}`} hint="jami" />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <CardChart title="Kunlik sarf" hint="FB + IG stack" height={260}>
-            <StackedBar data={stackedData as never} series={[
-              { dataKey: 'Facebook',  fill: 'var(--blue)' },
-              { dataKey: 'Instagram', fill: 'var(--purple)' },
-            ]} />
-          </CardChart>
-          <CardChart title="Sarf vs Lidlar (kunlik)" hint="line" height={260}>
-            <MultiLine data={trendData as never} lines={[
-              { dataKey: 'FB sarf', stroke: 'var(--blue)' },
-              { dataKey: 'IG sarf', stroke: 'var(--purple)' },
-              { dataKey: 'FB lid',  stroke: 'var(--green)' },
-              { dataKey: 'IG lid',  stroke: 'var(--amber)' },
-            ]} />
-          </CardChart>
+          {q.isLoading && !q.data ? (
+            <>
+              <ChartCardSkeleton height={260} />
+              <ChartCardSkeleton height={260} />
+            </>
+          ) : (
+            <>
+              <CardChart title="Kunlik sarf" hint="FB + IG stack" height={260}>
+                <StackedBar data={stackedData as never} series={[
+                  { dataKey: 'Facebook',  fill: 'var(--blue)' },
+                  { dataKey: 'Instagram', fill: 'var(--purple)' },
+                ]} />
+              </CardChart>
+              <CardChart title="Sarf vs Lidlar (kunlik)" hint="line" height={260}>
+                <MultiLine data={trendData as never} lines={[
+                  { dataKey: 'FB sarf', stroke: 'var(--blue)' },
+                  { dataKey: 'IG sarf', stroke: 'var(--purple)' },
+                  { dataKey: 'FB lid',  stroke: 'var(--green)' },
+                  { dataKey: 'IG lid',  stroke: 'var(--amber)' },
+                ]} />
+              </CardChart>
+            </>
+          )}
         </div>
 
         <div className="mb-2 flex items-center gap-2">
@@ -149,7 +161,7 @@ export default function KampaniyalarPage() {
           data={rows}
           pageSize={31}
           maxBodyHeight={520}
-          emptyMessage={q.isLoading ? 'Yuklanmoqda…' : 'Ma\'lumot yo\'q'}
+          loading={q.isLoading}
         />
 
         {q.error && (

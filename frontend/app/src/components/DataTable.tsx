@@ -6,6 +6,7 @@ import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { useState } from 'react';
 import { ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { DataTableSkeleton } from '@/components/Skeleton';
 
 type Props<T> = {
   columns: ColumnDef<T, unknown>[];
@@ -13,9 +14,14 @@ type Props<T> = {
   pageSize?: number;
   emptyMessage?: string;
   maxBodyHeight?: number;
+  loading?: boolean;
+  skeletonRows?: number;
 };
 
-export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hech narsa topilmadi', maxBodyHeight = 480 }: Props<T>) {
+export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hech narsa topilmadi', maxBodyHeight = 480, loading = false, skeletonRows = 6 }: Props<T>) {
+  if (loading && data.length === 0) {
+    return <DataTableSkeleton rows={skeletonRows} cols={Math.min(columns.length, 6)} />;
+  }
   const [sorting, setSorting] = useState<SortingState>([]);
   const table = useReactTable({
     data,

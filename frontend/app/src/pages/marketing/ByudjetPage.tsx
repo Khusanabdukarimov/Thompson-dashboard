@@ -4,6 +4,7 @@ import { Topbar } from '@/components/Topbar';
 import { MetricCard } from '@/components/MetricCard';
 import { Button } from '@/components/Button';
 import { CardChart, StackedBar, FunnelBars } from '@/components/charts';
+import { MetricRowSkeleton, ChartCardSkeleton, FunnelSkeleton } from '@/components/Skeleton';
 import { getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
@@ -96,28 +97,32 @@ export default function ByudjetPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        <div className="grid grid-cols-5 gap-2.5 mb-4">
-          <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" hint={`${totals.days} ta kun`} />
-          <MetricCard label="Jami lid" value={fmtNum(totalLeads)} tone="green" />
-          <MetricCard label="CPL" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / lid" />
-          <MetricCard label={target ? 'Maqsad qoldi' : 'Maqsad'} value={target ? fmtMoney(remaining) : 'belgilanmagan'} tone={burn > 100 ? 'red' : 'blue'} hint={target ? `${fmtPct(burn, 1)} foyda` : '—'} />
-          <MetricCard label="Bugungi sarf" value={fmtMoney(totals.fbToday + totals.igToday)} hint={`FB ${fmtMoney(totals.fbToday)} · IG ${fmtMoney(totals.igToday)}`} />
-        </div>
+        {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
+          <div className="grid grid-cols-5 gap-2.5 mb-4">
+            <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" hint={`${totals.days} ta kun`} />
+            <MetricCard label="Jami lid" value={fmtNum(totalLeads)} tone="green" />
+            <MetricCard label="CPL" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / lid" />
+            <MetricCard label={target ? 'Maqsad qoldi' : 'Maqsad'} value={target ? fmtMoney(remaining) : 'belgilanmagan'} tone={burn > 100 ? 'red' : 'blue'} hint={target ? `${fmtPct(burn, 1)} foyda` : '—'} />
+            <MetricCard label="Bugungi sarf" value={fmtMoney(totals.fbToday + totals.igToday)} hint={`FB ${fmtMoney(totals.fbToday)} · IG ${fmtMoney(totals.igToday)}`} />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <CardChart title="Kunlik sarf (FB + IG stacked)" height={280}>
-            <StackedBar data={stackedData as never} series={[
-              { dataKey: 'Facebook',  fill: 'var(--blue)' },
-              { dataKey: 'Instagram', fill: 'var(--purple)' },
-            ]} />
-          </CardChart>
+          {q.isLoading && !q.data ? <ChartCardSkeleton height={280} /> : (
+            <CardChart title="Kunlik sarf (FB + IG stacked)" height={280}>
+              <StackedBar data={stackedData as never} series={[
+                { dataKey: 'Facebook',  fill: 'var(--blue)' },
+                { dataKey: 'Instagram', fill: 'var(--purple)' },
+              ]} />
+            </CardChart>
+          )}
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <span className="text-[13px] font-semibold">Platform bo'yicha sarf</span>
               <span className="text-[11px] text-text3">jami {fmtMoney(totalSpend)}</span>
             </div>
             <div className="p-4">
-              <FunnelBars steps={platformBreakdown} />
+              {q.isLoading && !q.data ? <FunnelSkeleton rows={2} /> : <FunnelBars steps={platformBreakdown} />}
 
               {target && (
                 <div className="mt-4 pt-4 border-t border-border">
