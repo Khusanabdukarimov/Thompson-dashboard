@@ -16,12 +16,10 @@ type Props<T> = {
   maxBodyHeight?: number;
   loading?: boolean;
   skeletonRows?: number;
+  onRowClick?: (row: T) => void;
 };
 
-export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hech narsa topilmadi', maxBodyHeight = 480, loading = false, skeletonRows = 6 }: Props<T>) {
-  if (loading && data.length === 0) {
-    return <DataTableSkeleton rows={skeletonRows} cols={Math.min(columns.length, 6)} />;
-  }
+export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hech narsa topilmadi', maxBodyHeight = 480, loading = false, skeletonRows = 6, onRowClick }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const table = useReactTable({
     data,
@@ -33,6 +31,11 @@ export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hec
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
   });
+
+  // Skeleton path — hooks above always called to keep hook order stable.
+  if (loading && data.length === 0) {
+    return <DataTableSkeleton rows={skeletonRows} cols={Math.min(columns.length, 6)} />;
+  }
 
   const total = data.length;
   const { pageIndex, pageSize: ps } = table.getState().pagination;
@@ -80,7 +83,14 @@ export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hec
               </tr>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-b border-border last:border-b-0 hover:bg-bg3 transition-colors">
+                <tr
+                  key={row.id}
+                  className={cn(
+                    'border-b border-border last:border-b-0 hover:bg-bg3 transition-colors',
+                    onRowClick && 'cursor-pointer',
+                  )}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-4 py-2.5 text-[12.5px] text-text">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

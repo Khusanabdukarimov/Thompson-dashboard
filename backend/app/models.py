@@ -124,3 +124,51 @@ class AttendanceLog(SQLModel, table=True):
     end_time: Optional[str] = None
     bucket: str = Field(default="absent")  # on-time | late-soft | late | penalty | absent
     note: Optional[str] = None
+
+
+# ────────────────────────────────────────────────────────────────────
+# report_log — daily report submission tracking (manual entry for now)
+# ────────────────────────────────────────────────────────────────────
+class ReportLog(SQLModel, table=True):
+    """Daily report submission tracking per employee.
+
+    `bucket` mirrors v2 design's discipline categories:
+    - on-time     ≤ 19:00
+    - late-soft   19:01–19:05
+    - late        19:06–19:10
+    - penalty     19:11–19:30 (⚡jarima)
+    - missed      did not submit
+    """
+    __tablename__ = "report_log"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bitrix_user_id: int = Field(index=True)
+    day: date = Field(index=True)
+    submitted_at: Optional[str] = None  # HH:MM
+    bucket: str = Field(default="missed")  # on-time | late-soft | late | penalty | missed
+    note: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ────────────────────────────────────────────────────────────────────
+# penalty_config — configurable penalty rules (per bucket → amount UZS)
+# ────────────────────────────────────────────────────────────────────
+class PenaltyConfig(SQLModel, table=True):
+    """Penalty rate per discipline bucket. Single row keyed by ID=1.
+
+    Used by /api/payroll/calculate to compute deductions from
+    attendance_log + report_log.
+    """
+    __tablename__ = "penalty_config"
+
+    id: Optional[int] = Field(default=1, primary_key=True)
+    # Per-incident penalty rates in UZS (so'm)
+    attendance_late_soft_uzs: int = Field(default=0)
+    attendance_late_uzs: int = Field(default=0)
+    attendance_penalty_uzs: int = Field(default=0)
+    attendance_absent_uzs: int = Field(default=0)
+    report_late_soft_uzs: int = Field(default=0)
+    report_late_uzs: int = Field(default=0)
+    report_penalty_uzs: int = Field(default=0)
+    report_missed_uzs: int = Field(default=0)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

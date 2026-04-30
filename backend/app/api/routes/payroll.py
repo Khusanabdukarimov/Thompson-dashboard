@@ -6,11 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from datetime import date as date_t
+
 from app.db import get_session
 from app.models import (
     EmployeeExtra, KpiRule, BonusRule, BonusAward, MonthlyTarget,
+    AttendanceLog, ReportLog, PenaltyConfig,
 )
 from app.services import bitrix
+from sqlalchemy import and_
 
 
 router = APIRouter(prefix="/api/payroll", tags=["payroll"])
@@ -262,6 +266,71 @@ def get_monthly_target(year: int, month: int, s: Session = Depends(_session)) ->
     return row.model_dump()
 
 
+@router.get("/weekly-actuals")
+def get_weekly_actuals(year: int, month: int) -> dict:
+    """Aggregate WON deal revenue split by week-of-month (1-7, 8-14, 15-21, 22-end).
+
+    Uses Bitrix `crm.deal.list` with CLOSEDATE filter. Returns one item per week
+    with start/end day, won_revenue, and won_count.
+    """
+    import calendar
+    days_in_month = calendar.monthrange(year, month)[1]
+    weeks = []
+    for i, (start, end) in enumerate([(1, 7), (8, 14), (15, 21), (22, days_in_month)]):
+        if start > days_in_month:
+            weeks.append({"week": i + 1, "start_day": start, "end_day": end, "won_revenue": 0.0, "won_count": 0})
+            continue
+        e = min(end, days_in_month)
+        start_iso = f"{year:04d}-{month:02d}-{start:02d}"
+        end_iso   = f"{year:04d}-{month:02d}-{e:02d}"
+        agg = bitrix.aggregate_deals_sum_total(start_iso, end_iso)  # sums all WON-or-not by close-date; use WON-only via stage filter
+        # Use stage filter for WON-only
+        won_agg = _won_revenue_in_range(start_iso, end_iso)
+        weeks.append({
+            "week": i + 1,
+            "start_day": start,
+            "end_day": e,
+            "won_revenue": float(won_agg["sum"]),
+            "won_count": int(won_agg["count"]),
+            "any_revenue": float(agg.get("sum") or 0),
+        })
+    return {"year": year, "month": month, "weeks": weeks}
+
+
+def _won_revenue_in_range(start_iso: str, end_iso: str) -> dict:
+    """Sum OPPORTUNITY for WON deals (any stage with WON) closing in range."""
+    url = f"{bitrix.BITRIX24_PORTAL}{bitrix.BITRIX24_TOKEN}/crm.deal.list"
+    import requests
+    total = 0.0
+    count = 0
+    start = 0
+    while True:
+        params = {
+            "filter[>=CLOSEDATE]": start_iso,
+            "filter[<=CLOSEDATE]": end_iso,
+            "select[]": ["ID", "OPPORTUNITY", "STAGE_ID"],
+            "start": start,
+        }
+        res = requests.get(url, params=params)
+        if res.status_code != 200:
+            break
+        data = res.json()
+        for d in data.get("result", []):
+            stage = (d.get("STAGE_ID") or "").upper()
+            if "WON" not in stage:
+                continue
+            try:
+                total += float(d.get("OPPORTUNITY") or 0)
+                count += 1
+            except Exception:
+                pass
+        if "next" in data:
+            start = data["next"]
+        else:
+            break
+    return {"sum": total, "count": count}
+
+
 @router.put("/target")
 def set_monthly_target(payload: MonthlyTargetIn, s: Session = Depends(_session)) -> dict:
     row = s.exec(
@@ -277,6 +346,224 @@ def set_monthly_target(payload: MonthlyTargetIn, s: Session = Depends(_session))
         row.updated_at = datetime.utcnow()
     s.add(row); s.commit(); s.refresh(row)
     return row.model_dump()
+
+
+# ────────────────────────────────────────────────────────────────────
+# Attendance + Report logs (manual entry; auto-detection later)
+# ────────────────────────────────────────────────────────────────────
+class LogEntryIn(BaseModel):
+    bitrix_user_id: int
+    day: date_t
+    bucket: str  # on-time | late-soft | late | penalty | absent | missed
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    submitted_at: Optional[str] = None
+    note: Optional[str] = None
+
+
+def _month_range(year: int, month: int) -> tuple[date_t, date_t]:
+    import calendar
+    last = calendar.monthrange(year, month)[1]
+    return date_t(year, month, 1), date_t(year, month, last)
+
+
+@router.get("/attendance-log")
+def list_attendance(year: int, month: int, s: Session = Depends(_session)) -> dict:
+    start, end = _month_range(year, month)
+    rows = s.exec(
+        select(AttendanceLog).where(and_(AttendanceLog.day >= start, AttendanceLog.day <= end)).order_by(AttendanceLog.day.desc())
+    ).all()
+    return {"count": len(rows), "logs": [{
+        **r.model_dump(),
+        "day": r.day.isoformat(),
+    } for r in rows]}
+
+
+@router.put("/attendance-log")
+def upsert_attendance(payload: LogEntryIn, s: Session = Depends(_session)) -> dict:
+    row = s.exec(
+        select(AttendanceLog).where(
+            and_(AttendanceLog.bitrix_user_id == payload.bitrix_user_id, AttendanceLog.day == payload.day),
+        )
+    ).first()
+    if row is None:
+        row = AttendanceLog(bitrix_user_id=payload.bitrix_user_id, day=payload.day)
+    row.bucket = payload.bucket
+    row.start_time = payload.start_time
+    row.end_time = payload.end_time
+    row.note = payload.note
+    s.add(row); s.commit(); s.refresh(row)
+    return {**row.model_dump(), "day": row.day.isoformat()}
+
+
+@router.delete("/attendance-log/{log_id}")
+def delete_attendance(log_id: int, s: Session = Depends(_session)) -> dict:
+    row = s.get(AttendanceLog, log_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    s.delete(row); s.commit()
+    return {"deleted": log_id}
+
+
+@router.get("/report-log")
+def list_reports(year: int, month: int, s: Session = Depends(_session)) -> dict:
+    start, end = _month_range(year, month)
+    rows = s.exec(
+        select(ReportLog).where(and_(ReportLog.day >= start, ReportLog.day <= end)).order_by(ReportLog.day.desc())
+    ).all()
+    return {"count": len(rows), "logs": [{
+        **r.model_dump(),
+        "day": r.day.isoformat(),
+    } for r in rows]}
+
+
+@router.put("/report-log")
+def upsert_report(payload: LogEntryIn, s: Session = Depends(_session)) -> dict:
+    row = s.exec(
+        select(ReportLog).where(
+            and_(ReportLog.bitrix_user_id == payload.bitrix_user_id, ReportLog.day == payload.day),
+        )
+    ).first()
+    if row is None:
+        row = ReportLog(bitrix_user_id=payload.bitrix_user_id, day=payload.day)
+    row.bucket = payload.bucket
+    row.submitted_at = payload.submitted_at
+    row.note = payload.note
+    s.add(row); s.commit(); s.refresh(row)
+    return {**row.model_dump(), "day": row.day.isoformat(), "created_at": row.created_at.isoformat()}
+
+
+@router.delete("/report-log/{log_id}")
+def delete_report(log_id: int, s: Session = Depends(_session)) -> dict:
+    row = s.get(ReportLog, log_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    s.delete(row); s.commit()
+    return {"deleted": log_id}
+
+
+# ────────────────────────────────────────────────────────────────────
+# Hisobot / Davomat statistikasi (oylik agregat)
+# ────────────────────────────────────────────────────────────────────
+@router.get("/discipline-stats")
+def discipline_stats(year: int, month: int, s: Session = Depends(_session)) -> dict:
+    """Per-employee bucket counts for both attendance & report logs in a month."""
+    start, end = _month_range(year, month)
+
+    # Pull all logs for the month
+    att_rows = s.exec(select(AttendanceLog).where(and_(AttendanceLog.day >= start, AttendanceLog.day <= end))).all()
+    rep_rows = s.exec(select(ReportLog).where(and_(ReportLog.day >= start, ReportLog.day <= end))).all()
+
+    def empty_buckets(): return {"on-time": 0, "late-soft": 0, "late": 0, "penalty": 0, "absent": 0, "missed": 0}
+
+    by_user_att: dict[int, dict] = {}
+    for r in att_rows:
+        by_user_att.setdefault(r.bitrix_user_id, empty_buckets())[r.bucket] = by_user_att[r.bitrix_user_id].get(r.bucket, 0) + 1
+    by_user_rep: dict[int, dict] = {}
+    for r in rep_rows:
+        by_user_rep.setdefault(r.bitrix_user_id, empty_buckets())[r.bucket] = by_user_rep[r.bitrix_user_id].get(r.bucket, 0) + 1
+
+    bitrix_users = bitrix.list_users()
+    employees = []
+    for u in bitrix_users:
+        try:
+            uid = int(u.get("ID", 0))
+        except Exception:
+            continue
+        if uid <= 0:
+            continue
+        name = f"{u.get('NAME','') or ''} {u.get('LAST_NAME','') or ''}".strip() or f"User {uid}"
+        employees.append({
+            "id": uid,
+            "name": name,
+            "attendance": by_user_att.get(uid, empty_buckets()),
+            "report": by_user_rep.get(uid, empty_buckets()),
+        })
+
+    return {"year": year, "month": month, "employees": employees}
+
+
+# ────────────────────────────────────────────────────────────────────
+# Penalty config
+# ────────────────────────────────────────────────────────────────────
+class PenaltyConfigIn(BaseModel):
+    attendance_late_soft_uzs: int = 0
+    attendance_late_uzs: int = 0
+    attendance_penalty_uzs: int = 0
+    attendance_absent_uzs: int = 0
+    report_late_soft_uzs: int = 0
+    report_late_uzs: int = 0
+    report_penalty_uzs: int = 0
+    report_missed_uzs: int = 0
+
+
+@router.get("/penalty-config")
+def get_penalty_config(s: Session = Depends(_session)) -> dict:
+    cfg = s.get(PenaltyConfig, 1)
+    if cfg is None:
+        cfg = PenaltyConfig(id=1)
+        s.add(cfg); s.commit(); s.refresh(cfg)
+    return cfg.model_dump()
+
+
+@router.put("/penalty-config")
+def set_penalty_config(payload: PenaltyConfigIn, s: Session = Depends(_session)) -> dict:
+    cfg = s.get(PenaltyConfig, 1)
+    if cfg is None:
+        cfg = PenaltyConfig(id=1)
+    for k, v in payload.model_dump().items():
+        setattr(cfg, k, v)
+    cfg.updated_at = datetime.utcnow()
+    s.add(cfg); s.commit(); s.refresh(cfg)
+    return cfg.model_dump()
+
+
+def _compute_penalty_uzs(uid: int, year: int, month: int, s: Session) -> tuple[int, list[dict]]:
+    """Sum penalty UZS for an employee across attendance + report logs in the period."""
+    cfg = s.get(PenaltyConfig, 1)
+    if cfg is None:
+        return 0, []
+    start, end = _month_range(year, month)
+    att = s.exec(select(AttendanceLog).where(and_(
+        AttendanceLog.bitrix_user_id == uid, AttendanceLog.day >= start, AttendanceLog.day <= end,
+    ))).all()
+    rep = s.exec(select(ReportLog).where(and_(
+        ReportLog.bitrix_user_id == uid, ReportLog.day >= start, ReportLog.day <= end,
+    ))).all()
+
+    breakdown: list[dict] = []
+    total = 0
+    att_rates = {
+        "late-soft": cfg.attendance_late_soft_uzs,
+        "late":      cfg.attendance_late_uzs,
+        "penalty":   cfg.attendance_penalty_uzs,
+        "absent":    cfg.attendance_absent_uzs,
+    }
+    rep_rates = {
+        "late-soft": cfg.report_late_soft_uzs,
+        "late":      cfg.report_late_uzs,
+        "penalty":   cfg.report_penalty_uzs,
+        "missed":    cfg.report_missed_uzs,
+    }
+    att_counts = {b: 0 for b in att_rates}
+    rep_counts = {b: 0 for b in rep_rates}
+    for r in att:
+        if r.bucket in att_counts: att_counts[r.bucket] += 1
+    for r in rep:
+        if r.bucket in rep_counts: rep_counts[r.bucket] += 1
+
+    for b, n in att_counts.items():
+        if n > 0 and att_rates[b] > 0:
+            sub = n * att_rates[b]
+            total += sub
+            breakdown.append({"kind": "attendance", "bucket": b, "count": n, "rate_uzs": att_rates[b], "subtotal_uzs": sub})
+    for b, n in rep_counts.items():
+        if n > 0 and rep_rates[b] > 0:
+            sub = n * rep_rates[b]
+            total += sub
+            breakdown.append({"kind": "report", "bucket": b, "count": n, "rate_uzs": rep_rates[b], "subtotal_uzs": sub})
+
+    return total, breakdown
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -345,11 +632,11 @@ def calculate_payroll(
     ).all()
     bonuses_usd = sum(a.amount_usd for a in awards)
 
-    # Penalties: not auto-computed yet; placeholder 0 (admin-driven for now)
-    penalties_usd = 0.0
+    # Penalties from attendance + report logs
+    penalties_uzs, penalty_breakdown = _compute_penalty_uzs(bitrix_user_id, year, month, s)
 
-    total_uzs = fix_base
-    total_usd = kpi_payout + bonuses_usd - penalties_usd
+    total_uzs = fix_base - penalties_uzs
+    total_usd = kpi_payout + bonuses_usd
 
     return {
         "bitrix_user_id": bitrix_user_id,
@@ -367,7 +654,8 @@ def calculate_payroll(
         },
         "bonuses": [a.model_dump() for a in awards],
         "bonuses_total_usd": round(bonuses_usd, 2),
-        "penalties_usd": round(penalties_usd, 2),
+        "penalties_uzs": penalties_uzs,
+        "penalty_breakdown": penalty_breakdown,
         "total_uzs": total_uzs,
         "total_usd": round(total_usd, 2),
     }

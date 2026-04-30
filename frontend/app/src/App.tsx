@@ -12,6 +12,7 @@ import PayrollCalcPage from '@/pages/payroll/PayrollCalcPage';
 import KpiRulesPage from '@/pages/payroll/KpiRulesPage';
 import BonusPage from '@/pages/payroll/BonusPage';
 import RejaPage from '@/pages/payroll/RejaPage';
+import HisobotPage from '@/pages/payroll/HisobotPage';
 import Placeholder from '@/pages/Placeholder';
 
 export default function App() {
@@ -32,7 +33,7 @@ export default function App() {
         <Route path="/payroll/reja"       element={<RejaPage />} />
         <Route path="/payroll/employees"  element={<EmployeesPage />} />
         <Route path="/payroll/attendance" element={<AttendancePage />} />
-        <Route path="/payroll/hisobot"    element={<Placeholder title="Hisobot intizomi" sub="Tez kunda — kunlik hisobot deadline tracking" />} />
+        <Route path="/payroll/hisobot"    element={<HisobotPage />} />
         <Route path="/payroll/kpi"        element={<KpiRulesPage />} />
         <Route path="/payroll/bonus"      element={<BonusPage />} />
         <Route path="/payroll/payroll"    element={<PayrollCalcPage />} />

@@ -101,7 +101,7 @@ export default function PayrollCalcPage() {
               <MetricCard label="Fix base (oy)" value={fmtNum(activeEmp.fix_base_uzs)} tone="blue" hint="so'm" />
               <MetricCard label="KPI payout" value={calc ? fmtMoney(calc.kpi.payout_usd) : '—'} tone="green" hint={calc?.kpi.percent ? `${calc.kpi.percent}% × ${fmtMoney(calc.revenue_usd)}` : '—'} />
               <MetricCard label="Bonuslar" value={calc ? fmtMoney(calc.bonuses_total_usd) : '—'} tone="amber" hint={`${calc?.bonuses.length ?? 0} ta bonus`} />
-              <MetricCard label="Jarimalar" value={calc ? fmtMoney(calc.penalties_usd) : '—'} tone="red" />
+              <MetricCard label="Jarimalar (so'm)" value={calc ? fmtNum(calc.penalties_uzs) : '—'} tone="red" hint={calc?.penalty_breakdown.length ? `${calc.penalty_breakdown.length} ta tur` : '0 ta'} />
             </div>
 
             <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden mb-4">
@@ -141,8 +141,10 @@ export default function PayrollCalcPage() {
                 />
                 <BRow
                   label="Jarimalar"
-                  hint="kechikish + boshqalar"
-                  value={calc && calc.penalties_usd > 0 ? `−${fmtMoney(calc.penalties_usd)}` : '—'}
+                  hint={calc && calc.penalty_breakdown.length > 0
+                    ? calc.penalty_breakdown.map(b => `${b.kind} ${b.bucket} × ${b.count}`).join(', ')
+                    : 'kechikish + boshqalar'}
+                  value={calc && calc.penalties_uzs > 0 ? `−${fmtNum(calc.penalties_uzs)} so'm` : '—'}
                   bar={0}
                   color="var(--red)"
                 />

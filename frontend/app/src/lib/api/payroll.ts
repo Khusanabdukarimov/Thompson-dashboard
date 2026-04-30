@@ -137,13 +137,89 @@ export type PayrollCalc = {
   kpi: { payout_usd: number; rule_id: number | null; rule_name: string | null; matched_tier: KpiTier | null; percent: number };
   bonuses: BonusAward[];
   bonuses_total_usd: number;
-  penalties_usd: number;
+  penalties_uzs: number;
+  penalty_breakdown: { kind: string; bucket: string; count: number; rate_uzs: number; subtotal_uzs: number }[];
   total_uzs: number;
   total_usd: number;
 };
 export function calculatePayroll(uid: number, year: number, month: number) {
   return apiGet<PayrollCalc>('/api/payroll/calculate', { bitrix_user_id: uid, year, month });
 }
+
+// ── Weekly sales actuals (per week of month) ──────────────────────
+export type WeeklyActual = {
+  week: number; start_day: number; end_day: number;
+  won_revenue: number; won_count: number; any_revenue: number;
+};
+export function getWeeklyActuals(year: number, month: number) {
+  return apiGet<{ year: number; month: number; weeks: WeeklyActual[] }>('/api/payroll/weekly-actuals', { year, month });
+}
+
+// ── Attendance + Report logs ──────────────────────────────────────
+export type LogBucket = 'on-time' | 'late-soft' | 'late' | 'penalty' | 'absent' | 'missed';
+export type AttendanceLog = {
+  id: number; bitrix_user_id: number; day: string;
+  start_time: string | null; end_time: string | null;
+  bucket: LogBucket; note: string | null;
+};
+export type ReportLog = {
+  id: number; bitrix_user_id: number; day: string;
+  submitted_at: string | null;
+  bucket: LogBucket; note: string | null; created_at: string;
+};
+
+export function listAttendanceLogs(year: number, month: number) {
+  return apiGet<{ count: number; logs: AttendanceLog[] }>('/api/payroll/attendance-log', { year, month });
+}
+export function listReportLogs(year: number, month: number) {
+  return apiGet<{ count: number; logs: ReportLog[] }>('/api/payroll/report-log', { year, month });
+}
+export type LogEntryIn = {
+  bitrix_user_id: number;
+  day: string;
+  bucket: LogBucket;
+  start_time?: string | null;
+  end_time?: string | null;
+  submitted_at?: string | null;
+  note?: string | null;
+};
+async function _put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+export const upsertAttendanceLog = (b: LogEntryIn) => _put<AttendanceLog>('/api/payroll/attendance-log', b);
+export const upsertReportLog     = (b: LogEntryIn) => _put<ReportLog>('/api/payroll/report-log', b);
+
+// ── Discipline stats ──────────────────────────────────────────────
+export type DisciplineBuckets = Record<LogBucket, number>;
+export type DisciplineEmployee = {
+  id: number; name: string;
+  attendance: DisciplineBuckets;
+  report: DisciplineBuckets;
+};
+export function getDisciplineStats(year: number, month: number) {
+  return apiGet<{ year: number; month: number; employees: DisciplineEmployee[] }>('/api/payroll/discipline-stats', { year, month });
+}
+
+// ── Penalty config ────────────────────────────────────────────────
+export type PenaltyConfig = {
+  id: number;
+  attendance_late_soft_uzs: number;
+  attendance_late_uzs: number;
+  attendance_penalty_uzs: number;
+  attendance_absent_uzs: number;
+  report_late_soft_uzs: number;
+  report_late_uzs: number;
+  report_penalty_uzs: number;
+  report_missed_uzs: number;
+  updated_at: string;
+};
+export function getPenaltyConfig() {
+  return apiGet<PenaltyConfig>('/api/payroll/penalty-config');
+}
+export const setPenaltyConfig = (b: Omit<PenaltyConfig, 'id' | 'updated_at'>) =>
+  _put<PenaltyConfig>('/api/payroll/penalty-config', b);
 
 // ── Realtime attendance (existing /api/users/timeman endpoint) ────
 export type TimemanStatus = 'OPENED' | 'PAUSED' | 'CLOSED' | null | { STATUS?: string };

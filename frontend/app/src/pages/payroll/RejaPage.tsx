@@ -10,7 +10,8 @@ import { DataTable } from '@/components/DataTable';
 import { FilterBar } from '@/components/FilterBar';
 import type { FilterField, FilterValues } from '@/components/FilterBar';
 import { Skeleton, MetricRowSkeleton } from '@/components/Skeleton';
-import { getMonthlyTarget, listEmployees } from '@/lib/api/payroll';
+import { getMonthlyTarget, listEmployees, getWeeklyActuals } from '@/lib/api/payroll';
+import type { WeeklyActual } from '@/lib/api/payroll';
 import { getDealsStats } from '@/lib/api/deals';
 import { listLeadsRich, getLeadsStats } from '@/lib/api/leads';
 import type { LeadRow, LeadsListFilter } from '@/lib/api/leads';
@@ -60,11 +61,13 @@ export default function RejaPage() {
   const [search, setSearch] = useState('');
   const [filterValues, setFilterValues] = useState<FilterValues>({});
   const [editTarget, setEditTarget] = useState(false);
+  const [viewLead, setViewLead] = useState<LeadRow | null>(null);
 
   const startDate = isoFirstOfMonth(year, month);
   const endDate = isoLastOfMonth(year, month);
 
   const targetQ = useQuery({ queryKey: ['payroll/target', year, month], queryFn: () => getMonthlyTarget(year, month) });
+  const weeklyQ = useQuery({ queryKey: ['payroll/weekly-actuals', year, month], queryFn: () => getWeeklyActuals(year, month) });
   const dealsQ = useQuery({
     queryKey: ['stats/deals', year, month],
     queryFn: () => getDealsStats({ start_date: startDate, end_date: endDate }),
@@ -196,6 +199,7 @@ export default function RejaPage() {
             year={year} month={month}
             target={target} wonRev={wonRev} remaining={remaining} progress={progress}
             weeklyBreakdown={weeklyBreakdown}
+            weeklyActuals={weeklyQ.data?.weeks ?? []}
           />
         )}
 
@@ -250,6 +254,7 @@ export default function RejaPage() {
             data={leadsQ.data?.leads ?? []}
             pageSize={10}
             loading={leadsQ.isLoading}
+            onRowClick={(r) => setViewLead(r)}
           />
         </div>
 
@@ -263,7 +268,63 @@ export default function RejaPage() {
       {editTarget && (
         <TargetModal year={year} month={month} initial={targetQ.data} onClose={() => setEditTarget(false)} />
       )}
+      {viewLead && <LeadDetailModal lead={viewLead} onClose={() => setViewLead(null)} />}
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────
+// Lead detail modal
+// ────────────────────────────────────────────────────────────────
+function LeadDetailModal({ lead, onClose }: { lead: LeadRow; onClose: () => void }) {
+  const customer = ((lead.NAME ?? '') + ' ' + (lead.LAST_NAME ?? '')).trim() || lead.TITLE || `Lead #${lead.ID}`;
+  const amount = parseFloat(lead.OPPORTUNITY ?? '0');
+  return (
+    <Dialog.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[300]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-bg2 border border-border rounded-xl p-6 w-[480px] max-h-[88vh] overflow-y-auto shadow-lg z-[301]">
+          <div className="flex items-start gap-3 mb-4">
+            <Avatar name={customer} size={42} />
+            <div className="flex-1 min-w-0">
+              <Dialog.Title className="text-[15px] font-semibold truncate">{customer}</Dialog.Title>
+              <div className="text-[11px] text-text3 mt-0.5">Lead ID: {lead.ID} · {fmtShortDate(lead.DATE_CREATE)}</div>
+            </div>
+            <Badge tone={statusTone(lead.STATUS_ID)}>{lead._status_name || lead.STATUS_ID || '—'}</Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 bg-bg3 border border-border rounded-md p-3 mb-3">
+            <Cell label="Mas'ul" value={lead._assigned_name || `User ${lead.ASSIGNED_BY_ID}`} />
+            <Cell label="Manba" value={lead._source_name || lead.SOURCE_ID || '—'} />
+            <Cell label="Summa" value={amount ? fmtMoney(amount) : '—'} valueClass="mono text-green font-semibold" />
+            <Cell label="Yangilangan" value={fmtShortDate(lead.DATE_MODIFY)} valueClass="mono text-text2 text-[11.5px]" />
+            <Cell label="Telefon" value={lead.PHONE ? String(lead.PHONE) : '—'} />
+            <Cell label="Email" value={lead.EMAIL ? String(lead.EMAIL) : '—'} />
+          </div>
+
+          {lead.COMMENTS && (
+            <div className="mb-4">
+              <div className="text-[10px] text-text3 uppercase tracking-wider font-medium mb-1">Izoh</div>
+              <div className="text-[12.5px] bg-bg3 border border-border rounded-md p-3 whitespace-pre-wrap">{String(lead.COMMENTS)}</div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-border">
+            <Button onClick={onClose}>Yopish</Button>
+            <Button variant="primary" onClick={() => alert("Bitrix CRM'da to'liq tafsilot ko'rish — keyingi turn'da bitrix link integratsiyasi")}>Bitrix'da ochish</Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function Cell({ label, value, valueClass = '' }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] text-text3 uppercase tracking-wider font-medium">{label}</div>
+      <div className={`text-[12.5px] mt-0.5 ${valueClass || 'font-medium'}`}>{value}</div>
+    </div>
   );
 }
 
@@ -271,12 +332,14 @@ export default function RejaPage() {
 // Reja header card (monthly progress + weekly cards)
 // ────────────────────────────────────────────────────────────────
 function RejaHeader({
-  year, month, target, wonRev, remaining, progress, weeklyBreakdown,
+  year, month, target, wonRev, remaining, progress, weeklyBreakdown, weeklyActuals,
 }: {
   year: number; month: number;
   target: number; wonRev: number; remaining: number; progress: number;
   weeklyBreakdown: number[];
+  weeklyActuals: WeeklyActual[];
 }) {
+  const actualsByWeek = new Map(weeklyActuals.map(w => [w.week, w]));
   return (
     <div className="bg-bg2 border border-border rounded-lg p-4 mb-4 shadow">
       <div className="flex items-start justify-between mb-1">
@@ -303,24 +366,40 @@ function RejaHeader({
 
       <div className="grid grid-cols-4 gap-2.5">
         {weeklyBreakdown.slice(0, 4).map((w, i) => {
-          // Simple visual: each week placeholder (without per-week actual data — backend agg required)
           const reja = Number(w) || 0;
-          const tone = i === 0 ? 'green' : i === 1 ? 'amber' : 'gray';
-          const toneClass = tone === 'green'
-            ? 'bg-green-bg border-green-bd'
-            : tone === 'amber'
-            ? 'bg-amber-bg border-amber-bd'
-            : 'bg-bg3 border-border';
+          const actual = actualsByWeek.get(i + 1);
+          const fakt = actual?.won_revenue ?? 0;
+          const pct = reja > 0 ? (fakt / reja) * 100 : 0;
+          const tone = pct >= 100 ? 'green' : pct >= 70 ? 'amber' : pct > 0 ? 'orange' : 'gray';
+          const toneClass = {
+            green:  'bg-green-bg border-green-bd',
+            amber:  'bg-amber-bg border-amber-bd',
+            orange: 'bg-orange-bg border-orange-bd',
+            gray:   'bg-bg3 border-border',
+          }[tone];
+          const toneText = {
+            green: 'text-green', amber: 'text-amber', orange: 'text-orange', gray: 'text-text3',
+          }[tone];
+          const toneBar = {
+            green: 'bg-green', amber: 'bg-amber', orange: 'bg-orange', gray: 'bg-text3',
+          }[tone];
           return (
             <div key={i} className={`border rounded-md p-3 ${toneClass}`}>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-semibold">{i + 1}-hafta</span>
-                <span className="mono text-[12px] font-bold text-text3">—</span>
+                <span className={`text-[11px] font-semibold ${toneText}`}>
+                  {i + 1}-hafta {actual ? `(${actual.start_day}-${actual.end_day})` : ''}
+                </span>
+                <span className={`mono text-[12px] font-bold ${toneText}`}>
+                  {pct > 0 ? `${pct.toFixed(0)}%` : '—'}
+                </span>
               </div>
               <div className="text-[11px] text-text2 flex justify-between"><span>Reja</span><span className="mono">{fmtMoney(reja)}</span></div>
-              <div className="text-[11px] text-text2 flex justify-between"><span>Fakt</span><span className="mono text-text3">—</span></div>
+              <div className={`text-[11px] flex justify-between ${toneText}`}><span>Fakt</span><span className="mono">{fakt > 0 ? fmtMoney(fakt) : '—'}</span></div>
+              {actual && actual.won_count > 0 && (
+                <div className="text-[10px] text-text3 flex justify-between mt-0.5"><span>Deal</span><span className="mono">{actual.won_count} ta</span></div>
+              )}
               <div className="h-1 bg-bg4 rounded overflow-hidden mt-1.5">
-                <div className="h-full rounded bg-text3" style={{ width: '0%' }} />
+                <div className={`h-full rounded ${toneBar}`} style={{ width: `${Math.min(100, pct)}%` }} />
               </div>
             </div>
           );
