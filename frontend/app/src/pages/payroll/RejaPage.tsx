@@ -17,7 +17,7 @@ import { listLeadsRich, getLeadsStats } from '@/lib/api/leads';
 import type { LeadRow, LeadsListFilter } from '@/lib/api/leads';
 import { fmtMoney, fmtNum, fmtPct } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
-import { apiGet } from '@/lib/api/client';
+import { getConfig } from '@/lib/api/config';
 
 const now = new Date();
 const DEFAULT_YEAR = now.getFullYear();
@@ -268,7 +268,7 @@ export default function RejaPage() {
       {editTarget && (
         <TargetModal year={year} month={month} initial={targetQ.data} onClose={() => setEditTarget(false)} />
       )}
-      {viewLead && <LeadDetailModal lead={viewLead} onClose={() => setViewLead(null)} />}
+      {viewLead && <LeadDetailModalWrapper lead={viewLead} onClose={() => setViewLead(null)} />}
     </>
   );
 }
@@ -276,9 +276,16 @@ export default function RejaPage() {
 // ────────────────────────────────────────────────────────────────
 // Lead detail modal
 // ────────────────────────────────────────────────────────────────
-function LeadDetailModal({ lead, onClose }: { lead: LeadRow; onClose: () => void }) {
+function LeadDetailModalWrapper({ lead, onClose }: { lead: LeadRow; onClose: () => void }) {
+  const cfgQ = useQuery({ queryKey: ['app/config'], queryFn: getConfig, staleTime: Infinity });
+  const portal = cfgQ.data?.bitrix_portal ?? '';
+  return <LeadDetailModal lead={lead} bitrixPortal={portal} onClose={onClose} />;
+}
+
+function LeadDetailModal({ lead, bitrixPortal, onClose }: { lead: LeadRow; bitrixPortal: string; onClose: () => void }) {
   const customer = ((lead.NAME ?? '') + ' ' + (lead.LAST_NAME ?? '')).trim() || lead.TITLE || `Lead #${lead.ID}`;
   const amount = parseFloat(lead.OPPORTUNITY ?? '0');
+  const bitrixLeadUrl = bitrixPortal ? `${bitrixPortal}/crm/lead/details/${lead.ID}/` : null;
   return (
     <Dialog.Root open onOpenChange={(o) => { if (!o) onClose(); }}>
       <Dialog.Portal>
@@ -311,7 +318,13 @@ function LeadDetailModal({ lead, onClose }: { lead: LeadRow; onClose: () => void
 
           <div className="flex justify-end gap-2 pt-3 border-t border-border">
             <Button onClick={onClose}>Yopish</Button>
-            <Button variant="primary" onClick={() => alert("Bitrix CRM'da to'liq tafsilot ko'rish — keyingi turn'da bitrix link integratsiyasi")}>Bitrix'da ochish</Button>
+            {bitrixLeadUrl ? (
+              <a href={bitrixLeadUrl} target="_blank" rel="noopener noreferrer">
+                <Button variant="primary">Bitrix'da ochish ↗</Button>
+              </a>
+            ) : (
+              <Button variant="primary" disabled>Bitrix link sozlanmagan</Button>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -495,5 +508,3 @@ function TargetModal({
 
 const fi = 'w-full px-2.5 py-2 rounded-[7px] border border-border bg-bg text-text text-[12.5px] focus:outline-none focus:border-blue focus:bg-bg2 focus:shadow-[0_0_0_3px_rgba(34,102,245,0.1)] disabled:opacity-60';
 
-// Suppress unused imports (apiGet imported for completeness)
-void apiGet;

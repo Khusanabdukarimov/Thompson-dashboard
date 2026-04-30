@@ -146,6 +146,12 @@ export function calculatePayroll(uid: number, year: number, month: number) {
   return apiGet<PayrollCalc>('/api/payroll/calculate', { bitrix_user_id: uid, year, month });
 }
 
+// ── Sales trend (last N months) ───────────────────────────────────
+export type SalesTrendMonth = { year: number; month: number; won_revenue: number; won_count: number };
+export function getSalesTrend(months_back = 6) {
+  return apiGet<{ months: SalesTrendMonth[] }>('/api/payroll/sales-trend', { months_back });
+}
+
 // ── Weekly sales actuals (per week of month) ──────────────────────
 export type WeeklyActual = {
   week: number; start_day: number; end_day: number;
@@ -190,6 +196,17 @@ async function _put<T>(path: string, body: unknown): Promise<T> {
 }
 export const upsertAttendanceLog = (b: LogEntryIn) => _put<AttendanceLog>('/api/payroll/attendance-log', b);
 export const upsertReportLog     = (b: LogEntryIn) => _put<ReportLog>('/api/payroll/report-log', b);
+
+export type AutoSyncResult = { mode: string; created: number; updated: number; skipped_users: number; note?: string };
+export async function autoSyncLogs(year: number, month: number, mode: 'report' | 'attendance'): Promise<AutoSyncResult> {
+  const url = new URL('/api/payroll/auto-sync', window.location.origin);
+  url.searchParams.set('year', String(year));
+  url.searchParams.set('month', String(month));
+  url.searchParams.set('mode', mode);
+  const res = await fetch(url.pathname + url.search, { method: 'POST' });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
 
 // ── Discipline stats ──────────────────────────────────────────────
 export type DisciplineBuckets = Record<LogBucket, number>;

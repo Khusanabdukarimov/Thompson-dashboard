@@ -11,7 +11,7 @@ import { DataTable } from '@/components/DataTable';
 import { MetricRowSkeleton } from '@/components/Skeleton';
 import {
   getDisciplineStats, getPenaltyConfig, setPenaltyConfig,
-  upsertReportLog, upsertAttendanceLog, listEmployees,
+  upsertReportLog, upsertAttendanceLog, listEmployees, autoSyncLogs,
 } from '@/lib/api/payroll';
 import type { DisciplineEmployee, LogBucket, PenaltyConfig } from '@/lib/api/payroll';
 import { fmtNum } from '@/lib/utils';
@@ -45,6 +45,22 @@ export default function HisobotPage() {
   const [mode, setMode] = useState<Mode>('report');
   const [logEntry, setLogEntry] = useState<{ employeeId: number; name: string } | null>(null);
   const [editPenalty, setEditPenalty] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const qcRoot = useQueryClient();
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const r = await autoSyncLogs(year, month, mode);
+      qcRoot.invalidateQueries({ queryKey: ['payroll/discipline-stats'] });
+      const note = r.note ? `\n\n${r.note}` : '';
+      alert(`Sync ${mode}:\n  yaratildi: ${r.created}\n  yangilandi: ${r.updated}\n  o'tkazib yuborildi: ${r.skipped_users}${note}`);
+    } catch (e) {
+      alert(`Xato: ${(e as Error).message}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const statsQ = useQuery({
     queryKey: ['payroll/discipline-stats', year, month],
@@ -135,6 +151,7 @@ export default function HisobotPage() {
             <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] shadow-xs" value={year} onChange={(e) => setYear(Number(e.target.value))}>
               {[DEFAULT_YEAR, DEFAULT_YEAR - 1].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
+            <Button onClick={handleSync} disabled={syncing}>{syncing ? 'Sinxronlanmoqda…' : 'Bitrix\'dan sinx'}</Button>
             <Button onClick={() => setEditPenalty(true)}>Jarima tariflari</Button>
           </>
         }

@@ -5,9 +5,9 @@ import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Avatar } from '@/components/Avatar';
 import { MetricCard } from '@/components/MetricCard';
-import { CardChart, FunnelBars } from '@/components/charts';
-import { MetricRowSkeleton, FunnelSkeleton, DataTableSkeleton } from '@/components/Skeleton';
-import { listEmployees, getMonthlyTarget, listTimeman } from '@/lib/api/payroll';
+import { CardChart, FunnelBars, SimpleBar } from '@/components/charts';
+import { MetricRowSkeleton, FunnelSkeleton, DataTableSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
+import { listEmployees, getMonthlyTarget, listTimeman, getSalesTrend, listBonusAwards } from '@/lib/api/payroll';
 import type { TimemanUser } from '@/lib/api/payroll';
 import { getDealsStats } from '@/lib/api/deals';
 import { fmtMoney, fmtNum, fmtPct } from '@/lib/utils';
@@ -55,6 +55,9 @@ export default function DashboardPage() {
     queryKey: ['stats/deals', year, month],
     queryFn: () => getDealsStats({ start_date: isoFirstOfMonth(year, month), end_date: isoLastOfMonth(year, month) }),
   });
+  const trendQ = useQuery({ queryKey: ['payroll/sales-trend', 6], queryFn: () => getSalesTrend(6) });
+  const periodLabel = `${year}-${String(month).padStart(2, '0')}`;
+  const bonusesQ = useQuery({ queryKey: ['payroll/bonus-awards', periodLabel], queryFn: () => listBonusAwards(periodLabel) });
 
   const target = targetQ.data?.target_usd ?? 0;
   const wonRev = dealsQ.data?.total_won_revenue ?? 0;
@@ -79,6 +82,29 @@ export default function DashboardPage() {
   }, [dealsQ.data]);
 
   const todayUsers = (tmQ.data?.users ?? []).slice(0, 6);
+
+  const trendData = useMemo(() => {
+    const months = trendQ.data?.months ?? [];
+    return months.map(m => ({
+      name: `${MONTH_LABELS[MONTH_KEYS[m.month - 1]].slice(0, 3)} ${String(m.year).slice(-2)}`,
+      value: Math.round(m.won_revenue),
+    }));
+  }, [trendQ.data]);
+
+  // Top bonus recipients in current period
+  const topBonusRecipients = useMemo(() => {
+    const awards = bonusesQ.data?.awards ?? [];
+    const byUser = new Map<number, { uid: number; name: string; total: number; count: number }>();
+    for (const a of awards) {
+      const emp = empQ.data?.employees.find(e => e.id === a.bitrix_user_id);
+      const name = emp?.name ?? `User ${a.bitrix_user_id}`;
+      const cur = byUser.get(a.bitrix_user_id) ?? { uid: a.bitrix_user_id, name, total: 0, count: 0 };
+      cur.total += a.amount_usd;
+      cur.count += 1;
+      byUser.set(a.bitrix_user_id, cur);
+    }
+    return Array.from(byUser.values()).sort((a, b) => b.total - a.total).slice(0, 5);
+  }, [bonusesQ.data, empQ.data]);
 
   return (
     <>
@@ -106,6 +132,48 @@ export default function DashboardPage() {
             <MetricCard label="Xodimlar" value={fmtNum(empQ.data?.count ?? 0)} hint="aktiv + ta'tilda" />
           </div>
         )}
+
+        {/* ── Trend + Top bonus row ───────────────────────────── */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {trendQ.isLoading && !trendQ.data ? <ChartCardSkeleton height={220} /> : (
+            <CardChart title="Sotuv trendi" hint="oxirgi 6 oy · won daromad" height={220}>
+              <SimpleBar data={trendData as never} dataKey="value" fill="var(--blue)" />
+            </CardChart>
+          )}
+          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <span className="text-[13px] font-semibold">Top bonus oluvchilar</span>
+              <span className="text-[11px] text-text3">{periodLabel}</span>
+            </div>
+            <div className="p-2">
+              {bonusesQ.isLoading && !bonusesQ.data ? (
+                <div className="space-y-2 p-2">
+                  {Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton h-9 w-full rounded" />)}
+                </div>
+              ) : topBonusRecipients.length === 0 ? (
+                <div className="text-text3 text-[12px] text-center py-8">Bu davr uchun bonus berilmagan</div>
+              ) : (
+                <table className="w-full">
+                  <tbody>
+                    {topBonusRecipients.map((u, i) => (
+                      <tr key={u.uid} className="border-b border-border last:border-0 hover:bg-bg3">
+                        <td className="px-3 py-2 mono text-amber font-bold w-6">{i + 1}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={u.name} />
+                            <span className="font-medium">{u.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right text-[11px] text-text3">{u.count} bonus</td>
+                        <td className="px-3 py-2 text-right mono text-green font-semibold">+{fmtMoney(u.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <CardChart title={`${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year} — Maqsad bajarilishi`} hint={target ? fmtPct(progress, 1) : '—'} height={180}>

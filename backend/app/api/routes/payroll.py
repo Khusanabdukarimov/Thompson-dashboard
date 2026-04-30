@@ -297,6 +297,32 @@ def get_weekly_actuals(year: int, month: int) -> dict:
     return {"year": year, "month": month, "weeks": weeks}
 
 
+@router.get("/sales-trend")
+def get_sales_trend(months_back: int = 6) -> dict:
+    """Return monthly won revenue trend for last N months (incl. current)."""
+    today = datetime.utcnow()
+    out = []
+    for i in range(months_back - 1, -1, -1):
+        # i months ago
+        y = today.year
+        m = today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        import calendar
+        last = calendar.monthrange(y, m)[1]
+        start_iso = f"{y:04d}-{m:02d}-01"
+        end_iso = f"{y:04d}-{m:02d}-{last:02d}"
+        agg = _won_revenue_in_range(start_iso, end_iso)
+        out.append({
+            "year": y,
+            "month": m,
+            "won_revenue": float(agg["sum"]),
+            "won_count": int(agg["count"]),
+        })
+    return {"months": out}
+
+
 def _won_revenue_in_range(start_iso: str, end_iso: str) -> dict:
     """Sum OPPORTUNITY for WON deals (any stage with WON) closing in range."""
     url = f"{bitrix.BITRIX24_PORTAL}{bitrix.BITRIX24_TOKEN}/crm.deal.list"
@@ -440,6 +466,159 @@ def delete_report(log_id: int, s: Session = Depends(_session)) -> dict:
         raise HTTPException(status_code=404, detail="Not found")
     s.delete(row); s.commit()
     return {"deleted": log_id}
+
+
+# ────────────────────────────────────────────────────────────────────
+# Bitrix auto-sync — best-effort hydrate logs from Bitrix activity
+# ────────────────────────────────────────────────────────────────────
+def _classify_time_vs_deadline(actual_hm: str, deadline_hm: str, mode: str) -> str:
+    """Bucket: on-time/late-soft/late/penalty + (missed|absent)."""
+    try:
+        ah, am = [int(x) for x in actual_hm.split(":")]
+        dh, dm = [int(x) for x in deadline_hm.split(":")]
+    except Exception:
+        return "missed" if mode == "report" else "absent"
+    diff = (ah * 60 + am) - (dh * 60 + dm)  # minutes after deadline
+    if diff <= 0:        return "on-time"
+    if diff <= 5:        return "late-soft"
+    if diff <= 10:       return "late"
+    if diff <= 30:       return "penalty"
+    return "missed" if mode == "report" else "absent"
+
+
+@router.post("/auto-sync")
+def auto_sync_logs(year: int, month: int, mode: str = "report", s: Session = Depends(_session)) -> dict:
+    """Best-effort sync logs from Bitrix.
+
+    - mode="report":     uses crm.activity.list with PROVIDER_TYPE_ID=TODO,
+                         deadline=19:00. Compared CLOSED_TIME vs DEADLINE.
+    - mode="attendance": uses timeman.status (current only — historical not
+                         exposed in current bitrix.py wrapper). For each user,
+                         records today's status if month/year matches.
+
+    Returns counts of created/updated rows.
+    """
+    if mode not in ("report", "attendance"):
+        raise HTTPException(status_code=400, detail="mode must be 'report' or 'attendance'")
+
+    start, end = _month_range(year, month)
+    users = bitrix.list_users()
+    created = 0
+    updated = 0
+    skipped_users = 0
+
+    if mode == "report":
+        # For each user, fetch completed TODO activities in the period
+        for u in users:
+            try:
+                uid = int(u.get("ID", 0))
+            except Exception:
+                skipped_users += 1
+                continue
+            if uid <= 0:
+                skipped_users += 1
+                continue
+
+            # Fetch activities (best-effort — Bitrix structure varies per portal)
+            try:
+                import requests
+                resp = requests.get(
+                    f"{bitrix.BITRIX24_PORTAL}{bitrix.BITRIX24_TOKEN}/crm.activity.list",
+                    params={
+                        "filter[RESPONSIBLE_ID]": uid,
+                        "filter[COMPLETED]":      "Y",
+                        "filter[PROVIDER_TYPE_ID]": "TODO",
+                        "filter[>=CREATED]":      start.isoformat(),
+                        "filter[<=CREATED]":      end.isoformat(),
+                        "select[]": ["ID", "DEADLINE", "END_TIME", "CREATED", "SUBJECT"],
+                    },
+                    timeout=15,
+                )
+                data = resp.json() if resp.status_code == 200 else {}
+            except Exception:
+                data = {}
+
+            for act in (data.get("result") or [])[:200]:
+                # DEADLINE / END_TIME → "YYYY-MM-DDTHH:MM:SS+TZ" or similar
+                dt_str = act.get("DEADLINE") or act.get("CREATED")
+                end_str = act.get("END_TIME") or act.get("CREATED")
+                if not dt_str or not end_str:
+                    continue
+                try:
+                    from dateutil.parser import parse as dt_parse
+                    deadline_dt = dt_parse(dt_str)
+                    end_dt = dt_parse(end_str)
+                except Exception:
+                    continue
+                day = end_dt.date()
+                if day < start or day > end:
+                    continue
+
+                actual_hm   = end_dt.strftime("%H:%M")
+                deadline_hm = deadline_dt.strftime("%H:%M")
+                bucket = _classify_time_vs_deadline(actual_hm, deadline_hm, "report")
+
+                row = s.exec(select(ReportLog).where(and_(
+                    ReportLog.bitrix_user_id == uid, ReportLog.day == day,
+                ))).first()
+                if row is None:
+                    row = ReportLog(bitrix_user_id=uid, day=day)
+                    created += 1
+                else:
+                    updated += 1
+                row.bucket = bucket
+                row.submitted_at = actual_hm
+                row.note = act.get("SUBJECT")
+                s.add(row)
+        s.commit()
+
+    elif mode == "attendance":
+        # Snapshot today's timeman.status into attendance_log if today is in [start,end]
+        from datetime import date as _date
+        today = _date.today()
+        if not (start <= today <= end):
+            return {"mode": mode, "created": 0, "updated": 0, "skipped_users": 0,
+                    "note": "Selected month is not the current month — historical timeman not yet supported."}
+        for u in users:
+            try:
+                uid = int(u.get("ID", 0))
+            except Exception:
+                skipped_users += 1
+                continue
+            if uid <= 0:
+                skipped_users += 1
+                continue
+            tm = bitrix.get_timeman_status(uid) or {}
+            status = tm.get("STATUS") if isinstance(tm, dict) else None
+            time_start = tm.get("TIME_START") if isinstance(tm, dict) else None
+            # Map STATUS → bucket
+            bucket = "absent"
+            actual_hm = None
+            if time_start:
+                try:
+                    from dateutil.parser import parse as dt_parse
+                    actual_hm = dt_parse(time_start).strftime("%H:%M")
+                    bucket = _classify_time_vs_deadline(actual_hm, "09:00", "attendance")
+                except Exception:
+                    pass
+            elif status == "OPENED":
+                bucket = "on-time"
+
+            row = s.exec(select(AttendanceLog).where(and_(
+                AttendanceLog.bitrix_user_id == uid, AttendanceLog.day == today,
+            ))).first()
+            if row is None:
+                row = AttendanceLog(bitrix_user_id=uid, day=today)
+                created += 1
+            else:
+                updated += 1
+            row.bucket = bucket
+            row.start_time = actual_hm
+            row.note = f"auto-sync {status or 'unknown'}"
+            s.add(row)
+        s.commit()
+
+    return {"mode": mode, "created": created, "updated": updated, "skipped_users": skipped_users}
 
 
 # ────────────────────────────────────────────────────────────────────

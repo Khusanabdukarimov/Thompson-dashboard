@@ -33,6 +33,23 @@ def _on_startup():
 app.include_router(payroll_routes.router)
 
 
+@app.get("/api/config")
+def api_config():
+    """Frontend bootstrap config — exposed safely to browser."""
+    portal = bitrix.BITRIX24_PORTAL or ""
+    # Strip trailing /rest/ to get base portal URL for UI links
+    portal_base = portal.rstrip("/")
+    if portal_base.endswith("/rest"):
+        portal_base = portal_base[:-len("/rest")]
+    return {
+        "bitrix_portal": portal_base,
+        "currency": {
+            "primary": "UZS",
+            "secondary": "USD",
+        },
+    }
+
+
 @app.get("/")
 def serve_index():
     return FileResponse(FRONTEND_LEGACY / "marketing.html")
