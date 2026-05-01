@@ -61,10 +61,11 @@ export function FilterBar({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== '/') return;
-      const t = e.target as HTMLElement | null;
-      if (!t) return;
-      const tag = t.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || t.isContentEditable) return;
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable) return;
+      }
       e.preventDefault();
       inputRef.current?.focus();
       setOpen(true);
