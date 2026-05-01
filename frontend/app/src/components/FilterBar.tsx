@@ -137,8 +137,8 @@ export function FilterBar({
     <div ref={wrapRef} className="relative w-full max-w-[560px]">
       <div
         className={cn(
-          'flex items-center gap-1.5 rounded-[22px] pl-1.5 pr-2.5 py-[5px] cursor-text transition-colors min-h-[38px]',
-          open ? 'bg-bg2 shadow-xs' : 'bg-bg3 hover:bg-bg2',
+          'flex items-center gap-1.5 rounded-[22px] pl-1.5 pr-2.5 py-[5px] cursor-text transition-colors min-h-[38px] border',
+          open ? 'bg-bg3 border-border2 shadow-xs' : 'bg-bg3 border-transparent hover:border-border',
         )}
         onClick={() => setOpen(true)}
       >
@@ -160,7 +160,7 @@ export function FilterBar({
         <input
           ref={inputRef}
           className="flex-1 bg-transparent text-[13px] text-text font-sans py-1 px-1.5 min-w-[120px] placeholder:text-text3 border-0 outline-none focus:outline-none focus-visible:outline-none"
-          placeholder="+ qidiruv"
+          placeholder="Qidirish"
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
           onClick={() => setOpen(true)}
