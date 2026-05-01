@@ -267,7 +267,7 @@ export function FilterBar({
 }
 
 function FieldRow({ field, value, onChange }: { field: FilterField; value: string | undefined; onChange: (v: string | undefined) => void }) {
-  const inputCls = 'w-full px-2.5 py-2 rounded-[7px] border border-border bg-bg2 text-text text-[12.5px] font-sans transition-colors h-[34px] focus:outline-none focus:border-blue focus:shadow-[0_0_0_3px_rgba(34,102,245,0.1)]';
+  const inputCls = 'w-full px-2.5 py-2 rounded-[7px] bg-bg3 text-text text-[12.5px] font-sans transition-colors h-[34px] border-0 outline-0 focus:bg-bg4 focus:outline-none';
   return (
     <div className="mb-3.5">
       <div className="text-[11px] text-text3 mb-1 font-medium flex justify-between items-center">

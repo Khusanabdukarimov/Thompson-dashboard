@@ -66,10 +66,15 @@ export default function SdelkalarPage() {
   }, [statsQ.data, sourceQ.data]);
 
   const byUserFiltered = useMemo(() => {
-    const list = statsQ.data?.by_user ?? [];
+    let list = statsQ.data?.by_user ?? [];
+    if (activePreset === 'won') {
+      list = list.filter(u => Object.entries(u.by_stage).some(([k, v]) => k.toUpperCase().includes('WON') && v > 0));
+    } else if (activePreset === 'lost') {
+      list = list.filter(u => Object.entries(u.by_stage).some(([k, v]) => k.toUpperCase().includes('LOSE') && v > 0));
+    }
     const s = search.trim().toLowerCase();
     return s ? list.filter(u => u.name.toLowerCase().includes(s)) : list;
-  }, [statsQ.data, search]);
+  }, [statsQ.data, search, activePreset]);
 
   const userColumns = useMemo<ColumnDef<StatsDealsByUser, unknown>[]>(() => [
     {

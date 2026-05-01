@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Topbar } from '@/components/Topbar';
 import { Button } from '@/components/Button';
 import { ChartCardSkeleton } from '@/components/Skeleton';
+import { FilterBar } from '@/components/FilterBar';
+import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
 import { fmtNum, fmtMoney, fmtPct, cn } from '@/lib/utils';
-import { downloadCsv } from '@/lib/csv';
 
 const now = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
@@ -16,16 +17,17 @@ const TODAY_DAY = now.getDate();
 type SourceKey = 'all' | 'target' | 'instagram';
 type Period = 'all' | 'this_week' | 'last_week';
 
-const SOURCE_TABS: { key: SourceKey; label: string }[] = [
-  { key: 'all', label: 'Hammasi' },
-  { key: 'target', label: 'Target reklama' },
-  { key: 'instagram', label: 'Instagram' },
+// Source presets — extensible: add Facebook/Twitter/etc here later, no UI changes needed.
+const SOURCE_PRESETS: FilterPreset[] = [
+  { id: 'all',       label: 'Hammasi',        pinned: true },
+  { id: 'target',    label: 'Target reklama', pinned: true },
+  { id: 'instagram', label: 'Instagram',      pinned: true },
 ];
 
-const PERIOD_TABS: { key: Period; label: string }[] = [
-  { key: 'all', label: 'Barchasi' },
-  { key: 'this_week', label: 'Bu hafta' },
-  { key: 'last_week', label: "O'tgan hafta" },
+const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+  { value: 'all',        label: 'Barchasi' },
+  { value: 'this_week',  label: 'Bu hafta' },
+  { value: 'last_week',  label: "O'tgan hafta" },
 ];
 
 // Metric rows — ordered by importance (most important on top per user feedback).
@@ -96,11 +98,19 @@ function fmtVal(v: number | undefined | null, fmt: MetricRow['format']) {
   return fmtNum(v);
 }
 
+const PERIOD_FIELDS: FilterField[] = [
+  { key: 'period', label: 'Davr', type: 'select', options: PERIOD_OPTIONS.map(o => ({ value: o.value, label: o.label })) },
+];
+
 export default function KunlikPage() {
   const [month, setMonth] = useState<MonthKey>(DEFAULT_MONTH);
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
-  const [source, setSource] = useState<SourceKey>('all');
-  const [period, setPeriod] = useState<Period>('all');
+  const [activePreset, setActivePreset] = useState<string | null>('all');
+  const [search, setSearch] = useState('');
+  const [values, setValues] = useState<FilterValues>({ period: 'all' });
+
+  const source: SourceKey = (activePreset === 'target' || activePreset === 'instagram') ? activePreset : 'all';
+  const period: Period = (values.period as Period) || 'all';
 
   const q = useQuery({
     queryKey: ['meta/insights', month, year],
@@ -152,33 +162,16 @@ export default function KunlikPage() {
     return any ? sum : undefined;
   }
 
-  function exportCsv() {
-    const rows: Record<string, unknown>[] = [];
-    for (const src of sectionsToShow) {
-      for (const metric of METRIC_ROWS) {
-        const row: Record<string, unknown> = {
-          source: SECTION_META[src].label,
-          metric: metric.label,
-          oylik:  rowTotal(src, metric) ?? '',
-        };
-        for (let i = 0; i < days; i++) {
-          if (!mask[i]) continue;
-          row[`d${i + 1}`] = metric.live ? valueFor(src, metric, i) ?? '' : '';
-        }
-        rows.push(row);
-      }
-    }
-    const cols = [
-      { key: 'source', label: 'Manba' },
-      { key: 'metric', label: "Ko'rsatkich" },
-      { key: 'oylik',  label: 'Oylik' },
-      ...Array.from({ length: days }, (_, i) => ({ key: `d${i + 1}`, label: String(i + 1) }))
-              .filter((_, i) => mask[i]),
-    ];
-    downloadCsv(`kunlik-${month}-${year}.csv`, rows, cols);
-  }
+  // Apply search to metric labels (lets user narrow rows by name)
+  const filteredMetrics = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return METRIC_ROWS;
+    return METRIC_ROWS.filter(m => m.label.toLowerCase().includes(s));
+  }, [search]);
 
   const yearOptions = [DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2];
+  const periodLabel = PERIOD_OPTIONS.find(o => o.value === period)?.label;
+  const sourceLabel = SOURCE_PRESETS.find(p => p.id === activePreset)?.label;
 
   return (
     <>
@@ -206,53 +199,36 @@ export default function KunlikPage() {
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        {/* Tabs row */}
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <div className="inline-flex items-center gap-1 bg-bg2 border border-border rounded-full p-1 shadow-xs">
-            {SOURCE_TABS.map(t => (
-              <button
-                key={t.key}
-                onClick={() => setSource(t.key)}
-                className={cn(
-                  'px-4 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-                  source === t.key ? 'bg-blue-bg text-blue' : 'text-text2 hover:text-text',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="inline-flex items-center gap-2">
-            <span className="text-[12px] text-text3">Davr:</span>
-            <div className="inline-flex items-center gap-1 bg-bg2 border border-border rounded-full p-1 shadow-xs">
-              {PERIOD_TABS.map(t => (
-                <button
-                  key={t.key}
-                  onClick={() => setPeriod(t.key)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full text-[12.5px] font-medium transition-colors',
-                    period === t.key ? 'bg-blue text-white' : 'text-text2 hover:text-text',
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* FilterBar — source presets (extensible: Facebook/Twitter/etc later) + period */}
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <FilterBar
+            presets={SOURCE_PRESETS}
+            activePreset={activePreset}
+            onPresetChange={setActivePreset}
+            searchValue={search}
+            onSearchChange={setSearch}
+            fields={PERIOD_FIELDS}
+            values={values}
+            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+            onClear={() => { setSearch(''); setValues({ period: 'all' }); setActivePreset('all'); }}
+            onApply={() => q.refetch()}
+            activeChipLabel={sourceLabel}
+            onActiveChipClear={() => setActivePreset('all')}
+          />
+          {periodLabel && period !== 'all' && (
+            <span className="text-[12px] text-text2 inline-flex items-center gap-1">
+              <span className="text-text3">Davr:</span>
+              <span className="font-medium">{periodLabel}</span>
+            </span>
+          )}
         </div>
 
         {q.isLoading && !q.data ? <ChartCardSkeleton height={520} /> : (
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="text-[14px] font-semibold">Kunlik ma'lumotlar jadvali</div>
-                <div className="text-[11px] text-text3 mt-0.5">
-                  Yashil — avtomatik · Sariq — qo'lda · Bo'sh — kiritilmagan · Bugun ustun ko'k bilan ajratilgan
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button onClick={exportCsv} className="text-[12px] text-blue hover:underline">CSV export</button>
-                <button onClick={exportCsv} className="text-[12px] text-blue hover:underline">Excel</button>
+            <div className="px-4 py-3 border-b border-border">
+              <div className="text-[14px] font-semibold">Kunlik ma'lumotlar jadvali</div>
+              <div className="text-[11px] text-text3 mt-0.5">
+                Yashil — avtomatik · Sariq — qo'lda · Bo'sh — kiritilmagan · Bugun ustun ko'k bilan ajratilgan
               </div>
             </div>
 
@@ -291,6 +267,7 @@ export default function KunlikPage() {
                       days={days}
                       isCurrent={isCurrentMonth(month, year)}
                       mask={mask}
+                      metrics={filteredMetrics}
                       valueFor={valueFor}
                       rowTotal={rowTotal}
                     />
@@ -312,13 +289,14 @@ export default function KunlikPage() {
 }
 
 function SectionBlock({
-  src, meta, days, isCurrent, mask, valueFor, rowTotal,
+  src, meta, days, isCurrent, mask, metrics, valueFor, rowTotal,
 }: {
   src: 'target' | 'instagram';
   meta: { label: string; color: string };
   days: number;
   isCurrent: boolean;
   mask: boolean[];
+  metrics: MetricRow[];
   valueFor: (src: 'target' | 'instagram', metric: MetricRow, d: number) => number | undefined;
   rowTotal: (src: 'target' | 'instagram', metric: MetricRow) => number | undefined;
 }) {
@@ -331,7 +309,7 @@ function SectionBlock({
           {meta.label}
         </td>
       </tr>
-      {METRIC_ROWS.map((metric) => {
+      {metrics.map((metric) => {
         const total = rowTotal(src, metric);
         return (
           <tr key={metric.key} className={cn('border-b border-border last:border-b-0', !metric.important && 'text-text2')}>
