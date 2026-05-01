@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Search, X, Settings as Gear, Pin, Trash2 } from 'lucide-react';
+import { Search, X, Pin, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type FilterPreset = { id: string; label: string; pinned?: boolean };
@@ -165,14 +165,14 @@ export function FilterBar({
             title="Tezkor: / tugmasini bosing"
             className="hidden sm:inline-flex items-center justify-center mono text-[10px] px-1.5 h-5 rounded border border-border bg-bg2 text-text3"
           >/</kbd>
-          <button type="button" className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text" aria-label="Find">
+          <button type="button" className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text" aria-label="Qidirish">
             <Search className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
             className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text"
             onClick={(e) => { e.stopPropagation(); onClear(); }}
-            aria-label="Clear"
+            aria-label="Tozalash"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -231,8 +231,7 @@ export function FilterBar({
               {fields.map((f) => (
                 <FieldRow key={f.key} field={f} value={values[f.key]} onChange={(v) => onChange(f.key, v)} />
               ))}
-              <span className="text-[12px] text-blue cursor-pointer font-medium mt-0.5 inline-flex items-center gap-1 hover:underline">+ Maydon qo'shish</span>
-              <span className="text-[12px] text-text3 cursor-pointer ml-3.5 hover:text-text2" onClick={onClear}>Standart maydonlarga qaytish</span>
+              <span className="text-[12px] text-text3 cursor-pointer hover:text-text2" onClick={onClear}>Standart maydonlarga qaytish</span>
             </div>
 
             {/* Footer (spans both cols) */}
@@ -243,9 +242,6 @@ export function FilterBar({
                 ) : (
                   <span className="text-[12px] text-text3 italic">filtr saqlash o'chirilgan</span>
                 )}
-                <button className="w-7 h-7 rounded-full inline-flex items-center justify-center text-text3 hover:bg-bg3 hover:text-text" aria-label="Settings">
-                  <Gear className="w-3.5 h-3.5" />
-                </button>
               </div>
               <div className="flex items-center gap-2">
                 <button

@@ -12,7 +12,6 @@ import { fmtNum, fmtMoney, fmtPct, cn } from '@/lib/utils';
 const now = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
 const DEFAULT_YEAR = now.getFullYear();
-const TODAY_DAY = now.getDate();
 
 type SourceKey = 'all' | 'target' | 'instagram';
 type Period = 'all' | 'this_week' | 'last_week';
@@ -109,6 +108,8 @@ export default function KunlikPage() {
   const [search, setSearch] = useState('');
   const [values, setValues] = useState<FilterValues>({ period: 'all' });
 
+  // Compute "today" once per render so thead and tbody agree.
+  const todayDay = new Date().getDate();
   const source: SourceKey = (activePreset === 'target' || activePreset === 'instagram') ? activePreset : 'all';
   const period: Period = (values.period as Period) || 'all';
 
@@ -239,9 +240,9 @@ export default function KunlikPage() {
                     <th className="text-left px-3 py-2 sticky left-0 bg-bg3 z-10 min-w-[180px] border-b border-border">
                       Manba / Ko'rsatkich
                     </th>
-                    <th className="text-right px-3 py-2 min-w-[88px] border-b border-border">Oylik</th>
+                    <th className="text-right px-3 py-2 min-w-[88px] border-b border-border">{period === 'all' ? 'Oylik' : 'Davr jami'}</th>
                     {Array.from({ length: days }, (_, i) => i + 1).map(d => {
-                      const isToday = isCurrentMonth(month, year) && d === TODAY_DAY;
+                      const isToday = isCurrentMonth(month, year) && d === todayDay;
                       const dim = !mask[d - 1];
                       return (
                         <th
@@ -266,6 +267,7 @@ export default function KunlikPage() {
                       meta={SECTION_META[src]}
                       days={days}
                       isCurrent={isCurrentMonth(month, year)}
+                      todayDay={todayDay}
                       mask={mask}
                       metrics={filteredMetrics}
                       valueFor={valueFor}
@@ -289,12 +291,13 @@ export default function KunlikPage() {
 }
 
 function SectionBlock({
-  src, meta, days, isCurrent, mask, metrics, valueFor, rowTotal,
+  src, meta, days, isCurrent, todayDay, mask, metrics, valueFor, rowTotal,
 }: {
   src: 'target' | 'instagram';
   meta: { label: string; color: string };
   days: number;
   isCurrent: boolean;
+  todayDay: number;
   mask: boolean[];
   metrics: MetricRow[];
   valueFor: (src: 'target' | 'instagram', metric: MetricRow, d: number) => number | undefined;
@@ -327,7 +330,7 @@ function SectionBlock({
             </td>
             {Array.from({ length: days }, (_, i) => i).map(i => {
               const day = i + 1;
-              const isToday = isCurrent && day === (new Date()).getDate();
+              const isToday = isCurrent && day === todayDay;
               const dim = !mask[i];
               const v = metric.live ? valueFor(src, metric, i) : undefined;
               const filled = typeof v === 'number';

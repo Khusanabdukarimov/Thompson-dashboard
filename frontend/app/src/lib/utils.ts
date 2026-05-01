@@ -12,8 +12,10 @@ export function fmtNum(n: number | null | undefined) {
 
 export function fmtMoney(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return '—';
-  if (Math.abs(n) >= 1_000_000) return '$' + (n / 1_000_000).toFixed(1) + 'M';
-  return '$' + fmtNum(Math.round(n));
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  return `${sign}$${fmtNum(Math.round(abs))}`;
 }
 
 export function fmtPct(n: number | null | undefined, digits = 1) {

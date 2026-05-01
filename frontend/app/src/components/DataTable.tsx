@@ -112,23 +112,24 @@ export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hec
           >
             {[10, 25, 50].map(n => <option key={n} value={n}>{n}/sahifa</option>)}
           </select>
-          <PagerBtn onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}><ChevronsLeft className="w-3 h-3" /></PagerBtn>
-          <PagerBtn onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}><ChevronLeft className="w-3 h-3" /></PagerBtn>
+          <PagerBtn onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()} ariaLabel="Birinchi sahifa"><ChevronsLeft className="w-3 h-3" /></PagerBtn>
+          <PagerBtn onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} ariaLabel="Oldingi sahifa"><ChevronLeft className="w-3 h-3" /></PagerBtn>
           <span className="px-2 text-[12px] text-text2">{pageIndex + 1} / {Math.max(1, table.getPageCount())}</span>
-          <PagerBtn onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}><ChevronRight className="w-3 h-3" /></PagerBtn>
-          <PagerBtn onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}><ChevronsRight className="w-3 h-3" /></PagerBtn>
+          <PagerBtn onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} ariaLabel="Keyingi sahifa"><ChevronRight className="w-3 h-3" /></PagerBtn>
+          <PagerBtn onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()} ariaLabel="Oxirgi sahifa"><ChevronsRight className="w-3 h-3" /></PagerBtn>
         </div>
       </div>
     </div>
   );
 }
 
-function PagerBtn({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+function PagerBtn({ onClick, disabled, ariaLabel, children }: { onClick: () => void; disabled?: boolean; ariaLabel: string; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
       className="w-7 h-7 rounded-md border border-border bg-bg2 text-text2 cursor-pointer inline-flex items-center justify-center text-[12px] font-medium hover:bg-bg3 hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
     >{children}</button>
   );
