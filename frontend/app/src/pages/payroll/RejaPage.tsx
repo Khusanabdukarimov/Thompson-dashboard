@@ -246,7 +246,7 @@ export default function RejaPage() {
                 onChange={(k, v) => setFilterValues(s => ({ ...s, [k]: v }))}
                 onClear={() => { setSearch(''); setFilterValues({}); setActivePreset('all'); }}
                 onApply={() => leadsQ.refetch()}
-                activeChipLabel={STATUS_PRESETS.find(p => p.id === activePreset)?.label}
+                activeChipLabel={activePreset && activePreset !== 'all' ? STATUS_PRESETS.find(p => p.id === activePreset)?.label : undefined}
                 onActiveChipClear={() => setActivePreset('all')}
                 storageKey="reja.leads"
                 onApplySavedFilter={(v) => setFilterValues(v)}

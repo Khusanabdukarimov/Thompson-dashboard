@@ -106,7 +106,7 @@ export default function KunlikPage() {
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
   const [activePreset, setActivePreset] = useState<string | null>('all');
   const [search, setSearch] = useState('');
-  const [values, setValues] = useState<FilterValues>({ period: 'all' });
+  const [values, setValues] = useState<FilterValues>({});
 
   // Compute "today" once per render so thead and tbody agree.
   const todayDay = new Date().getDate();
@@ -172,7 +172,10 @@ export default function KunlikPage() {
 
   const yearOptions = [DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2];
   const periodLabel = PERIOD_OPTIONS.find(o => o.value === period)?.label;
-  const sourceLabel = SOURCE_PRESETS.find(p => p.id === activePreset)?.label;
+  // Show a clearable chip only when the user picked a non-default source.
+  const sourceLabel = activePreset && activePreset !== 'all'
+    ? SOURCE_PRESETS.find(p => p.id === activePreset)?.label
+    : undefined;
 
   return (
     <>
@@ -211,7 +214,7 @@ export default function KunlikPage() {
             fields={PERIOD_FIELDS}
             values={values}
             onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
-            onClear={() => { setSearch(''); setValues({ period: 'all' }); setActivePreset('all'); }}
+            onClear={() => { setSearch(''); setValues({}); setActivePreset('all'); }}
             onApply={() => q.refetch()}
             activeChipLabel={sourceLabel}
             onActiveChipClear={() => setActivePreset('all')}

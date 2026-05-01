@@ -57,6 +57,11 @@ export function FilterBar({
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const hasSomethingToClear =
+    searchValue.length > 0
+    || !!activeChipLabel
+    || Object.values(values).some(v => v != null && v !== '');
+
   // "/" shortcut to focus search (when not already in an input/textarea)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -154,7 +159,7 @@ export function FilterBar({
         )}
         <input
           ref={inputRef}
-          className="flex-1 border-0 outline-0 bg-transparent text-[13px] text-text font-sans py-1 px-1.5 min-w-[120px] placeholder:text-text3"
+          className="flex-1 bg-transparent text-[13px] text-text font-sans py-1 px-1.5 min-w-[120px] placeholder:text-text3 border-0 outline-none focus:outline-none focus-visible:outline-none"
           placeholder="+ qidiruv"
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
@@ -168,14 +173,16 @@ export function FilterBar({
           <button type="button" className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text" aria-label="Qidirish">
             <Search className="w-3.5 h-3.5" />
           </button>
-          <button
-            type="button"
-            className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text"
-            onClick={(e) => { e.stopPropagation(); onClear(); }}
-            aria-label="Tozalash"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          {hasSomethingToClear && (
+            <button
+              type="button"
+              className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text"
+              onClick={(e) => { e.stopPropagation(); onClear(); }}
+              aria-label="Tozalash"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

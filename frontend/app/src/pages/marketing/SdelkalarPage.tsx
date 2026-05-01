@@ -178,7 +178,7 @@ export default function SdelkalarPage() {
             onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
             onClear={() => { setSearch(''); setValues({ start_date: oneYearAgoISO(), end_date: todayISO() }); setActivePreset('all'); }}
             onApply={() => { statsQ.refetch(); sourceQ.refetch(); }}
-            activeChipLabel={PRESETS.find(p => p.id === activePreset)?.label}
+            activeChipLabel={activePreset && activePreset !== 'all' ? PRESETS.find(p => p.id === activePreset)?.label : undefined}
             onActiveChipClear={() => setActivePreset('all')}
           />
         </div>
