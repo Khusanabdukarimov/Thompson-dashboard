@@ -55,6 +55,23 @@ export function FilterBar({
   const [anchor, setAnchor] = useState<'left' | 'right'>('left');
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // "/" shortcut to focus search (when not already in an input/textarea)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== '/') return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const tag = t.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || t.isContentEditable) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+      setOpen(true);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Load saved filters from localStorage
   useEffect(() => {
@@ -114,8 +131,8 @@ export function FilterBar({
     <div ref={wrapRef} className="relative w-full max-w-[560px]">
       <div
         className={cn(
-          'flex items-center gap-1.5 bg-bg2 border rounded-[22px] pl-1.5 pr-2.5 py-[5px] cursor-text transition-all min-h-[38px] shadow-xs',
-          open ? 'border-blue ring-[3px] ring-blue/15' : 'border-border hover:border-border2',
+          'flex items-center gap-1.5 rounded-[22px] pl-1.5 pr-2.5 py-[5px] cursor-text transition-colors min-h-[38px]',
+          open ? 'bg-bg2 shadow-xs' : 'bg-bg3 hover:bg-bg2',
         )}
         onClick={() => setOpen(true)}
       >
@@ -135,19 +152,24 @@ export function FilterBar({
           </span>
         )}
         <input
+          ref={inputRef}
           className="flex-1 border-0 outline-0 bg-transparent text-[13px] text-text font-sans py-1 px-1.5 min-w-[120px] placeholder:text-text3"
           placeholder="+ qidiruv"
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
           onClick={() => setOpen(true)}
         />
-        <div className="flex items-center gap-0.5 ml-auto text-text3">
-          <button type="button" className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg3 hover:text-text" aria-label="Find">
+        <div className="flex items-center gap-1 ml-auto text-text3">
+          <kbd
+            title="Tezkor: / tugmasini bosing"
+            className="hidden sm:inline-flex items-center justify-center mono text-[10px] px-1.5 h-5 rounded border border-border bg-bg2 text-text3"
+          >/</kbd>
+          <button type="button" className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text" aria-label="Find">
             <Search className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
-            className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg3 hover:text-text"
+            className="w-[30px] h-[30px] rounded-full inline-flex items-center justify-center hover:bg-bg2 hover:text-text"
             onClick={(e) => { e.stopPropagation(); onClear(); }}
             aria-label="Clear"
           >

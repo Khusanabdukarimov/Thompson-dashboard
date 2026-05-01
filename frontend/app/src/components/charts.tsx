@@ -96,25 +96,31 @@ export function MultiLine({
   );
 }
 
-/** Funnel-like bars (decreasing horizontal bars). */
+/** Funnel-like bars (decreasing horizontal bars). Value sits to the right of the bar. */
 export function FunnelBars({ steps }: { steps: { label: string; value: number; color: string }[] }) {
   const max = Math.max(1, ...steps.map(s => s.value));
   return (
-    <div className="flex flex-col gap-2 px-1">
-      {steps.map((s, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <span className="text-[12px] text-text2 w-32 shrink-0">{s.label}</span>
-          <div className="flex-1 h-7 rounded overflow-hidden bg-bg3 relative">
-            <div className="h-full rounded transition-all flex items-center justify-end pr-2"
-              style={{ width: `${(s.value / max) * 100}%`, background: s.color }}>
-              <span className="mono text-[11px] font-semibold text-white">{s.value.toLocaleString('ru-RU')}</span>
+    <div className="flex flex-col gap-2.5 px-1">
+      {steps.map((s, i) => {
+        const pct = (s.value / max) * 100;
+        return (
+          <div key={i} className="flex items-center gap-3">
+            <span className="text-[12.5px] text-text2 w-32 shrink-0">{s.label}</span>
+            <div className="flex-1 h-7 rounded overflow-hidden bg-bg3">
+              <div
+                className="h-full rounded transition-all"
+                style={{ width: `${pct}%`, background: s.color }}
+              />
             </div>
+            <span className="mono text-[13px] font-semibold text-text w-24 text-right tabular-nums">
+              {s.value.toLocaleString('ru-RU')}
+            </span>
+            <span className="mono text-[11px] text-text3 w-10 text-right">
+              {pct.toFixed(0)}%
+            </span>
           </div>
-          <span className="mono text-[11px] text-text3 w-12 text-right">
-            {((s.value / max) * 100).toFixed(0)}%
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

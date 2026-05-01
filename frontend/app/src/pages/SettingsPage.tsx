@@ -48,14 +48,6 @@ export default function SettingsPage() {
           )}
         </Section>
 
-        {/* ── Foydali eslatmalar ──────────────────────────────── */}
-        <Section title="Hujjatlar va foydali havolalar">
-          <ul className="text-[12.5px] space-y-1.5">
-            <li>📘 <a href="https://github.com/JaysonKhan/mountain" target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">GitHub repo</a></li>
-            <li>📗 <a href={`${cfgQ.data?.bitrix_portal ?? ''}/crm/`} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">Bitrix24 CRM</a></li>
-            <li>📙 <a href="/api/docs" target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">API Swagger UI (FastAPI)</a></li>
-          </ul>
-        </Section>
       </div>
     </>
   );

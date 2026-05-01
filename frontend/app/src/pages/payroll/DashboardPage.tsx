@@ -125,11 +125,11 @@ export default function DashboardPage() {
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {dealsQ.isLoading && !dealsQ.data ? <MetricRowSkeleton count={4} /> : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
-            <MetricCard label="Oylik maqsad" value={fmtMoney(target)} tone="blue" hint={target ? '' : 'belgilanmagan'} />
-            <MetricCard label="Hozirgi savdo" value={fmtMoney(wonRev)} tone="green" hint={target ? `${fmtPct(progress, 1)} bajarildi` : '—'} />
-            <MetricCard label="Qolgan" value={fmtMoney(remaining)} tone={progress >= 100 ? 'green' : 'amber'} />
-            <MetricCard label="Xodimlar" value={fmtNum(empQ.data?.count ?? 0)} hint="aktiv + ta'tilda" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <MetricCard size="lg" label="Oylik maqsad" value={fmtMoney(target)} tone="blue" hint={target ? '' : 'belgilanmagan'} />
+            <MetricCard size="lg" label="Hozirgi savdo" value={fmtMoney(wonRev)} tone="green" hint={target ? `${fmtPct(progress, 1)} bajarildi` : '—'} />
+            <MetricCard size="lg" label="Qolgan" value={fmtMoney(remaining)} tone={progress >= 100 ? 'green' : 'amber'} />
+            <MetricCard size="lg" label="Xodimlar" value={fmtNum(empQ.data?.count ?? 0)} hint="aktiv + ta'tilda" />
           </div>
         )}
 

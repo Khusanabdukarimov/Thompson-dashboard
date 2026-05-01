@@ -106,10 +106,10 @@
 
   body {
     margin: 0;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Manrope', 'Inter', system-ui, sans-serif;
     background: var(--bg);
     color: var(--text);
-    font-size: 13px;
+    font-size: 13.5px;
     line-height: 1.5;
     letter-spacing: -0.005em;
     -webkit-font-smoothing: antialiased;
@@ -117,6 +117,10 @@
   .mono, .tabular {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-feature-settings: "tnum";
+  }
+  .display {
+    font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 
   /* Shimmer animation for skeleton loaders */

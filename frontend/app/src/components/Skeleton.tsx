@@ -7,8 +7,8 @@ export function Skeleton({ className, style }: { className?: string; style?: Rea
 export function MetricCardSkeleton() {
   return (
     <div className="bg-bg2 border border-border rounded-lg px-4 py-3.5 shadow">
-      <Skeleton className="h-2.5 w-20 mb-2.5" />
-      <Skeleton className="h-6 w-24 mb-1.5" />
+      <Skeleton className="h-2.5 w-20 mb-3" />
+      <Skeleton className="h-7 w-32 mb-2" />
       <Skeleton className="h-2.5 w-16" />
     </div>
   );
