@@ -555,11 +555,16 @@ def api_meta_insights(
 import calendar as _calendar
 from datetime import datetime as _dt
 
-# UTM_SOURCE → bucket. Add aliases here if Bitrix data uses other tags.
+# UTM_SOURCE (lower) or SOURCE_ID (upper) → bucket.
+# Add aliases here if Bitrix data uses other tags.
 _UTM_TO_SOURCE = {
     "instagram": "instagram", "ig": "instagram", "instagram_ads": "instagram", "ig_ads": "instagram",
     "facebook": "target", "fb": "target", "meta": "target",
     "facebook_ads": "target", "fb_ads": "target", "target": "target", "target_ads": "target",
+}
+_SOURCE_ID_TO_BUCKET = {
+    "INSTAGRAM": "instagram", "IG": "instagram",
+    "FACEBOOK": "target", "FB": "target", "META": "target", "TARGET": "target",
 }
 
 # Lead statuses considered "qualified" — mirrors JARAYON_STATUSES in /api/stats/leads.
@@ -568,8 +573,11 @@ _QUALIFIED_LEAD_STATUSES = {
 }
 
 
-def _classify_source(utm_source):
-    return _UTM_TO_SOURCE.get((utm_source or "").strip().lower())
+def _classify_source(utm_source, source_id=None):
+    bucket = _UTM_TO_SOURCE.get((utm_source or "").strip().lower())
+    if bucket:
+        return bucket
+    return _SOURCE_ID_TO_BUCKET.get((source_id or "").strip().upper())
 
 
 def _stage_is_won(stage_id):
@@ -613,10 +621,10 @@ def api_marketing_bitrix_daily(month: str, year: int):
 
     deals_closed = bitrix.list_deals(
         filter_dict={">=CLOSEDATE": since, "<=CLOSEDATE": until},
-        select=["ID", "OPPORTUNITY", "CLOSEDATE", "STAGE_ID", "UTM_SOURCE"],
+        select=["ID", "OPPORTUNITY", "CLOSEDATE", "STAGE_ID", "UTM_SOURCE", "SOURCE_ID"],
     )
     for d in deals_closed:
-        src = _classify_source(d.get("UTM_SOURCE"))
+        src = _classify_source(d.get("UTM_SOURCE"), d.get("SOURCE_ID"))
         if src is None or not _stage_is_won(d.get("STAGE_ID")):
             continue
         day = _parse_bitrix_day(d.get("CLOSEDATE"), year, month_num)
@@ -631,10 +639,10 @@ def api_marketing_bitrix_daily(month: str, year: int):
 
     deals_created = bitrix.list_deals(
         filter_dict={">=DATE_CREATE": since, "<=DATE_CREATE": until},
-        select=["ID", "DATE_CREATE", "UTM_SOURCE"],
+        select=["ID", "DATE_CREATE", "UTM_SOURCE", "SOURCE_ID"],
     )
     for d in deals_created:
-        src = _classify_source(d.get("UTM_SOURCE"))
+        src = _classify_source(d.get("UTM_SOURCE"), d.get("SOURCE_ID"))
         if src is None:
             continue
         day = _parse_bitrix_day(d.get("DATE_CREATE"), year, month_num)
@@ -644,10 +652,10 @@ def api_marketing_bitrix_daily(month: str, year: int):
 
     leads = bitrix.list_leads(
         filter_dict={">=DATE_CREATE": since, "<=DATE_CREATE": until},
-        select=["ID", "DATE_CREATE", "STATUS_ID", "UTM_SOURCE"],
+        select=["ID", "DATE_CREATE", "STATUS_ID", "UTM_SOURCE", "SOURCE_ID"],
     )
     for l in leads:
-        src = _classify_source(l.get("UTM_SOURCE"))
+        src = _classify_source(l.get("UTM_SOURCE"), l.get("SOURCE_ID"))
         if src is None or l.get("STATUS_ID") not in _QUALIFIED_LEAD_STATUSES:
             continue
         day = _parse_bitrix_day(l.get("DATE_CREATE"), year, month_num)
