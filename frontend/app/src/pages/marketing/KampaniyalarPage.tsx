@@ -6,10 +6,19 @@ import { MetricCard } from '@/components/MetricCard';
 import { Button } from '@/components/Button';
 import { CardChart, MultiLine, StackedBar } from '@/components/charts';
 import { DataTable } from '@/components/DataTable';
+import { FilterBar } from '@/components/FilterBar';
+import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { MetricRowSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
 import { getMetaInsights, getMetaCampaigns, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey, CampaignAdRow } from '@/lib/api/meta';
 import { fmtNum, fmtMoney } from '@/lib/utils';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+
+const PLATFORM_PRESETS: FilterPreset[] = [
+  { id: 'all',       label: 'Hammasi',   pinned: true },
+  { id: 'facebook',  label: 'Facebook',  pinned: true },
+  { id: 'instagram', label: 'Instagram', pinned: true },
+];
 
 type DayRow = {
   day: number;
@@ -39,7 +48,9 @@ export default function KampaniyalarPage() {
     queryFn: () => getMetaCampaigns(month, year),
   });
 
-  const [platformFilter, setPlatformFilter] = useState<'all' | 'facebook' | 'instagram'>('all');
+  const [activePreset, setActivePreset] = useLocalStorage<string | null>('kampaniyalar.preset', 'all');
+  const [search, setSearch] = useState('');
+  const [values, setValues] = useLocalStorage<FilterValues>('kampaniyalar.filter', {});
 
   const rows = useMemo<DayRow[]>(() => {
     const m = q.data?.data;
@@ -81,11 +92,38 @@ export default function KampaniyalarPage() {
   const trendData = rows.map(r => ({ name: String(r.day), 'FB sarf': Math.round(r.fb_budget * 100) / 100, 'IG sarf': Math.round(r.ig_budget * 100) / 100, 'FB lid': r.fb_leads, 'IG lid': r.ig_leads }));
   const stackedData = rows.map(r => ({ name: String(r.day), 'Facebook': Math.round(r.fb_budget * 100) / 100, 'Instagram': Math.round(r.ig_budget * 100) / 100 }));
 
+  // Build objective options from data so the popover stays in sync.
+  const objectiveOptions = useMemo(() => {
+    const set = new Set<string>();
+    (qCamp.data?.rows ?? []).forEach(r => { if (r.objective) set.add(r.objective); });
+    return [...set].sort();
+  }, [qCamp.data]);
+
+  const filterFields: FilterField[] = useMemo(() => [
+    { key: 'objective',  label: 'Maqsad',          type: 'select', options: objectiveOptions.map(v => ({ value: v, label: v })) },
+    { key: 'min_spend',  label: 'Min sarf ($)',    type: 'amount' },
+    { key: 'min_leads',  label: 'Min lid',         type: 'amount' },
+  ], [objectiveOptions]);
+
   const campaignRows = useMemo<CampaignAdRow[]>(() => {
     const all = qCamp.data?.rows ?? [];
-    if (platformFilter === 'all') return all;
-    return all.filter(r => r.platform === platformFilter);
-  }, [qCamp.data, platformFilter]);
+    const platform = activePreset && activePreset !== 'all' ? activePreset : null;
+    const q = search.trim().toLowerCase();
+    const minSpend = values.min_spend ? Number(values.min_spend) : 0;
+    const minLeads = values.min_leads ? Number(values.min_leads) : 0;
+    const objective = values.objective || '';
+    return all.filter(r => {
+      if (platform && r.platform !== platform) return false;
+      if (objective && r.objective !== objective) return false;
+      if (minSpend && r.spend < minSpend) return false;
+      if (minLeads && r.leads < minLeads) return false;
+      if (q) {
+        const hay = `${r.campaign_name} ${r.adset_name} ${r.ad_name}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [qCamp.data, activePreset, search, values]);
 
   const PlatformBadge = ({ p }: { p: 'facebook' | 'instagram' }) => (
     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${p === 'instagram' ? 'bg-purple/15 text-purple' : 'bg-blue/15 text-blue'}`}>
@@ -194,22 +232,27 @@ export default function KampaniyalarPage() {
           )}
         </div>
 
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[12.5px] font-semibold">Kampaniyalar bo'yicha (Meta Ads)</span>
-            <span className="text-[11px] text-text3">· {campaignRows.length} ta qator</span>
-          </div>
-          <div className="inline-flex items-center gap-1 rounded-md border border-border2 bg-bg2 p-0.5">
-            {(['all','facebook','instagram'] as const).map(p => (
-              <button
-                key={p}
-                onClick={() => setPlatformFilter(p)}
-                className={`px-2.5 py-1 text-[11.5px] rounded-[5px] transition-colors ${platformFilter === p ? 'bg-bg3 text-text font-medium' : 'text-text2 hover:text-text'}`}
-              >
-                {p === 'all' ? 'Hammasi' : p === 'facebook' ? 'Facebook' : 'Instagram'}
-              </button>
-            ))}
-          </div>
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-[12.5px] font-semibold">Kampaniyalar bo'yicha (Meta Ads)</span>
+          <span className="text-[11px] text-text3">· {campaignRows.length} / {qCamp.data?.rows.length ?? 0} ta qator</span>
+        </div>
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-3 flex items-center gap-3">
+          <FilterBar
+            presets={PLATFORM_PRESETS}
+            activePreset={activePreset}
+            onPresetChange={setActivePreset}
+            searchValue={search}
+            onSearchChange={setSearch}
+            fields={filterFields}
+            values={values}
+            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+            onClear={() => { setSearch(''); setValues({}); setActivePreset('all'); }}
+            onApply={() => { /* filtering is purely client-side; no refetch needed */ }}
+            activeChipLabel={activePreset && activePreset !== 'all' ? PLATFORM_PRESETS.find(p => p.id === activePreset)?.label : undefined}
+            onActiveChipClear={() => setActivePreset('all')}
+            storageKey="marketing.kampaniyalar"
+            onApplySavedFilter={(v) => setValues(v as typeof values)}
+          />
         </div>
         <DataTable<CampaignAdRow>
           columns={campaignColumns}
