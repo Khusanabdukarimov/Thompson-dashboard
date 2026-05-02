@@ -52,45 +52,8 @@ export default function KampaniyalarPage() {
   const [search, setSearch] = useState('');
   const [values, setValues] = useLocalStorage<FilterValues>('kampaniyalar.filter', {});
 
-  const rows = useMemo<DayRow[]>(() => {
-    const m = q.data?.data;
-    if (!m) return [];
-    const t = m.target;
-    const i = m.instagram;
-    const days = Math.max(t.budget.length, i.budget.length);
-    return Array.from({ length: days }, (_, idx) => {
-      const fb_budget = t.budget[idx] ?? 0;
-      const ig_budget = i.budget[idx] ?? 0;
-      const fb_leads = t.leads[idx] ?? 0;
-      const ig_leads = i.leads[idx] ?? 0;
-      return {
-        day: idx + 1,
-        fb_budget, ig_budget,
-        fb_leads, ig_leads,
-        fb_clicks: t.clicks[idx] ?? 0, ig_clicks: i.clicks[idx] ?? 0,
-        fb_impr:   t.impressions[idx] ?? 0, ig_impr:   i.impressions[idx] ?? 0,
-        total_budget: fb_budget + ig_budget,
-        total_leads:  fb_leads + ig_leads,
-      };
-    });
-  }, [q.data]);
-
-  const totals = useMemo(() => rows.reduce((acc, r) => ({
-    fb_budget: acc.fb_budget + r.fb_budget,
-    ig_budget: acc.ig_budget + r.ig_budget,
-    fb_leads:  acc.fb_leads  + r.fb_leads,
-    ig_leads:  acc.ig_leads  + r.ig_leads,
-    clicks:    acc.clicks    + r.fb_clicks + r.ig_clicks,
-    impr:      acc.impr      + r.fb_impr + r.ig_impr,
-  }), { fb_budget: 0, ig_budget: 0, fb_leads: 0, ig_leads: 0, clicks: 0, impr: 0 }), [rows]);
-
-  const totalSpend = totals.fb_budget + totals.ig_budget;
-  const totalLeads = totals.fb_leads + totals.ig_leads;
-  const cpl = totalLeads ? totalSpend / totalLeads : 0;
-  const ctr = totals.impr ? (totals.clicks / totals.impr) * 100 : 0;
-
-  const trendData = rows.map(r => ({ name: String(r.day), 'FB sarf': Math.round(r.fb_budget * 100) / 100, 'IG sarf': Math.round(r.ig_budget * 100) / 100, 'FB lid': r.fb_leads, 'IG lid': r.ig_leads }));
-  const stackedData = rows.map(r => ({ name: String(r.day), 'Facebook': Math.round(r.fb_budget * 100) / 100, 'Instagram': Math.round(r.ig_budget * 100) / 100 }));
+  const platform: 'facebook' | 'instagram' | null =
+    activePreset === 'facebook' || activePreset === 'instagram' ? activePreset : null;
 
   // Build objective options from data so the popover stays in sync.
   const objectiveOptions = useMemo(() => {
@@ -107,7 +70,6 @@ export default function KampaniyalarPage() {
 
   const campaignRows = useMemo<CampaignAdRow[]>(() => {
     const all = qCamp.data?.rows ?? [];
-    const platform = activePreset && activePreset !== 'all' ? activePreset : null;
     const q = search.trim().toLowerCase();
     const minSpend = values.min_spend ? Number(values.min_spend) : 0;
     const minLeads = values.min_leads ? Number(values.min_leads) : 0;
@@ -123,7 +85,49 @@ export default function KampaniyalarPage() {
       }
       return true;
     });
-  }, [qCamp.data, activePreset, search, values]);
+  }, [qCamp.data, platform, search, values]);
+
+  // Daily series — apply platform filter only (daily data has no campaign attribution).
+  const rows = useMemo<DayRow[]>(() => {
+    const m = q.data?.data;
+    if (!m) return [];
+    const t = m.target;
+    const i = m.instagram;
+    const days = Math.max(t.budget.length, i.budget.length);
+    return Array.from({ length: days }, (_, idx) => {
+      const fb_budget = platform === 'instagram' ? 0 : (t.budget[idx] ?? 0);
+      const ig_budget = platform === 'facebook'  ? 0 : (i.budget[idx] ?? 0);
+      const fb_leads  = platform === 'instagram' ? 0 : (t.leads[idx]  ?? 0);
+      const ig_leads  = platform === 'facebook'  ? 0 : (i.leads[idx]  ?? 0);
+      const fb_clicks = platform === 'instagram' ? 0 : (t.clicks[idx] ?? 0);
+      const ig_clicks = platform === 'facebook'  ? 0 : (i.clicks[idx] ?? 0);
+      const fb_impr   = platform === 'instagram' ? 0 : (t.impressions[idx] ?? 0);
+      const ig_impr   = platform === 'facebook'  ? 0 : (i.impressions[idx] ?? 0);
+      return {
+        day: idx + 1,
+        fb_budget, ig_budget,
+        fb_leads, ig_leads,
+        fb_clicks, ig_clicks,
+        fb_impr, ig_impr,
+        total_budget: fb_budget + ig_budget,
+        total_leads:  fb_leads + ig_leads,
+      };
+    });
+  }, [q.data, platform]);
+
+  // Metric cards — derive from filtered campaign rows so they match the table.
+  const totals = useMemo(() => campaignRows.reduce((acc, r) => ({
+    spend:  acc.spend  + r.spend,
+    leads:  acc.leads  + r.leads,
+    clicks: acc.clicks + r.clicks,
+    impr:   acc.impr   + r.impressions,
+  }), { spend: 0, leads: 0, clicks: 0, impr: 0 }), [campaignRows]);
+
+  const cpl = totals.leads ? totals.spend / totals.leads : 0;
+  const ctr = totals.impr  ? (totals.clicks / totals.impr) * 100 : 0;
+
+  const trendData = rows.map(r => ({ name: String(r.day), 'FB sarf': Math.round(r.fb_budget * 100) / 100, 'IG sarf': Math.round(r.ig_budget * 100) / 100, 'FB lid': r.fb_leads, 'IG lid': r.ig_leads }));
+  const stackedData = rows.map(r => ({ name: String(r.day), 'Facebook': Math.round(r.fb_budget * 100) / 100, 'Instagram': Math.round(r.ig_budget * 100) / 100 }));
 
   const PlatformBadge = ({ p }: { p: 'facebook' | 'instagram' }) => (
     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${p === 'instagram' ? 'bg-purple/15 text-purple' : 'bg-blue/15 text-blue'}`}>
@@ -174,8 +178,27 @@ export default function KampaniyalarPage() {
       <Topbar
         title="Kampaniyalar"
         sub={`Meta Ads (FB + Instagram) — ${MONTH_LABELS[month]} ${year}`}
-        actions={
-          <>
+      />
+      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+        {/* Unified filter row — search/preset/popover + period selectors */}
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <FilterBar
+            presets={PLATFORM_PRESETS}
+            activePreset={activePreset}
+            onPresetChange={setActivePreset}
+            searchValue={search}
+            onSearchChange={setSearch}
+            fields={filterFields}
+            values={values}
+            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+            onClear={() => { setSearch(''); setValues({}); setActivePreset('all'); }}
+            onApply={() => { /* client-side filtering */ }}
+            activeChipLabel={activePreset && activePreset !== 'all' ? PLATFORM_PRESETS.find(p => p.id === activePreset)?.label : undefined}
+            onActiveChipClear={() => setActivePreset('all')}
+            storageKey="marketing.kampaniyalar"
+            onApplySavedFilter={(v) => setValues(v as typeof values)}
+          />
+          <div className="flex items-center gap-2 ml-auto">
             <select
               className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
               value={month}
@@ -191,15 +214,14 @@ export default function KampaniyalarPage() {
               {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <Button onClick={() => { q.refetch(); qCamp.refetch(); }}>Yangilash</Button>
-          </>
-        }
-      />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        {q.isLoading && !q.data ? <MetricRowSkeleton count={6} /> : (
+          </div>
+        </div>
+
+        {qCamp.isLoading && !qCamp.data ? <MetricRowSkeleton count={6} /> : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-4">
-            <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" />
-            <MetricCard label="Jami lidlar" value={fmtNum(totalLeads)} tone="green" />
-            <MetricCard label="CPL" value={totalLeads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / 1 lid" />
+            <MetricCard label="Jami sarf" value={fmtMoney(totals.spend)} tone="orange" />
+            <MetricCard label="Jami lidlar" value={fmtNum(totals.leads)} tone="green" />
+            <MetricCard label="CPL" value={totals.leads ? fmtMoney(cpl) : '—'} tone="amber" hint="sarf / 1 lid" />
             <MetricCard label="CTR" value={totals.impr ? `${ctr.toFixed(2)}%` : '—'} tone="blue" hint="klik/impr" />
             <MetricCard label="Klikllar" value={fmtNum(totals.clicks)} hint="jami klik" />
             <MetricCard label="Impressiyalar" value={fmtNum(totals.impr)} hint="ko'rishlar" />
@@ -235,24 +257,6 @@ export default function KampaniyalarPage() {
         <div className="mb-2 flex items-center gap-2">
           <span className="text-[12.5px] font-semibold">Kampaniyalar bo'yicha (Meta Ads)</span>
           <span className="text-[11px] text-text3">· {campaignRows.length} / {qCamp.data?.rows.length ?? 0} ta qator</span>
-        </div>
-        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-3 flex items-center gap-3">
-          <FilterBar
-            presets={PLATFORM_PRESETS}
-            activePreset={activePreset}
-            onPresetChange={setActivePreset}
-            searchValue={search}
-            onSearchChange={setSearch}
-            fields={filterFields}
-            values={values}
-            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
-            onClear={() => { setSearch(''); setValues({}); setActivePreset('all'); }}
-            onApply={() => { /* filtering is purely client-side; no refetch needed */ }}
-            activeChipLabel={activePreset && activePreset !== 'all' ? PLATFORM_PRESETS.find(p => p.id === activePreset)?.label : undefined}
-            onActiveChipClear={() => setActivePreset('all')}
-            storageKey="marketing.kampaniyalar"
-            onApplySavedFilter={(v) => setValues(v as typeof values)}
-          />
         </div>
         <DataTable<CampaignAdRow>
           columns={campaignColumns}
