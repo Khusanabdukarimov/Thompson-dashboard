@@ -208,6 +208,140 @@ def get_campaign_insights(ad_account_id: str, since: str, until: str):
     return rows
 
 
+def get_ad_breakdown(ad_account_id: str, since: str, until: str):
+    """Per-ad × platform breakdown for the date range, aggregated.
+
+    Returns one row per (ad, platform). Used by the Kampaniyalar page table.
+    """
+    url = f"{GRAPH}/{ad_account_id}/insights"
+    fields = ",".join([
+        "campaign_id", "campaign_name", "adset_id", "adset_name", "ad_id", "ad_name",
+        "objective", "spend", "impressions", "reach", "frequency",
+        "clicks", "unique_clicks", "inline_link_clicks",
+        "cpm", "cpc", "ctr", "actions", "video_play_actions",
+    ])
+    params = {
+        "access_token": _token(),
+        "fields": fields,
+        "level": "ad",
+        "breakdowns": "publisher_platform",
+        "time_range": f'{{"since":"{since}","until":"{until}"}}',
+        "limit": 500,
+    }
+    rows = []
+    while url:
+        res = requests.get(url, params=params)
+        data = res.json()
+        if "error" in data:
+            return {"error": data["error"]}
+        rows.extend(data.get("data", []))
+        url = data.get("paging", {}).get("next")
+        params = {}
+    return rows
+
+
+def _action_value(actions, types):
+    if not actions:
+        return 0
+    s = 0
+    for a in actions:
+        if a.get("action_type") in types:
+            try:
+                s += int(float(a.get("value") or 0))
+            except Exception:
+                pass
+    return s
+
+
+def ads_to_table(rows):
+    """Aggregate ad rows into per-(ad × platform) table rows for the frontend.
+
+    Computed fields:
+      hook_rate = 3s video views / impressions (videolar uchun)
+      visit_rate = landing_page_views / link_clicks
+      lid_rate = leads / link_clicks
+    """
+    from collections import defaultdict
+    LEAD_TYPES = {"lead", "offsite_conversion.fb_pixel_lead",
+                  "onsite_conversion.lead_grouped",
+                  "onsite_conversion.messaging_conversation_started_7d"}
+    LPV_TYPES = {"landing_page_view"}
+    V3_TYPES = {"video_view", "video_3sec_watched_actions"}
+
+    bucket = defaultdict(lambda: {
+        "campaign_name": "", "adset_name": "", "ad_name": "",
+        "objective": "", "platform": "",
+        "spend": 0.0, "impressions": 0, "reach": 0, "frequency_w": 0.0,
+        "clicks": 0, "unique_clicks": 0, "link_clicks": 0,
+        "leads": 0, "lpv": 0, "v3": 0,
+    })
+
+    for r in rows:
+        if not isinstance(r, dict) or "error" in r:
+            continue
+        ad_id = r.get("ad_id") or r.get("ad_name") or ""
+        platform = (r.get("publisher_platform") or "").lower()
+        # Bucket all Facebook surfaces (facebook, audience_network, messenger) under "facebook".
+        if platform == "instagram":
+            plat = "instagram"
+        else:
+            plat = "facebook"
+        key = (ad_id, plat)
+        b = bucket[key]
+        b["campaign_name"] = r.get("campaign_name") or b["campaign_name"]
+        b["adset_name"]    = r.get("adset_name") or b["adset_name"]
+        b["ad_name"]       = r.get("ad_name") or b["ad_name"]
+        b["objective"]     = r.get("objective") or b["objective"]
+        b["platform"]      = plat
+        try:
+            b["spend"] += float(r.get("spend") or 0)
+        except Exception:
+            pass
+        impr = int(r.get("impressions") or 0)
+        b["impressions"] += impr
+        b["reach"] += int(r.get("reach") or 0)
+        try:
+            b["frequency_w"] += float(r.get("frequency") or 0) * impr
+        except Exception:
+            pass
+        b["clicks"]        += int(r.get("clicks") or 0)
+        b["unique_clicks"] += int(r.get("unique_clicks") or 0)
+        b["link_clicks"]   += int(r.get("inline_link_clicks") or 0)
+        b["leads"] += _action_value(r.get("actions"), LEAD_TYPES)
+        b["lpv"]   += _action_value(r.get("actions"), LPV_TYPES)
+        b["v3"]    += _action_value(r.get("video_play_actions"), V3_TYPES)
+
+    out = []
+    for b in bucket.values():
+        impr = b["impressions"]
+        clicks = b["clicks"]
+        link = b["link_clicks"]
+        out.append({
+            "campaign_name": b["campaign_name"],
+            "adset_name":    b["adset_name"],
+            "ad_name":       b["ad_name"],
+            "objective":     b["objective"],
+            "platform":      b["platform"],
+            "spend":         round(b["spend"], 2),
+            "impressions":   impr,
+            "reach":         b["reach"],
+            "frequency":     round(b["frequency_w"] / impr, 2) if impr else 0.0,
+            "clicks":        clicks,
+            "unique_clicks": b["unique_clicks"],
+            "link_clicks":   link,
+            "leads":         b["leads"],
+            "landing_page_views": b["lpv"],
+            "cpm":           round(b["spend"] / impr * 1000, 2) if impr else 0.0,
+            "cpc":           round(b["spend"] / clicks, 2) if clicks else 0.0,
+            "ctr":           round(clicks / impr * 100, 2) if impr else 0.0,
+            "hook_rate":     round(b["v3"] / impr * 100, 2) if impr else 0.0,
+            "visit_rate":    round(b["lpv"] / link * 100, 2) if link else 0.0,
+            "lid_rate":      round(b["leads"] / link * 100, 2) if link else 0.0,
+        })
+    out.sort(key=lambda r: r["spend"], reverse=True)
+    return out
+
+
 def insights_to_monthly(rows, month_key: str, year: int):
     """
     Convert raw insight rows into the monthData format the frontend expects.

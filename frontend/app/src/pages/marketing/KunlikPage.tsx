@@ -116,13 +116,11 @@ export default function KunlikPage() {
   const q = useQuery({
     queryKey: ['meta/insights', month, year],
     queryFn: () => getMetaInsights(month, year),
-    staleTime: 5 * 60_000,
   });
 
   const qBitrix = useQuery({
     queryKey: ['marketing/bitrix-daily', month, year],
     queryFn: () => getBitrixDaily(month, year),
-    staleTime: 5 * 60_000,
   });
 
   const days = daysInMonth(month, year);

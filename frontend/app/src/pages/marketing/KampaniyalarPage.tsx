@@ -7,8 +7,8 @@ import { Button } from '@/components/Button';
 import { CardChart, MultiLine, StackedBar } from '@/components/charts';
 import { DataTable } from '@/components/DataTable';
 import { MetricRowSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
-import { getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
-import type { MonthKey } from '@/lib/api/meta';
+import { getMetaInsights, getMetaCampaigns, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
+import type { MonthKey, CampaignAdRow } from '@/lib/api/meta';
 import { fmtNum, fmtMoney } from '@/lib/utils';
 
 type DayRow = {
@@ -33,6 +33,13 @@ export default function KampaniyalarPage() {
     queryKey: ['meta/insights', month, year],
     queryFn: () => getMetaInsights(month, year),
   });
+
+  const qCamp = useQuery({
+    queryKey: ['meta/campaigns', month, year],
+    queryFn: () => getMetaCampaigns(month, year),
+  });
+
+  const [platformFilter, setPlatformFilter] = useState<'all' | 'facebook' | 'instagram'>('all');
 
   const rows = useMemo<DayRow[]>(() => {
     const m = q.data?.data;
@@ -74,6 +81,40 @@ export default function KampaniyalarPage() {
   const trendData = rows.map(r => ({ name: String(r.day), 'FB sarf': Math.round(r.fb_budget * 100) / 100, 'IG sarf': Math.round(r.ig_budget * 100) / 100, 'FB lid': r.fb_leads, 'IG lid': r.ig_leads }));
   const stackedData = rows.map(r => ({ name: String(r.day), 'Facebook': Math.round(r.fb_budget * 100) / 100, 'Instagram': Math.round(r.ig_budget * 100) / 100 }));
 
+  const campaignRows = useMemo<CampaignAdRow[]>(() => {
+    const all = qCamp.data?.rows ?? [];
+    if (platformFilter === 'all') return all;
+    return all.filter(r => r.platform === platformFilter);
+  }, [qCamp.data, platformFilter]);
+
+  const PlatformBadge = ({ p }: { p: 'facebook' | 'instagram' }) => (
+    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${p === 'instagram' ? 'bg-purple/15 text-purple' : 'bg-blue/15 text-blue'}`}>
+      {p === 'instagram' ? 'IG' : 'FB'}
+    </span>
+  );
+
+  const campaignColumns = useMemo<ColumnDef<CampaignAdRow, unknown>[]>(() => [
+    { header: 'Platforma', accessorKey: 'platform', cell: (c) => <PlatformBadge p={c.getValue<'facebook' | 'instagram'>()} /> },
+    { header: 'Kampaniya', accessorKey: 'campaign_name', cell: (c) => <span className="text-[12px]">{c.getValue<string>() || '—'}</span> },
+    { header: 'Ad set',   accessorKey: 'adset_name',   cell: (c) => <span className="text-[12px] text-text2">{c.getValue<string>() || '—'}</span> },
+    { header: 'Reklama',  accessorKey: 'ad_name',      cell: (c) => <span className="text-[12px] text-text2">{c.getValue<string>() || '—'}</span> },
+    { header: 'Sarf',     accessorKey: 'spend',        cell: (c) => <span className="mono font-semibold">{fmtMoney(c.getValue<number>())}</span> },
+    { header: 'Impr.',    accessorKey: 'impressions',  cell: (c) => <span className="mono">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'Reach',    accessorKey: 'reach',        cell: (c) => <span className="mono">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'Freq.',    accessorKey: 'frequency',    cell: (c) => <span className="mono text-text2">{c.getValue<number>().toFixed(2)}</span> },
+    { header: 'Klik',     accessorKey: 'clicks',       cell: (c) => <span className="mono">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'Uniq.klik',accessorKey: 'unique_clicks',cell: (c) => <span className="mono text-text2">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'Havola',   accessorKey: 'link_clicks',  cell: (c) => <span className="mono">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'LPV',      accessorKey: 'landing_page_views', cell: (c) => <span className="mono">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'Lid',      accessorKey: 'leads',        cell: (c) => <span className="mono font-semibold text-green">{fmtNum(c.getValue<number>())}</span> },
+    { header: 'CPM',      accessorKey: 'cpm',          cell: (c) => <span className="mono text-text2">{fmtMoney(c.getValue<number>())}</span> },
+    { header: 'CPC',      accessorKey: 'cpc',          cell: (c) => <span className="mono">{fmtMoney(c.getValue<number>())}</span> },
+    { header: 'CTR %',    accessorKey: 'ctr',          cell: (c) => <span className="mono">{c.getValue<number>().toFixed(2)}</span> },
+    { header: 'Hook %',   accessorKey: 'hook_rate',    cell: (c) => <span className="mono text-text2">{c.getValue<number>().toFixed(2)}</span> },
+    { header: 'Visit %',  accessorKey: 'visit_rate',   cell: (c) => <span className="mono text-text2">{c.getValue<number>().toFixed(2)}</span> },
+    { header: 'Lid %',    accessorKey: 'lid_rate',     cell: (c) => <span className="mono">{c.getValue<number>().toFixed(2)}</span> },
+  ], []);
+
   const columns = useMemo<ColumnDef<DayRow, unknown>[]>(() => [
     { header: 'Kun', accessorKey: 'day', cell: (c) => <span className="mono">{c.getValue<number>()}</span> },
     { header: 'FB sarf', accessorKey: 'fb_budget', cell: (c) => <span className="mono">{fmtMoney(c.getValue<number>())}</span> },
@@ -111,7 +152,7 @@ export default function KampaniyalarPage() {
             >
               {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-            <Button onClick={() => q.refetch()}>Yangilash</Button>
+            <Button onClick={() => { q.refetch(); qCamp.refetch(); }}>Yangilash</Button>
           </>
         }
       />
@@ -153,7 +194,32 @@ export default function KampaniyalarPage() {
           )}
         </div>
 
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[12.5px] font-semibold">Kampaniyalar bo'yicha (Meta Ads)</span>
+            <span className="text-[11px] text-text3">· {campaignRows.length} ta qator</span>
+          </div>
+          <div className="inline-flex items-center gap-1 rounded-md border border-border2 bg-bg2 p-0.5">
+            {(['all','facebook','instagram'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setPlatformFilter(p)}
+                className={`px-2.5 py-1 text-[11.5px] rounded-[5px] transition-colors ${platformFilter === p ? 'bg-bg3 text-text font-medium' : 'text-text2 hover:text-text'}`}
+              >
+                {p === 'all' ? 'Hammasi' : p === 'facebook' ? 'Facebook' : 'Instagram'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <DataTable<CampaignAdRow>
+          columns={campaignColumns}
+          data={campaignRows}
+          pageSize={20}
+          maxBodyHeight={520}
+          loading={qCamp.isLoading}
+        />
+
+        <div className="mt-6 mb-2 flex items-center gap-2">
           <span className="text-[12.5px] font-semibold">Kunlik jadval</span>
           <span className="text-[11px] text-text3">· {rows.length} ta kun</span>
         </div>
@@ -165,9 +231,9 @@ export default function KampaniyalarPage() {
           loading={q.isLoading}
         />
 
-        {q.error && (
+        {(q.error || qCamp.error) && (
           <div className="mt-4 p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
-            Xatolik: {(q.error as Error).message}
+            Xatolik: {((q.error || qCamp.error) as Error).message}
           </div>
         )}
       </div>

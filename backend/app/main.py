@@ -549,6 +549,28 @@ def api_meta_insights(
     return {"month": month, "year": year, "data": data}
 
 
+@app.get("/api/meta/campaigns")
+def api_meta_campaigns(month: str, year: int, ad_account_id: Optional[str] = None):
+    """Per-ad × platform breakdown — feeds Kampaniyalar page table."""
+    import calendar as _cal
+    month_num = meta_svc.MONTH_NAMES.get(month.lower())
+    if not month_num:
+        raise HTTPException(status_code=400, detail=f"Unknown month: {month}")
+    days_in_month = _cal.monthrange(year, month_num)[1]
+    since = f"{year}-{month_num:02d}-01"
+    until = f"{year}-{month_num:02d}-{days_in_month:02d}"
+
+    account_id = ad_account_id or meta_svc.META_AD_ACCOUNT
+    if not account_id:
+        raise HTTPException(status_code=400, detail="ad_account_id is required")
+
+    rows = meta_svc.get_ad_breakdown(account_id, since, until)
+    if isinstance(rows, dict) and "error" in rows:
+        raise HTTPException(status_code=400, detail=rows["error"])
+
+    return {"month": month, "year": year, "rows": meta_svc.ads_to_table(rows)}
+
+
 # ────────────────────────────────────────────────────────────────────
 # Marketing daily breakdown (Bitrix-derived metrics for Kunlik hisobot)
 # ────────────────────────────────────────────────────────────────────

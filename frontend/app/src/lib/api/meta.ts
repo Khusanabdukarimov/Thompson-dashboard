@@ -62,6 +62,39 @@ export function getBitrixDaily(month: MonthKey, year: number) {
   return apiGet<BitrixDailyResponse>('/api/marketing/bitrix-daily', { month, year });
 }
 
+export type CampaignAdRow = {
+  campaign_name: string;
+  adset_name: string;
+  ad_name: string;
+  objective: string;
+  platform: 'facebook' | 'instagram';
+  spend: number;
+  impressions: number;
+  reach: number;
+  frequency: number;
+  clicks: number;
+  unique_clicks: number;
+  link_clicks: number;
+  leads: number;
+  landing_page_views: number;
+  cpm: number;
+  cpc: number;
+  ctr: number;
+  hook_rate: number;
+  visit_rate: number;
+  lid_rate: number;
+};
+
+export type CampaignsResponse = {
+  month: string;
+  year: number;
+  rows: CampaignAdRow[];
+};
+
+export function getMetaCampaigns(month: MonthKey, year: number) {
+  return apiGet<CampaignsResponse>('/api/meta/campaigns', { month, year });
+}
+
 export function getDashboardDaily(date: string) {
   return apiGet<DashboardDailyResponse>('/api/dashboard/daily', { date_str: date });
 }
