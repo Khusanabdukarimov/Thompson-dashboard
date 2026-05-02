@@ -2,9 +2,9 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel,
   flexRender,
 } from '@tanstack/react-table';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import { useState } from 'react';
-import { ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { ColumnDef, SortingState, VisibilityState, Table, Column } from '@tanstack/react-table';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, Columns3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DataTableSkeleton } from '@/components/Skeleton';
 
@@ -17,15 +17,39 @@ type Props<T> = {
   loading?: boolean;
   skeletonRows?: number;
   onRowClick?: (row: T) => void;
+  /** When set, shows a "Columns" toggle and persists user's choice in localStorage. */
+  storageKey?: string;
+  /** Column ids hidden by default (until user toggles them on). */
+  defaultHidden?: string[];
 };
 
-export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hech narsa topilmadi', maxBodyHeight = 480, loading = false, skeletonRows = 6, onRowClick }: Props<T>) {
+function loadVisibility(storageKey: string | undefined, defaultHidden: string[] | undefined): VisibilityState {
+  if (storageKey) {
+    try {
+      const raw = localStorage.getItem(`columns.${storageKey}`);
+      if (raw) return JSON.parse(raw) as VisibilityState;
+    } catch { /* ignore */ }
+  }
+  const init: VisibilityState = {};
+  defaultHidden?.forEach(id => { init[id] = false; });
+  return init;
+}
+
+export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hech narsa topilmadi', maxBodyHeight = 480, loading = false, skeletonRows = 6, onRowClick, storageKey, defaultHidden }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => loadVisibility(storageKey, defaultHidden));
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try { localStorage.setItem(`columns.${storageKey}`, JSON.stringify(columnVisibility)); } catch { /* ignore */ }
+  }, [columnVisibility, storageKey]);
+
   const table = useReactTable({
     data,
     columns,
-    state: { sorting },
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -44,6 +68,11 @@ export function DataTable<T>({ columns, data, pageSize = 10, emptyMessage = 'Hec
 
   return (
     <div className="bg-bg2 border border-border rounded-lg overflow-hidden shadow">
+      {storageKey && (
+        <div className="flex items-center justify-end px-3 py-2 border-b border-border bg-bg2">
+          <ColumnsToggle table={table} defaultHidden={defaultHidden ?? []} />
+        </div>
+      )}
       <div style={{ maxHeight: maxBodyHeight }} className="overflow-y-auto relative">
         <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead>
@@ -132,5 +161,83 @@ function PagerBtn({ onClick, disabled, ariaLabel, children }: { onClick: () => v
       aria-label={ariaLabel}
       className="w-7 h-7 rounded-md border border-border bg-bg2 text-text2 cursor-pointer inline-flex items-center justify-center text-[12px] font-medium hover:bg-bg3 hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
     >{children}</button>
+  );
+}
+
+function getHeaderLabel<T>(col: Column<T, unknown>): string {
+  const h = col.columnDef.header;
+  if (typeof h === 'string') return h;
+  return col.id;
+}
+
+function ColumnsToggle<T>({ table, defaultHidden }: { table: Table<T>; defaultHidden: string[] }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const allCols = table.getAllLeafColumns();
+  const visibleCount = allCols.filter(c => c.getIsVisible()).length;
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border2 bg-bg2 text-[12px] text-text2 hover:bg-bg3 hover:text-text"
+        aria-label="Kolonnalarni boshqarish"
+      >
+        <Columns3 className="w-3.5 h-3.5" />
+        <span>Kolonnalar <span className="text-text3">({visibleCount}/{allCols.length})</span></span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-64 bg-bg2 border border-border rounded-lg shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <span className="text-[12px] font-medium text-text">Ko'rsatish</span>
+            <div className="flex items-center gap-2 text-[11px]">
+              <button
+                type="button"
+                className="text-blue hover:underline"
+                onClick={() => allCols.forEach(c => c.toggleVisibility(true))}
+              >Hammasi</button>
+              <span className="text-text3">·</span>
+              <button
+                type="button"
+                className="text-text2 hover:text-text"
+                onClick={() => {
+                  // reset to defaults — apply defaultHidden, show others
+                  const next: VisibilityState = {};
+                  defaultHidden.forEach(id => { next[id] = false; });
+                  table.setColumnVisibility(next);
+                }}
+              >Standart</button>
+            </div>
+          </div>
+          <div className="max-h-[320px] overflow-y-auto p-1">
+            {allCols.map(col => (
+              <label
+                key={col.id}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-[6px] cursor-pointer hover:bg-bg3 text-[12.5px]"
+              >
+                <input
+                  type="checkbox"
+                  checked={col.getIsVisible()}
+                  onChange={col.getToggleVisibilityHandler()}
+                  className="w-3.5 h-3.5 cursor-pointer accent-blue"
+                />
+                <span className="text-text">{getHeaderLabel(col)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

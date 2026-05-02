@@ -264,6 +264,8 @@ export default function KampaniyalarPage() {
           pageSize={20}
           maxBodyHeight={520}
           loading={qCamp.isLoading}
+          storageKey="kampaniyalar.cols"
+          defaultHidden={['unique_clicks', 'reach', 'frequency', 'cpm', 'hook_rate', 'visit_rate']}
         />
 
         <div className="mt-6 mb-2 flex items-center gap-2">
