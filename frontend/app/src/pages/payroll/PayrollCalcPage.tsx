@@ -4,10 +4,13 @@ import { Topbar } from '@/components/Topbar';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { MetricCard } from '@/components/MetricCard';
+import { FilterBar } from '@/components/FilterBar';
+import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { MetricRowSkeleton, Skeleton } from '@/components/Skeleton';
 import { listEmployees, calculatePayroll, getMonthlyTarget } from '@/lib/api/payroll';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 const now = new Date();
 const DEFAULT_MONTH = now.getMonth() + 1;
@@ -16,7 +19,9 @@ const DEFAULT_YEAR = now.getFullYear();
 export default function PayrollCalcPage() {
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
   const [month, setMonth] = useState<number>(DEFAULT_MONTH);
-  const [empId, setEmpId] = useState<number | null>(null);
+  const [activePreset, setActivePreset] = useLocalStorage<string | null>('payroll-calc.preset', null);
+  const [search, setSearch] = useState('');
+  const [values, setValues] = useLocalStorage<FilterValues>('payroll-calc.filter', {});
 
   const empQ = useQuery({ queryKey: ['payroll/employees'], queryFn: listEmployees });
   const targetQ = useQuery({
@@ -24,10 +29,44 @@ export default function PayrollCalcPage() {
     queryFn: () => getMonthlyTarget(year, month),
   });
 
-  // Default employee selection
   const employees = empQ.data?.employees ?? [];
-  const activeEmpId = empId ?? employees[0]?.id ?? null;
+
+  // Employee presets — one per employee, plus search by name in popover.
+  const employeePresets: FilterPreset[] = useMemo(
+    () => employees.map(e => ({ id: String(e.id), label: e.name, pinned: true })),
+    [employees],
+  );
+
+  const roleOptions = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach(e => { if (e.role) set.add(e.role); });
+    return [...set].sort();
+  }, [employees]);
+
+  const filterFields: FilterField[] = useMemo(() => [
+    { key: 'role', label: 'Lavozim', type: 'select', options: roleOptions.map(v => ({ value: v, label: v })) },
+  ], [roleOptions]);
+
+  // Resolve active employee from preset (preset id is the employee id as string).
+  const activeEmpId = useMemo(() => {
+    const id = activePreset ? Number(activePreset) : null;
+    if (id && employees.some(e => e.id === id)) return id;
+    return employees[0]?.id ?? null;
+  }, [activePreset, employees]);
   const activeEmp = employees.find(e => e.id === activeEmpId) ?? null;
+
+  // Filtered presets shown in popover sidebar (search + role filter narrow the list).
+  const filteredPresets = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    const role = values.role || '';
+    return employeePresets.filter(p => {
+      const emp = employees.find(e => String(e.id) === p.id);
+      if (!emp) return false;
+      if (role && emp.role !== role) return false;
+      if (s && !emp.name.toLowerCase().includes(s)) return false;
+      return true;
+    });
+  }, [employeePresets, employees, search, values.role]);
 
   const calcQ = useQuery({
     queryKey: ['payroll/calculate', activeEmpId, year, month],
@@ -48,15 +87,26 @@ export default function PayrollCalcPage() {
       <Topbar
         title="Oylik hisob"
         sub={`Payroll breakdown — ${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year}`}
-        actions={
-          <>
-            <select
-              className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
-              value={activeEmpId ?? ''}
-              onChange={(e) => setEmpId(e.target.value ? Number(e.target.value) : null)}
-            >
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
+      />
+      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <FilterBar
+            presets={filteredPresets}
+            activePreset={activeEmpId ? String(activeEmpId) : null}
+            onPresetChange={setActivePreset}
+            searchValue={search}
+            onSearchChange={setSearch}
+            fields={filterFields}
+            values={values}
+            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+            onClear={() => { setSearch(''); setValues({}); setActivePreset(null); }}
+            onApply={() => { /* client-side */ }}
+            activeChipLabel={activeEmp?.name}
+            onActiveChipClear={() => setActivePreset(null)}
+            storageKey="payroll.calc"
+            onApplySavedFilter={(v) => setValues(v as typeof values)}
+          />
+          <div className="flex items-center gap-2 ml-auto">
             <select
               className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
               value={month}
@@ -72,10 +122,8 @@ export default function PayrollCalcPage() {
               {[DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <Button variant="primary" onClick={() => calcQ.refetch()}>{calcQ.isFetching ? '…' : 'Hisoblash'}</Button>
-          </>
-        }
-      />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+          </div>
+        </div>
         {empQ.isLoading && !empQ.data && (
           <>
             <MetricRowSkeleton count={4} />

@@ -4,10 +4,23 @@ import { Topbar } from '@/components/Topbar';
 import { MetricCard } from '@/components/MetricCard';
 import { Button } from '@/components/Button';
 import { CardChart, StackedBar, FunnelBars } from '@/components/charts';
+import { FilterBar } from '@/components/FilterBar';
+import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { MetricRowSkeleton, ChartCardSkeleton, FunnelSkeleton } from '@/components/Skeleton';
 import { getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
 import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+
+const PLATFORM_PRESETS: FilterPreset[] = [
+  { id: 'all',       label: 'Hammasi',   pinned: true },
+  { id: 'facebook',  label: 'Facebook',  pinned: true },
+  { id: 'instagram', label: 'Instagram', pinned: true },
+];
+
+const FILTER_FIELDS: FilterField[] = [
+  { key: 'target', label: 'Oylik maqsad ($)', type: 'amount' },
+];
 
 const now = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
@@ -17,7 +30,14 @@ const todayDay = now.getDate();
 export default function ByudjetPage() {
   const [month, setMonth] = useState<MonthKey>(DEFAULT_MONTH);
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
-  const [target, setTarget] = useState<string>(''); // optional monthly target $
+
+  const [activePreset, setActivePreset] = useLocalStorage<string | null>('byudjet.preset', 'all');
+  const [search, setSearch] = useState('');
+  const [values, setValues] = useLocalStorage<FilterValues>('byudjet.filter', {});
+  const target = values.target ?? '';
+
+  const platform: 'facebook' | 'instagram' | null =
+    activePreset === 'facebook' || activePreset === 'instagram' ? activePreset : null;
 
   const q = useQuery({
     queryKey: ['meta/insights', month, year],
@@ -30,16 +50,16 @@ export default function ByudjetPage() {
     if (!m) return { fbBudget: 0, igBudget: 0, fbLeads: 0, igLeads: 0, fbToday: 0, igToday: 0, days: 0 };
     const days = m.target.budget.length;
     const sum = (a: number[]) => a.reduce((s, v) => s + (v ?? 0), 0);
-    const fbBudget = sum(m.target.budget);
-    const igBudget = sum(m.instagram.budget);
-    const fbLeads = sum(m.target.leads);
-    const igLeads = sum(m.instagram.leads);
+    const fbBudget = platform === 'instagram' ? 0 : sum(m.target.budget);
+    const igBudget = platform === 'facebook'  ? 0 : sum(m.instagram.budget);
+    const fbLeads  = platform === 'instagram' ? 0 : sum(m.target.leads);
+    const igLeads  = platform === 'facebook'  ? 0 : sum(m.instagram.leads);
     const isCurrent = month === DEFAULT_MONTH && year === DEFAULT_YEAR;
     const td = isCurrent ? todayDay - 1 : days - 1;
-    const fbToday = m.target.budget[td] ?? 0;
-    const igToday = m.instagram.budget[td] ?? 0;
+    const fbToday = platform === 'instagram' ? 0 : (m.target.budget[td] ?? 0);
+    const igToday = platform === 'facebook'  ? 0 : (m.instagram.budget[td] ?? 0);
     return { fbBudget, igBudget, fbLeads, igLeads, fbToday, igToday, days };
-  }, [m, month, year]);
+  }, [m, month, year, platform]);
 
   const totalSpend = totals.fbBudget + totals.igBudget;
   const totalLeads = totals.fbLeads + totals.igLeads;
@@ -52,15 +72,15 @@ export default function ByudjetPage() {
     if (!m) return [];
     return m.target.budget.map((_, i) => ({
       name: String(i + 1),
-      'Facebook':  Math.round((m.target.budget[i] ?? 0) * 100) / 100,
-      'Instagram': Math.round((m.instagram.budget[i] ?? 0) * 100) / 100,
+      'Facebook':  platform === 'instagram' ? 0 : Math.round((m.target.budget[i] ?? 0) * 100) / 100,
+      'Instagram': platform === 'facebook'  ? 0 : Math.round((m.instagram.budget[i] ?? 0) * 100) / 100,
     }));
-  }, [m]);
+  }, [m, platform]);
 
   const platformBreakdown = [
     { label: 'Facebook',  value: Math.round(totals.fbBudget * 100) / 100, color: 'var(--blue)' },
     { label: 'Instagram', value: Math.round(totals.igBudget * 100) / 100, color: 'var(--purple)' },
-  ];
+  ].filter(p => p.value > 0 || !platform);
 
   const yearOptions = [DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2];
 
@@ -69,8 +89,26 @@ export default function ByudjetPage() {
       <Topbar
         title="Byudjet"
         sub={`Reklama byudjeti — ${MONTH_LABELS[month]} ${year}`}
-        actions={
-          <>
+      />
+      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <FilterBar
+            presets={PLATFORM_PRESETS}
+            activePreset={activePreset}
+            onPresetChange={setActivePreset}
+            searchValue={search}
+            onSearchChange={setSearch}
+            fields={FILTER_FIELDS}
+            values={values}
+            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+            onClear={() => { setSearch(''); setValues({}); setActivePreset('all'); }}
+            onApply={() => { /* client-side */ }}
+            activeChipLabel={activePreset && activePreset !== 'all' ? PLATFORM_PRESETS.find(p => p.id === activePreset)?.label : undefined}
+            onActiveChipClear={() => setActivePreset('all')}
+            storageKey="marketing.byudjet"
+            onApplySavedFilter={(v) => setValues(v as typeof values)}
+          />
+          <div className="flex items-center gap-2 ml-auto">
             <select
               className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
               value={month}
@@ -85,18 +123,10 @@ export default function ByudjetPage() {
             >
               {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-            <input
-              className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs w-32 placeholder:text-text3"
-              type="number"
-              placeholder="Oylik maqsad $"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-            />
             <Button onClick={() => q.refetch()}>Yangilash</Button>
-          </>
-        }
-      />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+          </div>
+        </div>
+
         {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami sarf" value={fmtMoney(totalSpend)} tone="orange" hint={`${totals.days} ta kun`} />

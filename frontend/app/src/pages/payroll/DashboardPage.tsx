@@ -6,12 +6,22 @@ import { Badge } from '@/components/Badge';
 import { Avatar } from '@/components/Avatar';
 import { MetricCard } from '@/components/MetricCard';
 import { CardChart, FunnelBars, SimpleBar } from '@/components/charts';
+import { FilterBar } from '@/components/FilterBar';
+import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
 import { MetricRowSkeleton, FunnelSkeleton, DataTableSkeleton, ChartCardSkeleton } from '@/components/Skeleton';
 import { listEmployees, getMonthlyTarget, listTimeman, getSalesTrend, listBonusAwards } from '@/lib/api/payroll';
 import type { TimemanUser } from '@/lib/api/payroll';
 import { getDealsStats } from '@/lib/api/deals';
 import { fmtMoney, fmtNum, fmtPct } from '@/lib/utils';
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+
+const SCOPE_PRESETS: FilterPreset[] = [
+  { id: 'all',     label: 'Hammasi',         pinned: true },
+  { id: 'working', label: 'Hozir ishda',     pinned: true },
+  { id: 'paused',  label: 'Pauzada' },
+  { id: 'closed',  label: 'Ish yakunlangan' },
+];
 
 const now = new Date();
 const DEFAULT_YEAR = now.getFullYear();
@@ -40,6 +50,10 @@ function isoLastOfMonth(year: number, month: number) {
 export default function DashboardPage() {
   const [year, setYear] = useState(DEFAULT_YEAR);
   const [month, setMonth] = useState(DEFAULT_MONTH);
+
+  const [activePreset, setActivePreset] = useLocalStorage<string | null>('dashboard.preset', 'all');
+  const [search, setSearch] = useState('');
+  const [values, setValues] = useLocalStorage<FilterValues>('dashboard.filter', {});
 
   const empQ = useQuery({ queryKey: ['payroll/employees'], queryFn: listEmployees });
   const targetQ = useQuery({
@@ -81,7 +95,41 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [dealsQ.data]);
 
-  const todayUsers = (tmQ.data?.users ?? []).slice(0, 6);
+  // Apply scope preset + search to today's user list (timeman bucket)
+  const filteredTimemanUsers = useMemo(() => {
+    const all = tmQ.data?.users ?? [];
+    let list = all;
+    if (activePreset && activePreset !== 'all') {
+      const wanted = activePreset === 'working' ? 'opened'
+        : activePreset === 'paused' ? 'paused'
+        : activePreset === 'closed' ? 'closed' : null;
+      if (wanted) list = list.filter(u => classifyTimeman(u).bucket === wanted);
+    }
+    const minRev = values.min_revenue ? Number(values.min_revenue) : 0;
+    if (minRev) {
+      const byUser = new Map((dealsQ.data?.by_user ?? []).map(u => [String(u.id), u.won_revenue]));
+      list = list.filter(u => (byUser.get(String(u.id)) ?? 0) >= minRev);
+    }
+    const s = search.trim().toLowerCase();
+    if (s) list = list.filter(u => (u.name || '').toLowerCase().includes(s));
+    return list;
+  }, [tmQ.data, activePreset, values, dealsQ.data, search]);
+
+  const todayUsers = filteredTimemanUsers.slice(0, 6);
+
+  // Top sellers also reflect search and min_revenue (preset doesn't apply since deals don't have timeman state)
+  const topSellersFiltered = useMemo(() => {
+    let list = topSellers;
+    const minRev = values.min_revenue ? Number(values.min_revenue) : 0;
+    if (minRev) list = list.filter(u => u.won_revenue >= minRev);
+    const s = search.trim().toLowerCase();
+    if (s) list = list.filter(u => (u.name || '').toLowerCase().includes(s));
+    return list;
+  }, [topSellers, values, search]);
+
+  const filterFields: FilterField[] = useMemo(() => [
+    { key: 'min_revenue', label: 'Min savdo ($)', type: 'amount' },
+  ], []);
 
   const trendData = useMemo(() => {
     const months = trendQ.data?.months ?? [];
@@ -111,8 +159,26 @@ export default function DashboardPage() {
       <Topbar
         title="Dashboard"
         sub={`${MONTH_LABELS[MONTH_KEYS[month - 1]]} ${year} · Mountain umumiy holat`}
-        actions={
-          <>
+      />
+      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <FilterBar
+            presets={SCOPE_PRESETS}
+            activePreset={activePreset}
+            onPresetChange={setActivePreset}
+            searchValue={search}
+            onSearchChange={setSearch}
+            fields={filterFields}
+            values={values}
+            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+            onClear={() => { setSearch(''); setValues({}); setActivePreset('all'); }}
+            onApply={() => { /* client-side */ }}
+            activeChipLabel={activePreset && activePreset !== 'all' ? SCOPE_PRESETS.find(p => p.id === activePreset)?.label : undefined}
+            onActiveChipClear={() => setActivePreset('all')}
+            storageKey="payroll.dashboard"
+            onApplySavedFilter={(v) => setValues(v as typeof values)}
+          />
+          <div className="flex items-center gap-2 ml-auto">
             <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] shadow-xs" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
               {MONTH_KEYS.map((m, i) => <option key={m} value={i + 1}>{MONTH_LABELS[m]}</option>)}
             </select>
@@ -120,10 +186,8 @@ export default function DashboardPage() {
               {[DEFAULT_YEAR, DEFAULT_YEAR - 1].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <Button onClick={() => { dealsQ.refetch(); tmQ.refetch(); targetQ.refetch(); }}>Yangilash</Button>
-          </>
-        }
-      />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+          </div>
+        </div>
         {dealsQ.isLoading && !dealsQ.data ? <MetricRowSkeleton count={4} /> : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             <MetricCard size="lg" label="Oylik maqsad" value={fmtMoney(target)} tone="blue" hint={target ? '' : 'belgilanmagan'} />
@@ -230,10 +294,10 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {topSellers.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-text3 text-[12.5px]">Bu oy savdo topilmadi</td></tr>
+                {topSellersFiltered.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-text3 text-[12.5px]">Mos keladigan natija yo'q</td></tr>
                 )}
-                {topSellers.map((u, i) => (
+                {topSellersFiltered.map((u, i) => (
                   <tr key={u.id} className="border-b border-border last:border-0 hover:bg-bg3">
                     <td className="px-4 py-2.5 mono text-amber font-bold">{i + 1}</td>
                     <td className="px-4 py-2.5">
