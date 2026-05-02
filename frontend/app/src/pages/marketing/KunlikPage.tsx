@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import { ChartCardSkeleton } from '@/components/Skeleton';
 import { FilterBar } from '@/components/FilterBar';
 import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
-import { getMetaInsights, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
+import { getMetaInsights, getBitrixDaily, MONTH_KEYS, MONTH_LABELS } from '@/lib/api/meta';
 import type { MonthKey } from '@/lib/api/meta';
 import { fmtNum, fmtMoney, fmtPct, cn } from '@/lib/utils';
 
@@ -40,15 +40,15 @@ type MetricRow = {
 };
 
 const METRIC_ROWS: MetricRow[] = [
-  { key: 'sales_sum',   label: "Sotuvlar summasi",  format: 'money', important: true, live: false },
-  { key: 'roas',        label: 'ROAS',              format: 'pct',   important: true, live: false },
-  { key: 'sales_count', label: "Sotuvlar soni",     format: 'num',   important: true, live: false },
+  { key: 'sales_sum',   label: "Sotuvlar summasi",  format: 'money', important: true, live: true  },
+  { key: 'roas',        label: 'ROAS',              format: 'pct',   important: true, live: true  },
+  { key: 'sales_count', label: "Sotuvlar soni",     format: 'num',   important: true, live: true  },
   { key: 'budget',      label: 'Byudjet ($)',       format: 'money', important: true, live: true  },
   { key: 'leads',       label: 'Lidlar soni',       format: 'num',                    live: true  },
-  { key: 'qual_leads',  label: 'Maqsadli lidlar',   format: 'num',                    live: false },
-  { key: 'qual_pct',    label: "Lid→Maq.lid %",     format: 'pct',                    live: false },
+  { key: 'qual_leads',  label: 'Maqsadli lidlar',   format: 'num',                    live: true  },
+  { key: 'qual_pct',    label: "Lid→Maq.lid %",     format: 'pct',                    live: true  },
   { key: 'meetings',    label: 'Uchrashuvlar',      format: 'num',                    live: false },
-  { key: 'deals',       label: 'Kelishuvlar',       format: 'num',                    live: false },
+  { key: 'deals',       label: 'Kelishuvlar',       format: 'num',                    live: true  },
 ];
 
 const SECTION_META = {
@@ -116,6 +116,13 @@ export default function KunlikPage() {
   const q = useQuery({
     queryKey: ['meta/insights', month, year],
     queryFn: () => getMetaInsights(month, year),
+    staleTime: 5 * 60_000,
+  });
+
+  const qBitrix = useQuery({
+    queryKey: ['marketing/bitrix-daily', month, year],
+    queryFn: () => getBitrixDaily(month, year),
+    staleTime: 5 * 60_000,
   });
 
   const days = daysInMonth(month, year);
@@ -123,21 +130,25 @@ export default function KunlikPage() {
 
   const rowDataBySection = useMemo(() => {
     const m = q.data?.data;
+    const b = qBitrix.data?.data;
     const empty = new Array(days).fill(undefined);
     const buildSection = (src: 'target' | 'instagram') => {
-      const block = m?.[src];
-      const budget = block?.budget ?? empty;
-      const leads  = block?.leads  ?? empty;
+      const meta = m?.[src];
+      const bx   = b?.[src];
       return {
-        budget: budget as (number | undefined)[],
-        leads:  leads  as (number | undefined)[],
+        budget:      (meta?.budget       ?? empty) as (number | undefined)[],
+        leads:       (meta?.leads        ?? empty) as (number | undefined)[],
+        sales_sum:   (bx?.sales_sum      ?? empty) as (number | undefined)[],
+        sales_count: (bx?.sales_count    ?? empty) as (number | undefined)[],
+        qual_leads:  (bx?.qual_leads     ?? empty) as (number | undefined)[],
+        deals:       (bx?.deals          ?? empty) as (number | undefined)[],
       };
     };
     return {
       target:    buildSection('target'),
       instagram: buildSection('instagram'),
     };
-  }, [q.data, days]);
+  }, [q.data, qBitrix.data, days]);
 
   const sectionsToShow: ('target' | 'instagram')[] =
     source === 'all'    ? ['target', 'instagram']
@@ -146,13 +157,44 @@ export default function KunlikPage() {
 
   function valueFor(src: 'target' | 'instagram', metric: MetricRow, dayIdx: number): number | undefined {
     const block = rowDataBySection[src];
-    if (metric.key === 'budget') return block.budget[dayIdx];
-    if (metric.key === 'leads')  return block.leads[dayIdx];
+    if (metric.key === 'budget')      return block.budget[dayIdx];
+    if (metric.key === 'leads')       return block.leads[dayIdx];
+    if (metric.key === 'sales_sum')   return block.sales_sum[dayIdx];
+    if (metric.key === 'sales_count') return block.sales_count[dayIdx];
+    if (metric.key === 'qual_leads')  return block.qual_leads[dayIdx];
+    if (metric.key === 'deals')       return block.deals[dayIdx];
+    if (metric.key === 'roas') {
+      const sales = block.sales_sum[dayIdx];
+      const budget = block.budget[dayIdx];
+      if (typeof sales !== 'number' || typeof budget !== 'number' || budget === 0) return undefined;
+      return (sales / budget) * 100;
+    }
+    if (metric.key === 'qual_pct') {
+      const qual = block.qual_leads[dayIdx];
+      const leads = block.leads[dayIdx];
+      if (typeof qual !== 'number' || typeof leads !== 'number' || leads === 0) return undefined;
+      return (qual / leads) * 100;
+    }
     return undefined;
   }
 
   function rowTotal(src: 'target' | 'instagram', metric: MetricRow): number | undefined {
     if (!metric.live) return undefined;
+    const block = rowDataBySection[src];
+    if (metric.key === 'roas' || metric.key === 'qual_pct') {
+      const numKey = metric.key === 'roas' ? 'sales_sum'  : 'qual_leads';
+      const denKey = metric.key === 'roas' ? 'budget'     : 'leads';
+      let num = 0, den = 0, any = false;
+      for (let i = 0; i < days; i++) {
+        if (!mask[i]) continue;
+        const n = block[numKey][i];
+        const d = block[denKey][i];
+        if (typeof n === 'number') { num += n; any = true; }
+        if (typeof d === 'number') { den += d; any = true; }
+      }
+      if (!any || den === 0) return undefined;
+      return (num / den) * 100;
+    }
     let sum = 0;
     let any = false;
     for (let i = 0; i < days; i++) {

@@ -16,6 +16,22 @@ export type MetaInsightsResponse = {
   };
 };
 
+export type BitrixDailyRow = {
+  sales_sum: number[];
+  sales_count: number[];
+  qual_leads: number[];
+  deals: number[];
+};
+
+export type BitrixDailyResponse = {
+  month: string;
+  year: number;
+  data: {
+    target: BitrixDailyRow;
+    instagram: BitrixDailyRow;
+  };
+};
+
 export type DashboardDailyResponse = {
   date: string;
   facebook: { date?: string; spend?: number | string; leads_count?: number; error?: string };
@@ -40,6 +56,10 @@ export const MONTH_LABELS: Record<MonthKey, string> = {
 
 export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string) {
   return apiGet<MetaInsightsResponse>('/api/meta/insights', { month, year, ad_account_id });
+}
+
+export function getBitrixDaily(month: MonthKey, year: number) {
+  return apiGet<BitrixDailyResponse>('/api/marketing/bitrix-daily', { month, year });
 }
 
 export function getDashboardDaily(date: string) {

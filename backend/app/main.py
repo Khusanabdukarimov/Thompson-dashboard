@@ -549,6 +549,115 @@ def api_meta_insights(
     return {"month": month, "year": year, "data": data}
 
 
+# ────────────────────────────────────────────────────────────────────
+# Marketing daily breakdown (Bitrix-derived metrics for Kunlik hisobot)
+# ────────────────────────────────────────────────────────────────────
+import calendar as _calendar
+from datetime import datetime as _dt
+
+# UTM_SOURCE → bucket. Add aliases here if Bitrix data uses other tags.
+_UTM_TO_SOURCE = {
+    "instagram": "instagram", "ig": "instagram", "instagram_ads": "instagram", "ig_ads": "instagram",
+    "facebook": "target", "fb": "target", "meta": "target",
+    "facebook_ads": "target", "fb_ads": "target", "target": "target", "target_ads": "target",
+}
+
+# Lead statuses considered "qualified" — mirrors JARAYON_STATUSES in /api/stats/leads.
+_QUALIFIED_LEAD_STATUSES = {
+    "IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68", "CONVERTED",
+}
+
+
+def _classify_source(utm_source):
+    return _UTM_TO_SOURCE.get((utm_source or "").strip().lower())
+
+
+def _stage_is_won(stage_id):
+    s = (stage_id or "").upper()
+    return s == "WON" or s.endswith(":WON")
+
+
+def _parse_bitrix_day(date_str, year: int, month_num: int):
+    if not date_str:
+        return None
+    try:
+        dt = _dt.fromisoformat(date_str.replace("Z", "+00:00"))
+    except Exception:
+        try:
+            dt = _dt.strptime(date_str[:10], "%Y-%m-%d")
+        except Exception:
+            return None
+    if dt.year != year or dt.month != month_num:
+        return None
+    return dt.day
+
+
+@app.get("/api/marketing/bitrix-daily")
+def api_marketing_bitrix_daily(month: str, year: int):
+    """Daily breakdown of Bitrix-derived metrics for the Kunlik hisobot table.
+
+    Per-day arrays (length = days in month) bucketed by source (UTM_SOURCE):
+      - sales_sum, sales_count: WON deals by CLOSEDATE
+      - deals:                  all deals created (DATE_CREATE)
+      - qual_leads:             leads with qualifying STATUS_ID by DATE_CREATE
+    """
+    month_num = meta_svc.MONTH_NAMES.get(month.lower())
+    if not month_num:
+        raise HTTPException(status_code=400, detail=f"Unknown month: {month}")
+    days_in_month = _calendar.monthrange(year, month_num)[1]
+    since = f"{year}-{month_num:02d}-01"
+    until = f"{year}-{month_num:02d}-{days_in_month:02d}T23:59:59"
+
+    metrics = ("sales_sum", "sales_count", "qual_leads", "deals")
+    result = {src: {m: [0] * days_in_month for m in metrics} for src in ("target", "instagram")}
+
+    deals_closed = bitrix.list_deals(
+        filter_dict={">=CLOSEDATE": since, "<=CLOSEDATE": until},
+        select=["ID", "OPPORTUNITY", "CLOSEDATE", "STAGE_ID", "UTM_SOURCE"],
+    )
+    for d in deals_closed:
+        src = _classify_source(d.get("UTM_SOURCE"))
+        if src is None or not _stage_is_won(d.get("STAGE_ID")):
+            continue
+        day = _parse_bitrix_day(d.get("CLOSEDATE"), year, month_num)
+        if day is None:
+            continue
+        try:
+            opp = float(d.get("OPPORTUNITY") or 0)
+        except Exception:
+            opp = 0.0
+        result[src]["sales_sum"][day - 1] += opp
+        result[src]["sales_count"][day - 1] += 1
+
+    deals_created = bitrix.list_deals(
+        filter_dict={">=DATE_CREATE": since, "<=DATE_CREATE": until},
+        select=["ID", "DATE_CREATE", "UTM_SOURCE"],
+    )
+    for d in deals_created:
+        src = _classify_source(d.get("UTM_SOURCE"))
+        if src is None:
+            continue
+        day = _parse_bitrix_day(d.get("DATE_CREATE"), year, month_num)
+        if day is None:
+            continue
+        result[src]["deals"][day - 1] += 1
+
+    leads = bitrix.list_leads(
+        filter_dict={">=DATE_CREATE": since, "<=DATE_CREATE": until},
+        select=["ID", "DATE_CREATE", "STATUS_ID", "UTM_SOURCE"],
+    )
+    for l in leads:
+        src = _classify_source(l.get("UTM_SOURCE"))
+        if src is None or l.get("STATUS_ID") not in _QUALIFIED_LEAD_STATUSES:
+            continue
+        day = _parse_bitrix_day(l.get("DATE_CREATE"), year, month_num)
+        if day is None:
+            continue
+        result[src]["qual_leads"][day - 1] += 1
+
+    return {"month": month, "year": year, "data": result}
+
+
 if __name__ == "__main__":
     host = os.getenv("SERVER_IP", "127.0.0.1")
     uvicorn.run(app, host=host, port=8000)
