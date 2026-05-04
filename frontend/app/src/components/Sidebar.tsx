@@ -146,8 +146,16 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
             </div>
           ))}
 
+          {/* Powered by */}
+          <div className={cn('mt-auto pt-3 border-t border-border', collapsed && 'md:hidden')}>
+            <p className="text-[11px] text-text3 px-2.5 pb-2 leading-snug">
+              Powered by{' '}
+              <span className="font-semibold text-text2">data365.uz</span>
+            </p>
+          </div>
+
           {/* Dark mode toggle — pinned to bottom of nav */}
-          <div className="mt-auto pt-3 border-t border-border">
+          <div className={cn('pt-3 border-t border-border', !collapsed && 'mt-0')}>
             <button
               type="button"
               onClick={toggle}
