@@ -540,7 +540,7 @@ function LeadCreateModal({
 }) {
   const toast = useToast();
   const [form, setForm] = useState<LeadCreateIn>({
-    client: '',
+    client: (window as unknown as { __BX_CLIENT__?: { clientName: string | null } }).__BX_CLIENT__?.clientName ?? '',
     date: new Date().toISOString().slice(0, 10),
     employee_id: undefined,
     source: undefined,

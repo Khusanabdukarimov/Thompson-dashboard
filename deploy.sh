@@ -143,8 +143,8 @@ if $DEPLOY_FRONTEND; then
     remote "cd $FRONTEND_DIR && npm run build 2>&1 | tail -5"
     ok "  Build complete"
 
-    info "  Reloading nginx..."
-    remote "nginx -t && systemctl reload nginx"
+    info "  Applying nginx config..."
+    remote "cp $REPO_DIR/nginx/mountain.conf /etc/nginx/sites-available/mountain && ln -sf /etc/nginx/sites-available/mountain /etc/nginx/sites-enabled/mountain && nginx -t && systemctl reload nginx"
     ok "  nginx reloaded"
     echo
 fi

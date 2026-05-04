@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
+import json
 import uvicorn
 import os
 
@@ -686,6 +688,41 @@ def api_marketing_bitrix_daily(month: str, year: int):
         result[src]["qual_leads"][day - 1] += 1
 
     return {"month": month, "year": year, "data": result}
+
+
+@app.post("/api/bitrix/handler", response_class=HTMLResponse)
+async def bitrix_iframe_handler(request: Request):
+    """Bitrix24 POSTs here when the app is opened from a CRM Lead/Deal card.
+    Reads PLACEMENT_OPTIONS, fetches the client name, injects it into index.html."""
+    form = await request.form()
+    placement = str(form.get("PLACEMENT") or "")
+    placement_options_raw = str(form.get("PLACEMENT_OPTIONS") or "")
+
+    client_name = None
+    try:
+        opts = json.loads(placement_options_raw) if placement_options_raw else {}
+        entity_id = opts.get("ID")
+        if entity_id:
+            if "LEAD" in placement:
+                lead = bitrix.get_lead_details(int(entity_id))
+                if lead:
+                    parts = [lead.get("NAME") or "", lead.get("LAST_NAME") or ""]
+                    client_name = " ".join(p for p in parts if p) or None
+            elif "DEAL" in placement:
+                deal = bitrix.get_deal_details(int(entity_id))
+                if deal and deal.get("CONTACT_ID"):
+                    contact = bitrix.get_contact_details(int(deal["CONTACT_ID"]))
+                    if contact:
+                        parts = [contact.get("NAME") or "", contact.get("LAST_NAME") or ""]
+                        client_name = " ".join(p for p in parts if p) or None
+    except Exception as e:
+        pass  # Return app without pre-fill rather than erroring
+
+    dist_index = Path("/var/www/mountain/frontend/app/dist/index.html")
+    html = dist_index.read_text(encoding="utf-8")
+    script = f'<script>window.__BX_CLIENT__={json.dumps({"clientName": client_name})};</script>'
+    html = html.replace("</head>", f"{script}</head>", 1)
+    return HTMLResponse(content=html)
 
 
 if __name__ == "__main__":
