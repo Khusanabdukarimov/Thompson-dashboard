@@ -103,6 +103,7 @@ def install_auth_middleware(app):
         "/api/openapi.json", # docs
         "/api/docs",
         "/api/config",       # bootstrap config (no secrets)
+        "/api/bitrix/",      # Bitrix24 iframe handler (public POST)
     )
 
     @app.middleware("http")
