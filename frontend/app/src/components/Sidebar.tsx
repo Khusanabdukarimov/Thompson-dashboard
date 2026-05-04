@@ -150,7 +150,14 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
           <div className={cn('mt-auto pt-3 border-t border-border', collapsed && 'md:hidden')}>
             <p className="text-[11px] text-text3 px-2.5 pb-2 leading-snug">
               Powered by{' '}
-              <span className="font-semibold text-text2">data365.uz</span>
+              <a
+                href="https://www.data365.uz/en"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-text2 hover:text-blue-2 transition-colors"
+              >
+                data365.uz
+              </a>
             </p>
           </div>
 
