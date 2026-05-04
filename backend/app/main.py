@@ -715,12 +715,18 @@ async def bitrix_iframe_handler(request: Request):
                     if contact:
                         parts = [contact.get("NAME") or "", contact.get("LAST_NAME") or ""]
                         client_name = " ".join(p for p in parts if p) or None
-    except Exception as e:
+    except Exception:
         pass  # Return app without pre-fill rather than erroring
 
     dist_index = Path("/var/www/mountain/frontend/app/dist/index.html")
     html = dist_index.read_text(encoding="utf-8")
-    script = f'<script>window.__BX_CLIENT__={json.dumps({"clientName": client_name})};</script>'
+    # Inject BX context + navigate to the target route before React mounts
+    script = (
+        f'<script>'
+        f'window.__BX_CLIENT__={json.dumps({"clientName": client_name})};'
+        f'history.replaceState(null,"","/marketing/kunlik");'
+        f'</script>'
+    )
     html = html.replace("</head>", f"{script}</head>", 1)
     return HTMLResponse(content=html)
 
