@@ -182,13 +182,13 @@ else
     ALL_OK=false
 fi
 
-# /api/users endpoint
-API_RESP=$(curl -sf --max-time 8 "http://${PUBLIC_IP}/api/users" 2>/dev/null || echo "")
+# /api/auth/status endpoint (public, works with auth enabled)
+API_RESP=$(curl -sf --max-time 8 "http://${PUBLIC_IP}/api/auth/status" 2>/dev/null || echo "")
 if [[ -n "$API_RESP" ]]; then
-    USERS_COUNT=$(echo "$API_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count', '?'))" 2>/dev/null || echo "?")
-    ok "  /api/users: ${DIM}$USERS_COUNT users${RESET}"
+    AUTH_ENABLED=$(echo "$API_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('enabled' if d.get('enabled') else 'disabled')" 2>/dev/null || echo "?")
+    ok "  /api/auth/status: ${DIM}auth $AUTH_ENABLED${RESET}"
 else
-    warn "  /api/users failed"
+    warn "  /api/auth/status failed"
     ALL_OK=false
 fi
 
