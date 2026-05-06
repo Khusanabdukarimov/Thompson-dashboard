@@ -1,10 +1,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { RefreshCw } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MetricCard } from "@/components/MetricCard";
-import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { FilterBar } from "@/components/FilterBar";
 import type {
@@ -12,20 +10,57 @@ import type {
   FilterPreset,
   FilterValues,
 } from "@/components/FilterBar";
-import { DataTable } from "@/components/DataTable";
-import { FunnelBars } from "@/components/charts";
-import { MetricRowSkeleton, FunnelSkeleton } from "@/components/Skeleton";
+import { MetricRowSkeleton } from "@/components/Skeleton";
 import { getLeadsStats, getLeadQuality } from "@/lib/api/leads";
-import type { StatsLeadsByUser, LeadFilter } from "@/lib/api/leads";
-import { fmtNum, fmtMoney, fmtPct } from "@/lib/utils";
+import type { LeadFilter } from "@/lib/api/leads";
+import { fmtNum, fmtPct } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+
+const STATUS_COLORS: Record<string, string> = {
+  NEW: "#6b7280",
+  IN_PROCESS: "#3b82f6",
+  PROCESSED: "#8b5cf6",
+  UC_F8K4GI: "#ef4444",
+  UC_NAZK5J: "#ef4444",
+  JUNK: "#6b7280",
+  CONVERTED: "#22c55e",
+};
+const PALETTE = [
+  "#f59e0b",
+  "#a78bfa",
+  "#22d3ee",
+  "#fb923c",
+  "#f472b6",
+  "#34d399",
+  "#60a5fa",
+  "#e879f9",
+];
+function sColor(id: string, idx: number) {
+  return STATUS_COLORS[id] ?? PALETTE[idx % PALETTE.length];
+}
+
+const JARAYON = new Set([
+  "NEW",
+  "IN_PROCESS",
+  "PROCESSED",
+  "UC_1KPATX",
+  "UC_Q2U9EL",
+  "UC_KXC3ZW",
+  "UC_L28G68",
+]);
 
 const PRESETS: FilterPreset[] = [
   { id: "all", label: "Barcha leadlar", pinned: true },
-  { id: "jarayonda", label: "Jarayondagi leadlar", pinned: true },
-  { id: "yopilgan", label: "Yopilgan leadlar" },
-  { id: "sifatsiz", label: "Sifatsiz leadlar" },
+  { id: "jarayonda", label: "Jarayondagi", pinned: true },
+  { id: "yopilgan", label: "Yopilgan" },
+  { id: "sifatsiz", label: "Sifatsiz" },
 ];
+const STATUS_BY_PRESET: Record<string, string | undefined> = {
+  all: undefined,
+  jarayonda: "IN_PROCESS",
+  yopilgan: "CONVERTED",
+  sifatsiz: "UC_F8K4GI",
+};
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const oneYearAgoISO = () => {
@@ -45,20 +80,12 @@ export default function LidlarPage() {
     end_date: todayISO(),
   });
 
-  // Apply preset → derive status filter
-  const statusByPreset: Record<string, string | undefined> = {
-    all: undefined,
-    jarayonda: "IN_PROCESS",
-    yopilgan: "CONVERTED",
-    sifatsiz: "UC_F8K4GI",
-  };
-
   const apiFilter: LeadFilter = useMemo(
     () => ({
       start_date: values.start_date,
       end_date: values.end_date,
       assigned_by: values.assigned_by ? Number(values.assigned_by) : undefined,
-      status_id: activePreset ? statusByPreset[activePreset] : undefined,
+      status_id: activePreset ? STATUS_BY_PRESET[activePreset] : undefined,
       source_id: values.source_id,
       utm_source: values.utm_source,
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,17 +97,14 @@ export default function LidlarPage() {
     queryKey: ["stats/leads", apiFilter],
     queryFn: () => getLeadsStats(apiFilter),
   });
-
   const qualityQ = useQuery({
     queryKey: ["stats/lead-quality", apiFilter],
     queryFn: () => getLeadQuality(apiFilter),
   });
 
-  // Build dynamic filter fields once stats are available
   const fields: FilterField[] = useMemo(() => {
     const users = statsQ.data?.users ?? [];
     const sources = statsQ.data?.sources ?? [];
-    const utmSources = statsQ.data?.utm_sources ?? [];
     return [
       { key: "start_date", label: "Sanadan", type: "date" },
       { key: "end_date", label: "Sanagacha", type: "date" },
@@ -99,145 +123,88 @@ export default function LidlarPage() {
         type: "select",
         options: sources.map((s) => ({ value: s.id, label: s.label })),
       },
-      {
-        key: "utm_source",
-        label: "UTM source",
-        type: "select",
-        options: utmSources.map((v) => ({ value: v, label: v })),
-      },
     ];
   }, [statsQ.data]);
 
-  // Filter by user "name" search client-side on byUser table
-  const byUserFiltered = useMemo(() => {
-    const list = statsQ.data?.by_user ?? [];
-    const s = search.trim().toLowerCase();
-    if (!s) return list;
-    return list.filter((u) => u.name.toLowerCase().includes(s));
-  }, [statsQ.data, search]);
+  const d = statsQ.data;
+  const total = d?.total ?? 0;
+  const converted = d?.converted ?? 0;
+  const jarayon = d?.jarayon_total ?? 0;
+  const byStatus = d?.by_status ?? {};
+  const statusNames = d?.status_names ?? {};
 
-  const userColumns = useMemo<ColumnDef<StatsLeadsByUser, unknown>[]>(
-    () => [
-      {
-        header: "Mas'ul",
-        accessorKey: "name",
-        cell: (c) => {
-          const name = c.getValue<string>() || `User ${c.row.original.id}`;
-          const initials =
-            name
-              .split(" ")
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((s) => s[0])
-              .join("")
-              .toUpperCase() || "?";
-          return (
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-blue-bg text-blue text-[10px] font-bold flex items-center justify-center border-2 border-bg2 shadow-xs">
-                {initials}
-              </div>
-              <span className="font-medium">{name}</span>
-            </div>
-          );
-        },
-      },
-      {
-        header: "Lidlar",
-        accessorKey: "total",
-        cell: (c) => (
-          <span className="mono">{fmtNum(c.getValue<number>())}</span>
-        ),
-      },
-      {
-        header: "Daromad",
-        accessorKey: "revenue",
-        cell: (c) => (
-          <span className="mono text-green font-semibold">
-            {fmtMoney(c.getValue<number>())}
-          </span>
-        ),
-      },
-      {
-        header: "Konversiya",
-        accessorFn: (row) => {
-          const won =
-            (row.by_status["CONVERTED"] ?? 0) + (row.by_status["WON"] ?? 0);
-          return row.total ? (won / row.total) * 100 : 0;
-        },
-        cell: (c) => {
-          const v = c.getValue<number>();
-          const tone = v > 5 ? "green" : v > 1 ? "amber" : "gray";
-          return <Badge tone={tone}>{fmtPct(v, 2)}</Badge>;
-        },
-      },
-    ],
-    [],
+  const failed = Object.entries(byStatus)
+    .filter(([k]) => !JARAYON.has(k) && k !== "CONVERTED" && k !== "CLOSED")
+    .reduce((s, [, v]) => s + v, 0);
+
+  const tashrifBelgId = Object.entries(statusNames).find(([, n]) =>
+    n.toLowerCase().includes("belgiland"),
+  )?.[0];
+  const tashrifBuyId = Object.entries(statusNames).find(([, n]) =>
+    n.toLowerCase().includes("buyur"),
+  )?.[0];
+  const tashrifBelg = tashrifBelgId ? (byStatus[tashrifBelgId] ?? 0) : 0;
+  const tashrifBuy = tashrifBuyId ? (byStatus[tashrifBuyId] ?? 0) : converted;
+
+  const orderedStatuses = useMemo(
+    () =>
+      Object.entries(byStatus)
+        .sort(([, a], [, b]) => b - a)
+        .map(([id]) => id)
+        .slice(0, 14),
+    [byStatus],
   );
 
-  const total = statsQ.data?.total ?? 0;
-  const revenue = statsQ.data?.total_revenue ?? 0;
-  const converted = statsQ.data?.converted ?? 0;
-  const jarayon = statsQ.data?.jarayon_total ?? 0;
-  const conv = statsQ.data?.conversion_rate ?? 0;
+  const colMaxes = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const sid of orderedStatuses) {
+      m[sid] = Math.max(
+        1,
+        ...(d?.by_user ?? []).map((u) => u.by_status[sid] ?? 0),
+      );
+    }
+    return m;
+  }, [orderedStatuses, d?.by_user]);
 
-  const funnelSteps = useMemo(() => {
-    const byStatus = statsQ.data?.by_status ?? {};
-    const statusNames = statsQ.data?.status_names ?? {};
-    const sifatsiz = byStatus["UC_F8K4GI"] ?? 0;
-    const bekor = byStatus["UC_NAZK5J"] ?? 0;
-    const junk = byStatus["JUNK"] ?? 0;
-    return [
-      { label: "Jami lidlar", value: total, color: "var(--blue)" },
-      { label: "Jarayonda", value: jarayon, color: "var(--amber)" },
-      {
-        label: statusNames["UC_F8K4GI"] || "Sifatsiz",
-        value: sifatsiz,
-        color: "var(--orange)",
-      },
-      {
-        label: statusNames["UC_NAZK5J"] || "Bekor",
-        value: bekor,
-        color: "var(--red)",
-      },
-      { label: "Sandiq (junk)", value: junk, color: "var(--text3)" },
-      { label: "Konversiya", value: converted, color: "var(--green)" },
-    ];
-  }, [statsQ.data, total, jarayon, converted]);
+  const byUserFiltered = useMemo(() => {
+    const list = d?.by_user ?? [];
+    const s = search.trim().toLowerCase();
+    return s ? list.filter((u) => u.name.toLowerCase().includes(s)) : list;
+  }, [d?.by_user, search]);
 
-  const topStatuses = useMemo(() => {
-    const byStatus = statsQ.data?.by_status ?? {};
-    const statusNames = statsQ.data?.status_names ?? {};
-    return Object.entries(byStatus)
-      .map(([k, v]) => ({ label: statusNames[k] || k, val: v }))
-      .sort((a, b) => b.val - a.val)
-      .slice(0, 8);
-  }, [statsQ.data]);
+  const totalsRow = useMemo(() => {
+    const bs: Record<string, number> = {};
+    for (const u of d?.by_user ?? []) {
+      for (const [sid, cnt] of Object.entries(u.by_status)) {
+        bs[sid] = (bs[sid] ?? 0) + cnt;
+      }
+    }
+    return bs;
+  }, [d?.by_user]);
 
   return (
     <>
       <Topbar
         title="Lidlar analitika"
-        sub={`Davr: ${values.start_date ?? "—"} → ${values.end_date ?? "—"}`}
+        sub={`${values.start_date ?? "—"} → ${values.end_date ?? "—"}`}
         actions={
-          <>
-            <Button
-              onClick={() => {
-                statsQ.refetch();
-                qualityQ.refetch();
-              }}
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Yangilash
-            </Button>
-          </>
+          <Button
+            onClick={() => {
+              statsQ.refetch();
+              qualityQ.refetch();
+            }}
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Yangilash
+          </Button>
         }
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        {/* Filter row */}
+        {/* Filter */}
         <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3">
           <FilterBar
             presets={PRESETS}
             activePreset={activePreset}
-            onPresetChange={(id) => setActivePreset(id)}
+            onPresetChange={setActivePreset}
             searchValue={search}
             onSearchChange={setSearch}
             fields={fields}
@@ -263,116 +230,185 @@ export default function LidlarPage() {
           />
         </div>
 
-        {/* Metrics */}
-        {statsQ.isLoading && !statsQ.data ? (
+        {/* KPI Row 1 — 5 large cards */}
+        {statsQ.isLoading && !d ? (
           <MetricRowSkeleton count={5} />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
-            <MetricCard label="Jami lidlar" value={fmtNum(total)} tone="blue" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
             <MetricCard
+              size="lg"
+              label="Barcha lidlar"
+              value={fmtNum(total)}
+              tone="blue"
+            />
+            <MetricCard
+              size="lg"
               label="Jarayonda"
               value={fmtNum(jarayon)}
               tone="amber"
             />
             <MetricCard
-              label="Konversiya"
+              size="lg"
+              label="Muvaffaqiyatsiz"
+              value={fmtNum(failed)}
+              tone="red"
+            />
+            <MetricCard
+              size="lg"
+              label="Sdelkaga"
               value={fmtNum(converted)}
               tone="green"
             />
-            <MetricCard label="Konv. foiz" value={fmtPct(conv, 2)} />
             <MetricCard
-              label="Daromad"
-              value={fmtMoney(revenue)}
+              size="lg"
+              label="Konversiya"
+              value={fmtPct(d?.conversion_rate ?? 0, 2)}
+            />
+          </div>
+        )}
+
+        {/* KPI Row 2 — 4 medium cards */}
+        {!statsQ.isLoading && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <MetricCard
+              label="Tashrif belgilandi"
+              value={fmtNum(tashrifBelg)}
+              hint={tashrifBelgId ? statusNames[tashrifBelgId] : "—"}
+              tone="blue"
+            />
+            <MetricCard
+              label="Konv. → Tashrif belgilandi"
+              value={total ? fmtPct((tashrifBelg / total) * 100, 2) : "—"}
+            />
+            <MetricCard
+              label="Konv. → Tashrif buyurdi"
+              value={total ? fmtPct((tashrifBuy / total) * 100, 2) : "—"}
+              tone="green"
+            />
+            <MetricCard
+              label="Sifatli konversiya"
+              value={
+                tashrifBelg ? fmtPct((tashrifBuy / tashrifBelg) * 100, 2) : "—"
+              }
               tone="green"
             />
           </div>
         )}
 
-        {/* Funnel + Status breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
-          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <span className="text-[13px] font-semibold">Voronka</span>
-              <span className="text-[11px] text-text3 ml-2">
-                jami → jarayon → konversiya
-              </span>
-            </div>
-            <div className="p-4">
-              {statsQ.isLoading && !statsQ.data ? (
-                <FunnelSkeleton rows={6} />
-              ) : (
-                <FunnelBars steps={funnelSteps} />
-              )}
-            </div>
+        {/* Lid mas'ullar kesimida */}
+        <div className="bg-bg2 border border-border rounded-lg shadow mb-4 overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-[13px] font-semibold">
+              Lid mas'ullar kesimida
+            </span>
+            <span className="text-[11px] text-text3 ml-2">
+              {byUserFiltered.length} ta xodim
+            </span>
           </div>
-          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <span className="text-[13px] font-semibold">
-                Status bo'yicha (top 8)
-              </span>
-              <span className="text-[11px] text-text3 ml-2">
-                {statsQ.isLoading && !statsQ.data
-                  ? "yuklanmoqda…"
-                  : `${topStatuses.length} ta`}
-              </span>
-            </div>
-            <div className="p-4">
-              {statsQ.isLoading && !statsQ.data ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 py-1.5">
-                      <div
-                        className="skeleton h-3 flex-1"
-                        style={{ maxWidth: 140 + i * 12 }}
-                      />
-                      <div className="skeleton h-1.5 w-24" />
-                      <div className="skeleton h-3 w-10" />
-                    </div>
+          {statsQ.isLoading && !d ? (
+            <div className="p-6 text-text3 text-[12px]">Yuklanmoqda…</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11.5px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border bg-bg">
+                    <th className="sticky left-0 bg-bg px-4 py-2.5 text-left font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[160px] z-10">
+                      Mas'ul
+                    </th>
+                    <th className="px-3 py-2.5 text-right font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[56px]">
+                      Jami
+                    </th>
+                    {orderedStatuses.map((sid, i) => (
+                      <th
+                        key={sid}
+                        className="px-3 py-2.5 text-left font-medium text-[10px] uppercase tracking-wider min-w-[88px]"
+                        style={{ color: sColor(sid, i) }}
+                      >
+                        {statusNames[sid] || sid}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {byUserFiltered.map((u) => (
+                    <tr
+                      key={u.id}
+                      className="border-b border-border hover:bg-bg3 transition-colors"
+                    >
+                      <td className="sticky left-0 bg-bg2 px-4 py-2.5 z-10">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-blue-bg text-blue text-[9px] font-bold flex items-center justify-center shrink-0">
+                            {(u.name || `U${u.id}`)
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((s) => s[0])
+                              .join("")
+                              .toUpperCase() || "?"}
+                          </div>
+                          <span className="font-medium text-[12px] whitespace-nowrap">
+                            {u.name || `User ${u.id}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="mono font-semibold text-[13px]">
+                          {fmtNum(u.total)}
+                        </span>
+                      </td>
+                      {orderedStatuses.map((sid, i) => {
+                        const cnt = u.by_status[sid] ?? 0;
+                        const col = sColor(sid, i);
+                        return (
+                          <td key={sid} className="px-3 py-2.5">
+                            {cnt > 0 ? (
+                              <div>
+                                <span className="mono text-[12px]">
+                                  {fmtNum(cnt)}
+                                </span>
+                                <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
+                                  <div
+                                    className="h-full rounded"
+                                    style={{
+                                      width: `${(cnt / colMaxes[sid]) * 100}%`,
+                                      background: col,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-text3">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   ))}
-                </div>
-              ) : topStatuses.length === 0 ? (
-                <div className="text-text3 text-[12px] text-center py-6">
-                  Bo'sh
-                </div>
-              ) : (
-                topStatuses.map((it, i) => {
-                  const max = Math.max(1, ...topStatuses.map((s) => s.val));
-                  return (
-                    <div key={i} className="flex items-center gap-3 py-1.5">
-                      <span className="text-[12px] text-text2 flex-1 truncate">
-                        {it.label}
+                  <tr className="bg-bg3 border-t-2 border-border">
+                    <td className="sticky left-0 bg-bg3 px-4 py-2.5 text-[10px] text-text3 uppercase tracking-wider font-semibold z-10">
+                      Jami
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <span className="mono font-bold text-[13px]">
+                        {fmtNum(total)}
                       </span>
-                      <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">
-                        <div
-                          className="h-full rounded bg-blue"
-                          style={{ width: `${(it.val / max) * 100}%` }}
-                        />
-                      </div>
-                      <span className="mono text-[12px] font-semibold w-10 text-right">
-                        {fmtNum(it.val)}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
+                    </td>
+                    {orderedStatuses.map((sid) => (
+                      <td key={sid} className="px-3 py-2.5">
+                        <span className="mono text-[12px] font-semibold">
+                          {fmtNum(totalsRow[sid] ?? 0)}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Mas'ullar kesimida */}
-        <SectionHead
-          title="Mas'ullar kesimida"
-          hint={`${byUserFiltered.length} ta xodim`}
-        />
-        <DataTable<StatsLeadsByUser>
-          columns={userColumns}
-          data={byUserFiltered}
-          pageSize={10}
-          loading={statsQ.isLoading}
-        />
-
         {/* Quality breakdowns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <QualityList
             title="Sifatsiz sabablari"
             items={qualityQ.data?.sifatsiz ?? []}
@@ -402,15 +438,6 @@ export default function LidlarPage() {
         )}
       </div>
     </>
-  );
-}
-
-function SectionHead({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2 mt-1">
-      <span className="text-[12.5px] font-semibold text-text">{title}</span>
-      {hint && <span className="text-[11px] text-text3">· {hint}</span>}
-    </div>
   );
 }
 
