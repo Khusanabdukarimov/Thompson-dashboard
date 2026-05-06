@@ -249,7 +249,12 @@ export default function ByudjetPage() {
               {q.isLoading && !q.data ? (
                 <FunnelSkeleton rows={2} />
               ) : (
-                <FunnelBars steps={platformBreakdown} />
+                <FunnelBars
+                  steps={platformBreakdown}
+                  formatValue={(v) =>
+                    `$${v.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  }
+                />
               )}
 
               {target && (
