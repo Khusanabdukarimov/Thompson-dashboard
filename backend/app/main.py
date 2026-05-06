@@ -1,26 +1,32 @@
+import json
+import os
+from pathlib import Path
+from typing import Optional
+
+import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import Optional
-from pathlib import Path
-from dotenv import load_dotenv
-import json
-import uvicorn
-import os
-
 
 APP_DIR = Path(__file__).resolve().parent          # backend/app/
 BACKEND_DIR = APP_DIR.parent                       # backend/
 
 load_dotenv(BACKEND_DIR / ".env")
 
-from app.services import bitrix, meta as meta_svc
-from app.services.meta import MetaClient
 from datetime import date
-from app.services.bitrix import aggregate_deals_sum_total, get_visits_by_date, list_leads
-from app.db import init_db
+
 from app.api.routes import payroll as payroll_routes
 from app.core import auth as auth_module
+from app.db import init_db
+from app.services import bitrix
+from app.services import meta as meta_svc
+from app.services.bitrix import (
+    aggregate_deals_sum_total,
+    get_visits_by_date,
+    list_leads,
+)
+from app.services.meta import MetaClient
 
 app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
 
@@ -218,12 +224,18 @@ def api_stats_leads(
 
     select = ["ID", "ASSIGNED_BY_ID", "STATUS_ID", "OPPORTUNITY", "SOURCE_ID",
               "UTM_SOURCE", "UTM_MEDIUM", "UTM_CAMPAIGN", "UTM_CONTENT", "UTM_TERM"]
-    leads = bitrix.list_leads(filter_dict=f, select=select)
-    all_users = bitrix.list_users()
+    # Run all 4 Bitrix calls concurrently — reduces wall-clock time from ~sum to ~max
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_leads   = ex.submit(bitrix.list_leads, f, select)
+        f_users   = ex.submit(bitrix.list_users)
+        f_status  = ex.submit(bitrix.get_lead_status_names)
+        f_sources = ex.submit(bitrix.get_deal_source_names)
+    leads        = f_leads.result()
+    all_users    = f_users.result()
+    status_names = f_status.result()
+    source_names = f_sources.result()
     users_map = {u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
                  for u in all_users}
-    status_names = bitrix.get_lead_status_names()
-    source_names = bitrix.get_deal_source_names()
 
     by_status: dict = {}
     by_user: dict = {}
@@ -423,7 +435,6 @@ def api_stats_lead_quality(
     }
     STATUS_KEY = {"UC_F8K4GI": "sifatsiz", "UC_NAZK5J": "bekor", "JUNK": "sandiq"}
 
-    enum_map = bitrix.get_lead_enum_map()
     base_filter: dict = {}
     if start_date:   base_filter[">=DATE_CREATE"] = start_date
     if end_date:     base_filter["<=DATE_CREATE"] = end_date
@@ -437,9 +448,23 @@ def api_stats_lead_quality(
 
     result: dict = {"sifatsiz": [], "bekor": [], "sandiq": [], "utm": []}
 
+    # Run all 4 list_leads calls + enum_map fetch concurrently
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        f_enum = ex.submit(bitrix.get_lead_enum_map)
+        reason_futures = {
+            status_id: ex.submit(
+                bitrix.list_leads,
+                {"STATUS_ID": status_id, **base_filter},
+                ["ID", "ASSIGNED_BY_ID", reason_field],
+            )
+            for status_id, reason_field in REASON_FIELDS.items()
+        }
+        f_utm_leads = ex.submit(bitrix.list_leads, base_filter, ["ID", "UTM_SOURCE"])
+
+    enum_map = f_enum.result()
+
     for status_id, reason_field in REASON_FIELDS.items():
-        f = {"STATUS_ID": status_id, **base_filter}
-        leads = bitrix.list_leads(filter_dict=f, select=["ID", "ASSIGNED_BY_ID", reason_field])
+        leads = reason_futures[status_id].result()
         counts: dict = {}
         field_enum = enum_map.get(reason_field, {})
         for lead in leads:
@@ -456,9 +481,8 @@ def api_stats_lead_quality(
         key = STATUS_KEY[status_id]
         result[key] = sorted([{"label": k, "val": v} for k, v in counts.items()], key=lambda x: -x["val"])
 
-    all_leads = bitrix.list_leads(filter_dict=base_filter, select=["ID", "UTM_SOURCE"])
     utm_counts: dict = {}
-    for lead in all_leads:
+    for lead in f_utm_leads.result():
         src = (lead.get("UTM_SOURCE") or "").strip()
         if src:
             utm_counts[src] = utm_counts.get(src, 0) + 1
