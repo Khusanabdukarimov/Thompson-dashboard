@@ -1,21 +1,26 @@
 """Payroll routes — employee enrichment, KPI/Bonus rules, monthly targets, calculation."""
+from datetime import date as date_t
 from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import and_
 from sqlmodel import Session, select
 
-from datetime import date as date_t
-
+from app.core.auth import hash_password
 from app.db import get_session
 from app.models import (
-    EmployeeExtra, KpiRule, BonusRule, BonusAward, MonthlyTarget,
-    AttendanceLog, ReportLog, PenaltyConfig,
+    AttendanceLog,
+    BonusAward,
+    BonusRule,
+    EmployeeExtra,
+    KpiRule,
+    MonthlyTarget,
+    PenaltyConfig,
+    ReportLog,
 )
 from app.services import bitrix
-from sqlalchemy import and_
-
 
 router = APIRouter(prefix="/api/payroll", tags=["payroll"])
 
@@ -48,6 +53,9 @@ class EmployeeOut(BaseModel):
     kpi_rule_id: Optional[int] = None
     notes: Optional[str] = None
     has_extras: bool = False
+    # dashboard credentials
+    login: Optional[str] = None
+    dashboard_role: str = ""
 
 
 @router.get("/employees")
@@ -82,6 +90,8 @@ def list_employees(s: Session = Depends(_session)) -> dict:
             kpi_rule_id=ex.kpi_rule_id if ex else None,
             notes=ex.notes if ex else None,
             has_extras=ex is not None,
+            login=ex.login if ex else None,
+            dashboard_role=ex.dashboard_role if ex else "",
         ))
     out.sort(key=lambda e: (not e.bitrix_active, e.name.lower()))
     return {"count": len(out), "employees": [e.model_dump() for e in out]}
@@ -97,6 +107,9 @@ class EmployeeExtraIn(BaseModel):
     schedule_end: Optional[str] = None
     kpi_rule_id: Optional[int] = None
     notes: Optional[str] = None
+    login: Optional[str] = None
+    password: Optional[str] = None  # plain text — will be hashed; omit to keep existing
+    dashboard_role: Optional[str] = None
 
 
 @router.put("/employees/{bitrix_user_id}")
@@ -108,13 +121,20 @@ def upsert_employee_extra(
     ex = s.get(EmployeeExtra, bitrix_user_id)
     if ex is None:
         ex = EmployeeExtra(bitrix_user_id=bitrix_user_id)
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    # Handle password separately — never store plaintext
+    plain_password = payload.password
+    data = payload.model_dump(exclude_unset=True, exclude={"password"})
+    for k, v in data.items():
         setattr(ex, k, v)
+    if plain_password:
+        ex.password_hash = hash_password(plain_password)
     ex.updated_at = datetime.utcnow()
     s.add(ex)
     s.commit()
     s.refresh(ex)
-    return ex.model_dump()
+    d = ex.model_dump()
+    d.pop("password_hash", None)
+    return d
 
 
 # ────────────────────────────────────────────────────────────────────

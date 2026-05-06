@@ -6,10 +6,11 @@ Source-of-truth split:
 
 Joined via `bitrix_user_id` foreign key to Bitrix.
 """
-from datetime import datetime, date
-from typing import Optional, List, Any
-from sqlmodel import SQLModel, Field, Column
+from datetime import date, datetime
+from typing import Any, List, Optional
+
 from sqlalchemy import JSON
+from sqlmodel import Column, Field, SQLModel
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -29,6 +30,10 @@ class EmployeeExtra(SQLModel, table=True):
     kpi_rule_id: Optional[int] = Field(default=None, foreign_key="kpi_rules.id")
     notes: Optional[str] = Field(default=None)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Dashboard credentials
+    login: Optional[str] = Field(default=None)
+    password_hash: Optional[str] = Field(default=None)
+    dashboard_role: str = Field(default="")  # "" | admin | owner | closer | marketolog | hunter
 
 
 # ────────────────────────────────────────────────────────────────────

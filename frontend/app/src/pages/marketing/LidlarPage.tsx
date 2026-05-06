@@ -1,37 +1,46 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import type { ColumnDef } from '@tanstack/react-table';
-import { Topbar } from '@/components/Topbar';
-import { MetricCard } from '@/components/MetricCard';
-import { Badge } from '@/components/Badge';
-import { Button } from '@/components/Button';
-import { FilterBar } from '@/components/FilterBar';
-import type { FilterField, FilterPreset, FilterValues } from '@/components/FilterBar';
-import { DataTable } from '@/components/DataTable';
-import { FunnelBars } from '@/components/charts';
-import { MetricRowSkeleton, FunnelSkeleton } from '@/components/Skeleton';
-import { getLeadsStats, getLeadQuality } from '@/lib/api/leads';
-import type { StatsLeadsByUser, LeadFilter } from '@/lib/api/leads';
-import { fmtNum, fmtMoney, fmtPct } from '@/lib/utils';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { RefreshCw } from "lucide-react";
+import { Topbar } from "@/components/Topbar";
+import { MetricCard } from "@/components/MetricCard";
+import { Badge } from "@/components/Badge";
+import { Button } from "@/components/Button";
+import { FilterBar } from "@/components/FilterBar";
+import type {
+  FilterField,
+  FilterPreset,
+  FilterValues,
+} from "@/components/FilterBar";
+import { DataTable } from "@/components/DataTable";
+import { FunnelBars } from "@/components/charts";
+import { MetricRowSkeleton, FunnelSkeleton } from "@/components/Skeleton";
+import { getLeadsStats, getLeadQuality } from "@/lib/api/leads";
+import type { StatsLeadsByUser, LeadFilter } from "@/lib/api/leads";
+import { fmtNum, fmtMoney, fmtPct } from "@/lib/utils";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 
 const PRESETS: FilterPreset[] = [
-  { id: 'all',       label: 'Barcha leadlar', pinned: true },
-  { id: 'jarayonda', label: 'Jarayondagi leadlar', pinned: true },
-  { id: 'yopilgan',  label: 'Yopilgan leadlar' },
-  { id: 'sifatsiz',  label: 'Sifatsiz leadlar' },
+  { id: "all", label: "Barcha leadlar", pinned: true },
+  { id: "jarayonda", label: "Jarayondagi leadlar", pinned: true },
+  { id: "yopilgan", label: "Yopilgan leadlar" },
+  { id: "sifatsiz", label: "Sifatsiz leadlar" },
 ];
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const oneYearAgoISO = () => {
-  const d = new Date(); d.setFullYear(d.getFullYear() - 1);
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
   return d.toISOString().slice(0, 10);
 };
 
 export default function LidlarPage() {
-  const [activePreset, setActivePreset] = useLocalStorage<string | null>('lidlar.preset', 'all');
-  const [search, setSearch] = useState('');
-  const [values, setValues] = useLocalStorage<FilterValues>('lidlar.filter', {
+  const [activePreset, setActivePreset] = useLocalStorage<string | null>(
+    "lidlar.preset",
+    "all",
+  );
+  const [search, setSearch] = useState("");
+  const [values, setValues] = useLocalStorage<FilterValues>("lidlar.filter", {
     start_date: oneYearAgoISO(),
     end_date: todayISO(),
   });
@@ -39,28 +48,31 @@ export default function LidlarPage() {
   // Apply preset → derive status filter
   const statusByPreset: Record<string, string | undefined> = {
     all: undefined,
-    jarayonda: 'IN_PROCESS',
-    yopilgan: 'CONVERTED',
-    sifatsiz: 'UC_F8K4GI',
+    jarayonda: "IN_PROCESS",
+    yopilgan: "CONVERTED",
+    sifatsiz: "UC_F8K4GI",
   };
 
-  const apiFilter: LeadFilter = useMemo(() => ({
-    start_date: values.start_date,
-    end_date: values.end_date,
-    assigned_by: values.assigned_by ? Number(values.assigned_by) : undefined,
-    status_id: activePreset ? statusByPreset[activePreset] : undefined,
-    source_id: values.source_id,
-    utm_source: values.utm_source,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [values, activePreset]);
+  const apiFilter: LeadFilter = useMemo(
+    () => ({
+      start_date: values.start_date,
+      end_date: values.end_date,
+      assigned_by: values.assigned_by ? Number(values.assigned_by) : undefined,
+      status_id: activePreset ? statusByPreset[activePreset] : undefined,
+      source_id: values.source_id,
+      utm_source: values.utm_source,
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }),
+    [values, activePreset],
+  );
 
   const statsQ = useQuery({
-    queryKey: ['stats/leads', apiFilter],
+    queryKey: ["stats/leads", apiFilter],
     queryFn: () => getLeadsStats(apiFilter),
   });
 
   const qualityQ = useQuery({
-    queryKey: ['stats/lead-quality', apiFilter],
+    queryKey: ["stats/lead-quality", apiFilter],
     queryFn: () => getLeadQuality(apiFilter),
   });
 
@@ -70,11 +82,29 @@ export default function LidlarPage() {
     const sources = statsQ.data?.sources ?? [];
     const utmSources = statsQ.data?.utm_sources ?? [];
     return [
-      { key: 'start_date', label: 'Sanadan',     type: 'date' },
-      { key: 'end_date',   label: 'Sanagacha',   type: 'date' },
-      { key: 'assigned_by', label: 'Mas\'ul',    type: 'select', options: users.map(u => ({ value: u.id, label: u.name || `User ${u.id}` })) },
-      { key: 'source_id',  label: 'Manba',       type: 'select', options: sources.map(s => ({ value: s.id, label: s.label })) },
-      { key: 'utm_source', label: 'UTM source',  type: 'select', options: utmSources.map(v => ({ value: v, label: v })) },
+      { key: "start_date", label: "Sanadan", type: "date" },
+      { key: "end_date", label: "Sanagacha", type: "date" },
+      {
+        key: "assigned_by",
+        label: "Mas'ul",
+        type: "select",
+        options: users.map((u) => ({
+          value: u.id,
+          label: u.name || `User ${u.id}`,
+        })),
+      },
+      {
+        key: "source_id",
+        label: "Manba",
+        type: "select",
+        options: sources.map((s) => ({ value: s.id, label: s.label })),
+      },
+      {
+        key: "utm_source",
+        label: "UTM source",
+        type: "select",
+        options: utmSources.map((v) => ({ value: v, label: v })),
+      },
     ];
   }, [statsQ.data]);
 
@@ -83,47 +113,66 @@ export default function LidlarPage() {
     const list = statsQ.data?.by_user ?? [];
     const s = search.trim().toLowerCase();
     if (!s) return list;
-    return list.filter(u => u.name.toLowerCase().includes(s));
+    return list.filter((u) => u.name.toLowerCase().includes(s));
   }, [statsQ.data, search]);
 
-  const userColumns = useMemo<ColumnDef<StatsLeadsByUser, unknown>[]>(() => [
-    {
-      header: 'Mas\'ul',
-      accessorKey: 'name',
-      cell: (c) => {
-        const name = c.getValue<string>() || `User ${c.row.original.id}`;
-        const initials = name.split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase() || '?';
-        return (
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-blue-bg text-blue text-[10px] font-bold flex items-center justify-center border-2 border-bg2 shadow-xs">{initials}</div>
-            <span className="font-medium">{name}</span>
-          </div>
-        );
+  const userColumns = useMemo<ColumnDef<StatsLeadsByUser, unknown>[]>(
+    () => [
+      {
+        header: "Mas'ul",
+        accessorKey: "name",
+        cell: (c) => {
+          const name = c.getValue<string>() || `User ${c.row.original.id}`;
+          const initials =
+            name
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((s) => s[0])
+              .join("")
+              .toUpperCase() || "?";
+          return (
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-blue-bg text-blue text-[10px] font-bold flex items-center justify-center border-2 border-bg2 shadow-xs">
+                {initials}
+              </div>
+              <span className="font-medium">{name}</span>
+            </div>
+          );
+        },
       },
-    },
-    {
-      header: 'Lidlar',
-      accessorKey: 'total',
-      cell: (c) => <span className="mono">{fmtNum(c.getValue<number>())}</span>,
-    },
-    {
-      header: 'Daromad',
-      accessorKey: 'revenue',
-      cell: (c) => <span className="mono text-green font-semibold">{fmtMoney(c.getValue<number>())}</span>,
-    },
-    {
-      header: 'Konversiya',
-      accessorFn: (row) => {
-        const won = (row.by_status['CONVERTED'] ?? 0) + (row.by_status['WON'] ?? 0);
-        return row.total ? (won / row.total) * 100 : 0;
+      {
+        header: "Lidlar",
+        accessorKey: "total",
+        cell: (c) => (
+          <span className="mono">{fmtNum(c.getValue<number>())}</span>
+        ),
       },
-      cell: (c) => {
-        const v = c.getValue<number>();
-        const tone = v > 5 ? 'green' : v > 1 ? 'amber' : 'gray';
-        return <Badge tone={tone}>{fmtPct(v, 2)}</Badge>;
+      {
+        header: "Daromad",
+        accessorKey: "revenue",
+        cell: (c) => (
+          <span className="mono text-green font-semibold">
+            {fmtMoney(c.getValue<number>())}
+          </span>
+        ),
       },
-    },
-  ], []);
+      {
+        header: "Konversiya",
+        accessorFn: (row) => {
+          const won =
+            (row.by_status["CONVERTED"] ?? 0) + (row.by_status["WON"] ?? 0);
+          return row.total ? (won / row.total) * 100 : 0;
+        },
+        cell: (c) => {
+          const v = c.getValue<number>();
+          const tone = v > 5 ? "green" : v > 1 ? "amber" : "gray";
+          return <Badge tone={tone}>{fmtPct(v, 2)}</Badge>;
+        },
+      },
+    ],
+    [],
+  );
 
   const total = statsQ.data?.total ?? 0;
   const revenue = statsQ.data?.total_revenue ?? 0;
@@ -134,16 +183,24 @@ export default function LidlarPage() {
   const funnelSteps = useMemo(() => {
     const byStatus = statsQ.data?.by_status ?? {};
     const statusNames = statsQ.data?.status_names ?? {};
-    const sifatsiz = byStatus['UC_F8K4GI'] ?? 0;
-    const bekor    = byStatus['UC_NAZK5J'] ?? 0;
-    const junk     = byStatus['JUNK']      ?? 0;
+    const sifatsiz = byStatus["UC_F8K4GI"] ?? 0;
+    const bekor = byStatus["UC_NAZK5J"] ?? 0;
+    const junk = byStatus["JUNK"] ?? 0;
     return [
-      { label: 'Jami lidlar', value: total,     color: 'var(--blue)' },
-      { label: 'Jarayonda',   value: jarayon,   color: 'var(--amber)' },
-      { label: statusNames['UC_F8K4GI'] || 'Sifatsiz', value: sifatsiz, color: 'var(--orange)' },
-      { label: statusNames['UC_NAZK5J'] || 'Bekor',    value: bekor,    color: 'var(--red)' },
-      { label: 'Sandiq (junk)', value: junk,    color: 'var(--text3)' },
-      { label: 'Konversiya',    value: converted, color: 'var(--green)' },
+      { label: "Jami lidlar", value: total, color: "var(--blue)" },
+      { label: "Jarayonda", value: jarayon, color: "var(--amber)" },
+      {
+        label: statusNames["UC_F8K4GI"] || "Sifatsiz",
+        value: sifatsiz,
+        color: "var(--orange)",
+      },
+      {
+        label: statusNames["UC_NAZK5J"] || "Bekor",
+        value: bekor,
+        color: "var(--red)",
+      },
+      { label: "Sandiq (junk)", value: junk, color: "var(--text3)" },
+      { label: "Konversiya", value: converted, color: "var(--green)" },
     ];
   }, [statsQ.data, total, jarayon, converted]);
 
@@ -160,10 +217,17 @@ export default function LidlarPage() {
     <>
       <Topbar
         title="Lidlar analitika"
-        sub={`Davr: ${values.start_date ?? '—'} → ${values.end_date ?? '—'}`}
+        sub={`Davr: ${values.start_date ?? "—"} → ${values.end_date ?? "—"}`}
         actions={
           <>
-            <Button onClick={() => statsQ.refetch()}>Yangilash</Button>
+            <Button
+              onClick={() => {
+                statsQ.refetch();
+                qualityQ.refetch();
+              }}
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Yangilash
+            </Button>
           </>
         }
       />
@@ -179,23 +243,48 @@ export default function LidlarPage() {
             fields={fields}
             values={values}
             onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
-            onClear={() => { setSearch(''); setValues({ start_date: oneYearAgoISO(), end_date: todayISO() }); setActivePreset('all'); }}
-            onApply={() => statsQ.refetch()}
-            activeChipLabel={activePreset && activePreset !== 'all' ? PRESETS.find(p => p.id === activePreset)?.label : undefined}
-            onActiveChipClear={() => setActivePreset('all')}
+            onClear={() => {
+              setSearch("");
+              setValues({ start_date: oneYearAgoISO(), end_date: todayISO() });
+              setActivePreset("all");
+            }}
+            onApply={() => {
+              statsQ.refetch();
+              qualityQ.refetch();
+            }}
+            activeChipLabel={
+              activePreset && activePreset !== "all"
+                ? PRESETS.find((p) => p.id === activePreset)?.label
+                : undefined
+            }
+            onActiveChipClear={() => setActivePreset("all")}
             storageKey="marketing.lidlar"
             onApplySavedFilter={(v) => setValues(v as typeof values)}
           />
         </div>
 
         {/* Metrics */}
-        {statsQ.isLoading && !statsQ.data ? <MetricRowSkeleton count={5} /> : (
+        {statsQ.isLoading && !statsQ.data ? (
+          <MetricRowSkeleton count={5} />
+        ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami lidlar" value={fmtNum(total)} tone="blue" />
-            <MetricCard label="Jarayonda" value={fmtNum(jarayon)} tone="amber" />
-            <MetricCard label="Konversiya" value={fmtNum(converted)} tone="green" />
+            <MetricCard
+              label="Jarayonda"
+              value={fmtNum(jarayon)}
+              tone="amber"
+            />
+            <MetricCard
+              label="Konversiya"
+              value={fmtNum(converted)}
+              tone="green"
+            />
             <MetricCard label="Konv. foiz" value={fmtPct(conv, 2)} />
-            <MetricCard label="Daromad" value={fmtMoney(revenue)} tone="green" />
+            <MetricCard
+              label="Daromad"
+              value={fmtMoney(revenue)}
+              tone="green"
+            />
           </div>
         )}
 
@@ -204,48 +293,77 @@ export default function LidlarPage() {
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
               <span className="text-[13px] font-semibold">Voronka</span>
-              <span className="text-[11px] text-text3 ml-2">jami → jarayon → konversiya</span>
+              <span className="text-[11px] text-text3 ml-2">
+                jami → jarayon → konversiya
+              </span>
             </div>
             <div className="p-4">
-              {statsQ.isLoading && !statsQ.data ? <FunnelSkeleton rows={6} /> : <FunnelBars steps={funnelSteps} />}
+              {statsQ.isLoading && !statsQ.data ? (
+                <FunnelSkeleton rows={6} />
+              ) : (
+                <FunnelBars steps={funnelSteps} />
+              )}
             </div>
           </div>
           <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
-              <span className="text-[13px] font-semibold">Status bo'yicha (top 8)</span>
-              <span className="text-[11px] text-text3 ml-2">{statsQ.isLoading && !statsQ.data ? 'yuklanmoqda…' : `${topStatuses.length} ta`}</span>
+              <span className="text-[13px] font-semibold">
+                Status bo'yicha (top 8)
+              </span>
+              <span className="text-[11px] text-text3 ml-2">
+                {statsQ.isLoading && !statsQ.data
+                  ? "yuklanmoqda…"
+                  : `${topStatuses.length} ta`}
+              </span>
             </div>
             <div className="p-4">
               {statsQ.isLoading && !statsQ.data ? (
                 <div className="space-y-2">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="flex items-center gap-3 py-1.5">
-                      <div className="skeleton h-3 flex-1" style={{ maxWidth: 140 + (i * 12) }} />
+                      <div
+                        className="skeleton h-3 flex-1"
+                        style={{ maxWidth: 140 + i * 12 }}
+                      />
                       <div className="skeleton h-1.5 w-24" />
                       <div className="skeleton h-3 w-10" />
                     </div>
                   ))}
                 </div>
               ) : topStatuses.length === 0 ? (
-                <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>
-              ) : topStatuses.map((it, i) => {
-                const max = Math.max(1, ...topStatuses.map(s => s.val));
-                return (
-                  <div key={i} className="flex items-center gap-3 py-1.5">
-                    <span className="text-[12px] text-text2 flex-1 truncate">{it.label}</span>
-                    <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">
-                      <div className="h-full rounded bg-blue" style={{ width: `${(it.val / max) * 100}%` }} />
+                <div className="text-text3 text-[12px] text-center py-6">
+                  Bo'sh
+                </div>
+              ) : (
+                topStatuses.map((it, i) => {
+                  const max = Math.max(1, ...topStatuses.map((s) => s.val));
+                  return (
+                    <div key={i} className="flex items-center gap-3 py-1.5">
+                      <span className="text-[12px] text-text2 flex-1 truncate">
+                        {it.label}
+                      </span>
+                      <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">
+                        <div
+                          className="h-full rounded bg-blue"
+                          style={{ width: `${(it.val / max) * 100}%` }}
+                        />
+                      </div>
+                      <span className="mono text-[12px] font-semibold w-10 text-right">
+                        {fmtNum(it.val)}
+                      </span>
                     </div>
-                    <span className="mono text-[12px] font-semibold w-10 text-right">{fmtNum(it.val)}</span>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
 
         {/* Mas'ullar kesimida */}
-        <SectionHead title="Mas'ullar kesimida" hint={`${byUserFiltered.length} ta xodim`} />
+        <SectionHead
+          title="Mas'ullar kesimida"
+          hint={`${byUserFiltered.length} ta xodim`}
+        />
         <DataTable<StatsLeadsByUser>
           columns={userColumns}
           data={byUserFiltered}
@@ -255,10 +373,26 @@ export default function LidlarPage() {
 
         {/* Quality breakdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-          <QualityList title="Sifatsiz sabablari" items={qualityQ.data?.sifatsiz ?? []} loading={qualityQ.isLoading} />
-          <QualityList title="Bekor sabablari"   items={qualityQ.data?.bekor    ?? []} loading={qualityQ.isLoading} />
-          <QualityList title="Sandiq (junk)"     items={qualityQ.data?.sandiq   ?? []} loading={qualityQ.isLoading} />
-          <QualityList title="UTM source"        items={qualityQ.data?.utm      ?? []} loading={qualityQ.isLoading} />
+          <QualityList
+            title="Sifatsiz sabablari"
+            items={qualityQ.data?.sifatsiz ?? []}
+            loading={qualityQ.isLoading}
+          />
+          <QualityList
+            title="Bekor sabablari"
+            items={qualityQ.data?.bekor ?? []}
+            loading={qualityQ.isLoading}
+          />
+          <QualityList
+            title="Sandiq (junk)"
+            items={qualityQ.data?.sandiq ?? []}
+            loading={qualityQ.isLoading}
+          />
+          <QualityList
+            title="UTM source"
+            items={qualityQ.data?.utm ?? []}
+            loading={qualityQ.isLoading}
+          />
         </div>
 
         {statsQ.error && (
@@ -280,20 +414,33 @@ function SectionHead({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-function QualityList({ title, items, loading }: { title: string; items: { label: string; val: number }[]; loading: boolean }) {
-  const max = Math.max(1, ...items.map(i => i.val));
+function QualityList({
+  title,
+  items,
+  loading,
+}: {
+  title: string;
+  items: { label: string; val: number }[];
+  loading: boolean;
+}) {
+  const max = Math.max(1, ...items.map((i) => i.val));
   return (
     <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
         <span className="text-[13px] font-semibold">{title}</span>
-        <span className="text-[11px] text-text3 ml-2">{loading ? 'yuklanmoqda…' : `${items.length} ta`}</span>
+        <span className="text-[11px] text-text3 ml-2">
+          {loading ? "yuklanmoqda…" : `${items.length} ta`}
+        </span>
       </div>
       <div className="p-3">
         {loading && items.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 py-1.5">
-                <div className="skeleton h-3 flex-1" style={{ maxWidth: 100 + (i * 18) }} />
+                <div
+                  className="skeleton h-3 flex-1"
+                  style={{ maxWidth: 100 + i * 18 }}
+                />
                 <div className="skeleton h-1.5 w-24" />
                 <div className="skeleton h-3 w-10" />
               </div>
@@ -301,15 +448,24 @@ function QualityList({ title, items, loading }: { title: string; items: { label:
           </div>
         ) : items.length === 0 ? (
           <div className="text-text3 text-[12px] text-center py-6">Bo'sh</div>
-        ) : items.map((it, i) => (
-          <div key={i} className="flex items-center gap-3 py-1.5">
-            <span className="text-[12px] text-text2 flex-1 truncate">{it.label}</span>
-            <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">
-              <div className="h-full rounded bg-blue" style={{ width: `${(it.val / max) * 100}%` }} />
+        ) : (
+          items.map((it, i) => (
+            <div key={i} className="flex items-center gap-3 py-1.5">
+              <span className="text-[12px] text-text2 flex-1 truncate">
+                {it.label}
+              </span>
+              <div className="w-24 h-1.5 bg-bg4 rounded overflow-hidden">
+                <div
+                  className="h-full rounded bg-blue"
+                  style={{ width: `${(it.val / max) * 100}%` }}
+                />
+              </div>
+              <span className="mono text-[12px] font-semibold w-10 text-right">
+                {it.val}
+              </span>
             </div>
-            <span className="mono text-[12px] font-semibold w-10 text-right">{it.val}</span>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
