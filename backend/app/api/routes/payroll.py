@@ -357,7 +357,10 @@ def _won_revenue_in_range(start_iso: str, end_iso: str) -> dict:
             "select[]": ["ID", "OPPORTUNITY", "STAGE_ID"],
             "start": start,
         }
-        res = requests.get(url, params=params)
+        try:
+            res = requests.get(url, params=params, timeout=15)
+        except requests.RequestException:
+            break
         if res.status_code != 200:
             break
         data = res.json()
@@ -870,7 +873,7 @@ def calculate_payroll(
     # Penalties from attendance + report logs
     penalties_uzs, penalty_breakdown = _compute_penalty_uzs(bitrix_user_id, year, month, s)
 
-    total_uzs = fix_base - penalties_uzs
+    total_uzs = max(0, fix_base - penalties_uzs)
     total_usd = kpi_payout + bonuses_usd
 
     return {

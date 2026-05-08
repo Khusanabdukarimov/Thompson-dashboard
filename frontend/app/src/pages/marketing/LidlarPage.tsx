@@ -204,6 +204,7 @@ export default function LidlarPage() {
             onClick={() => {
               statsQ.refetch();
               qualityQ.refetch();
+              activitiesQ.refetch();
             }}
           >
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
@@ -230,6 +231,7 @@ export default function LidlarPage() {
             onApply={() => {
               statsQ.refetch();
               qualityQ.refetch();
+              activitiesQ.refetch();
             }}
             activeChipLabel={
               activePreset && activePreset !== "all"

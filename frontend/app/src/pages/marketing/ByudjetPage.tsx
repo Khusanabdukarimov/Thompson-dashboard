@@ -212,7 +212,7 @@ export default function ByudjetPage() {
               label={target ? "Maqsad qoldi" : "Maqsad"}
               value={target ? fmtMoney(remaining) : "belgilanmagan"}
               tone={burn > 100 ? "red" : "blue"}
-              hint={target ? `${fmtPct(burn, 1)} foyda` : "—"}
+              hint={target ? `${fmtPct(burn, 1)} sarflandi` : "—"}
             />
             <MetricCard
               label="Bugungi sarf"

@@ -696,7 +696,7 @@ async def api_dashboard_daily(date_str: str):
     try:
         # Bitrix visits and leads
         visits = get_visits_by_date(date_str, date_str)
-        leads = list_leads(filter_dict={})
+        leads = list_leads(filter_dict={">=DATE_CREATE": date_str, "<=DATE_CREATE": date_str})
         deals = aggregate_deals_sum_total(date_str, date_str)
     except Exception as e:
         visits = []

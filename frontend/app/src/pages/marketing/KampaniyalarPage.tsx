@@ -253,7 +253,7 @@ export default function KampaniyalarPage() {
         accessorKey: "frequency",
         cell: (c) => (
           <span className="mono text-text2">
-            {c.getValue<number>().toFixed(2)}
+            {(c.getValue<number>() ?? 0).toFixed(2)}
           </span>
         ),
       },
@@ -323,7 +323,9 @@ export default function KampaniyalarPage() {
         header: "CTR %",
         accessorKey: "ctr",
         cell: (c) => (
-          <span className="mono">{c.getValue<number>().toFixed(2)}%</span>
+          <span className="mono">
+            {(c.getValue<number>() ?? 0).toFixed(2)}%
+          </span>
         ),
       },
       {
@@ -331,7 +333,7 @@ export default function KampaniyalarPage() {
         accessorKey: "hook_rate",
         cell: (c) => (
           <span className="mono text-text2">
-            {c.getValue<number>().toFixed(2)}%
+            {(c.getValue<number>() ?? 0).toFixed(2)}%
           </span>
         ),
       },
@@ -340,7 +342,7 @@ export default function KampaniyalarPage() {
         accessorKey: "visit_rate",
         cell: (c) => (
           <span className="mono text-text2">
-            {c.getValue<number>().toFixed(2)}%
+            {(c.getValue<number>() ?? 0).toFixed(2)}%
           </span>
         ),
       },
@@ -348,7 +350,9 @@ export default function KampaniyalarPage() {
         header: "Lead %",
         accessorKey: "lid_rate",
         cell: (c) => (
-          <span className="mono">{c.getValue<number>().toFixed(2)}%</span>
+          <span className="mono">
+            {(c.getValue<number>() ?? 0).toFixed(2)}%
+          </span>
         ),
       },
     ],
