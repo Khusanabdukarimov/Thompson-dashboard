@@ -258,7 +258,7 @@ def api_stats_leads(
     utm_campaign_counts: dict = {}
     ages_days: list = []
     frozen_count = 0
-    now_utc = _dt.now(timezone.utc)
+    now_utc = _dt.utcnow()  # naive UTC — avoids timezone import
 
     for u in all_users:
         uid = str(u["ID"])
@@ -307,15 +307,16 @@ def api_stats_leads(
             modified_str = lead.get("DATE_MODIFY") or created_str
             if created_str:
                 try:
-                    created = _dt.fromisoformat(created_str.replace("Z", "+00:00"))
-                    if created.tzinfo is None:
-                        created = created.replace(tzinfo=timezone.utc)
+                    def _to_naive_utc(s):
+                        dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+                        if dt.tzinfo is not None:
+                            dt = dt - dt.utcoffset()
+                            dt = dt.replace(tzinfo=None)
+                        return dt
+                    created = _to_naive_utc(created_str)
                     age = (now_utc - created).days
                     ages_days.append(age)
-
-                    modified = _dt.fromisoformat(modified_str.replace("Z", "+00:00"))
-                    if modified.tzinfo is None:
-                        modified = modified.replace(tzinfo=timezone.utc)
+                    modified = _to_naive_utc(modified_str)
                     if (now_utc - modified).days >= FROZEN_DAYS:
                         frozen_count += 1
                 except Exception:
