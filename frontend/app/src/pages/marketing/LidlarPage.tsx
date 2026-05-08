@@ -13,7 +13,7 @@ import type {
 import { MetricRowSkeleton } from "@/components/Skeleton";
 import { getLeadsStats, getLeadQuality } from "@/lib/api/leads";
 import type { LeadFilter } from "@/lib/api/leads";
-import { fmtNum, fmtPct } from "@/lib/utils";
+import { fmtNum, fmtPct, fmtMoney } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -269,7 +269,7 @@ export default function LidlarPage() {
 
         {/* KPI Row 2 — 4 medium cards */}
         {!statsQ.isLoading && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
             <MetricCard
               label="Tashrif belgilandi"
               value={fmtNum(tashrifBelg)}
@@ -291,6 +291,38 @@ export default function LidlarPage() {
                 tashrifBelg ? fmtPct((tashrifBuy / tashrifBelg) * 100, 2) : "—"
               }
               tone="green"
+            />
+          </div>
+        )}
+
+        {/* KPI Row 3 — revenue + frozen + age */}
+        {!statsQ.isLoading && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <MetricCard
+              label="Jami daromad (lid)"
+              value={d?.total_revenue ? fmtMoney(d.total_revenue) : "—"}
+              tone="green"
+              hint="OPPORTUNITY summasi"
+            />
+            <MetricCard
+              label="Muzlab qolgan lidlar"
+              value={fmtNum(d?.frozen_count ?? 0)}
+              tone={(d?.frozen_count ?? 0) > 0 ? "red" : "blue"}
+              hint={`${7}+ kun o'zgarishsiz`}
+            />
+            <MetricCard
+              label="O'rtacha lid yoshi"
+              value={d?.avg_age_days ? `${d.avg_age_days} kun` : "—"}
+              hint="jarayondagi lidlar"
+            />
+            <MetricCard
+              label="Daromad / lid"
+              value={
+                total && d?.total_revenue
+                  ? fmtMoney(d.total_revenue / total)
+                  : "—"
+              }
+              hint="o'rtacha OPPORTUNITY"
             />
           </div>
         )}
@@ -317,6 +349,9 @@ export default function LidlarPage() {
                     </th>
                     <th className="px-3 py-2.5 text-right font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[56px]">
                       Jami
+                    </th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px] text-green">
+                      Daromad
                     </th>
                     {orderedStatuses.map((sid, i) => (
                       <th
@@ -356,6 +391,11 @@ export default function LidlarPage() {
                           {fmtNum(u.total)}
                         </span>
                       </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="mono text-[12px] text-green">
+                          {u.revenue > 0 ? fmtMoney(u.revenue) : "—"}
+                        </span>
+                      </td>
                       {orderedStatuses.map((sid, i) => {
                         const cnt = u.by_status[sid] ?? 0;
                         const col = sColor(sid, i);
@@ -393,6 +433,11 @@ export default function LidlarPage() {
                         {fmtNum(total)}
                       </span>
                     </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <span className="mono text-[12px] font-semibold text-green">
+                        {d?.total_revenue ? fmtMoney(d.total_revenue) : "—"}
+                      </span>
+                    </td>
                     {orderedStatuses.map((sid) => (
                       <td key={sid} className="px-3 py-2.5">
                         <span className="mono text-[12px] font-semibold">
@@ -406,6 +451,44 @@ export default function LidlarPage() {
             </div>
           )}
         </div>
+
+        {/* Sources breakdown */}
+        {!statsQ.isLoading && (d?.sources ?? []).length > 0 && (
+          <div className="bg-bg2 border border-border rounded-lg shadow mb-4 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <span className="text-[13px] font-semibold">
+                Manba bo'yicha lidlar
+              </span>
+              <span className="text-[11px] text-text3">
+                {(d?.sources ?? []).length} ta manba
+              </span>
+            </div>
+            <div className="p-4 flex flex-col gap-2">
+              {(d?.sources ?? []).map((s) => {
+                const pct = total ? (s.count / total) * 100 : 0;
+                return (
+                  <div key={s.id} className="flex items-center gap-3">
+                    <span className="text-[12px] text-text2 w-36 shrink-0 truncate">
+                      {s.label}
+                    </span>
+                    <div className="flex-1 h-6 rounded overflow-hidden bg-bg3">
+                      <div
+                        className="h-full rounded bg-blue transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="mono text-[12px] font-semibold w-8 text-right">
+                      {s.count}
+                    </span>
+                    <span className="mono text-[11px] text-text3 w-10 text-right">
+                      {pct.toFixed(0)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Quality breakdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -428,6 +511,16 @@ export default function LidlarPage() {
             title="UTM source"
             items={qualityQ.data?.utm ?? []}
             loading={qualityQ.isLoading}
+          />
+          <QualityList
+            title="UTM medium"
+            items={statsQ.data?.utm_medium_counts ?? []}
+            loading={statsQ.isLoading}
+          />
+          <QualityList
+            title="UTM campaign"
+            items={statsQ.data?.utm_campaign_counts ?? []}
+            loading={statsQ.isLoading}
           />
         </div>
 

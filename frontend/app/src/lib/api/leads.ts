@@ -1,4 +1,4 @@
-import { apiGet, authedFetch } from './client';
+import { apiGet, authedFetch } from "./client";
 
 export type LeadFilter = {
   start_date?: string;
@@ -27,17 +27,21 @@ export type StatsLeadsResponse = {
   converted: number;
   jarayon_total: number;
   conversion_rate: number;
+  avg_age_days: number;
+  frozen_count: number;
   by_status: Record<string, number>;
   by_user: StatsLeadsByUser[];
   all_statuses: string[];
   status_names: Record<string, string>;
   users: { id: string; name: string }[];
-  sources: { id: string; label: string }[];
+  sources: { id: string; label: string; count: number }[];
   utm_sources: string[];
   utm_mediums: string[];
   utm_campaigns: string[];
   utm_contents: string[];
   utm_terms: string[];
+  utm_medium_counts: { label: string; val: number }[];
+  utm_campaign_counts: { label: string; val: number }[];
 };
 
 export type LeadQualityResponse = {
@@ -48,11 +52,11 @@ export type LeadQualityResponse = {
 };
 
 export function getLeadsStats(filter: LeadFilter) {
-  return apiGet<StatsLeadsResponse>('/api/stats/leads', filter);
+  return apiGet<StatsLeadsResponse>("/api/stats/leads", filter);
 }
 
 export function getLeadQuality(filter: LeadFilter) {
-  return apiGet<LeadQualityResponse>('/api/stats/lead-quality', filter);
+  return apiGet<LeadQualityResponse>("/api/stats/lead-quality", filter);
 }
 
 // ── Lead list (raw + enriched) ───────────────────────────────────
@@ -88,10 +92,15 @@ export type LeadsListFilter = {
 };
 
 export function listLeadsRich(filter: LeadsListFilter) {
-  return apiGet<{ count: number; leads: LeadRow[]; offset: number; limit: number | null }>(
-    '/api/leads',
-    { ...filter, enrich: filter.enrich ? 'true' : undefined } as Record<string, string | number | undefined>,
-  );
+  return apiGet<{
+    count: number;
+    leads: LeadRow[];
+    offset: number;
+    limit: number | null;
+  }>("/api/leads", {
+    ...filter,
+    enrich: filter.enrich ? "true" : undefined,
+  } as Record<string, string | number | undefined>);
 }
 
 // ── Create lead ──────────────────────────────────────────────────
@@ -106,10 +115,12 @@ export type LeadCreateIn = {
   notes?: string;
 };
 
-export async function createLead(body: LeadCreateIn): Promise<{ result: number }> {
-  const res = await authedFetch('/api/leads', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function createLead(
+  body: LeadCreateIn,
+): Promise<{ result: number }> {
+  const res = await authedFetch("/api/leads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);

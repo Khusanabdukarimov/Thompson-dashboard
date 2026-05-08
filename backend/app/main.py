@@ -223,8 +223,11 @@ def api_stats_leads(
     if utm_content:  f["UTM_CONTENT"] = utm_content
     if utm_term:     f["UTM_TERM"] = utm_term
 
-    select = ["ID", "ASSIGNED_BY_ID", "STATUS_ID", "OPPORTUNITY", "SOURCE_ID",
-              "UTM_SOURCE", "UTM_MEDIUM", "UTM_CAMPAIGN", "UTM_CONTENT", "UTM_TERM"]
+    select = [
+        "ID", "ASSIGNED_BY_ID", "STATUS_ID", "OPPORTUNITY", "SOURCE_ID",
+        "UTM_SOURCE", "UTM_MEDIUM", "UTM_CAMPAIGN", "UTM_CONTENT", "UTM_TERM",
+        "DATE_CREATE", "DATE_MODIFY",
+    ]
     # Run all 4 Bitrix calls concurrently — reduces wall-clock time from ~sum to ~max
     with ThreadPoolExecutor(max_workers=4) as ex:
         f_leads   = ex.submit(bitrix.list_leads, f, select)
@@ -238,15 +241,24 @@ def api_stats_leads(
     users_map = {u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
                  for u in all_users}
 
+    JARAYON_STATUSES = {"NEW", "IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68"}
+    FROZEN_DAYS = 7  # idle days threshold for "muzlab qolgan" (frozen) leads
+
     by_status: dict = {}
     by_user: dict = {}
     total_opp = 0.0
     sources_found: set = set()
+    source_counts: dict = {}
     utm_sources_found: set = set()
     utm_mediums_found: set = set()
     utm_campaigns_found: set = set()
     utm_contents_found: set = set()
     utm_terms_found: set = set()
+    utm_medium_counts: dict = {}
+    utm_campaign_counts: dict = {}
+    ages_days: list = []
+    frozen_count = 0
+    now_utc = _dt.now(timezone.utc)
 
     for u in all_users:
         uid = str(u["ID"])
@@ -268,7 +280,10 @@ def api_stats_leads(
         by_user[uid]["by_status"][status] = by_user[uid]["by_status"].get(status, 0) + 1
 
         src = (lead.get("SOURCE_ID") or "").strip()
-        if src: sources_found.add(src)
+        if src:
+            sources_found.add(src)
+            source_counts[src] = source_counts.get(src, 0) + 1
+
         for val, col in [
             (lead.get("UTM_SOURCE"),   utm_sources_found),
             (lead.get("UTM_MEDIUM"),   utm_mediums_found),
@@ -279,27 +294,61 @@ def api_stats_leads(
             v = (val or "").strip()
             if v: col.add(v)
 
-    JARAYON_STATUSES = {"NEW", "IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68"}
+        med = (lead.get("UTM_MEDIUM") or "").strip()
+        if med:
+            utm_medium_counts[med] = utm_medium_counts.get(med, 0) + 1
+        camp = (lead.get("UTM_CAMPAIGN") or "").strip()
+        if camp:
+            utm_campaign_counts[camp] = utm_campaign_counts.get(camp, 0) + 1
+
+        # Lead age / frozen computation (only for active/jarayon leads)
+        if status in JARAYON_STATUSES:
+            created_str = lead.get("DATE_CREATE")
+            modified_str = lead.get("DATE_MODIFY") or created_str
+            if created_str:
+                try:
+                    created = _dt.fromisoformat(created_str.replace("Z", "+00:00"))
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    age = (now_utc - created).days
+                    ages_days.append(age)
+
+                    modified = _dt.fromisoformat(modified_str.replace("Z", "+00:00"))
+                    if modified.tzinfo is None:
+                        modified = modified.replace(tzinfo=timezone.utc)
+                    if (now_utc - modified).days >= FROZEN_DAYS:
+                        frozen_count += 1
+                except Exception:
+                    pass
+
+    avg_age_days = round(sum(ages_days) / len(ages_days), 1) if ages_days else 0
     jarayon_total = sum(v for k, v in by_status.items() if k in JARAYON_STATUSES)
     converted = sum(v for k, v in by_status.items() if "CONVERT" in k.upper() or k == "CLOSED")
     total = len(leads)
     return {
         "total": total,
-        "total_revenue": total_opp,
+        "total_revenue": round(total_opp, 2),
         "converted": converted,
         "jarayon_total": jarayon_total,
         "conversion_rate": round(converted / total * 100, 2) if total else 0,
+        "avg_age_days": avg_age_days,
+        "frozen_count": frozen_count,
         "by_status": by_status,
         "by_user": sorted(by_user.values(), key=lambda x: x["total"], reverse=True),
         "all_statuses": list(status_names.keys()),
         "status_names": status_names,
         "users": [{"id": u["ID"], "name": users_map[u["ID"]]} for u in all_users],
-        "sources": sorted([{"id": s, "label": source_names.get(s, s)} for s in sources_found], key=lambda x: x["label"]),
-        "utm_sources":   sorted(utm_sources_found),
-        "utm_mediums":   sorted(utm_mediums_found),
-        "utm_campaigns": sorted(utm_campaigns_found),
-        "utm_contents":  sorted(utm_contents_found),
-        "utm_terms":     sorted(utm_terms_found),
+        "sources": sorted(
+            [{"id": s, "label": source_names.get(s, s), "count": source_counts.get(s, 0)} for s in sources_found],
+            key=lambda x: -x["count"],
+        ),
+        "utm_sources":        sorted(utm_sources_found),
+        "utm_mediums":        sorted(utm_mediums_found),
+        "utm_campaigns":      sorted(utm_campaigns_found),
+        "utm_contents":       sorted(utm_contents_found),
+        "utm_terms":          sorted(utm_terms_found),
+        "utm_medium_counts":  sorted([{"label": k, "val": v} for k, v in utm_medium_counts.items()], key=lambda x: -x["val"]),
+        "utm_campaign_counts": sorted([{"label": k, "val": v} for k, v in utm_campaign_counts.items()], key=lambda x: -x["val"]),
     }
 
 
