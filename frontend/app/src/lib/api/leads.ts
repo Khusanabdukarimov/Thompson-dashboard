@@ -42,7 +42,31 @@ export type StatsLeadsResponse = {
   utm_terms: string[];
   utm_medium_counts: { label: string; val: number }[];
   utm_campaign_counts: { label: string; val: number }[];
+  field_breakdowns: {
+    key: string;
+    label: string;
+    items: { label: string; val: number }[];
+  }[];
 };
+
+export type ActivityStatsResponse = {
+  total: number;
+  by_type: { key: string; label: string; val: number }[];
+  by_user: {
+    id: string;
+    name: string;
+    total: number;
+    completed: number;
+    by_type: Record<string, number>;
+  }[];
+  type_labels: Record<string, string>;
+};
+
+export function getActivitiesStats(
+  filter: Pick<LeadFilter, "start_date" | "end_date">,
+) {
+  return apiGet<ActivityStatsResponse>("/api/stats/activities", filter);
+}
 
 export type LeadQualityResponse = {
   sifatsiz: { label: string; val: number }[];

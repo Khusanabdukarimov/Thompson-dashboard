@@ -2,16 +2,23 @@ import os
 
 # Try to import project config helper, otherwise fall back to environment variables.
 try:
-    from helper.config import BITRIX24_PORTAL, BITRIX24_TOKEN, TASHRIF_DATE, TASHRIF_VISTORS_COUNT
+    from helper.config import (
+        BITRIX24_PORTAL,
+        BITRIX24_TOKEN,
+        TASHRIF_DATE,
+        TASHRIF_VISTORS_COUNT,
+    )
 except Exception:
     BITRIX24_PORTAL = os.environ.get('BITRIX24_PORTAL', 'https://your-portal.bitrix24.com/rest/')
     BITRIX24_TOKEN = os.environ.get('BITRIX24_TOKEN', '')
     # Default custom field names for visit date / visitors count — adapt to your CRM
     TASHRIF_DATE = os.environ.get('TASHRIF_DATE', 'UF_CRM_VISIT_DATE')
     TASHRIF_VISTORS_COUNT = os.environ.get('TASHRIF_VISTORS_COUNT', 'UF_CRM_VISITORS_COUNT')
-from datetime import datetime, timezone
-from dateutil.parser import parse as parse_b24_datetime
+from datetime import datetime
+
 import requests
+from dateutil.parser import parse as parse_b24_datetime
+
 
 def get_lead_details(lead_id):
     url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.lead.get.json"
@@ -295,6 +302,7 @@ def get_todays_visits_leads():
 
 from datetime import timedelta
 
+
 def get_tomorrows_visits_leads():
     url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.lead.list"
     now = datetime.now(TSK_TZ)
@@ -553,3 +561,29 @@ def aggregate_deals_sum_total(start_iso, end_iso, stage_filter=None):
         else:
             break
     return {"sum": total, "count": count}
+
+
+def list_activities(filter_dict=None, select=None):
+    """List CRM activities with pagination."""
+    url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.activity.list"
+    all_items = []
+    start = 0
+    while True:
+        params = {"start": start}
+        if filter_dict:
+            for k, v in filter_dict.items():
+                params[f"filter[{k}]"] = v
+        if select:
+            params["select[]"] = select
+        res = requests.get(url, params=params)
+        if res.status_code == 200:
+            data = res.json()
+            items = data.get("result", [])
+            all_items.extend(items)
+            if "next" in data:
+                start = data["next"]
+            else:
+                break
+        else:
+            break
+    return all_items

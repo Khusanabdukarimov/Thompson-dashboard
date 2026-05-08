@@ -223,21 +223,31 @@ def api_stats_leads(
     if utm_content:  f["UTM_CONTENT"] = utm_content
     if utm_term:     f["UTM_TERM"] = utm_term
 
+    UF_SEGMENT_FIELDS = {
+        "UF_CRM_1775825731211": "Hudud",
+        "UF_CRM_1777030859057": "Qaysi filial",
+        "UF_CRM_1775824803703": "Xizmat turi",
+        "UF_CRM_1775825155935": "Faoliyati",
+        "UF_CRM_1770281264686": "Kim bilan keldi",
+    }
     select = [
         "ID", "ASSIGNED_BY_ID", "STATUS_ID", "OPPORTUNITY", "SOURCE_ID",
         "UTM_SOURCE", "UTM_MEDIUM", "UTM_CAMPAIGN", "UTM_CONTENT", "UTM_TERM",
         "DATE_CREATE", "DATE_MODIFY",
+        *UF_SEGMENT_FIELDS.keys(),
     ]
-    # Run all 4 Bitrix calls concurrently — reduces wall-clock time from ~sum to ~max
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    # Run all 5 Bitrix calls concurrently — reduces wall-clock time from ~sum to ~max
+    with ThreadPoolExecutor(max_workers=5) as ex:
         f_leads   = ex.submit(bitrix.list_leads, f, select)
         f_users   = ex.submit(bitrix.list_users)
         f_status  = ex.submit(bitrix.get_lead_status_names)
         f_sources = ex.submit(bitrix.get_deal_source_names)
+        f_enum    = ex.submit(bitrix.get_lead_enum_map)
     leads        = f_leads.result()
     all_users    = f_users.result()
     status_names = f_status.result()
     source_names = f_sources.result()
+    enum_map     = f_enum.result()
     users_map = {u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
                  for u in all_users}
 
@@ -256,6 +266,7 @@ def api_stats_leads(
     utm_terms_found: set = set()
     utm_medium_counts: dict = {}
     utm_campaign_counts: dict = {}
+    field_counts: dict = {fid: {} for fid in UF_SEGMENT_FIELDS}
     ages_days: list = []
     frozen_count = 0
     now_utc = _dt.utcnow()  # naive UTC — avoids timezone import
@@ -300,6 +311,16 @@ def api_stats_leads(
         camp = (lead.get("UTM_CAMPAIGN") or "").strip()
         if camp:
             utm_campaign_counts[camp] = utm_campaign_counts.get(camp, 0) + 1
+
+        for fid in UF_SEGMENT_FIELDS:
+            raw = lead.get(fid)
+            if not raw:
+                continue
+            vals = raw if isinstance(raw, list) else [raw]
+            fe = enum_map.get(fid, {})
+            for v in vals:
+                label = fe.get(str(v), str(v))
+                field_counts[fid][label] = field_counts[fid].get(label, 0) + 1
 
         # Lead age / frozen computation (only for active/jarayon leads)
         if status in JARAYON_STATUSES:
@@ -350,6 +371,17 @@ def api_stats_leads(
         "utm_terms":          sorted(utm_terms_found),
         "utm_medium_counts":  sorted([{"label": k, "val": v} for k, v in utm_medium_counts.items()], key=lambda x: -x["val"]),
         "utm_campaign_counts": sorted([{"label": k, "val": v} for k, v in utm_campaign_counts.items()], key=lambda x: -x["val"]),
+        "field_breakdowns": [
+            {
+                "key": fid,
+                "label": lbl,
+                "items": sorted(
+                    [{"label": k, "val": v} for k, v in field_counts[fid].items()],
+                    key=lambda x: -x["val"],
+                ),
+            }
+            for fid, lbl in UF_SEGMENT_FIELDS.items()
+        ],
     }
 
 
@@ -540,6 +572,69 @@ def api_stats_lead_quality(
     result["utm"] = sorted([{"label": k, "val": v} for k, v in utm_counts.items()], key=lambda x: -x["val"])
 
     return result
+
+
+@app.get("/api/stats/activities")
+def api_stats_activities(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """Activity analytics: calls, tasks, todos per responsible person."""
+    f = {}
+    if start_date:
+        f[">=CREATED"] = start_date
+    if end_date:
+        f["<=CREATED"] = end_date
+
+    TYPE_LABELS = {"CALL": "Qo'ng'iroq", "TODO": "Eslatma", "TASKS_TASK": "Topshiriq"}
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_acts = ex.submit(
+            bitrix.list_activities,
+            f,
+            ["ID", "RESPONSIBLE_ID", "COMPLETED", "DIRECTION", "PROVIDER_TYPE_ID", "CREATED"],
+        )
+        f_users = ex.submit(bitrix.list_users)
+    activities = f_acts.result()
+    all_users = f_users.result()
+    users_map = {
+        u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
+        for u in all_users
+    }
+
+    by_user: dict = {}
+    by_type: dict = {}
+
+    for act in activities:
+        uid = str(act.get("RESPONSIBLE_ID", ""))
+        atype = act.get("PROVIDER_TYPE_ID", "OTHER")
+        completed = act.get("COMPLETED") == "Y"
+        if uid not in by_user:
+            by_user[uid] = {
+                "id": uid,
+                "name": users_map.get(uid, f"User {uid}"),
+                "total": 0,
+                "completed": 0,
+                "by_type": {},
+            }
+        by_user[uid]["total"] += 1
+        if completed:
+            by_user[uid]["completed"] += 1
+        by_user[uid]["by_type"][atype] = by_user[uid]["by_type"].get(atype, 0) + 1
+        by_type[atype] = by_type.get(atype, 0) + 1
+
+    return {
+        "total": len(activities),
+        "by_type": [
+            {"key": k, "label": TYPE_LABELS.get(k, k), "val": v}
+            for k, v in sorted(by_type.items(), key=lambda x: -x[1])
+        ],
+        "by_user": sorted(
+            [u for u in by_user.values() if u["total"] > 0],
+            key=lambda x: -x["total"],
+        ),
+        "type_labels": TYPE_LABELS,
+    }
 
 
 @app.get("/api/attendance")

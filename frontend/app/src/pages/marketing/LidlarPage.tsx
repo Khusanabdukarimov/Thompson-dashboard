@@ -11,7 +11,11 @@ import type {
   FilterValues,
 } from "@/components/FilterBar";
 import { MetricRowSkeleton } from "@/components/Skeleton";
-import { getLeadsStats, getLeadQuality } from "@/lib/api/leads";
+import {
+  getLeadsStats,
+  getLeadQuality,
+  getActivitiesStats,
+} from "@/lib/api/leads";
 import type { LeadFilter } from "@/lib/api/leads";
 import { fmtNum, fmtPct, fmtMoney } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -100,6 +104,14 @@ export default function LidlarPage() {
   const qualityQ = useQuery({
     queryKey: ["stats/lead-quality", apiFilter],
     queryFn: () => getLeadQuality(apiFilter),
+  });
+  const activitiesQ = useQuery({
+    queryKey: ["stats/activities", values.start_date, values.end_date],
+    queryFn: () =>
+      getActivitiesStats({
+        start_date: values.start_date,
+        end_date: values.end_date,
+      }),
   });
 
   const fields: FilterField[] = useMemo(() => {
@@ -486,6 +498,105 @@ export default function LidlarPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* UF_CRM field breakdowns (hudud, filial, xizmat turi, …) */}
+        {!statsQ.isLoading &&
+          (d?.field_breakdowns ?? []).filter((fb) => fb.items.length > 0)
+            .length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+              {(d?.field_breakdowns ?? [])
+                .filter((fb) => fb.items.length > 0)
+                .map((fb) => (
+                  <QualityList
+                    key={fb.key}
+                    title={fb.label}
+                    items={fb.items}
+                    loading={false}
+                  />
+                ))}
+            </div>
+          )}
+
+        {/* Activities analytics table */}
+        {!activitiesQ.isLoading && (activitiesQ.data?.total ?? 0) > 0 && (
+          <div className="bg-bg2 border border-border rounded-lg shadow mb-4 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <span className="text-[13px] font-semibold">
+                Faoliyatlar (qo'ng'iroq / topshiriq / eslatma)
+              </span>
+              <div className="flex items-center gap-3">
+                {(activitiesQ.data?.by_type ?? []).map((t) => (
+                  <span key={t.key} className="text-[11px] text-text3">
+                    {t.label}:{" "}
+                    <span className="font-semibold text-text">{t.val}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11.5px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border bg-bg">
+                    <th className="px-4 py-2.5 text-left text-[10px] font-medium text-text3 uppercase tracking-wider min-w-[160px]">
+                      Mas'ul
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-medium text-text3 uppercase tracking-wider">
+                      Jami
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-blue">
+                      Qo'ng'iroq
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-amber">
+                      Topshiriq
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-purple">
+                      Eslatma
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-medium text-text3 uppercase tracking-wider">
+                      Bajarildi%
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(activitiesQ.data?.by_user ?? []).map((u) => {
+                    const pct = u.total
+                      ? Math.round((u.completed / u.total) * 100)
+                      : 0;
+                    return (
+                      <tr
+                        key={u.id}
+                        className="border-b border-border hover:bg-bg3 transition-colors"
+                      >
+                        <td className="px-4 py-2.5 font-medium text-[12px]">
+                          {u.name || `User ${u.id}`}
+                        </td>
+                        <td className="px-3 py-2.5 text-right mono font-semibold text-[13px]">
+                          {u.total}
+                        </td>
+                        <td className="px-3 py-2.5 text-right mono text-[12px] text-blue">
+                          {u.by_type["CALL"] ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5 text-right mono text-[12px] text-amber">
+                          {u.by_type["TASKS_TASK"] ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5 text-right mono text-[12px] text-purple">
+                          {u.by_type["TODO"] ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span
+                            className={`mono text-[12px] font-semibold ${pct >= 80 ? "text-green" : pct >= 50 ? "text-amber" : "text-red"}`}
+                          >
+                            {pct}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
