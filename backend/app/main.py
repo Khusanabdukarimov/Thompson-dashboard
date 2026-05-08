@@ -198,6 +198,42 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
     return res
 
 
+# ── Lead analytics constants (module-level) ─────────────────────────────────
+_UF_SEGMENT_FIELDS = {
+    "UF_CRM_1775825731211": "Hudud",
+    "UF_CRM_1777030859057": "Qaysi filial",
+    "UF_CRM_1775824803703": "Xizmat turi",
+    "UF_CRM_1775825155935": "Faoliyati",
+    "UF_CRM_1770281264686": "Kim bilan keldi",
+}
+
+# Translate Russian Bitrix source/status names that appear verbatim from CRM
+_BITRIX_LABEL_TRANSLATE = {
+    "Звонок": "Qo'ng'iroq",
+    "Электронная почта": "E-pochta",
+    "Веб-сайт": "Veb-sayt",
+    "Реклама": "Reklama",
+    "Партнер": "Hamkor",
+    "Другое": "Boshqa",
+    "Не указано": "Ko'rsatilmagan",
+    "Рекомендация": "Tavsiya",
+    "Собственный капитал": "O'z resursi",
+}
+
+
+def _translate_label(s: str) -> str:
+    return _BITRIX_LABEL_TRANSLATE.get(s, s)
+
+
+def _to_naive_utc(s: str):
+    """Convert ISO datetime string to naive UTC datetime."""
+    dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+    if dt.tzinfo is not None:
+        dt = dt - dt.utcoffset()
+        dt = dt.replace(tzinfo=None)
+    return dt
+
+
 @app.get("/api/stats/leads")
 def api_stats_leads(
     start_date: Optional[str] = None,
@@ -223,13 +259,7 @@ def api_stats_leads(
     if utm_content:  f["UTM_CONTENT"] = utm_content
     if utm_term:     f["UTM_TERM"] = utm_term
 
-    UF_SEGMENT_FIELDS = {
-        "UF_CRM_1775825731211": "Hudud",
-        "UF_CRM_1777030859057": "Qaysi filial",
-        "UF_CRM_1775824803703": "Xizmat turi",
-        "UF_CRM_1775825155935": "Faoliyati",
-        "UF_CRM_1770281264686": "Kim bilan keldi",
-    }
+    UF_SEGMENT_FIELDS = _UF_SEGMENT_FIELDS
     select = [
         "ID", "ASSIGNED_BY_ID", "STATUS_ID", "OPPORTUNITY", "SOURCE_ID",
         "UTM_SOURCE", "UTM_MEDIUM", "UTM_CAMPAIGN", "UTM_CONTENT", "UTM_TERM",
@@ -328,12 +358,6 @@ def api_stats_leads(
             modified_str = lead.get("DATE_MODIFY") or created_str
             if created_str:
                 try:
-                    def _to_naive_utc(s):
-                        dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
-                        if dt.tzinfo is not None:
-                            dt = dt - dt.utcoffset()
-                            dt = dt.replace(tzinfo=None)
-                        return dt
                     created = _to_naive_utc(created_str)
                     age = (now_utc - created).days
                     ages_days.append(age)
@@ -361,7 +385,7 @@ def api_stats_leads(
         "status_names": status_names,
         "users": [{"id": u["ID"], "name": users_map[u["ID"]]} for u in all_users],
         "sources": sorted(
-            [{"id": s, "label": source_names.get(s, s), "count": source_counts.get(s, 0)} for s in sources_found],
+            [{"id": s, "label": _translate_label(source_names.get(s, s)), "count": source_counts.get(s, 0)} for s in sources_found],
             key=lambda x: -x["count"],
         ),
         "utm_sources":        sorted(utm_sources_found),
@@ -480,7 +504,7 @@ def api_deals_by_source(
         stage = deal.get("STAGE_ID", "")
         opp = float(deal.get("OPPORTUNITY") or 0)
         if src_id not in by_source:
-            label = source_names.get(src_id, src_id) if src_id != "UNKNOWN" else "Noma'lum"
+            label = _translate_label(source_names.get(src_id, src_id)) if src_id != "UNKNOWN" else "Noma'lum"
             by_source[src_id] = {"id": src_id, "label": label, "ishlaydi": 0, "provodka": 0, "success": 0, "revenue": 0.0}
         if "WON" in stage.upper():
             by_source[src_id]["success"] += 1

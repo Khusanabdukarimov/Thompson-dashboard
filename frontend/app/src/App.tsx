@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Skeleton } from "@/components/Skeleton";
 import Placeholder from "@/pages/Placeholder";
@@ -60,8 +60,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<"loading" | "ok" | "login">(
     "loading",
   );
-  const location = useLocation();
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -85,7 +83,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [location.pathname]);
+  }, []);
 
   if (authState === "loading") return <PageLoader />;
   if (authState === "login") return <Navigate to="/login" replace />;
