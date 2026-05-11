@@ -61,13 +61,23 @@ def list_users():
     This is a small wrapper used to populate employee dropdowns in the frontend.
     """
     url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/user.get.json"
+    all_users = []
+    start = 0
     try:
-        res = requests.get(url)
-        if res.status_code == 200:
-            return res.json().get("result", [])
+        while True:
+            res = requests.get(url, params={"start": start, "ACTIVE": "Y"})
+            if res.status_code != 200:
+                break
+            data = res.json()
+            page = data.get("result", [])
+            all_users.extend(page)
+            if "next" in data:
+                start = data["next"]
+            else:
+                break
     except Exception as e:
         print(f"Error listing users: {e}")
-    return []
+    return all_users
 
 
 def create_lead(fields: dict):
