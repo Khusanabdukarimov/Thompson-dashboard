@@ -66,12 +66,6 @@ const STATUS_BY_PRESET: Record<string, string | undefined> = {
   sifatsiz: "UC_F8K4GI",
 };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const oneYearAgoISO = () => {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
-};
 
 export default function LidlarPage() {
   const [activePreset, setActivePreset] = useLocalStorage<string | null>(
@@ -79,10 +73,7 @@ export default function LidlarPage() {
     "all",
   );
   const [search, setSearch] = useState("");
-  const [values, setValues] = useLocalStorage<FilterValues>("lidlar.filter", {
-    start_date: oneYearAgoISO(),
-    end_date: todayISO(),
-  });
+  const [values, setValues] = useLocalStorage<FilterValues>("lidlar.filter", {});
 
   const apiFilter: LeadFilter = useMemo(
     () => ({
@@ -225,7 +216,7 @@ export default function LidlarPage() {
             onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
             onClear={() => {
               setSearch("");
-              setValues({ start_date: oneYearAgoISO(), end_date: todayISO() });
+              setValues({});
               setActivePreset("all");
             }}
             onApply={() => {
