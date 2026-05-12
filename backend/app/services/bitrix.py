@@ -127,7 +127,7 @@ def _fetch_page(list_url: str, base_params: dict, start: int) -> list:
     return []
 
 
-_PAGE_DELAY = 0.4  # seconds between page requests — keeps us ≤ 2.5 req/s
+_PAGE_DELAY = 1.0  # 1 req/s — comfortably under Bitrix24 webhook rate limit
 
 
 def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = None) -> tuple[list, int]:
@@ -181,7 +181,7 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
     r = _get_redis()
     dist_lock_key = f"b24:lock:{key}"
     dist_token = f"{os.getpid()}:{threading.get_ident()}"
-    dist_acquired = bool(r.set(dist_lock_key, dist_token, nx=True, ex=120)) if r else True
+    dist_acquired = bool(r.set(dist_lock_key, dist_token, nx=True, ex=360)) if r else True
 
     if not dist_acquired:
         log.info("_paginate_cached %s: another process is fetching — waiting…", method)
