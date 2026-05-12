@@ -17,10 +17,11 @@ import { MetricRowSkeleton, ChartCardSkeleton } from "@/components/Skeleton";
 import {
   getMetaInsights,
   getMetaCampaigns,
+  getCampaignForms,
   MONTH_KEYS,
   MONTH_LABELS,
 } from "@/lib/api/meta";
-import type { MonthKey, CampaignAdRow } from "@/lib/api/meta";
+import type { MonthKey, CampaignAdRow, CampaignForms } from "@/lib/api/meta";
 import { fmtNum, fmtMoney } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
@@ -60,6 +61,12 @@ export default function KampaniyalarPage() {
   const qCamp = useQuery({
     queryKey: ["meta/campaigns", month, year],
     queryFn: () => getMetaCampaigns(month, year),
+  });
+
+  const qForms = useQuery({
+    queryKey: ["meta/campaign-forms"],
+    queryFn: () => getCampaignForms(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const [activePreset, setActivePreset] = useLocalStorage<string | null>(
@@ -529,6 +536,74 @@ export default function KampaniyalarPage() {
             "visit_rate",
           ]}
         />
+
+        {/* Instant Forms section */}
+        <div className="mt-6 mb-2 flex items-center gap-2">
+          <span className="text-[12.5px] font-semibold">Instant Formlar (Lead Ads)</span>
+          <span className="text-[11px] text-text3">
+            · {qForms.data?.count ?? 0} ta kampaniya
+          </span>
+        </div>
+        {qForms.isLoading ? (
+          <div className="text-[12px] text-text3 py-4">Yuklanmoqda...</div>
+        ) : qForms.error ? (
+          <div className="p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
+            Formlar yuklanmadi: {(qForms.error as Error).message}
+          </div>
+        ) : (qForms.data?.campaigns.length ?? 0) === 0 ? (
+          <div className="text-[12px] text-text3 py-4">Lead Gen kampaniyalar topilmadi.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {qForms.data!.campaigns.map((camp: CampaignForms) => (
+              <div
+                key={camp.campaign_id}
+                className="bg-bg2 border border-border rounded-lg shadow overflow-hidden"
+              >
+                <div className="px-4 py-2.5 bg-bg3 border-b border-border flex items-center gap-3">
+                  <span className="text-[12.5px] font-semibold">{camp.campaign_name || "—"}</span>
+                  {camp.objective && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue/10 text-blue font-medium">
+                      {camp.objective}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[11px] text-text3">{camp.forms.length} forma</span>
+                </div>
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-border text-text3">
+                      <th className="text-left px-4 py-1.5 font-medium">Forma nomi</th>
+                      <th className="text-left px-3 py-1.5 font-medium">Holat</th>
+                      <th className="text-left px-3 py-1.5 font-medium">Ad to'plam</th>
+                      <th className="text-right px-4 py-1.5 font-medium">Lidlar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {camp.forms.map((f) => (
+                      <tr key={f.form_id} className="border-b border-border last:border-0 hover:bg-bg3 transition-colors">
+                        <td className="px-4 py-2 font-medium">{f.form_name || f.form_id}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            f.status === "ACTIVE"
+                              ? "bg-green/10 text-green"
+                              : f.status === "ARCHIVED"
+                              ? "bg-text3/10 text-text3"
+                              : "bg-amber/10 text-amber"
+                          }`}>
+                            {f.status || "—"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-text2">{f.adset_name || "—"}</td>
+                        <td className="px-4 py-2 text-right mono font-semibold text-green">
+                          {f.leads_count != null ? fmtNum(f.leads_count) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
 
         {(q.error || qCamp.error) && (
           <div className="mt-4 p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">

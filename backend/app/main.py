@@ -791,6 +791,19 @@ async def api_dashboard_daily(date_str: str):
     }
 
 
+@app.get("/api/meta/campaign-forms")
+def api_meta_campaign_forms(ad_account_id: Optional[str] = None):
+    """Return all campaigns that use lead gen (Instant Form) objectives,
+    each with the list of instant forms attached via their adsets."""
+    account_id = ad_account_id or meta_svc.META_AD_ACCOUNT
+    if not account_id:
+        raise HTTPException(status_code=400, detail="ad_account_id is required")
+    if not account_id.startswith("act_"):
+        account_id = f"act_{account_id}"
+    campaigns = meta_svc.get_campaign_leadgen_forms(account_id)
+    return {"count": len(campaigns), "campaigns": campaigns}
+
+
 @app.get("/api/meta/accounts")
 def api_meta_accounts():
     return meta_svc.get_ad_accounts()

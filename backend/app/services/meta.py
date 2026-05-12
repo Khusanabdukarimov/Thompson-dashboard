@@ -390,6 +390,120 @@ def insights_to_monthly(rows, month_key: str, year: int):
     return result
 
 
+def _creative_form_id(creative: dict) -> str | None:
+    """Extract lead_gen_form_id from a creative's video_data or link_data CTA."""
+    spec = creative.get("object_story_spec") or {}
+    for section in ("video_data", "link_data"):
+        cta = (spec.get(section) or {}).get("call_to_action") or {}
+        form_id = (cta.get("value") or {}).get("lead_gen_form_id")
+        if form_id:
+            return form_id
+    return None
+
+
+def _paginate(url: str, params: dict) -> list[dict]:
+    rows: list[dict] = []
+    while url:
+        res = requests.get(url, params=params)
+        data = res.json()
+        if "error" in data:
+            return rows
+        rows.extend(data.get("data", []))
+        url = data.get("paging", {}).get("next")
+        params = {}
+    return rows
+
+
+def get_campaign_leadgen_forms(ad_account_id: str) -> list[dict]:
+    """Return campaigns with their instant forms (OUTCOME_LEADS / LEAD_GENERATION).
+
+    OUTCOME_LEADS campaigns store the form ID inside the ad creative's
+    video_data/link_data call_to_action — not in the adset promoted_object.
+    Fetches ads in a small request then resolves creatives, campaigns, adsets
+    individually to stay within Meta's response-size limits.
+    """
+    token = _token()
+
+    # Step 1: fetch ads (minimal fields to avoid "too much data" error)
+    ads = _paginate(
+        f"{GRAPH}/{ad_account_id}/ads",
+        {
+            "access_token": token,
+            "fields": "id,name,adset_id,campaign_id,creative{id}",
+            "limit": 200,
+            "filtering": '[{"field":"campaign.objective","operator":"IN","value":["OUTCOME_LEADS","LEAD_GENERATION"]}]',
+        },
+    )
+
+    # Step 2: resolve creatives, campaigns, adsets individually
+    creative_ids = list({(ad.get("creative") or {}).get("id") for ad in ads if (ad.get("creative") or {}).get("id")})
+    camp_ids     = list({ad.get("campaign_id") for ad in ads if ad.get("campaign_id")})
+    adset_ids    = list({ad.get("adset_id")    for ad in ads if ad.get("adset_id")})
+
+    def _fetch_one(node_id: str, fields: str) -> dict:
+        r = requests.get(f"{GRAPH}/{node_id}", params={"access_token": token, "fields": fields})
+        d = r.json()
+        return d if "id" in d else {}
+
+    creative_map = {cid: _fetch_one(cid, "id,object_story_spec")     for cid in creative_ids}
+    camp_map     = {cid: _fetch_one(cid, "id,name,objective")         for cid in camp_ids}
+    adset_map    = {aid: _fetch_one(aid, "id,name,status")            for aid in adset_ids}
+
+    # Step 3: group by campaign → form
+    campaign_map: dict = {}
+    for ad in ads:
+        creative = creative_map.get((ad.get("creative") or {}).get("id") or "", {})
+        form_id  = _creative_form_id(creative)
+        if not form_id:
+            continue
+        camp  = camp_map.get(ad.get("campaign_id") or "", {})
+        adset = adset_map.get(ad.get("adset_id") or "", {})
+        camp_id = camp.get("id") or ad.get("campaign_id", "")
+        if camp_id not in campaign_map:
+            campaign_map[camp_id] = {
+                "campaign_id":   camp_id,
+                "campaign_name": camp.get("name", ""),
+                "objective":     camp.get("objective", ""),
+                "forms": {},
+            }
+        campaign_map[camp_id]["forms"].setdefault(form_id, {
+            "form_id":    form_id,
+            "adset_id":   adset.get("id") or ad.get("adset_id", ""),
+            "adset_name": adset.get("name", ""),
+        })
+
+    # Step 4: fetch form details
+    all_form_ids = list({fid for c in campaign_map.values() for fid in c["forms"]})
+    form_details: dict = {}
+    for form_id in all_form_ids:
+        d = _fetch_one(form_id, "id,name,status,leads_count,created_time")
+        form_details[form_id] = d
+
+    # Step 5: build result
+    result = []
+    for camp in campaign_map.values():
+        forms_list = []
+        for fid, adset_info in camp["forms"].items():
+            fd = form_details.get(fid, {})
+            forms_list.append({
+                "form_id":      fid,
+                "form_name":    fd.get("name", fid),
+                "status":       fd.get("status", ""),
+                "leads_count":  fd.get("leads_count"),
+                "created_time": fd.get("created_time", ""),
+                "adset_id":     adset_info["adset_id"],
+                "adset_name":   adset_info["adset_name"],
+            })
+        result.append({
+            "campaign_id":   camp["campaign_id"],
+            "campaign_name": camp["campaign_name"],
+            "objective":     camp["objective"],
+            "forms": sorted(forms_list, key=lambda x: x["form_name"]),
+        })
+    result.sort(key=lambda x: x["campaign_name"])
+    return result
+
+
 if __name__ == "__main__":
     import json
 

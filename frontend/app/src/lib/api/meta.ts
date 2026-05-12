@@ -98,3 +98,29 @@ export function getMetaCampaigns(month: MonthKey, year: number) {
 export function getDashboardDaily(date: string) {
   return apiGet<DashboardDailyResponse>('/api/dashboard/daily', { date_str: date });
 }
+
+export type LeadgenForm = {
+  form_id: string;
+  form_name: string;
+  status: string;
+  leads_count: number | null;
+  created_time: string;
+  adset_id: string;
+  adset_name: string;
+};
+
+export type CampaignForms = {
+  campaign_id: string;
+  campaign_name: string;
+  objective: string;
+  forms: LeadgenForm[];
+};
+
+export type CampaignFormsResponse = {
+  count: number;
+  campaigns: CampaignForms[];
+};
+
+export function getCampaignForms(ad_account_id?: string) {
+  return apiGet<CampaignFormsResponse>('/api/meta/campaign-forms', ad_account_id ? { ad_account_id } : {});
+}
