@@ -119,17 +119,17 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
     try:
         res = _session.get(list_url, params={**base_params, "start": 0}, timeout=20)
         if res.status_code != 200:
-            return []
+            return [], 0
     except Exception as exc:
         log.warning("first page failed (%s): %s", method, exc)
-        return []
+        return [], 0
 
     data = res.json()
     all_items: list = list(data.get("result", []))
     total: int = data.get("total", 0)
 
     if total <= 50:
-        return all_items
+        return all_items, total
 
     remaining = list(range(50, total, 50))
     workers = min(len(remaining), 8)
@@ -140,7 +140,7 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
             all_items.extend(f.result())
 
     log.info("_paginate %s: total=%d fetched=%d pages=%d", method, total, len(all_items), 1 + len(remaining))
-    return all_items
+    return all_items, total
 
 
 def _paginate_cached(method: str, filter_dict=None, select=None,
@@ -149,11 +149,15 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    result = _paginate(method, filter_dict, select, extra)
-    # Never cache empty results — an empty list likely means a transient error or
-    # a Bitrix24 rate-limit hit, not a genuine "no data" response.
-    if result:
+    result, total = _paginate(method, filter_dict, select, extra)
+    # Only cache if result is non-empty AND complete (≥95% of declared total).
+    # Partial results from rate-limiting or transient failures are not cached —
+    # the next request will retry and get the full dataset.
+    complete = total == 0 or len(result) >= total * 0.95
+    if result and complete:
         _cache_set(key, result, ttl)
+    elif result and not complete:
+        log.warning("_paginate_cached %s: incomplete (%d/%d) — not caching", method, len(result), total)
     return result
 
 
@@ -252,7 +256,8 @@ def get_tasks_by_date(start_date_iso, end_date_iso, ttl: int = 300) -> list:
         else:
             break
 
-    _cache_set(key, all_tasks, ttl)
+    if all_tasks:
+        _cache_set(key, all_tasks, ttl)
     return all_tasks
 
 
