@@ -127,7 +127,8 @@ def _fetch_page(list_url: str, base_params: dict, start: int) -> list:
     return []
 
 
-_PAGE_DELAY = 1.0  # 1 req/s — comfortably under Bitrix24 webhook rate limit
+_PAGE_DELAY_LARGE = 1.0   # delay for large fetches (>50 pages) — stays under rate limit
+_LARGE_FETCH_THRESHOLD = 50  # pages
 
 
 def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = None) -> tuple[list, int]:
@@ -158,8 +159,11 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
     if total <= 50:
         return all_items, total
 
-    for start in range(50, total, 50):
-        time.sleep(_PAGE_DELAY)
+    pages_remaining = list(range(50, total, 50))
+    large = len(pages_remaining) >= _LARGE_FETCH_THRESHOLD
+    for start in pages_remaining:
+        if large:
+            time.sleep(_PAGE_DELAY_LARGE)
         items = _fetch_page(list_url, base_params, start)
         all_items.extend(items)
 
