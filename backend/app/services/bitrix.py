@@ -150,7 +150,7 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
         return all_items, total
 
     remaining = list(range(50, total, 50))
-    workers = min(len(remaining), 4)  # 4 workers; dist lock ensures only 1 process fetches
+    workers = min(len(remaining), 6)  # dist lock ensures only 1 process fetches at a time
 
     failed_starts: list[int] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -292,19 +292,19 @@ def get_booking_clients(booking_id):
 
 # ─── List functions (batch-paginated + Redis cached) ─────────────────────────
 
-def list_users(ttl: int = 600) -> list:
+def list_users(ttl: int = 1800) -> list:
     return _paginate_cached("user.get.json", filter_dict={"ACTIVE": "Y"}, ttl=ttl)
 
 
-def list_leads(filter_dict=None, select=None, ttl: int = 300) -> list:
+def list_leads(filter_dict=None, select=None, ttl: int = 1800) -> list:
     return _paginate_cached("crm.lead.list", filter_dict=filter_dict, select=select, ttl=ttl)
 
 
-def list_deals(filter_dict=None, select=None, ttl: int = 300) -> list:
+def list_deals(filter_dict=None, select=None, ttl: int = 1800) -> list:
     return _paginate_cached("crm.deal.list", filter_dict=filter_dict, select=select, ttl=ttl)
 
 
-def list_activities(filter_dict=None, select=None, ttl: int = 300) -> list:
+def list_activities(filter_dict=None, select=None, ttl: int = 1800) -> list:
     return _paginate_cached("crm.activity.list", filter_dict=filter_dict, select=select, ttl=ttl)
 
 
