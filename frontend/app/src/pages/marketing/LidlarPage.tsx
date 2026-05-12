@@ -81,11 +81,13 @@ const STATUS_BY_PRESET: Record<string, string | undefined> = {
   sifatsiz: "UC_F8K4GI",
 };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const localISO = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const todayISO = () => localISO(new Date());
 const thirtyDaysAgoISO = () => {
   const d = new Date();
   d.setDate(d.getDate() - 30);
-  return d.toISOString().slice(0, 10);
+  return localISO(d);
 };
 const DEFAULT_FILTER: FilterValues = {
   start_date: thirtyDaysAgoISO(),
