@@ -204,7 +204,9 @@ export default function LidlarPage() {
       ...(d?.all_statuses ?? []),
       ...Object.keys(byStatus),
     ]);
-    return [...allIds].sort((a, b) => priority(a) - priority(b));
+    return [...allIds]
+      .filter((sid) => !(statusNames[sid] || sid).toLowerCase().includes("propush"))
+      .sort((a, b) => priority(a) - priority(b));
   }, [d?.all_statuses, byStatus, statusNames]);
 
   const colMaxes = useMemo(() => {
@@ -435,9 +437,6 @@ export default function LidlarPage() {
                     <th className="px-3 py-2.5 text-right font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[56px]">
                       Jami
                     </th>
-                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px] text-green">
-                      Daromad
-                    </th>
                     {orderedStatuses.map((sid, i) => (
                       <th
                         key={sid}
@@ -476,11 +475,6 @@ export default function LidlarPage() {
                           {fmtNum(u.total)}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="mono text-[12px] text-green">
-                          {u.revenue > 0 ? fmtMoney(u.revenue) : "—"}
-                        </span>
-                      </td>
                       {orderedStatuses.map((sid, i) => {
                         const cnt = u.by_status[sid] ?? 0;
                         const col = sColor(sid, i);
@@ -516,11 +510,6 @@ export default function LidlarPage() {
                     <td className="px-3 py-2.5 text-right">
                       <span className="mono font-bold text-[13px]">
                         {fmtNum(total)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <span className="mono text-[12px] font-semibold text-green">
-                        {d?.total_revenue ? fmtMoney(d.total_revenue) : "—"}
                       </span>
                     </td>
                     {orderedStatuses.map((sid) => (
