@@ -925,8 +925,10 @@ async def bitrix_iframe_handler(request: Request):
 
     dist_index = Path("/var/www/mountain/frontend/app/dist/index.html")
     html = dist_index.read_text(encoding="utf-8")
-    # Inject BX context + navigate to the target route before React mounts
+    # Inject BX24 SDK + context + route before React mounts.
+    # The SDK script must come first so BX24 is defined when the app bundle runs.
     script = (
+        f'<script src="https://api.bitrix24.com/api/v1/"></script>'
         f'<script>'
         f'window.__BX_CLIENT__={json.dumps({"clientName": client_name})};'
         f'history.replaceState(null,"","/marketing/kunlik");'
