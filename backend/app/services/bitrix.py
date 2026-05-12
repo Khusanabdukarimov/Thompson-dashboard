@@ -185,7 +185,7 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
 
     if not dist_acquired:
         log.info("_paginate_cached %s: another process is fetching — waiting…", method)
-        for _w in range(90):
+        for _w in range(420):  # wait up to 7 min (>270 pages × 1s/page + buffer)
             time.sleep(1)
             cached = _cache_get(key)
             if cached is not None:
