@@ -43,6 +43,21 @@ function sColor(id: string, idx: number) {
   return STATUS_COLORS[id] ?? PALETTE[idx % PALETTE.length];
 }
 
+const STATUS_NAME_ORDER = [
+  "Qo'ng'iroq",
+  "Yangi lid",
+  "Propushin",
+  "Javob bermadi",
+  "Qayta aloqa",
+  "O'ylab",
+  "Konsultatsiya belgiland",
+  "O'tkazilmadi",
+  "Sandiq",
+  "Sifatsiz",
+  "Bekor",
+  "Konsultatsiya o'tkazild",
+];
+
 const JARAYON = new Set([
   "NEW",
   "IN_PROCESS",
@@ -162,14 +177,22 @@ export default function LidlarPage() {
   const tashrifBelg = tashrifBelgId ? (byStatus[tashrifBelgId] ?? 0) : 0;
   const tashrifBuy = tashrifBuyId ? (byStatus[tashrifBuyId] ?? 0) : converted;
 
-  const orderedStatuses = useMemo(
-    () =>
-      Object.entries(byStatus)
-        .sort(([, a], [, b]) => b - a)
-        .map(([id]) => id)
-        .slice(0, 14),
-    [byStatus],
-  );
+  const orderedStatuses = useMemo(() => {
+    function priority(sid: string): number {
+      const name = (statusNames[sid] || "").toLowerCase();
+      const idx = STATUS_NAME_ORDER.findIndex((p) =>
+        name.includes(p.toLowerCase()),
+      );
+      return idx === -1 ? STATUS_NAME_ORDER.length : idx;
+    }
+    // Use all_statuses from API so every stage always shows as a column
+    // (even those with 0 leads in the current date range).
+    const allIds = new Set([
+      ...(d?.all_statuses ?? []),
+      ...Object.keys(byStatus),
+    ]);
+    return [...allIds].sort((a, b) => priority(a) - priority(b));
+  }, [d?.all_statuses, byStatus, statusNames]);
 
   const colMaxes = useMemo(() => {
     const m: Record<string, number> = {};

@@ -145,7 +145,7 @@ def api_list_leads(
     if status_id:    f["STATUS_ID"] = status_id
     if source_id:    f["SOURCE_ID"] = source_id
     if start_date:   f[">=DATE_CREATE"] = start_date
-    if end_date:     f["<=DATE_CREATE"] = end_date
+    if end_date:     f["<=DATE_CREATE"] = _end_of_day(end_date)
     if search:       f["%TITLE"] = search   # Bitrix substring filter
 
     leads = bitrix.list_leads(filter_dict=f, select=select)
@@ -225,6 +225,11 @@ def _translate_label(s: str) -> str:
     return _BITRIX_LABEL_TRANSLATE.get(s, s)
 
 
+def _end_of_day(d: str) -> str:
+    """Append T23:59:59 to a YYYY-MM-DD date so Bitrix24 includes the entire day."""
+    return d if "T" in d else f"{d}T23:59:59"
+
+
 def _to_naive_utc(s: str):
     """Convert ISO datetime string to naive UTC datetime."""
     dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
@@ -249,7 +254,7 @@ def api_stats_leads(
 ):
     f = {}
     if start_date:   f[">=DATE_CREATE"] = start_date
-    if end_date:     f["<=DATE_CREATE"] = end_date
+    if end_date:     f["<=DATE_CREATE"] = _end_of_day(end_date)
     if assigned_by:  f["ASSIGNED_BY_ID"] = assigned_by
     if status_id:    f["STATUS_ID"] = status_id
     if source_id:    f["SOURCE_ID"] = source_id
@@ -280,6 +285,37 @@ def api_stats_leads(
     enum_map     = f_enum.result()
     users_map = {u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
                  for u in all_users}
+
+    print(f"\n{'='*60}")
+    print(f"[LEADS DEBUG] filter: {start_date} → {end_date}")
+    print(f"[LEADS DEBUG] Raw leads from Bitrix24: {len(leads)}")
+    raw_by_status: dict = {}
+    for l in leads:
+        s = l.get("STATUS_ID", "UNKNOWN")
+        raw_by_status[s] = raw_by_status.get(s, 0) + 1
+    for sid, cnt in sorted(raw_by_status.items(), key=lambda x: -x[1]):
+        sname = status_names.get(sid, sid)
+        print(f"  {sid:20s} {sname:35s} {cnt}")
+    print(f"{'='*60}\n")
+
+    # Bitrix24 ignores DATE_CREATE filter for some terminal stages (e.g. Bekor bo'ldi
+    # always returns all-time leads in kanban).  Post-filter by DATE_CREATE to guarantee
+    # only leads actually created in the requested window are counted.
+    if start_date or end_date:
+        _s = start_date or ""
+        _e = end_date[:10] if end_date else ""
+        def _in_range(lead) -> bool:
+            dc = (lead.get("DATE_CREATE") or "")[:10]
+            if not dc:
+                return True
+            if _s and dc < _s:
+                return False
+            if _e and dc > _e:
+                return False
+            return True
+        leads_before = len(leads)
+        leads = [l for l in leads if _in_range(l)]
+        print(f"[LEADS DEBUG] After DATE_CREATE post-filter: {len(leads)} (removed {leads_before - len(leads)})")
 
     JARAYON_STATUSES = {"NEW", "IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68"}
     FROZEN_DAYS = 7  # idle days threshold for "muzlab qolgan" (frozen) leads
@@ -370,7 +406,32 @@ def api_stats_leads(
     avg_age_days = round(sum(ages_days) / len(ages_days), 1) if ages_days else 0
     jarayon_total = sum(v for k, v in by_status.items() if k in JARAYON_STATUSES)
     converted = sum(v for k, v in by_status.items() if "CONVERT" in k.upper() or k == "CLOSED")
+    failed = sum(v for k, v in by_status.items() if k not in JARAYON_STATUSES and "CONVERT" not in k.upper() and k != "CLOSED")
     total = len(leads)
+    conversion_rate = round(converted / total * 100, 2) if total else 0
+
+    tashrif_belg_id = next((k for k, n in status_names.items() if "belgiland" in n.lower()), None)
+    tashrif_buy_id  = next((k for k, n in status_names.items() if "buyur"     in n.lower()), None)
+    tashrif_belg = by_status.get(tashrif_belg_id, 0) if tashrif_belg_id else 0
+    tashrif_buy  = by_status.get(tashrif_buy_id,  0) if tashrif_buy_id  else converted
+
+    print(f"\n{'='*60}")
+    print(f"[LEADS METRICS] {start_date} → {end_date}")
+    print(f"  Barcha lidlar        : {total}")
+    print(f"  Jarayonda            : {jarayon_total}")
+    print(f"  Muvaffaqiyatsiz      : {failed}")
+    print(f"  Sdelkaga (converted) : {converted}")
+    print(f"  Konversiya           : {conversion_rate}%")
+    print(f"  Tashrif belgilandi   : {tashrif_belg}  ({status_names.get(tashrif_belg_id,'?')})")
+    print(f"  Konv→Tashrif belg    : {round(tashrif_belg/total*100,2) if total else 0}%")
+    print(f"  Konv→Tashrif buyurdi : {round(tashrif_buy/total*100,2)  if total else 0}%")
+    print(f"  Sifatli konversiya   : {round(tashrif_buy/tashrif_belg*100,2) if tashrif_belg else 0}%")
+    print(f"  By status (filtered):")
+    for sid, cnt in sorted(by_status.items(), key=lambda x: -x[1]):
+        sname = status_names.get(sid, sid)
+        print(f"    {sid:20s} {sname:35s} {cnt}")
+    print(f"{'='*60}\n")
+
     return {
         "total": total,
         "total_revenue": round(total_opp, 2),
@@ -383,6 +444,22 @@ def api_stats_leads(
         "by_user": sorted(by_user.values(), key=lambda x: x["total"], reverse=True),
         "all_statuses": list(status_names.keys()),
         "status_names": status_names,
+        "_debug": {
+            "raw_from_bitrix": sum(raw_by_status.values()),
+            "after_postfilter": total,
+            "removed_by_postfilter": sum(raw_by_status.values()) - total,
+            "barcha_lidlar": total,
+            "jarayonda": jarayon_total,
+            "muvaffaqiyatsiz": failed,
+            "sdelkaga": converted,
+            "konversiya_pct": conversion_rate,
+            "tashrif_belgilandi": tashrif_belg,
+            "konv_tashrif_belg_pct": round(tashrif_belg / total * 100, 2) if total else 0,
+            "konv_tashrif_buyurdi_pct": round(tashrif_buy / total * 100, 2) if total else 0,
+            "sifatli_konversiya_pct": round(tashrif_buy / tashrif_belg * 100, 2) if tashrif_belg else 0,
+            "by_status_raw": {status_names.get(k, k): v for k, v in sorted(raw_by_status.items(), key=lambda x: -x[1])},
+            "by_status_filtered": {status_names.get(k, k): v for k, v in sorted(by_status.items(), key=lambda x: -x[1])},
+        },
         "users": [{"id": u["ID"], "name": users_map[u["ID"]]} for u in all_users],
         "sources": sorted(
             [{"id": s, "label": _translate_label(source_names.get(s, s)), "count": source_counts.get(s, 0)} for s in sources_found],
@@ -421,7 +498,7 @@ def api_stats_deals(
     if start_date:
         f[">=DATE_CREATE"] = start_date
     if end_date:
-        f["<=DATE_CREATE"] = end_date
+        f["<=DATE_CREATE"] = _end_of_day(end_date)
     if assigned_by:
         f["ASSIGNED_BY_ID"] = assigned_by
     if stage_id:
@@ -489,7 +566,7 @@ def api_deals_by_source(
     if start_date:
         f[">=DATE_CREATE"] = start_date
     if end_date:
-        f["<=DATE_CREATE"] = end_date
+        f["<=DATE_CREATE"] = _end_of_day(end_date)
     if assigned_by:
         f["ASSIGNED_BY_ID"] = assigned_by
     if stage_id:
@@ -544,7 +621,7 @@ def api_stats_lead_quality(
 
     base_filter: dict = {}
     if start_date:   base_filter[">=DATE_CREATE"] = start_date
-    if end_date:     base_filter["<=DATE_CREATE"] = end_date
+    if end_date:     base_filter["<=DATE_CREATE"] = _end_of_day(end_date)
     if assigned_by:  base_filter["ASSIGNED_BY_ID"] = assigned_by
     if source_id:    base_filter["SOURCE_ID"] = source_id
     if utm_source:   base_filter["UTM_SOURCE"] = utm_source
@@ -608,7 +685,7 @@ def api_stats_activities(
     if start_date:
         f[">=CREATED"] = start_date
     if end_date:
-        f["<=CREATED"] = end_date
+        f["<=CREATED"] = _end_of_day(end_date)
 
     TYPE_LABELS = {"CALL": "Qo'ng'iroq", "TODO": "Eslatma", "TASKS_TASK": "Topshiriq"}
 
@@ -696,7 +773,7 @@ async def api_dashboard_daily(date_str: str):
     try:
         # Bitrix visits and leads
         visits = get_visits_by_date(date_str, date_str)
-        leads = list_leads(filter_dict={">=DATE_CREATE": date_str, "<=DATE_CREATE": date_str})
+        leads = list_leads(filter_dict={">=DATE_CREATE": date_str, "<=DATE_CREATE": _end_of_day(date_str)})
         deals = aggregate_deals_sum_total(date_str, date_str)
     except Exception as e:
         visits = []
