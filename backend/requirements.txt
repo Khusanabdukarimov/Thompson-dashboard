@@ -9,3 +9,4 @@ tenacity>=9.0
 sqlmodel>=0.0.16
 PyJWT>=2.8.0
 python-multipart>=0.0.9
+redis>=5.0
