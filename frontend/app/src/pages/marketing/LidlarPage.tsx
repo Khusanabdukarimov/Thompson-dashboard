@@ -84,15 +84,26 @@ const STATUS_BY_PRESET: Record<string, string | undefined> = {
 const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const todayISO = () => localISO(new Date());
-const thirtyDaysAgoISO = () => {
+const daysAgoISO = (n: number) => {
   const d = new Date();
-  d.setDate(d.getDate() - 30);
+  d.setDate(d.getDate() - n);
   return localISO(d);
 };
+// "Tozalash" clears dates → shows all-time data
+const EMPTY_FILTER: FilterValues = { start_date: undefined, end_date: undefined };
+// Default on first visit: last 30 days
 const DEFAULT_FILTER: FilterValues = {
-  start_date: thirtyDaysAgoISO(),
+  start_date: daysAgoISO(30),
   end_date: todayISO(),
 };
+
+const DATE_PRESETS = [
+  { label: "Bugun",   start: () => todayISO(),    end: () => todayISO() },
+  { label: "7 kun",   start: () => daysAgoISO(7),  end: () => todayISO() },
+  { label: "30 kun",  start: () => daysAgoISO(30), end: () => todayISO() },
+  { label: "90 kun",  start: () => daysAgoISO(90), end: () => todayISO() },
+  { label: "Barchasi", start: () => "",             end: () => "" },
+];
 
 export default function LidlarPage() {
   const [activePreset, setActivePreset] = useLocalStorage<string | null>(
@@ -227,7 +238,11 @@ export default function LidlarPage() {
     <>
       <Topbar
         title="Lidlar analitika"
-        sub={`${values.start_date ?? "—"} → ${values.end_date ?? "—"}`}
+        sub={
+          values.start_date || values.end_date
+            ? `${values.start_date ?? "—"} → ${values.end_date ?? "—"}`
+            : "Barcha vaqt"
+        }
         actions={
           <Button
             onClick={() => {
@@ -242,7 +257,7 @@ export default function LidlarPage() {
       />
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
         {/* Filter */}
-        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3">
+        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3 flex-wrap">
           <FilterBar
             presets={PRESETS}
             activePreset={activePreset}
@@ -254,7 +269,7 @@ export default function LidlarPage() {
             onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
             onClear={() => {
               setSearch("");
-              setValues(DEFAULT_FILTER);
+              setValues(EMPTY_FILTER);
               setActivePreset("all");
             }}
             onApply={() => {
@@ -271,6 +286,33 @@ export default function LidlarPage() {
             storageKey="marketing.lidlar"
             onApplySavedFilter={(v) => setValues(v as typeof values)}
           />
+          {/* Quick date range buttons */}
+          <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+            {DATE_PRESETS.map((dp) => {
+              const s = dp.start();
+              const e = dp.end();
+              const active = (values.start_date ?? "") === s && (values.end_date ?? "") === e;
+              return (
+                <button
+                  key={dp.label}
+                  type="button"
+                  onClick={() => {
+                    setValues((prev) => ({ ...prev, start_date: s || undefined, end_date: e || undefined }));
+                    statsQ.refetch();
+                    qualityQ.refetch();
+                    activitiesQ.refetch();
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors border ${
+                    active
+                      ? "bg-blue text-white border-blue"
+                      : "bg-bg3 text-text2 border-border hover:border-border2 hover:text-text"
+                  }`}
+                >
+                  {dp.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* KPI Row 1 — 5 large cards */}

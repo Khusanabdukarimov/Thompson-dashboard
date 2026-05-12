@@ -150,7 +150,10 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
     if cached is not None:
         return cached
     result = _paginate(method, filter_dict, select, extra)
-    _cache_set(key, result, ttl)
+    # Never cache empty results — an empty list likely means a transient error or
+    # a Bitrix24 rate-limit hit, not a genuine "no data" response.
+    if result:
+        _cache_set(key, result, ttl)
     return result
 
 
