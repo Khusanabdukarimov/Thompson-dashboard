@@ -932,6 +932,7 @@ async def bitrix_iframe_handler(request: Request):
         f'<script>'
         f'window.__BX_CLIENT__={json.dumps({"clientName": client_name})};'
         f'history.replaceState(null,"","/marketing/kunlik");'
+        f'BX24.init(function(){{}});'
         f'</script>'
     )
     html = html.replace("</head>", f"{script}</head>", 1)
