@@ -150,7 +150,7 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
         return all_items, total
 
     remaining = list(range(50, total, 50))
-    workers = min(len(remaining), 6)  # dist lock ensures only 1 process fetches at a time
+    workers = min(len(remaining), 10)  # dist lock ensures only 1 process fetches at a time
 
     failed_starts: list[int] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
