@@ -15,6 +15,7 @@ except Exception:
     TASHRIF_DATE = os.environ.get('TASHRIF_DATE', 'UF_CRM_VISIT_DATE')
     TASHRIF_VISTORS_COUNT = os.environ.get('TASHRIF_VISTORS_COUNT', 'UF_CRM_VISITORS_COUNT')
 from datetime import datetime
+from functools import lru_cache
 
 import requests
 from dateutil.parser import parse as parse_b24_datetime
@@ -378,19 +379,21 @@ def get_visits_by_date(start_date_iso, end_date_iso):
     return all_leads
 
 
+@lru_cache(maxsize=1)
 def get_lead_status_names():
-    """Returns {status_id: name} for all lead statuses."""
+    """Returns {status_id: name} for all lead statuses. Cached for process lifetime."""
     url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.status.list.json"
-    res = requests.get(url, params={"filter[ENTITY_ID]": "STATUS"})
+    res = requests.get(url, params={"filter[ENTITY_ID]": "STATUS"}, timeout=10)
     if res.status_code != 200:
         return {}
     return {s["STATUS_ID"]: s["NAME"] for s in res.json().get("result", [])}
 
 
+@lru_cache(maxsize=1)
 def get_deal_source_names():
-    """Returns {source_id: name} for all deal/lead sources."""
+    """Returns {source_id: name} for all deal/lead sources. Cached for process lifetime."""
     url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.status.list.json"
-    res = requests.get(url, params={"filter[ENTITY_ID]": "SOURCE"})
+    res = requests.get(url, params={"filter[ENTITY_ID]": "SOURCE"}, timeout=10)
     if res.status_code != 200:
         return {}
     return {s["STATUS_ID"]: s["NAME"] for s in res.json().get("result", [])}
@@ -422,9 +425,13 @@ def get_deal_stage_names():
     return stages
 
 
+@lru_cache(maxsize=1)
 def get_lead_enum_map():
+    """Returns {field_id: {enum_id: label}} for all enumerated lead fields.
+    Cached for process lifetime — crm.lead.fields.json is a large, slow call.
+    """
     url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.lead.fields.json"
-    res = requests.get(url)
+    res = requests.get(url, timeout=15)
     if res.status_code != 200:
         return {}
     fields = res.json().get("result", {})
