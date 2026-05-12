@@ -884,6 +884,17 @@ def api_marketing_bitrix_daily(month: str, year: int):
     return {"month": month, "year": year, "data": result}
 
 
+@app.all("/install", response_class=HTMLResponse)
+async def bitrix_install(_request: Request):
+    """Bitrix24 calls this during app installation. Must respond with BX24.installFinish()."""
+    return HTMLResponse(content=(
+        "<!DOCTYPE html><html><head>"
+        '<script src="https://api.bitrix24.com/api/v1/"></script>'
+        "<script>BX24.init(function(){ BX24.installFinish(); });</script>"
+        "</head><body></body></html>"
+    ))
+
+
 @app.post("/api/bitrix/handler", response_class=HTMLResponse)
 async def bitrix_iframe_handler(request: Request):
     """Bitrix24 POSTs here when the app is opened from a CRM Lead/Deal card.
