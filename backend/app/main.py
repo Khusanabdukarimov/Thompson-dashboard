@@ -1,8 +1,13 @@
 import json
+import logging
 import os
+import threading
+import time as _time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
+
+_log = logging.getLogger(__name__)
 
 import uvicorn
 from dotenv import load_dotenv
@@ -35,9 +40,32 @@ app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
 auth_module.install_auth_middleware(app)
 
 
+def _warm_cache():
+    """Background thread: pre-warm the most expensive cache entries on startup."""
+    _time.sleep(5)  # let uvicorn finish binding
+    _log.info("cache warmer: starting pre-warm for leads + deals + users")
+    try:
+        bitrix.list_leads()
+        _log.info("cache warmer: leads done")
+    except Exception as e:
+        _log.warning("cache warmer: leads failed — %s", e)
+    try:
+        bitrix.list_deals()
+        _log.info("cache warmer: deals done")
+    except Exception as e:
+        _log.warning("cache warmer: deals failed — %s", e)
+    try:
+        bitrix.list_users()
+        _log.info("cache warmer: users done")
+    except Exception as e:
+        _log.warning("cache warmer: users failed — %s", e)
+    _log.info("cache warmer: finished")
+
+
 @app.on_event("startup")
 def _on_startup():
     init_db()
+    threading.Thread(target=_warm_cache, daemon=True).start()
 
 
 app.include_router(payroll_routes.router)
