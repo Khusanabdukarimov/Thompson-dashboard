@@ -41,25 +41,26 @@ auth_module.install_auth_middleware(app)
 
 
 def _warm_cache():
-    """Background thread: pre-warm the most expensive cache entries on startup."""
+    """Background thread: warm & periodically refresh expensive caches.
+
+    Runs at startup (after 5s delay) then loops every 25 minutes so that the
+    30-minute Redis TTL never expires while the service is running.
+    The distributed lock in _paginate_cached ensures only one uvicorn worker
+    actually fetches; the other finds the result already in Redis.
+    """
     _time.sleep(5)  # let uvicorn finish binding
-    _log.info("cache warmer: starting pre-warm for leads + deals + users")
-    try:
-        bitrix.list_leads()
-        _log.info("cache warmer: leads done")
-    except Exception as e:
-        _log.warning("cache warmer: leads failed — %s", e)
-    try:
-        bitrix.list_deals()
-        _log.info("cache warmer: deals done")
-    except Exception as e:
-        _log.warning("cache warmer: deals failed — %s", e)
-    try:
-        bitrix.list_users()
-        _log.info("cache warmer: users done")
-    except Exception as e:
-        _log.warning("cache warmer: users failed — %s", e)
-    _log.info("cache warmer: finished")
+    while True:
+        _log.info("cache warmer: starting refresh for leads + deals + users")
+        for name, fn in [("leads", bitrix.list_leads),
+                         ("deals", bitrix.list_deals),
+                         ("users", bitrix.list_users)]:
+            try:
+                fn()
+                _log.info("cache warmer: %s done", name)
+            except Exception as e:
+                _log.warning("cache warmer: %s failed — %s", name, e)
+        _log.info("cache warmer: cycle complete — sleeping 25 min")
+        _time.sleep(25 * 60)  # refresh before 30-min TTL expires
 
 
 @app.on_event("startup")
