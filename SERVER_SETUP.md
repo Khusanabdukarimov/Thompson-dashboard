@@ -5,8 +5,8 @@ Bu hujjat Mountain ilovasining production deploy'ini tushuntiradi.
 ## Server tafsilotlari
 
 - **Provider:** Contabo VPS
-- **IP:** `164.68.110.215`
-- **Hostname:** `vmi3269211.contaboserver.net`
+- **IP:** `207.180.198.41`
+- **Hostname:** `vmi3222597.contaboserver.net`
 - **OS:** Ubuntu 22.04 LTS
 - **Resources:** 4 CPU · 7.8 GB RAM · 146 GB disk
 
@@ -19,7 +19,7 @@ Bu hujjat Mountain ilovasining production deploy'ini tushuntiradi.
 
 ```
 Host mountain
-    HostName 164.68.110.215
+    HostName 207.180.198.41
     User root
     IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes

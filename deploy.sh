@@ -21,7 +21,7 @@ set -e
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 SERVER="mountain"
-PUBLIC_IP="164.68.110.215"
+PUBLIC_IP="207.180.198.41"
 
 REPO_DIR="/var/www/mountain"
 BACKEND_DIR="$REPO_DIR/backend"
