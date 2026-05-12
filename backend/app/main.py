@@ -884,7 +884,7 @@ def api_marketing_bitrix_daily(month: str, year: int):
     return {"month": month, "year": year, "data": result}
 
 
-@app.all("/install", response_class=HTMLResponse)
+@app.api_route("/install", methods=["GET", "POST", "HEAD"], response_class=HTMLResponse)
 async def bitrix_install(_request: Request):
     """Bitrix24 calls this during app installation. Must respond with BX24.installFinish()."""
     return HTMLResponse(content=(
