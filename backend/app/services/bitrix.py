@@ -5,7 +5,6 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from functools import lru_cache
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import requests
@@ -24,6 +23,12 @@ except Exception:
     BITRIX24_TOKEN = os.environ.get('BITRIX24_TOKEN', '')
     TASHRIF_DATE = os.environ.get('TASHRIF_DATE', 'UF_CRM_VISIT_DATE')
     TASHRIF_VISTORS_COUNT = os.environ.get('TASHRIF_VISTORS_COUNT', 'UF_CRM_VISITORS_COUNT')
+
+# Session with connection pooling for concurrent page fetches
+_session = requests.Session()
+_adapter = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=16)
+_session.mount("https://", _adapter)
+_session.mount("http://", _adapter)
 
 TSK_TZ = ZoneInfo("Asia/Tashkent")
 log = logging.getLogger(__name__)
@@ -85,48 +90,34 @@ def _build_params(filter_dict=None, select=None, extra: dict | None = None) -> d
     return params
 
 
-def _fetch_batch_chunk(method: str, base_params: dict, starts: list[int]) -> list:
-    """Send one batch request covering up to 50 pages and return combined results."""
-    batch_url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/batch"
-    cmd = {}
-    for i, s in enumerate(starts):
-        page_params = {**base_params, "start": s}
-        cmd[f"p{i}"] = f"{method}?" + urlencode(page_params, doseq=True)
-
+def _fetch_page(list_url: str, base_params: dict, start: int) -> list:
+    """Fetch a single page at the given offset."""
     try:
-        res = requests.post(batch_url, json={"halt": 0, "cmd": cmd}, timeout=30)
-        if res.status_code != 200:
-            return []
-        result_map = res.json().get("result", {}).get("result", {})
-        items = []
-        for i in range(len(starts)):
-            page = result_map.get(f"p{i}", [])
-            if isinstance(page, list):
-                items.extend(page)
-        return items
+        res = _session.get(list_url, params={**base_params, "start": start}, timeout=20)
+        if res.status_code == 200:
+            return res.json().get("result", [])
     except Exception as exc:
-        log.warning("batch chunk failed: %s", exc)
-        return []
+        log.warning("page fetch failed (start=%s): %s", start, exc)
+    return []
 
 
 def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = None) -> list:
     """
-    Fetch all pages for a Bitrix24 list method.
+    Fetch all pages for a Bitrix24 list method using concurrent GET requests.
 
     Strategy:
-      1. Fetch page 0 to get `total`.
-      2. Group remaining page offsets into chunks of 50.
-      3. Fire each chunk as a single batch request (in parallel if >1 chunk).
+      1. Fetch page 0 to learn `total`.
+      2. Fire all remaining pages concurrently (max 8 workers).
 
-    Worst case for 1 000 leads (20 pages):
-      Before: 20 sequential HTTP calls ≈ 30s
-      After : 1 first call + 1 batch call  ≈  3s
+    Typical improvement for 500 leads (10 pages):
+      Before: 10 sequential calls ≈ 20s
+      After : ~2 rounds × 8 workers ≈ 4s  (+Redis: <100ms on repeat)
     """
     list_url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/{method}"
     base_params = _build_params(filter_dict, select, extra)
 
     try:
-        res = requests.get(list_url, params={**base_params, "start": 0}, timeout=20)
+        res = _session.get(list_url, params={**base_params, "start": 0}, timeout=20)
         if res.status_code != 200:
             return []
     except Exception as exc:
@@ -134,23 +125,21 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
         return []
 
     data = res.json()
-    all_items: list = data.get("result", [])
+    all_items: list = list(data.get("result", []))
     total: int = data.get("total", 0)
 
     if total <= 50:
         return all_items
 
     remaining = list(range(50, total, 50))
-    chunks = [remaining[i:i + 50] for i in range(0, len(remaining), 50)]
+    workers = min(len(remaining), 8)
 
-    if len(chunks) == 1:
-        all_items.extend(_fetch_batch_chunk(method, base_params, chunks[0]))
-    else:
-        with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as pool:
-            futures = [pool.submit(_fetch_batch_chunk, method, base_params, ch) for ch in chunks]
-            for f in futures:
-                all_items.extend(f.result())
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_fetch_page, list_url, base_params, s) for s in remaining]
+        for f in futures:
+            all_items.extend(f.result())
 
+    log.info("_paginate %s: total=%d fetched=%d pages=%d", method, total, len(all_items), 1 + len(remaining))
     return all_items
 
 
