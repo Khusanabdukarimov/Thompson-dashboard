@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -91,27 +92,31 @@ def _build_params(filter_dict=None, select=None, extra: dict | None = None) -> d
 
 
 def _fetch_page(list_url: str, base_params: dict, start: int) -> list:
-    """Fetch a single page at the given offset."""
-    try:
-        res = _session.get(list_url, params={**base_params, "start": start}, timeout=20)
-        if res.status_code == 200:
-            return res.json().get("result", [])
-    except Exception as exc:
-        log.warning("page fetch failed (start=%s): %s", start, exc)
+    """Fetch a single page with up to 2 retries (handles 429 rate-limit)."""
+    for attempt in range(3):
+        if attempt:
+            time.sleep(attempt * 2.0)  # 0s, 2s, 4s
+        try:
+            res = _session.get(list_url, params={**base_params, "start": start}, timeout=25)
+            if res.status_code == 200:
+                return res.json().get("result", [])
+            if res.status_code != 429:
+                log.warning("page fetch non-retryable (start=%s, status=%s)", start, res.status_code)
+                break
+            log.warning("rate-limited at start=%s (attempt %d), retrying", start, attempt + 1)
+        except Exception as exc:
+            log.warning("page fetch exception (start=%s, attempt=%d): %s", start, attempt + 1, exc)
     return []
 
 
-def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = None) -> list:
+def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = None) -> tuple[list, int]:
     """
-    Fetch all pages for a Bitrix24 list method using concurrent GET requests.
+    Fetch all pages for a Bitrix24 list method.
 
     Strategy:
       1. Fetch page 0 to learn `total`.
-      2. Fire all remaining pages concurrently (max 8 workers).
-
-    Typical improvement for 500 leads (10 pages):
-      Before: 10 sequential calls ≈ 20s
-      After : ~2 rounds × 8 workers ≈ 4s  (+Redis: <100ms on repeat)
+      2. Fire remaining pages concurrently (max 3 workers — avoids Bitrix24 rate limit).
+      3. Any page that returned [] is retried sequentially.
     """
     list_url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/{method}"
     base_params = _build_params(filter_dict, select, extra)
@@ -132,14 +137,31 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
         return all_items, total
 
     remaining = list(range(50, total, 50))
-    workers = min(len(remaining), 8)
+    workers = min(len(remaining), 3)  # 3 workers ≈ 10–15 req/s, within Bitrix24 limits
 
+    failed_starts: list[int] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_fetch_page, list_url, base_params, s) for s in remaining]
-        for f in futures:
-            all_items.extend(f.result())
+        futures = [(s, pool.submit(_fetch_page, list_url, base_params, s)) for s in remaining]
+        for start, f in futures:
+            items = f.result()
+            if items:
+                all_items.extend(items)
+            else:
+                failed_starts.append(start)
 
-    log.info("_paginate %s: total=%d fetched=%d pages=%d", method, total, len(all_items), 1 + len(remaining))
+    # Sequential retry for any pages that returned [] on first pass
+    if failed_starts:
+        log.warning("_paginate %s: retrying %d empty pages sequentially", method, len(failed_starts))
+        for start in failed_starts:
+            time.sleep(0.5)
+            items = _fetch_page(list_url, base_params, start)
+            if items:
+                all_items.extend(items)
+            else:
+                log.warning("_paginate %s: page start=%d still empty after retry", method, start)
+
+    log.info("_paginate %s: total=%d fetched=%d pages=%d failed=%d",
+             method, total, len(all_items), 1 + len(remaining), len(failed_starts))
     return all_items, total
 
 
