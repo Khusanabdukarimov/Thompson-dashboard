@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -33,6 +34,18 @@ _session.mount("http://", _adapter)
 
 TSK_TZ = ZoneInfo("Asia/Tashkent")
 log = logging.getLogger(__name__)
+
+# ─── Per-key threading locks (within-process serialisation) ──────────────────
+_FETCH_LOCKS: dict[str, threading.Lock] = {}
+_FETCH_LOCKS_MUTEX = threading.Lock()
+
+
+def _get_fetch_lock(key: str) -> threading.Lock:
+    with _FETCH_LOCKS_MUTEX:
+        if key not in _FETCH_LOCKS:
+            _FETCH_LOCKS[key] = threading.Lock()
+        return _FETCH_LOCKS[key]
+
 
 # ─── Redis ────────────────────────────────────────────────────────────────────
 
@@ -137,7 +150,7 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
         return all_items, total
 
     remaining = list(range(50, total, 50))
-    workers = min(len(remaining), 3)  # 3 workers ≈ 10–15 req/s, within Bitrix24 limits
+    workers = min(len(remaining), 4)  # 4 workers; dist lock ensures only 1 process fetches
 
     failed_starts: list[int] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -168,19 +181,61 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
 def _paginate_cached(method: str, filter_dict=None, select=None,
                      extra: dict | None = None, ttl: int = 300) -> list:
     key = _cache_key(method, filter_dict, select, extra)
+
+    # 1. Fast path — no lock needed
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    result, total = _paginate(method, filter_dict, select, extra)
-    # Only cache if result is non-empty AND complete (≥95% of declared total).
-    # Partial results from rate-limiting or transient failures are not cached —
-    # the next request will retry and get the full dataset.
-    complete = total == 0 or len(result) >= total * 0.95
-    if result and complete:
-        _cache_set(key, result, ttl)
-    elif result and not complete:
-        log.warning("_paginate_cached %s: incomplete (%d/%d) — not caching", method, len(result), total)
-    return result
+
+    # 2. Distributed lock (Redis SETNX) — prevents thundering herd across
+    #    uvicorn worker processes.  Only ONE process fetches; others wait.
+    r = _get_redis()
+    dist_lock_key = f"b24:lock:{key}"
+    dist_token = f"{os.getpid()}:{threading.get_ident()}"
+    dist_acquired = bool(r.set(dist_lock_key, dist_token, nx=True, ex=120)) if r else True
+
+    if not dist_acquired:
+        log.info("_paginate_cached %s: another process is fetching — waiting…", method)
+        for _w in range(90):
+            time.sleep(1)
+            cached = _cache_get(key)
+            if cached is not None:
+                log.info("_paginate_cached %s: got result after waiting %ds", method, _w + 1)
+                return cached
+        log.warning("_paginate_cached %s: wait timeout — fetching directly", method)
+        # Fall through without owning the dist lock (best-effort)
+
+    # 3. Within-process lock per cache key — prevents duplicate threads inside
+    #    the same uvicorn worker from both fetching at the same time.
+    local_lock = _get_fetch_lock(key)
+    with local_lock:
+        cached = _cache_get(key)
+        if cached is not None:
+            _release_dist_lock(r, dist_lock_key, dist_token, dist_acquired)
+            return cached
+
+        try:
+            result, total = _paginate(method, filter_dict, select, extra)
+            complete = total == 0 or len(result) >= total * 0.95
+            if result and complete:
+                _cache_set(key, result, ttl)
+            elif result and not complete:
+                log.warning("_paginate_cached %s: incomplete (%d/%d) — not caching",
+                            method, len(result), total)
+            return result
+        finally:
+            _release_dist_lock(r, dist_lock_key, dist_token, dist_acquired)
+
+
+def _release_dist_lock(r, lock_key: str, token: str, acquired: bool):
+    if not acquired or not r:
+        return
+    try:
+        current = r.get(lock_key)
+        if current and current.decode() == token:
+            r.delete(lock_key)
+    except Exception:
+        pass
 
 
 # ─── Single-entity fetches ────────────────────────────────────────────────────
