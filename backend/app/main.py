@@ -23,15 +23,10 @@ from datetime import date
 from app.api.routes import payroll as payroll_routes
 from app.core import auth as auth_module
 from app.db import init_db
-from app.db_bx import init_bx_db
+from app.db_bx import init_bx_db, bx_engine
+from sqlalchemy import text
 from app.services import bitrix
 from app.services import meta as meta_svc
-from app.services.bitrix import (
-    aggregate_deals_sum_total,
-    get_visits_by_date,
-    list_leads,
-)
-from app.services.bitrix_sync import start_sync_worker
 from app.services.meta import MetaClient
 
 app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
@@ -44,7 +39,6 @@ auth_module.install_auth_middleware(app)
 def _on_startup():
     init_db()
     init_bx_db()
-    start_sync_worker()
 
 
 app.include_router(payroll_routes.router)
@@ -126,53 +120,57 @@ def api_get_lead(lead_id: int):
 
 @app.get("/api/leads")
 def api_list_leads(
-    assigned_by: Optional[int] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    status_id: Optional[str] = None,
-    source_id: Optional[str] = None,
+    range: str = "all",
+    responsible_id: Optional[int] = None,
+    stage_id: Optional[str] = None,
     search: Optional[str] = None,
-    limit: Optional[int] = None,
-    offset: int = 0,
-    enrich: bool = False,
+    limit: int = 50,
+    page: int = 1,
 ):
-    """List leads with optional filters and enrichment.
-
-    enrich=true → include status_name, source_name, assigned_name resolved server-side.
-    """
-    f = {}
-    select = [
-        "ID", "TITLE", "NAME", "LAST_NAME", "SECOND_NAME",
-        "ASSIGNED_BY_ID", "OPPORTUNITY", "STATUS_ID", "SOURCE_ID",
-        "DATE_CREATE", "DATE_MODIFY",
-        "PHONE", "EMAIL", "COMMENTS",
-        "UF_CRM_1774413003006",
-    ]
-    if assigned_by:  f["ASSIGNED_BY_ID"] = assigned_by
-    if status_id:    f["STATUS_ID"] = status_id
-    if source_id:    f["SOURCE_ID"] = source_id
-    if start_date:   f[">=DATE_CREATE"] = start_date
-    if end_date:     f["<=DATE_CREATE"] = _end_of_day(end_date)
-    if search:       f["%TITLE"] = search   # Bitrix substring filter
-
-    leads = bitrix.list_leads(filter_dict=f, select=select)
-    total = len(leads)
-
-    # Optional pagination (server-side after Bitrix-side filtering)
-    if limit:
-        leads = leads[offset: offset + limit]
-
-    if enrich:
-        status_names = bitrix.get_lead_status_names()
-        source_names = bitrix.get_deal_source_names()
-        users = {str(u["ID"]): f"{u.get('NAME','') or ''} {u.get('LAST_NAME','') or ''}".strip() or f"User {u['ID']}"
-                 for u in bitrix.list_users()}
-        for ld in leads:
-            ld["_status_name"]  = status_names.get(ld.get("STATUS_ID") or "", ld.get("STATUS_ID") or "")
-            ld["_source_name"]  = source_names.get(ld.get("SOURCE_ID") or "", ld.get("SOURCE_ID") or "")
-            ld["_assigned_name"] = users.get(str(ld.get("ASSIGNED_BY_ID") or ""), "")
-
-    return {"count": total, "leads": leads, "offset": offset, "limit": limit}
+    offset = (page - 1) * limit
+    days = None if range == "all" else (1 if range == "today" else int(range))
+    
+    query = text("""
+        SELECT
+            l.id, l.title, l.name, l.last_name,
+            l.opportunity, l.currency,
+            l.is_won, l.is_failed, l.is_processed,
+            l.date_created, l.date_modified,
+            s.name_uz        AS stage_name,
+            s.bitrix_id      AS stage_bitrix_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, '')) AS responsible_name,
+            (SELECT phone FROM lead_phones lp
+             WHERE lp.lead_id = l.id AND lp.is_primary = TRUE LIMIT 1) AS primary_phone,
+            COUNT(*) OVER()  AS total_count
+        FROM leads l
+        LEFT JOIN stages       s ON s.id = l.stage_id
+        LEFT JOIN responsibles r ON r.id = l.responsible_id
+        WHERE
+            (:days::int    IS NULL OR l.date_created  >= NOW() - (:days || ' days')::INTERVAL)
+            AND (:responsible_id::int    IS NULL OR l.responsible_id = :responsible_id)
+            AND (:stage_id::text   IS NULL OR s.bitrix_id      = :stage_id)
+            AND (:search::text   IS NULL OR l.name ILIKE '%' || :search || '%'
+                                    OR l.last_name ILIKE '%' || :search || '%'
+                                    OR l.title ILIKE '%' || :search || '%'
+                                    OR EXISTS (
+                                        SELECT 1 FROM lead_phones lp
+                                        WHERE lp.lead_id = l.id AND lp.phone ILIKE '%' || :search || '%'
+                                    ))
+        ORDER BY l.date_created DESC
+        LIMIT :limit OFFSET :offset;
+    """)
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, {
+            "days": days,
+            "responsible_id": responsible_id,
+            "stage_id": stage_id,
+            "search": search,
+            "limit": limit,
+            "offset": offset
+        }).mappings().all()
+    
+    count = res[0]["total_count"] if res else 0
+    return {"count": count, "leads": [dict(r) for r in res], "offset": offset, "limit": limit}
 
 
 @app.get("/api/users/timeman")
@@ -205,597 +203,86 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
     return res
 
 
-# ── Lead analytics constants (module-level) ─────────────────────────────────
-_UF_SEGMENT_FIELDS = {
-    "UF_CRM_1775825731211": "Hudud",
-    "UF_CRM_1777030859057": "Qaysi filial",
-    "UF_CRM_1775824803703": "Xizmat turi",
-    "UF_CRM_1775825155935": "Faoliyati",
-    "UF_CRM_1770281264686": "Kim bilan keldi",
-}
+@app.get("/api/stats")
+def api_stats(range: str = "all"):
+    days = None if range == "all" else (1 if range == "today" else int(range))
+    
+    stats_query = text("""
+        SELECT
+            COUNT(*)                                                                AS total_leads,
+            COUNT(*) FILTER (WHERE NOT is_won AND NOT is_failed AND NOT is_processed) AS in_process,
+            COUNT(*) FILTER (WHERE is_failed)                                       AS failed,
+            COUNT(*) FILTER (WHERE is_processed)                                    AS converted,
+            ROUND(COUNT(*) FILTER (WHERE is_processed)::NUMERIC
+                  / NULLIF(COUNT(*), 0) * 100, 2)                                   AS conversion_pct,
+            COALESCE(SUM(opportunity), 0)                                           AS total_opportunity,
+            COALESCE(ROUND(AVG(opportunity), 0), 0)                                 AS avg_opportunity,
+            COUNT(*) FILTER (
+                WHERE NOT is_won AND NOT is_failed AND NOT is_processed
+                  AND date_modified < NOW() - INTERVAL '7 days'
+            )                                                                       AS frozen_leads,
+            ROUND(AVG(
+                EXTRACT(EPOCH FROM (NOW() - date_created)) / 86400.0
+            ) FILTER (WHERE NOT is_won AND NOT is_failed AND NOT is_processed), 1)  AS avg_age_days
+        FROM leads
+        WHERE (:days::int IS NULL OR date_created >= NOW() - (:days || ' days')::INTERVAL);
+    """)
 
-# Translate Russian Bitrix source/status names that appear verbatim from CRM
-_BITRIX_LABEL_TRANSLATE = {
-    "Звонок": "Qo'ng'iroq",
-    "Электронная почта": "E-pochta",
-    "Веб-сайт": "Veb-sayt",
-    "Реклама": "Reklama",
-    "Партнер": "Hamkor",
-    "Другое": "Boshqa",
-    "Не указано": "Ko'rsatilmagan",
-    "Рекомендация": "Tavsiya",
-    "Собственный капитал": "O'z resursi",
-}
+    funnel_query = text("""
+        SELECT
+            s.bitrix_id,
+            s.name_uz,
+            s.sort_order,
+            COUNT(l.id)                     AS lead_count,
+            COALESCE(SUM(l.opportunity), 0) AS total_opportunity
+        FROM stages s
+        LEFT JOIN leads l ON l.stage_id = s.id
+            AND (:days::int IS NULL OR l.date_created >= NOW() - (:days || ' days')::INTERVAL)
+        WHERE s.entity_type = 'lead'
+        GROUP BY s.id, s.bitrix_id, s.name_uz, s.sort_order
+        ORDER BY s.sort_order;
+    """)
 
-
-def _translate_label(s: str) -> str:
-    return _BITRIX_LABEL_TRANSLATE.get(s, s)
-
-
-def _end_of_day(d: str) -> str:
-    """Append T23:59:59 to a YYYY-MM-DD date so Bitrix24 includes the entire day."""
-    return d if "T" in d else f"{d}T23:59:59"
-
-
-def _to_naive_utc(s: str):
-    """Convert ISO datetime string to naive UTC datetime."""
-    dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
-    if dt.tzinfo is not None:
-        dt = dt - dt.utcoffset()
-        dt = dt.replace(tzinfo=None)
-    return dt
-
-
-@app.get("/api/stats/leads")
-def api_stats_leads(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    assigned_by: Optional[int] = None,
-    status_id: Optional[str] = None,
-    source_id: Optional[str] = None,
-    utm_source: Optional[str] = None,
-    utm_medium: Optional[str] = None,
-    utm_campaign: Optional[str] = None,
-    utm_content: Optional[str] = None,
-    utm_term: Optional[str] = None,
-):
-    f = {}
-    if start_date:   f[">=DATE_CREATE"] = start_date
-    if end_date:     f["<=DATE_CREATE"] = _end_of_day(end_date)
-    if assigned_by:  f["ASSIGNED_BY_ID"] = assigned_by
-    if status_id:    f["STATUS_ID"] = status_id
-    if source_id:    f["SOURCE_ID"] = source_id
-    if utm_source:   f["UTM_SOURCE"] = utm_source
-    if utm_medium:   f["UTM_MEDIUM"] = utm_medium
-    if utm_campaign: f["UTM_CAMPAIGN"] = utm_campaign
-    if utm_content:  f["UTM_CONTENT"] = utm_content
-    if utm_term:     f["UTM_TERM"] = utm_term
-
-    UF_SEGMENT_FIELDS = _UF_SEGMENT_FIELDS
-    select = [
-        "ID", "ASSIGNED_BY_ID", "STATUS_ID", "OPPORTUNITY", "SOURCE_ID",
-        "UTM_SOURCE", "UTM_MEDIUM", "UTM_CAMPAIGN", "UTM_CONTENT", "UTM_TERM",
-        "DATE_CREATE", "DATE_MODIFY",
-        *UF_SEGMENT_FIELDS.keys(),
-    ]
-    # Run all 5 Bitrix calls concurrently — reduces wall-clock time from ~sum to ~max
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        f_leads   = ex.submit(bitrix.list_leads, f, select)
-        f_users   = ex.submit(bitrix.list_users)
-        f_status  = ex.submit(bitrix.get_lead_status_names)
-        f_sources = ex.submit(bitrix.get_deal_source_names)
-        f_enum    = ex.submit(bitrix.get_lead_enum_map)
-    leads        = f_leads.result()
-    all_users    = f_users.result()
-    status_names = f_status.result()
-    source_names = f_sources.result()
-    enum_map     = f_enum.result()
-    users_map = {u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
-                 for u in all_users}
-
-    print(f"\n{'='*60}")
-    print(f"[LEADS DEBUG] filter: {start_date} → {end_date}")
-    print(f"[LEADS DEBUG] Raw leads from Bitrix24: {len(leads)}")
-    raw_by_status: dict = {}
-    for l in leads:
-        s = l.get("STATUS_ID", "UNKNOWN")
-        raw_by_status[s] = raw_by_status.get(s, 0) + 1
-    for sid, cnt in sorted(raw_by_status.items(), key=lambda x: -x[1]):
-        sname = status_names.get(sid, sid)
-        print(f"  {sid:20s} {sname:35s} {cnt}")
-    print(f"{'='*60}\n")
-
-    # Bitrix24 ignores DATE_CREATE filter for some terminal stages (e.g. Bekor bo'ldi
-    # always returns all-time leads in kanban).  Post-filter by DATE_CREATE to guarantee
-    # only leads actually created in the requested window are counted.
-    if start_date or end_date:
-        _s = start_date or ""
-        _e = end_date[:10] if end_date else ""
-        def _in_range(lead) -> bool:
-            dc = (lead.get("DATE_CREATE") or "")[:10]
-            if not dc:
-                return True
-            if _s and dc < _s:
-                return False
-            if _e and dc > _e:
-                return False
-            return True
-        leads_before = len(leads)
-        leads = [l for l in leads if _in_range(l)]
-        print(f"[LEADS DEBUG] After DATE_CREATE post-filter: {len(leads)} (removed {leads_before - len(leads)})")
-
-    JARAYON_STATUSES = {"NEW", "IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68"}
-    FROZEN_DAYS = 7  # idle days threshold for "muzlab qolgan" (frozen) leads
-
-    by_status: dict = {}
-    by_user: dict = {}
-    total_opp = 0.0
-    sources_found: set = set()
-    source_counts: dict = {}
-    utm_sources_found: set = set()
-    utm_mediums_found: set = set()
-    utm_campaigns_found: set = set()
-    utm_contents_found: set = set()
-    utm_terms_found: set = set()
-    utm_medium_counts: dict = {}
-    utm_campaign_counts: dict = {}
-    field_counts: dict = {fid: {} for fid in UF_SEGMENT_FIELDS}
-    ages_days: list = []
-    frozen_count = 0
-    now_utc = _dt.utcnow()  # naive UTC — avoids timezone import
-
-    for u in all_users:
-        uid = str(u["ID"])
-        if u.get("ACTIVE", True):
-            by_user[uid] = {"id": uid, "name": users_map.get(uid, f"User {uid}"),
-                            "total": 0, "revenue": 0.0, "by_status": {}}
-
-    for lead in leads:
-        uid = str(lead.get("ASSIGNED_BY_ID", ""))
-        status = lead.get("STATUS_ID", "UNKNOWN")
-        opp = float(lead.get("OPPORTUNITY") or 0)
-        total_opp += opp
-        by_status[status] = by_status.get(status, 0) + 1
-        if uid not in by_user:
-            by_user[uid] = {"id": uid, "name": users_map.get(uid, f"User {uid}"),
-                            "total": 0, "revenue": 0.0, "by_status": {}}
-        by_user[uid]["total"] += 1
-        by_user[uid]["revenue"] += opp
-        by_user[uid]["by_status"][status] = by_user[uid]["by_status"].get(status, 0) + 1
-
-        src = (lead.get("SOURCE_ID") or "").strip()
-        if src:
-            sources_found.add(src)
-            source_counts[src] = source_counts.get(src, 0) + 1
-
-        for val, col in [
-            (lead.get("UTM_SOURCE"),   utm_sources_found),
-            (lead.get("UTM_MEDIUM"),   utm_mediums_found),
-            (lead.get("UTM_CAMPAIGN"), utm_campaigns_found),
-            (lead.get("UTM_CONTENT"),  utm_contents_found),
-            (lead.get("UTM_TERM"),     utm_terms_found),
-        ]:
-            v = (val or "").strip()
-            if v: col.add(v)
-
-        med = (lead.get("UTM_MEDIUM") or "").strip()
-        if med:
-            utm_medium_counts[med] = utm_medium_counts.get(med, 0) + 1
-        camp = (lead.get("UTM_CAMPAIGN") or "").strip()
-        if camp:
-            utm_campaign_counts[camp] = utm_campaign_counts.get(camp, 0) + 1
-
-        for fid in UF_SEGMENT_FIELDS:
-            raw = lead.get(fid)
-            if not raw:
-                continue
-            vals = raw if isinstance(raw, list) else [raw]
-            fe = enum_map.get(fid, {})
-            for v in vals:
-                label = fe.get(str(v), str(v))
-                field_counts[fid][label] = field_counts[fid].get(label, 0) + 1
-
-        # Lead age / frozen computation (only for active/jarayon leads)
-        if status in JARAYON_STATUSES:
-            created_str = lead.get("DATE_CREATE")
-            modified_str = lead.get("DATE_MODIFY") or created_str
-            if created_str:
-                try:
-                    created = _to_naive_utc(created_str)
-                    age = (now_utc - created).days
-                    ages_days.append(age)
-                    modified = _to_naive_utc(modified_str)
-                    if (now_utc - modified).days >= FROZEN_DAYS:
-                        frozen_count += 1
-                except Exception:
-                    pass
-
-    avg_age_days = round(sum(ages_days) / len(ages_days), 1) if ages_days else 0
-    jarayon_total = sum(v for k, v in by_status.items() if k in JARAYON_STATUSES)
-    converted = sum(v for k, v in by_status.items() if "CONVERT" in k.upper() or k == "CLOSED")
-    failed = sum(v for k, v in by_status.items() if k not in JARAYON_STATUSES and "CONVERT" not in k.upper() and k != "CLOSED")
-    total = len(leads)
-    conversion_rate = round(converted / total * 100, 2) if total else 0
-
-    tashrif_belg_id = next((k for k, n in status_names.items() if "belgiland" in n.lower()), None)
-    tashrif_buy_id  = next((k for k, n in status_names.items() if "buyur"     in n.lower()), None)
-    tashrif_belg = by_status.get(tashrif_belg_id, 0) if tashrif_belg_id else 0
-    tashrif_buy  = by_status.get(tashrif_buy_id,  0) if tashrif_buy_id  else converted
-
-    print(f"\n{'='*60}")
-    print(f"[LEADS METRICS] {start_date} → {end_date}")
-    print(f"  Barcha lidlar        : {total}")
-    print(f"  Jarayonda            : {jarayon_total}")
-    print(f"  Muvaffaqiyatsiz      : {failed}")
-    print(f"  Sdelkaga (converted) : {converted}")
-    print(f"  Konversiya           : {conversion_rate}%")
-    print(f"  Tashrif belgilandi   : {tashrif_belg}  ({status_names.get(tashrif_belg_id,'?')})")
-    print(f"  Konv→Tashrif belg    : {round(tashrif_belg/total*100,2) if total else 0}%")
-    print(f"  Konv→Tashrif buyurdi : {round(tashrif_buy/total*100,2)  if total else 0}%")
-    print(f"  Sifatli konversiya   : {round(tashrif_buy/tashrif_belg*100,2) if tashrif_belg else 0}%")
-    print(f"  By status (filtered):")
-    for sid, cnt in sorted(by_status.items(), key=lambda x: -x[1]):
-        sname = status_names.get(sid, sid)
-        print(f"    {sid:20s} {sname:35s} {cnt}")
-    print(f"{'='*60}\n")
+    with bx_engine.connect() as conn:
+        stats = conn.execute(stats_query, {"days": days}).mappings().first()
+        funnel = conn.execute(funnel_query, {"days": days}).mappings().all()
 
     return {
-        "total": total,
-        "total_revenue": round(total_opp, 2),
-        "converted": converted,
-        "jarayon_total": jarayon_total,
-        "conversion_rate": round(converted / total * 100, 2) if total else 0,
-        "avg_age_days": avg_age_days,
-        "frozen_count": frozen_count,
-        "by_status": by_status,
-        "by_user": sorted(by_user.values(), key=lambda x: x["total"], reverse=True),
-        "all_statuses": list(status_names.keys()),
-        "status_names": status_names,
-        "_debug": {
-            "raw_from_bitrix": sum(raw_by_status.values()),
-            "after_postfilter": total,
-            "removed_by_postfilter": sum(raw_by_status.values()) - total,
-            "barcha_lidlar": total,
-            "jarayonda": jarayon_total,
-            "muvaffaqiyatsiz": failed,
-            "sdelkaga": converted,
-            "konversiya_pct": conversion_rate,
-            "tashrif_belgilandi": tashrif_belg,
-            "konv_tashrif_belg_pct": round(tashrif_belg / total * 100, 2) if total else 0,
-            "konv_tashrif_buyurdi_pct": round(tashrif_buy / total * 100, 2) if total else 0,
-            "sifatli_konversiya_pct": round(tashrif_buy / tashrif_belg * 100, 2) if tashrif_belg else 0,
-            "by_status_raw": {status_names.get(k, k): v for k, v in sorted(raw_by_status.items(), key=lambda x: -x[1])},
-            "by_status_filtered": {status_names.get(k, k): v for k, v in sorted(by_status.items(), key=lambda x: -x[1])},
-        },
-        "users": [{"id": u["ID"], "name": users_map[u["ID"]]} for u in all_users],
-        "sources": sorted(
-            [{"id": s, "label": _translate_label(source_names.get(s, s)), "count": source_counts.get(s, 0)} for s in sources_found],
-            key=lambda x: -x["count"],
-        ),
-        "utm_sources":        sorted(utm_sources_found),
-        "utm_mediums":        sorted(utm_mediums_found),
-        "utm_campaigns":      sorted(utm_campaigns_found),
-        "utm_contents":       sorted(utm_contents_found),
-        "utm_terms":          sorted(utm_terms_found),
-        "utm_medium_counts":  sorted([{"label": k, "val": v} for k, v in utm_medium_counts.items()], key=lambda x: -x["val"]),
-        "utm_campaign_counts": sorted([{"label": k, "val": v} for k, v in utm_campaign_counts.items()], key=lambda x: -x["val"]),
-        "field_breakdowns": [
-            {
-                "key": fid,
-                "label": lbl,
-                "items": sorted(
-                    [{"label": k, "val": v} for k, v in field_counts[fid].items()],
-                    key=lambda x: -x["val"],
-                ),
-            }
-            for fid, lbl in UF_SEGMENT_FIELDS.items()
-        ],
+        "header": dict(stats) if stats else {},
+        "funnel": [dict(r) for r in funnel]
     }
 
-
-@app.get("/api/stats/deals")
-def api_stats_deals(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    assigned_by: Optional[int] = None,
-    stage_id: Optional[str] = None,
-    source_id: Optional[str] = None,
-):
-    f = {}
-    if start_date:
-        f[">=DATE_CREATE"] = start_date
-    if end_date:
-        f["<=DATE_CREATE"] = _end_of_day(end_date)
-    if assigned_by:
-        f["ASSIGNED_BY_ID"] = assigned_by
-    if stage_id:
-        f["STAGE_ID"] = stage_id
-    if source_id:
-        f["SOURCE_ID"] = source_id
-    select = ["ID", "ASSIGNED_BY_ID", "STAGE_ID", "OPPORTUNITY", "CURRENCY_ID"]
-    deals = bitrix.list_deals(filter_dict=f, select=select)
-    all_users = bitrix.list_users()
-    users_map = {u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
-                 for u in all_users}
-    stage_names = bitrix.get_deal_stage_names()
-
-    by_stage: dict = {}
-    by_user: dict = {}
-    total_won = 0.0
-    won_count = 0
-
-    for u in all_users:
-        uid = str(u["ID"])
-        if u.get("ACTIVE", True):
-            by_user[uid] = {"id": uid, "name": users_map.get(uid, f"User {uid}"),
-                            "total": 0, "won_revenue": 0.0, "by_stage": {}}
-
-    for deal in deals:
-        uid = str(deal.get("ASSIGNED_BY_ID", ""))
-        stage = deal.get("STAGE_ID", "UNKNOWN")
-        opp = float(deal.get("OPPORTUNITY") or 0)
-        if "WON" in stage.upper():
-            total_won += opp
-            won_count += 1
-        by_stage[stage] = by_stage.get(stage, 0) + 1
-        if uid not in by_user:
-            by_user[uid] = {"id": uid, "name": users_map.get(uid, f"User {uid}"),
-                            "total": 0, "won_revenue": 0.0, "by_stage": {}}
-        by_user[uid]["total"] += 1
-        if "WON" in stage.upper():
-            by_user[uid]["won_revenue"] += opp
-        by_user[uid]["by_stage"][stage] = by_user[uid]["by_stage"].get(stage, 0) + 1
-
-    total = len(deals)
-    lost = sum(v for k, v in by_stage.items() if "LOSE" in k.upper())
-    return {
-        "total": total,
-        "won_count": won_count,
-        "lost_count": lost,
-        "total_won_revenue": total_won,
-        "conversion_rate": round(won_count / total * 100, 1) if total else 0,
-        "by_stage": by_stage,
-        "by_user": sorted(by_user.values(), key=lambda x: x["total"], reverse=True),
-        "all_stages": sorted(by_stage.keys()),
-        "stage_names": stage_names,
-        "users": [{"id": u["ID"], "name": users_map[u["ID"]]} for u in all_users],
-    }
-
-
-@app.get("/api/stats/deals/by-source")
-def api_deals_by_source(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    assigned_by: Optional[int] = None,
-    stage_id: Optional[str] = None,
-):
-    f = {}
-    if start_date:
-        f[">=DATE_CREATE"] = start_date
-    if end_date:
-        f["<=DATE_CREATE"] = _end_of_day(end_date)
-    if assigned_by:
-        f["ASSIGNED_BY_ID"] = assigned_by
-    if stage_id:
-        f["STAGE_ID"] = stage_id
-    select = ["ID", "STAGE_ID", "SOURCE_ID", "OPPORTUNITY"]
-    deals = bitrix.list_deals(filter_dict=f, select=select)
-    source_names = bitrix.get_deal_source_names()
-
-    by_source: dict = {}
-    for deal in deals:
-        src_id = deal.get("SOURCE_ID") or "UNKNOWN"
-        stage = deal.get("STAGE_ID", "")
-        opp = float(deal.get("OPPORTUNITY") or 0)
-        if src_id not in by_source:
-            label = _translate_label(source_names.get(src_id, src_id)) if src_id != "UNKNOWN" else "Noma'lum"
-            by_source[src_id] = {"id": src_id, "label": label, "ishlaydi": 0, "provodka": 0, "success": 0, "revenue": 0.0}
-        if "WON" in stage.upper():
-            by_source[src_id]["success"] += 1
-            by_source[src_id]["revenue"] += opp
-        elif "LOSE" in stage.upper():
-            by_source[src_id]["provodka"] += 1
-        else:
-            by_source[src_id]["ishlaydi"] += 1
-
-    result = []
-    for src in by_source.values():
-        total = src["ishlaydi"] + src["provodka"] + src["success"]
-        conv = round(src["success"] / total * 100, 1) if total else 0
-        result.append({**src, "total": total, "conversion": conv})
-    result.sort(key=lambda x: -x["total"])
-    return {"sources": result, "source_names": source_names}
-
-
-@app.get("/api/stats/lead-quality")
-def api_stats_lead_quality(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    assigned_by: Optional[int] = None,
-    source_id: Optional[str] = None,
-    utm_source: Optional[str] = None,
-    utm_medium: Optional[str] = None,
-    utm_campaign: Optional[str] = None,
-    utm_content: Optional[str] = None,
-    utm_term: Optional[str] = None,
-):
-    REASON_FIELDS = {
-        "UC_F8K4GI": "UF_CRM_1770282341169",
-        "UC_NAZK5J": "UF_CRM_1775826103146",
-        "JUNK":      "UF_CRM_1770609460118",
-    }
-    STATUS_KEY = {"UC_F8K4GI": "sifatsiz", "UC_NAZK5J": "bekor", "JUNK": "sandiq"}
-
-    base_filter: dict = {}
-    if start_date:   base_filter[">=DATE_CREATE"] = start_date
-    if end_date:     base_filter["<=DATE_CREATE"] = _end_of_day(end_date)
-    if assigned_by:  base_filter["ASSIGNED_BY_ID"] = assigned_by
-    if source_id:    base_filter["SOURCE_ID"] = source_id
-    if utm_source:   base_filter["UTM_SOURCE"] = utm_source
-    if utm_medium:   base_filter["UTM_MEDIUM"] = utm_medium
-    if utm_campaign: base_filter["UTM_CAMPAIGN"] = utm_campaign
-    if utm_content:  base_filter["UTM_CONTENT"] = utm_content
-    if utm_term:     base_filter["UTM_TERM"] = utm_term
-
-    result: dict = {"sifatsiz": [], "bekor": [], "sandiq": [], "utm": []}
-
-    # Run all 4 list_leads calls + enum_map fetch concurrently
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        f_enum = ex.submit(bitrix.get_lead_enum_map)
-        reason_futures = {
-            status_id: ex.submit(
-                bitrix.list_leads,
-                {"STATUS_ID": status_id, **base_filter},
-                ["ID", "ASSIGNED_BY_ID", reason_field],
-            )
-            for status_id, reason_field in REASON_FIELDS.items()
-        }
-        f_utm_leads = ex.submit(bitrix.list_leads, base_filter, ["ID", "UTM_SOURCE"])
-
-    enum_map = f_enum.result()
-
-    for status_id, reason_field in REASON_FIELDS.items():
-        leads = reason_futures[status_id].result()
-        counts: dict = {}
-        field_enum = enum_map.get(reason_field, {})
-        for lead in leads:
-            val = lead.get(reason_field)
-            if not val:
-                continue
-            if isinstance(val, list):
-                parts = [field_enum.get(str(v), str(v)) for v in val if v]
-                label = ", ".join(sorted(parts)) if parts else None
-            else:
-                label = field_enum.get(str(val), str(val))
-            if label:
-                counts[label] = counts.get(label, 0) + 1
-        key = STATUS_KEY[status_id]
-        result[key] = sorted([{"label": k, "val": v} for k, v in counts.items()], key=lambda x: -x["val"])
-
-    utm_counts: dict = {}
-    for lead in f_utm_leads.result():
-        src = (lead.get("UTM_SOURCE") or "").strip()
-        if src:
-            utm_counts[src] = utm_counts.get(src, 0) + 1
-    result["utm"] = sorted([{"label": k, "val": v} for k, v in utm_counts.items()], key=lambda x: -x["val"])
-
-    return result
-
-
-@app.get("/api/stats/activities")
-def api_stats_activities(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-):
-    """Activity analytics: calls, tasks, todos per responsible person."""
-    f = {}
-    if start_date:
-        f[">=CREATED"] = start_date
-    if end_date:
-        f["<=CREATED"] = _end_of_day(end_date)
-
-    TYPE_LABELS = {"CALL": "Qo'ng'iroq", "TODO": "Eslatma", "TASKS_TASK": "Topshiriq"}
-
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        f_acts = ex.submit(
-            bitrix.list_activities,
-            f,
-            ["ID", "RESPONSIBLE_ID", "COMPLETED", "DIRECTION", "PROVIDER_TYPE_ID", "CREATED"],
-        )
-        f_users = ex.submit(bitrix.list_users)
-    activities = f_acts.result()
-    all_users = f_users.result()
-    users_map = {
-        u["ID"]: f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
-        for u in all_users
-    }
-
-    by_user: dict = {}
-    by_type: dict = {}
-
-    for act in activities:
-        uid = str(act.get("RESPONSIBLE_ID", ""))
-        atype = act.get("PROVIDER_TYPE_ID", "OTHER")
-        completed = act.get("COMPLETED") == "Y"
-        if uid not in by_user:
-            by_user[uid] = {
-                "id": uid,
-                "name": users_map.get(uid, f"User {uid}"),
-                "total": 0,
-                "completed": 0,
-                "by_type": {},
-            }
-        by_user[uid]["total"] += 1
-        if completed:
-            by_user[uid]["completed"] += 1
-        by_user[uid]["by_type"][atype] = by_user[uid]["by_type"].get(atype, 0) + 1
-        by_type[atype] = by_type.get(atype, 0) + 1
-
-    return {
-        "total": len(activities),
-        "by_type": [
-            {"key": k, "label": TYPE_LABELS.get(k, k), "val": v}
-            for k, v in sorted(by_type.items(), key=lambda x: -x[1])
-        ],
-        "by_user": sorted(
-            [u for u in by_user.values() if u["total"] > 0],
-            key=lambda x: -x["total"],
-        ),
-        "type_labels": TYPE_LABELS,
-    }
-
-
-@app.get("/api/attendance")
-def api_attendance(start_date: str, end_date: str):
-    # Return leads that act as visits between dates (uses TASHRIF_DATE field)
-    leads = bitrix.get_visits_by_date(start_date, end_date)
-    return {"count": len(leads), "visits": leads}
-
-@app.get("/api/facebook/insights")
-async def api_facebook_insights(start_date: str, end_date: str):
-    """Return account-level daily Facebook insights between two ISO dates."""
-    try:
-        client = MetaClient()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Meta client init error: {e}")
-
-    try:
-        insights = await client.get_daily_insights(date.fromisoformat(start_date), date.fromisoformat(end_date))
-        return {"count": len(insights), "data": [i.dict() for i in insights]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Meta API error: {e}")
-
-
-@app.get("/api/dashboard/daily")
-async def api_dashboard_daily(date_str: str):
-    """Return combined dashboard data for a single date (YYYY-MM-DD)."""
-    try:
-        # Facebook
-        client = MetaClient()
-        fb = await client.get_daily_insights(date.fromisoformat(date_str), date.fromisoformat(date_str))
-        fb_row = fb[0].dict() if fb else {"date": date_str, "spend": 0, "leads_count": 0}
-    except Exception as e:
-        fb_row = {"error": str(e)}
-
-    try:
-        # Bitrix visits and leads
-        visits = get_visits_by_date(date_str, date_str)
-        leads = list_leads(filter_dict={">=DATE_CREATE": date_str, "<=DATE_CREATE": _end_of_day(date_str)})
-        deals = aggregate_deals_sum_total(date_str, date_str)
-    except Exception as e:
-        visits = []
-        leads = []
-        deals = {"sum": 0, "count": 0}
-
-    return {
-        "date": date_str,
-        "facebook": fb_row,
-        "bitrix": {
-            "visits_count": len(visits),
-            "leads_count": len(leads),
-            "closed_deals": deals,
-        },
-    }
+@app.get("/api/responsibles")
+def api_responsibles(range: str = "all"):
+    days = None if range == "all" else (1 if range == "today" else int(range))
+    
+    query = text("""
+        SELECT
+            r.id                                                            AS responsible_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
+            COUNT(l.id)                                                     AS total,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NEW')                 AS yangi_lid,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NO_ANSWER')           AS javob_bermadi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CALLBACK')            AS qayta_aloqa,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'THINKING')            AS oylab_koradi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')        AS konsultatsiya,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NOT_TRANSFERRED')     AS otkazilmadi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'ARCHIVE')             AS sandiq,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'JUNK')                AS sifatsiz,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'RECYCLED')            AS bekor_boldi,
+            COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
+        FROM responsibles r
+        LEFT JOIN leads l ON l.responsible_id = r.id
+            AND (:days::int IS NULL OR l.date_created >= NOW() - (:days || ' days')::INTERVAL)
+        LEFT JOIN stages s ON s.id = l.stage_id
+        WHERE r.is_active = TRUE
+        GROUP BY r.id, r.name, r.last_name
+        ORDER BY total DESC;
+    """)
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, {"days": days}).mappings().all()
+        
+    return {"responsibles": [dict(r) for r in res]}
 
 
 @app.get("/api/meta/campaign-forms")

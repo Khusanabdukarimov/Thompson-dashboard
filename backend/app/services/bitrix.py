@@ -10,10 +10,7 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import requests
-from sqlmodel import Session, select, delete
-from sqlalchemy.exc import IntegrityError
-from app.db_bx import bx_engine
-from app.bx_models import BxCache, BxLock
+from dateutil.parser import parse as parse_b24_datetime
 from dateutil.parser import parse as parse_b24_datetime
 
 try:
@@ -50,42 +47,7 @@ def _get_fetch_lock(key: str) -> threading.Lock:
         return _FETCH_LOCKS[key]
 
 
-# ─── Database Cache ───────────────────────────────────────────────────────────
-
-def _cache_key(method: str, filter_dict=None, select=None, extra: dict | None = None) -> str:
-    payload = json.dumps({"m": method, "f": filter_dict, "s": select, "e": extra}, sort_keys=True)
-    return "b24:" + hashlib.md5(payload.encode()).hexdigest()
-
-
-def _cache_get(key: str):
-    try:
-        with Session(bx_engine) as session:
-            # Clean up expired entries periodically
-            session.exec(delete(BxCache).where(BxCache.expires_at < datetime.utcnow()))
-            session.commit()
-            
-            cached = session.get(BxCache, key)
-            if cached and cached.expires_at > datetime.utcnow():
-                return json.loads(cached.value)
-    except Exception as e:
-        log.warning("Cache get error: %s", e)
-    return None
-
-
-def _cache_set(key: str, value, ttl: int = 300):
-    try:
-        with Session(bx_engine) as session:
-            expires_at = datetime.utcnow() + timedelta(seconds=ttl)
-            cached = session.get(BxCache, key)
-            if cached:
-                cached.value = json.dumps(value, default=str)
-                cached.expires_at = expires_at
-            else:
-                cached = BxCache(key=key, value=json.dumps(value, default=str), expires_at=expires_at)
-                session.add(cached)
-            session.commit()
-    except Exception as e:
-        log.warning("Cache set error: %s", e)
+# ─── No Database Cache ────────────────────────────────────────────────────────
 
 
 # ─── Batch-based pagination ───────────────────────────────────────────────────
@@ -169,79 +131,7 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
     return all_items, total
 
 
-def _paginate_cached(method: str, filter_dict=None, select=None,
-                     extra: dict | None = None, ttl: int = 300) -> list:
-    key = _cache_key(method, filter_dict, select, extra)
-
-    # 1. Fast path — no lock needed
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
-
-    # 2. Distributed lock (DB) — prevents thundering herd across
-    #    uvicorn worker processes.  Only ONE process fetches; others wait.
-    dist_lock_key = f"b24:lock:{key}"
-    dist_token = f"{os.getpid()}:{threading.get_ident()}"
-    dist_acquired = False
-    
-    try:
-        with Session(bx_engine) as session:
-            session.exec(delete(BxLock).where(BxLock.expires_at < datetime.utcnow()))
-            session.commit()
-            lock = BxLock(key=dist_lock_key, token=dist_token, expires_at=datetime.utcnow() + timedelta(seconds=360))
-            session.add(lock)
-            session.commit()
-            dist_acquired = True
-    except IntegrityError:
-        dist_acquired = False
-    except Exception as e:
-        log.warning("Lock acquire error: %s", e)
-        dist_acquired = True  # Fallback to fetching directly if DB fails
-
-    if not dist_acquired:
-        log.info("_paginate_cached %s: another process is fetching — waiting…", method)
-        for _w in range(420):  # wait up to 7 min (>270 pages × 1s/page + buffer)
-            time.sleep(1)
-            cached = _cache_get(key)
-            if cached is not None:
-                log.info("_paginate_cached %s: got result after waiting %ds", method, _w + 1)
-                return cached
-        log.warning("_paginate_cached %s: wait timeout — fetching directly", method)
-        # Fall through without owning the dist lock (best-effort)
-
-    # 3. Within-process lock per cache key — prevents duplicate threads inside
-    #    the same uvicorn worker from both fetching at the same time.
-    local_lock = _get_fetch_lock(key)
-    with local_lock:
-        cached = _cache_get(key)
-        if cached is not None:
-            _release_dist_lock(dist_lock_key, dist_token, dist_acquired)
-            return cached
-
-        try:
-            result, total = _paginate(method, filter_dict, select, extra)
-            complete = total == 0 or len(result) >= total * 0.95
-            if result and complete:
-                _cache_set(key, result, ttl)
-            elif result and not complete:
-                log.warning("_paginate_cached %s: incomplete (%d/%d) — not caching",
-                            method, len(result), total)
-            return result
-        finally:
-            _release_dist_lock(dist_lock_key, dist_token, dist_acquired)
-
-
-def _release_dist_lock(lock_key: str, token: str, acquired: bool):
-    if not acquired:
-        return
-    try:
-        with Session(bx_engine) as session:
-            lock = session.get(BxLock, lock_key)
-            if lock and lock.token == token:
-                session.delete(lock)
-                session.commit()
-    except Exception as e:
-        log.warning("Lock release error: %s", e)
+# Removed distributed cache locking logic
 
 
 # ─── Single-entity fetches ────────────────────────────────────────────────────
@@ -299,30 +189,26 @@ def get_booking_clients(booking_id):
 # ─── List functions (batch-paginated + Redis cached) ─────────────────────────
 
 def list_users(ttl: int = 1800) -> list:
-    return _paginate_cached("user.get.json", filter_dict={"ACTIVE": "Y"}, ttl=ttl)
-
+    res, _ = _paginate("user.get.json", filter_dict={"ACTIVE": "Y"})
+    return res
 
 def list_leads(filter_dict=None, select=None, ttl: int = 1800) -> list:
-    return _paginate_cached("crm.lead.list", filter_dict=filter_dict, select=select, ttl=ttl)
-
+    res, _ = _paginate("crm.lead.list", filter_dict=filter_dict, select=select)
+    return res
 
 def list_deals(filter_dict=None, select=None, ttl: int = 1800) -> list:
-    return _paginate_cached("crm.deal.list", filter_dict=filter_dict, select=select, ttl=ttl)
-
+    res, _ = _paginate("crm.deal.list", filter_dict=filter_dict, select=select)
+    return res
 
 def list_activities(filter_dict=None, select=None, ttl: int = 1800) -> list:
-    return _paginate_cached("crm.activity.list", filter_dict=filter_dict, select=select, ttl=ttl)
+    res, _ = _paginate("crm.activity.list", filter_dict=filter_dict, select=select)
+    return res
 
 
 def get_tasks_by_date(start_date_iso, end_date_iso, ttl: int = 300) -> list:
     filter_dict = {">=CREATED_DATE": start_date_iso, "<=CREATED_DATE": end_date_iso}
     select = ["ID", "RESPONSIBLE_ID", "TITLE"]
-    key = _cache_key("tasks.task.list", filter_dict, select)
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
 
-    # tasks.task.list returns result.tasks, not result directly — handle manually
     list_url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/tasks.task.list"
     base_params = _build_params(filter_dict, select)
     all_tasks: list = []
@@ -339,8 +225,6 @@ def get_tasks_by_date(start_date_iso, end_date_iso, ttl: int = 300) -> list:
         else:
             break
 
-    if all_tasks:
-        _cache_set(key, all_tasks, ttl)
     return all_tasks
 
 
@@ -350,7 +234,8 @@ def get_visits_by_date(start_date_iso, end_date_iso, ttl: int = 300) -> list:
         f"<={TASHRIF_DATE}": end_date_iso,
     }
     select = ["ID", "ASSIGNED_BY_ID", TASHRIF_DATE]
-    return _paginate_cached("crm.lead.list", filter_dict=filter_dict, select=select, ttl=ttl)
+    res, _ = _paginate("crm.lead.list", filter_dict=filter_dict, select=select)
+    return res
 
 
 def get_todays_visits_leads() -> list:
@@ -363,7 +248,8 @@ def get_todays_visits_leads() -> list:
     }
     select = ["ID", "TITLE", "NAME", "LAST_NAME", "PHONE", "ASSIGNED_BY_ID",
               TASHRIF_DATE, TASHRIF_VISTORS_COUNT, "UF_CRM_1774413003006", "STATUS_ID"]
-    return _paginate_cached("crm.lead.list", filter_dict=filter_dict, select=select, ttl=60)
+    res, _ = _paginate("crm.lead.list", filter_dict=filter_dict, select=select)
+    return res
 
 
 def get_tomorrows_visits_leads() -> list:
@@ -376,7 +262,8 @@ def get_tomorrows_visits_leads() -> list:
     }
     select = ["ID", "TITLE", "NAME", "LAST_NAME", "PHONE", "ASSIGNED_BY_ID",
               TASHRIF_DATE, TASHRIF_VISTORS_COUNT, "UF_CRM_1774413003006", "STATUS_ID"]
-    return _paginate_cached("crm.lead.list", filter_dict=filter_dict, select=select, ttl=60)
+    res, _ = _paginate("crm.lead.list", filter_dict=filter_dict, select=select)
+    return res
 
 
 # ─── Aggregate helpers ────────────────────────────────────────────────────────
