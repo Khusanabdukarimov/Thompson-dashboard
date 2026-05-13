@@ -227,12 +227,14 @@ def api_stats(range: str = "all"):
             ROUND(AVG(
                 EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
             ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days,
-            -- Sifatli lid: O'ylab ko'radi + Tashrif belgilandi + Tashrif buyurdi + Bekor bo'ldi + Kelmadi
+            -- Sifatli lid: O'ylab ko'radi + Konsultatsiya belgilandi + Konsultatsiya o'tkazildi + Bekor bo'ldi + O'tkazilmadi
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
-                'THINKING', 'CONSULTATION', 'NOT_TRANSFERRED', 'RECYCLED'
+                'THINKING', 'CONSULTATION', 'CONVERTED', 'NOT_TRANSFERRED', 'RECYCLED'
             ))                                                                      AS sifatli_lid_count,
-            -- Konsultatsiya o'tkazildi
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS konsultatsiya_count,
+            -- Konsultatsiya belgilandi
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS konsultatsiya_belgilandi_count,
+            -- Konsultatsiya o'tkazildi (CONVERTED in Bitrix24)
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')                   AS konsultatsiya_otkazildi_count,
             -- Muvaffaqiyatsiz = Sifatsiz + Bekor bo'ldi
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK', 'RECYCLED'))         AS muvaffaqiyatsiz_count
         FROM leads l
