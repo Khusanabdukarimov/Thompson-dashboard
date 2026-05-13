@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, API_URL_CRM } from './client';
 
 export type MetaInsightsRow = {
   budget: number[];
@@ -96,7 +96,7 @@ export function getMetaCampaigns(month: MonthKey, year: number) {
 }
 
 export function getDashboardDaily(date: string) {
-  return apiGet<DashboardDailyResponse>('/api/dashboard/daily', { date_str: date });
+  return apiGet<DashboardDailyResponse>('/api/dashboard/daily', { date_str: date }, API_URL_CRM);
 }
 
 export type LeadgenForm = {

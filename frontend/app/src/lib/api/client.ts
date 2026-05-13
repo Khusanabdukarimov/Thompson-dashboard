@@ -22,15 +22,26 @@ function handle401() {
   }
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, string | number | undefined | null>): Promise<T> {
-  const url = new URL(path, window.location.origin);
+export const API_URL_CRM = import.meta.env.VITE_API_URL_CRM || "";
+export const API_URL_PAYROLL = import.meta.env.VITE_API_URL_PAYROLL || "";
+
+export async function apiGet<T>(
+  path: string, 
+  params?: Record<string, string | number | undefined | null>,
+  baseUrl: string = API_URL_PAYROLL
+): Promise<T> {
+  // If baseUrl is empty, it relies on Vite proxy or same-domain
+  const base = baseUrl || window.location.origin;
+  const url = new URL(path, base);
+  
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === '') continue;
       url.searchParams.set(k, String(v));
     }
   }
-  const res = await window.fetch(url.pathname + url.search, { headers: authHeaders() });
+  
+  const res = await window.fetch(url.toString(), { headers: authHeaders() });
   if (res.status === 401) handle401();
   if (!res.ok) {
     let payload: unknown = null;
@@ -41,9 +52,18 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
 }
 
 /** Wrapper around fetch that adds auth header and handles 401. */
-export async function authedFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+export async function authedFetch(
+  input: RequestInfo, 
+  init: RequestInit = {},
+  baseUrl: string = API_URL_PAYROLL
+): Promise<Response> {
+  let finalInput = input;
+  if (typeof input === "string" && !input.startsWith("http") && baseUrl) {
+    finalInput = baseUrl + input;
+  }
+
   const headers = { ...(init.headers as Record<string, string> | undefined ?? {}), ...authHeaders() };
-  const res = await window.fetch(input, { ...init, headers });
+  const res = await window.fetch(finalInput, { ...init, headers });
   if (res.status === 401) handle401();
   return res;
 }

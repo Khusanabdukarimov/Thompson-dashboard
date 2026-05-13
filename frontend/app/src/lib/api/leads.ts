@@ -1,4 +1,4 @@
-import { apiGet, authedFetch } from "./client";
+import { apiGet, authedFetch, API_URL_CRM } from "./client";
 
 export type LeadFilter = {
   start_date?: string;
@@ -63,7 +63,7 @@ export function getDashboardStats(filter: Pick<LeadFilter, "start_date" | "end_d
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     range = String(diffDays);
   }
-  return apiGet<DashboardStatsResponse>("/api/stats", { range });
+  return apiGet<DashboardStatsResponse>("/api/stats", { range }, API_URL_CRM);
 }
 
 export function getResponsiblesStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
@@ -75,7 +75,7 @@ export function getResponsiblesStats(filter: Pick<LeadFilter, "start_date" | "en
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     range = String(diffDays);
   }
-  return apiGet<ResponsiblesStatsResponse>("/api/responsibles", { range });
+  return apiGet<ResponsiblesStatsResponse>("/api/responsibles", { range }, API_URL_CRM);
 }
 
 // ── Lead list (raw + enriched) ───────────────────────────────────
@@ -119,7 +119,7 @@ export function listLeadsRich(filter: LeadsListFilter) {
   }>("/api/leads", {
     ...filter,
     enrich: filter.enrich ? "true" : undefined,
-  } as Record<string, string | number | undefined>);
+  } as Record<string, string | number | undefined>, API_URL_CRM);
 }
 
 // ── Create lead ──────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export async function createLead(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, API_URL_CRM);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
