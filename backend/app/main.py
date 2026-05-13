@@ -137,7 +137,7 @@ def api_leads(
             l.id, l.title, l.name, l.last_name,
             l.opportunity, l.currency,
             l.is_won, l.is_failed, l.is_processed,
-            l.date_created, l.date_modified,
+            l.date_create, l.date_modify,
             s.name_uz        AS stage_name,
             s.bitrix_id      AS stage_bitrix_id,
             TRIM(r.name || ' ' || COALESCE(r.last_name, '')) AS responsible_name,
@@ -148,7 +148,7 @@ def api_leads(
         LEFT JOIN stages       s ON s.id = l.stage_id
         LEFT JOIN responsibles r ON r.id = l.responsible_id
         WHERE
-            (:days_interval IS NULL OR l.date_created  >= NOW() - CAST(:days_interval AS INTERVAL))
+            (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage_id IS NULL OR s.bitrix_id = :stage_id)
             AND (:search IS NULL OR l.name ILIKE :search
@@ -158,7 +158,7 @@ def api_leads(
                                      SELECT 1 FROM lead_phones lp
                                      WHERE lp.lead_id = l.id AND lp.phone ILIKE :search
                                  ))
-        ORDER BY l.date_created DESC
+        ORDER BY l.date_create DESC
         LIMIT :limit OFFSET :offset;
     """)
     with bx_engine.connect() as conn:
@@ -213,22 +213,23 @@ def api_stats(range: str = "all"):
     stats_query = text("""
         SELECT
             COUNT(*)                                                                AS total_leads,
-            COUNT(*) FILTER (WHERE NOT is_won AND NOT is_failed AND NOT is_processed) AS in_process,
-            COUNT(*) FILTER (WHERE is_failed)                                       AS failed,
-            COUNT(*) FILTER (WHERE is_processed)                                    AS converted,
-            ROUND(COUNT(*) FILTER (WHERE is_processed)::NUMERIC
+            COUNT(*) FILTER (WHERE NOT s.is_final)                                  AS in_process,
+            COUNT(*) FILTER (WHERE s.is_final AND NOT s.is_won)                     AS failed,
+            COUNT(*) FILTER (WHERE s.is_final AND s.is_won)                         AS converted,
+            ROUND(COUNT(*) FILTER (WHERE s.is_final AND s.is_won)::NUMERIC
                   / NULLIF(COUNT(*), 0) * 100, 2)                                   AS conversion_pct,
             COALESCE(SUM(opportunity), 0)                                           AS total_opportunity,
             COALESCE(ROUND(AVG(opportunity), 0), 0)                                 AS avg_opportunity,
             COUNT(*) FILTER (
-                WHERE NOT is_won AND NOT is_failed AND NOT is_processed
-                  AND date_modified < NOW() - INTERVAL '7 days'
+                WHERE NOT s.is_final
+                  AND l.date_modify < NOW() - INTERVAL '7 days'
             )                                                                       AS frozen_leads,
             ROUND(AVG(
-                EXTRACT(EPOCH FROM (NOW() - date_created)) / 86400.0
-            ) FILTER (WHERE NOT is_won AND NOT is_failed AND NOT is_processed), 1)  AS avg_age_days
-        FROM leads
-        WHERE (:days_interval IS NULL OR date_created >= NOW() - CAST(:days_interval AS INTERVAL));
+                EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
+            ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days
+        FROM leads l
+        JOIN stages s ON s.id = l.stage_id
+        WHERE (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL));
     """)
 
     funnel_query = text("""
@@ -240,8 +241,8 @@ def api_stats(range: str = "all"):
             COALESCE(SUM(l.opportunity), 0) AS total_opportunity
         FROM stages s
         LEFT JOIN leads l ON l.stage_id = s.id
-            AND (:days_interval IS NULL OR l.date_created >= NOW() - CAST(:days_interval AS INTERVAL))
-        WHERE s.entity_type = 'lead'
+            AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
+        WHERE s.entity = 'lead'
         GROUP BY s.id, s.bitrix_id, s.name_uz, s.sort_order
         ORDER BY s.sort_order;
     """)
@@ -277,7 +278,7 @@ def api_responsibles(range: str = "all"):
             COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:days_interval IS NULL OR l.date_created >= NOW() - CAST(:days_interval AS INTERVAL))
+            AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
         LEFT JOIN stages s ON s.id = l.stage_id
         WHERE r.is_active = TRUE
         GROUP BY r.id, r.name, r.last_name
