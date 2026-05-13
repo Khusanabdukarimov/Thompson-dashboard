@@ -300,6 +300,172 @@ def api_responsibles(range: str = "all"):
     return {"responsibles": [dict(r) for r in res]}
 
 
+@app.get("/api/stats/deals")
+def api_stats_deals(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    assigned_by: Optional[int] = None,
+    stage_id: Optional[str] = None,
+    source_id: Optional[str] = None,
+):
+    conditions = ["1=1"]
+    params: dict = {}
+    if start_date:
+        conditions.append("d.date_create >= :start_date")
+        params["start_date"] = start_date
+    if end_date:
+        conditions.append("d.date_create < :end_date ::date + INTERVAL '1 day'")
+        params["end_date"] = end_date
+    if assigned_by:
+        conditions.append("d.responsible_id = :assigned_by")
+        params["assigned_by"] = assigned_by
+    if stage_id:
+        conditions.append("s.bitrix_id = :stage_id")
+        params["stage_id"] = stage_id
+    if source_id:
+        conditions.append("d.source_id = :source_id")
+        params["source_id"] = source_id
+    where = "WHERE " + " AND ".join(conditions)
+
+    with bx_engine.connect() as conn:
+        stats = conn.execute(text(f"""
+            SELECT
+                COUNT(d.id)                                                      AS total,
+                COUNT(d.id) FILTER (WHERE s.is_won)                             AS won_count,
+                COUNT(d.id) FILTER (WHERE s.is_final AND NOT s.is_won)          AS lost_count,
+                COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won), 0)         AS total_won_revenue,
+                ROUND(COUNT(d.id) FILTER (WHERE s.is_won)::NUMERIC
+                    / NULLIF(COUNT(d.id), 0) * 100, 2)                          AS conversion_rate
+            FROM deals d
+            LEFT JOIN stages s ON s.id = d.stage_id
+            {where}
+        """), params).mappings().first()
+
+        stage_rows = conn.execute(text(f"""
+            SELECT s.bitrix_id, s.name, COUNT(d.id) AS cnt
+            FROM deals d
+            LEFT JOIN stages s ON s.id = d.stage_id
+            {where}
+            GROUP BY s.bitrix_id, s.name
+        """), params).mappings().all()
+
+        all_stage_rows = conn.execute(text(
+            "SELECT bitrix_id, name FROM stages WHERE entity = 'deal' ORDER BY sort_order"
+        )).mappings().all()
+
+        user_rows = conn.execute(text(f"""
+            SELECT
+                r.id                                                            AS responsible_id,
+                TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
+                s.bitrix_id                                                     AS stage_bitrix_id,
+                COUNT(d.id)                                                     AS cnt,
+                COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won), 0)        AS won_revenue
+            FROM deals d
+            LEFT JOIN stages s ON s.id = d.stage_id
+            LEFT JOIN responsibles r ON r.id = d.responsible_id
+            {where}
+            GROUP BY r.id, r.name, r.last_name, s.bitrix_id
+        """), params).mappings().all()
+
+    by_stage = {r["bitrix_id"]: r["cnt"] for r in stage_rows if r["bitrix_id"]}
+    stage_names = {r["bitrix_id"]: r["name"] for r in all_stage_rows}
+    all_stages = [r["bitrix_id"] for r in all_stage_rows]
+
+    user_map: dict = {}
+    for r in user_rows:
+        uid = str(r["responsible_id"] or "unknown")
+        if uid not in user_map:
+            user_map[uid] = {
+                "id": uid,
+                "name": r["full_name"] or f"User {uid}",
+                "total": 0,
+                "won_revenue": 0.0,
+                "by_stage": {},
+            }
+        stage = r["stage_bitrix_id"] or "UNKNOWN"
+        user_map[uid]["by_stage"][stage] = int(r["cnt"])
+        user_map[uid]["total"] += int(r["cnt"])
+        user_map[uid]["won_revenue"] += float(r["won_revenue"] or 0)
+
+    by_user = sorted(user_map.values(), key=lambda x: -x["total"])
+    return {
+        "total":             int(stats["total"] or 0),
+        "won_count":         int(stats["won_count"] or 0),
+        "lost_count":        int(stats["lost_count"] or 0),
+        "total_won_revenue": float(stats["total_won_revenue"] or 0),
+        "conversion_rate":   float(stats["conversion_rate"] or 0),
+        "by_stage":          by_stage,
+        "by_user":           by_user,
+        "all_stages":        all_stages,
+        "stage_names":       stage_names,
+        "users":             [{"id": u["id"], "name": u["name"]} for u in by_user],
+    }
+
+
+@app.get("/api/stats/deals/by-source")
+def api_stats_deals_by_source(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    assigned_by: Optional[int] = None,
+    stage_id: Optional[str] = None,
+    source_id: Optional[str] = None,
+):
+    conditions = ["1=1"]
+    params: dict = {}
+    if start_date:
+        conditions.append("d.date_create >= :start_date")
+        params["start_date"] = start_date
+    if end_date:
+        conditions.append("d.date_create < :end_date ::date + INTERVAL '1 day'")
+        params["end_date"] = end_date
+    if assigned_by:
+        conditions.append("d.responsible_id = :assigned_by")
+        params["assigned_by"] = assigned_by
+    if stage_id:
+        conditions.append("s.bitrix_id = :stage_id")
+        params["stage_id"] = stage_id
+    if source_id:
+        conditions.append("d.source_id = :source_id")
+        params["source_id"] = source_id
+    where = "WHERE " + " AND ".join(conditions)
+
+    with bx_engine.connect() as conn:
+        rows = conn.execute(text(f"""
+            SELECT
+                COALESCE(d.source_id, 'Noma''lum')                             AS source_id,
+                COUNT(d.id)                                                     AS total,
+                COUNT(d.id) FILTER (WHERE NOT s.is_final)                      AS ishlaydi,
+                COUNT(d.id) FILTER (WHERE s.is_final AND NOT s.is_won)         AS provodka,
+                COUNT(d.id) FILTER (WHERE s.is_won)                            AS success,
+                COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won), 0)        AS revenue
+            FROM deals d
+            LEFT JOIN stages s ON s.id = d.stage_id
+            {where}
+            GROUP BY d.source_id
+            ORDER BY total DESC
+        """), params).mappings().all()
+
+    sources = []
+    source_names = {}
+    for r in rows:
+        src = r["source_id"]
+        total = int(r["total"] or 0)
+        success = int(r["success"] or 0)
+        sources.append({
+            "id":         src,
+            "label":      src,
+            "ishlaydi":   int(r["ishlaydi"] or 0),
+            "provodka":   int(r["provodka"] or 0),
+            "success":    success,
+            "revenue":    float(r["revenue"] or 0),
+            "total":      total,
+            "conversion": round(success / total * 100, 2) if total else 0,
+        })
+        source_names[src] = src
+
+    return {"sources": sources, "source_names": source_names}
+
+
 @app.get("/api/meta/campaign-forms")
 def api_meta_campaign_forms(ad_account_id: Optional[str] = None):
     """Return all campaigns that use lead gen (Instant Form) objectives,
