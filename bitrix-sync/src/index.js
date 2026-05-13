@@ -8,6 +8,7 @@ const leadDeleted = require('./webhooks/leadDeleted');
 const dealCreated = require('./webhooks/dealCreated');
 const dealUpdated = require('./webhooks/dealUpdated');
 const dealDeleted = require('./webhooks/dealDeleted');
+const { verifyWebhook: fbVerify, receiveWebhook: fbReceive } = require('./webhooks/facebookWebhook');
 const dashboardRouter = require('./api/dashboard');
 
 const app = express();
@@ -24,6 +25,10 @@ app.post('/webhook/lead/deleted', leadDeleted);
 app.post('/webhook/deal/created', dealCreated);
 app.post('/webhook/deal/updated', dealUpdated);
 app.post('/webhook/deal/deleted', dealDeleted);
+
+// ── Facebook Lead Ads webhooks ────────────────────────────────
+app.get('/webhook/facebook', fbVerify);
+app.post('/webhook/facebook', fbReceive);
 
 // ── Dashboard API ─────────────────────────────────────────────
 app.use('/api/dashboard', dashboardRouter);
@@ -50,4 +55,6 @@ app.listen(PORT, () => {
   console.log(`  GET  /api/dashboard/responsibles`);
   console.log(`  GET  /api/dashboard/funnel`);
   console.log(`  GET  /api/dashboard/leads`);
+  console.log(`  GET  /webhook/facebook  (FB verification)`);
+  console.log(`  POST /webhook/facebook  (FB leadgen events)`);
 });
