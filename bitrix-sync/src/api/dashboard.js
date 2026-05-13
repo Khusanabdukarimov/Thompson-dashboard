@@ -56,9 +56,19 @@ router.get('/responsibles', async (req, res) => {
          r.id,
          TRIM(COALESCE(r.name, '') || ' ' || COALESCE(r.last_name, '')) AS full_name,
          COUNT(e.id) AS total,
-         SUM(e.opportunity) AS revenue
+         SUM(e.opportunity) AS revenue,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'NEW') AS yangi_lid,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'NO_ANSWER') AS javob_bermadi,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'CALLBACK') AS qayta_aloqa,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'THINKING') AS oylab_koradi,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION') AS konsultatsiya,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'NOT_TRANSFERRED') AS otkazilmadi,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'ARCHIVE') AS sandiq,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'JUNK') AS sifatsiz,
+         COUNT(e.id) FILTER (WHERE s.bitrix_id = 'RECYCLED') AS bekor_boldi
        FROM responsibles r
        LEFT JOIN ${table} e ON e.responsible_id = r.id
+       LEFT JOIN stages s ON s.id = e.stage_id
        ${where}
        GROUP BY r.id, r.name, r.last_name
        ORDER BY total DESC`,
