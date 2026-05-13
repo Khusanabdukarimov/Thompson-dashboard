@@ -24,6 +24,8 @@ export type DashboardStatsResponse = {
     avg_opportunity: number;
     frozen_leads: number;
     avg_age_days: number;
+    konsultatsiya_count: number;
+    sifatsiz_count: number;
   };
   funnel: {
     bitrix_id: string;

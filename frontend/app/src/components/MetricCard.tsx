@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-type Tone = 'default' | 'blue' | 'green' | 'amber' | 'red' | 'orange';
+type Tone = 'default' | 'blue' | 'green' | 'amber' | 'red' | 'orange' | 'purple';
 type Size = 'default' | 'lg' | 'sm';
 
 const toneClass: Record<Tone, string> = {
@@ -10,6 +10,7 @@ const toneClass: Record<Tone, string> = {
   amber: 'text-amber',
   red: 'text-red',
   orange: 'text-orange',
+  purple: 'text-purple',
 };
 
 const sizeClass: Record<Size, { wrap: string; label: string; value: string; hint: string }> = {

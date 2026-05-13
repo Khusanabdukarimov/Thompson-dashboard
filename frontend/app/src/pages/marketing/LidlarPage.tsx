@@ -96,6 +96,8 @@ export default function LidlarPage() {
   const jarayon = header?.in_process ?? 0;
   const failed = header?.failed ?? 0;
   const converted = header?.converted ?? 0;
+  const konsultatsiya = header?.konsultatsiya_count ?? 0;
+  const sifatsiz = header?.sifatsiz_count ?? 0;
   
   const tashrifBelg = funnel.find(f => f.name_uz.toLowerCase().includes("belgiland"))?.lead_count ?? 0;
   const tashrifBuy = funnel.find(f => f.name_uz.toLowerCase().includes("buyur"))?.lead_count ?? converted;
@@ -195,11 +197,11 @@ export default function LidlarPage() {
           <MetricRowSkeleton count={5} />
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
-            <MetricCard size="lg" label="Barcha lidlar" value={fmtNum(total)} tone="blue" />
+            <MetricCard size="lg" label="Umumiy lead" value={fmtNum(total)} tone="blue" />
             <MetricCard size="lg" label="Jarayonda" value={fmtNum(jarayon)} tone="amber" />
-            <MetricCard size="lg" label="Muvaffaqiyatsiz" value={fmtNum(failed)} tone="red" />
-            <MetricCard size="lg" label="Sdelkaga" value={fmtNum(converted)} tone="green" />
-            <MetricCard size="lg" label="Konversiya" value={fmtPct(header?.conversion_pct ?? 0, 2)} />
+            <MetricCard size="lg" label="Konversion" value={fmtPct(header?.conversion_pct ?? 0, 2)} tone="green" />
+            <MetricCard size="lg" label="Sifatsiz" value={fmtNum(sifatsiz)} tone="red" />
+            <MetricCard size="lg" label="Konsultatsiya" value={fmtNum(konsultatsiya)} tone="purple" />
           </div>
         )}
 

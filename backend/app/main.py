@@ -226,7 +226,9 @@ def api_stats(range: str = "all"):
             )                                                                       AS frozen_leads,
             ROUND(AVG(
                 EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
-            ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days
+            ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days,
+            COUNT(*) FILTER (WHERE s.bitrix_id ILIKE '%CONSULT%')                   AS konsultatsiya_count,
+            COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')                            AS sifatsiz_count
         FROM leads l
         JOIN stages s ON s.id = l.stage_id
         WHERE (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL));
