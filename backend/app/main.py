@@ -142,7 +142,7 @@ def api_leads(
             s.bitrix_id      AS stage_bitrix_id,
             TRIM(r.name || ' ' || COALESCE(r.last_name, '')) AS responsible_name,
             (SELECT phone FROM lead_phones lp
-             WHERE lp.lead_id = l.id AND lp.is_primary = TRUE LIMIT 1) AS primary_phone,
+             WHERE lp.lead_id = l.id LIMIT 1) AS primary_phone,
             COUNT(*) OVER()  AS total_count
         FROM leads l
         LEFT JOIN stages       s ON s.id = l.stage_id
@@ -280,7 +280,7 @@ def api_responsibles(range: str = "all"):
         LEFT JOIN leads l ON l.responsible_id = r.id
             AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
         LEFT JOIN stages s ON s.id = l.stage_id
-        WHERE r.is_active = TRUE
+        WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
         ORDER BY total DESC;
     """)
