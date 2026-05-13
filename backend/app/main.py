@@ -245,7 +245,7 @@ def api_stats(range: str = "all"):
     funnel_query = text("""
         SELECT
             s.bitrix_id,
-            s.name_uz,
+            s.name AS name_uz,
             s.sort_order,
             COUNT(l.id)                     AS lead_count,
             COALESCE(SUM(l.opportunity), 0) AS total_opportunity
@@ -253,7 +253,7 @@ def api_stats(range: str = "all"):
         LEFT JOIN leads l ON l.stage_id = s.id
             AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
         WHERE s.entity = 'lead'
-        GROUP BY s.id, s.bitrix_id, s.name_uz, s.sort_order
+        GROUP BY s.id, s.bitrix_id, s.name, s.sort_order
         ORDER BY s.sort_order;
     """)
 
