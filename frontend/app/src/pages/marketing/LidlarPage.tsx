@@ -94,7 +94,6 @@ export default function LidlarPage() {
 
   const total = header?.total_leads ?? 0;
   const jarayon = header?.in_process ?? 0;
-  const failed = header?.failed ?? 0;
   const converted = header?.converted ?? 0;
   const konsultatsiya = header?.konsultatsiya_count ?? 0;
   const sifatsiz = header?.sifatsiz_count ?? 0;
