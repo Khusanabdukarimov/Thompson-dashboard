@@ -4,8 +4,10 @@ const pool = require('./db/pool');
 
 const leadCreated = require('./webhooks/leadCreated');
 const leadUpdated = require('./webhooks/leadUpdated');
+const leadDeleted = require('./webhooks/leadDeleted');
 const dealCreated = require('./webhooks/dealCreated');
 const dealUpdated = require('./webhooks/dealUpdated');
+const dealDeleted = require('./webhooks/dealDeleted');
 const dashboardRouter = require('./api/dashboard');
 
 const app = express();
@@ -18,8 +20,10 @@ app.use(express.json());
 // ── Webhook routes ────────────────────────────────────────────
 app.post('/webhook/lead/created', leadCreated);
 app.post('/webhook/lead/updated', leadUpdated);
+app.post('/webhook/lead/deleted', leadDeleted);
 app.post('/webhook/deal/created', dealCreated);
 app.post('/webhook/deal/updated', dealUpdated);
+app.post('/webhook/deal/deleted', dealDeleted);
 
 // ── Dashboard API ─────────────────────────────────────────────
 app.use('/api/dashboard', dashboardRouter);
@@ -38,8 +42,10 @@ app.listen(PORT, () => {
   console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);
+  console.log(`  POST /webhook/lead/deleted`);
   console.log(`  POST /webhook/deal/created`);
   console.log(`  POST /webhook/deal/updated`);
+  console.log(`  POST /webhook/deal/deleted`);
   console.log(`  GET  /api/dashboard/stats`);
   console.log(`  GET  /api/dashboard/responsibles`);
   console.log(`  GET  /api/dashboard/funnel`);
