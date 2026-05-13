@@ -13,74 +13,69 @@ export type LeadFilter = {
   utm_term?: string;
 };
 
-export type StatsLeadsByUser = {
-  id: string;
-  name: string;
-  total: number;
-  revenue: number;
-  by_status: Record<string, number>;
-};
-
-export type StatsLeadsResponse = {
-  total: number;
-  total_revenue: number;
-  converted: number;
-  jarayon_total: number;
-  conversion_rate: number;
-  avg_age_days: number;
-  frozen_count: number;
-  by_status: Record<string, number>;
-  by_user: StatsLeadsByUser[];
-  all_statuses: string[];
-  status_names: Record<string, string>;
-  users: { id: string; name: string }[];
-  sources: { id: string; label: string; count: number }[];
-  utm_sources: string[];
-  utm_mediums: string[];
-  utm_campaigns: string[];
-  utm_contents: string[];
-  utm_terms: string[];
-  utm_medium_counts: { label: string; val: number }[];
-  utm_campaign_counts: { label: string; val: number }[];
-  field_breakdowns: {
-    key: string;
-    label: string;
-    items: { label: string; val: number }[];
+export type DashboardStatsResponse = {
+  header: {
+    total_leads: number;
+    in_process: number;
+    failed: number;
+    converted: number;
+    conversion_pct: number;
+    total_opportunity: number;
+    avg_opportunity: number;
+    frozen_leads: number;
+    avg_age_days: number;
+  };
+  funnel: {
+    bitrix_id: string;
+    name_uz: string;
+    sort_order: number;
+    lead_count: number;
+    total_opportunity: number;
   }[];
 };
 
-export type ActivityStatsResponse = {
-  total: number;
-  by_type: { key: string; label: string; val: number }[];
-  by_user: {
-    id: string;
-    name: string;
+export type ResponsiblesStatsResponse = {
+  responsibles: {
+    responsible_id: number;
+    full_name: string;
     total: number;
-    completed: number;
-    by_type: Record<string, number>;
+    yangi_lid: number;
+    javob_bermadi: number;
+    qayta_aloqa: number;
+    oylab_koradi: number;
+    konsultatsiya: number;
+    otkazilmadi: number;
+    sandiq: number;
+    sifatsiz: number;
+    bekor_boldi: number;
+    total_opportunity: number;
   }[];
-  type_labels: Record<string, string>;
 };
 
-export function getActivitiesStats(
-  filter: Pick<LeadFilter, "start_date" | "end_date">,
-) {
-  return apiGet<ActivityStatsResponse>("/api/stats/activities", filter);
+export function getDashboardStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
+  // Map our start_date/end_date to the 'range' parameter the backend expects.
+  // The backend expects 'range' as a number of days or 'all'.
+  let range = "all";
+  if (filter.start_date) {
+    const start = new Date(filter.start_date);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    range = String(diffDays);
+  }
+  return apiGet<DashboardStatsResponse>("/api/stats", { range });
 }
 
-export type LeadQualityResponse = {
-  sifatsiz: { label: string; val: number }[];
-  bekor: { label: string; val: number }[];
-  sandiq: { label: string; val: number }[];
-  utm: { label: string; val: number }[];
-};
-
-export function getLeadsStats(filter: LeadFilter) {
-  return apiGet<StatsLeadsResponse>("/api/stats/leads", filter);
-}
-
-export function getLeadQuality(filter: LeadFilter) {
-  return apiGet<LeadQualityResponse>("/api/stats/lead-quality", filter);
+export function getResponsiblesStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
+  let range = "all";
+  if (filter.start_date) {
+    const start = new Date(filter.start_date);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    range = String(diffDays);
+  }
+  return apiGet<ResponsiblesStatsResponse>("/api/responsibles", { range });
 }
 
 // ── Lead list (raw + enriched) ───────────────────────────────────
