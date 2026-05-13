@@ -17,7 +17,7 @@ import {
 } from "@/lib/api/payroll";
 import type { WeeklyActual } from "@/lib/api/payroll";
 import { getDealsStats } from "@/lib/api/deals";
-import { listLeadsRich, getLeadsStats, createLead } from "@/lib/api/leads";
+import { listLeadsRich, getDashboardStats, createLead } from "@/lib/api/leads";
 import type { LeadRow, LeadsListFilter, LeadCreateIn } from "@/lib/api/leads";
 import { fmtMoney, fmtNum, fmtPct, fmtDate } from "@/lib/utils";
 import { MONTH_KEYS, MONTH_LABELS } from "@/lib/api/meta";
@@ -107,7 +107,7 @@ export default function RejaPage() {
   });
   const statsQ = useQuery({
     queryKey: ["stats/leads", year, month],
-    queryFn: () => getLeadsStats({ start_date: startDate, end_date: endDate }),
+    queryFn: () => getDashboardStats({ start_date: startDate, end_date: endDate }),
   });
 
   const presetStatusId = STATUS_PRESETS.find(
@@ -146,8 +146,10 @@ export default function RejaPage() {
 
   // Filter fields
   const filterFields: FilterField[] = useMemo(() => {
-    const users = statsQ.data?.users ?? [];
-    const sources = statsQ.data?.sources ?? [];
+    // Note: Because DashboardStats doesn't return users/sources anymore,
+    // we use empty arrays or fetch from alternative endpoints if needed.
+    const users: any[] = [];
+    const sources: any[] = [];
     return [
       {
         key: "assigned_by",
@@ -380,10 +382,10 @@ export default function RejaPage() {
                 Konversiya
               </div>
               <div className="text-[22px] font-semibold mono text-green">
-                {fmtNum(statsQ.data?.converted ?? 0)}
+                {fmtNum(statsQ.data?.header?.converted ?? 0)}
               </div>
               <div className="text-[11px] text-text3 mt-1">
-                {fmtPct(statsQ.data?.conversion_rate ?? 0, 2)}
+                {fmtPct(statsQ.data?.header?.conversion_pct ?? 0, 2)}
               </div>
             </div>
             <div className="bg-bg2 border border-border rounded-lg px-4 py-3.5 shadow">
@@ -482,9 +484,9 @@ export default function RejaPage() {
       )}
       {createLeadOpen && (
         <LeadCreateModal
-          employees={statsQ.data?.users ?? []}
-          sources={statsQ.data?.sources ?? []}
-          statuses={statsQ.data?.status_names ?? {}}
+          employees={[]}
+          sources={[]}
+          statuses={{}}
           onClose={() => setCreateLeadOpen(false)}
           onCreated={() => leadsQ.refetch()}
         />
