@@ -313,10 +313,6 @@ def aggregate_deals_sum_total(start_iso, end_iso, stage_filter=None):
 
 # ─── Metadata (lru_cache — rarely changes) ───────────────────────────────────
 
-@lru_cache(maxsize=1)
-def get_lead_status_names():
-    res = requests.get(
-        f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.status.list.json",
 def get_source_names():
     query = text("SELECT bitrix_id, name FROM sources;")
     with bx_engine.connect() as conn:
