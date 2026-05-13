@@ -119,16 +119,18 @@ def api_get_lead(lead_id: int):
 
 
 @app.get("/api/leads")
-def api_list_leads(
+def api_leads(
     range: str = "all",
     responsible_id: Optional[int] = None,
     stage_id: Optional[str] = None,
     search: Optional[str] = None,
-    limit: int = 50,
     page: int = 1,
+    limit: int = 50,
 ):
     offset = (page - 1) * limit
     days = None if range == "all" else (1 if range == "today" else int(range))
+    days_interval = f"{days} days" if days is not None else None
+    search_param = f"%{search}%" if search else None
     
     query = text("""
         SELECT
@@ -146,25 +148,25 @@ def api_list_leads(
         LEFT JOIN stages       s ON s.id = l.stage_id
         LEFT JOIN responsibles r ON r.id = l.responsible_id
         WHERE
-            (:days::int    IS NULL OR l.date_created  >= NOW() - (:days || ' days')::INTERVAL)
-            AND (:responsible_id::int    IS NULL OR l.responsible_id = :responsible_id)
-            AND (:stage_id::text   IS NULL OR s.bitrix_id      = :stage_id)
-            AND (:search::text   IS NULL OR l.name ILIKE '%' || :search || '%'
-                                    OR l.last_name ILIKE '%' || :search || '%'
-                                    OR l.title ILIKE '%' || :search || '%'
-                                    OR EXISTS (
-                                        SELECT 1 FROM lead_phones lp
-                                        WHERE lp.lead_id = l.id AND lp.phone ILIKE '%' || :search || '%'
-                                    ))
+            (:days_interval IS NULL OR l.date_created  >= NOW() - CAST(:days_interval AS INTERVAL))
+            AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
+            AND (:stage_id IS NULL OR s.bitrix_id = :stage_id)
+            AND (:search IS NULL OR l.name ILIKE :search
+                                 OR l.last_name ILIKE :search
+                                 OR l.title ILIKE :search
+                                 OR EXISTS (
+                                     SELECT 1 FROM lead_phones lp
+                                     WHERE lp.lead_id = l.id AND lp.phone ILIKE :search
+                                 ))
         ORDER BY l.date_created DESC
         LIMIT :limit OFFSET :offset;
     """)
     with bx_engine.connect() as conn:
         res = conn.execute(query, {
-            "days": days,
+            "days_interval": days_interval,
             "responsible_id": responsible_id,
             "stage_id": stage_id,
-            "search": search,
+            "search": search_param,
             "limit": limit,
             "offset": offset
         }).mappings().all()
@@ -206,6 +208,7 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
 @app.get("/api/stats")
 def api_stats(range: str = "all"):
     days = None if range == "all" else (1 if range == "today" else int(range))
+    days_interval = f"{days} days" if days is not None else None
     
     stats_query = text("""
         SELECT
@@ -225,7 +228,7 @@ def api_stats(range: str = "all"):
                 EXTRACT(EPOCH FROM (NOW() - date_created)) / 86400.0
             ) FILTER (WHERE NOT is_won AND NOT is_failed AND NOT is_processed), 1)  AS avg_age_days
         FROM leads
-        WHERE (:days::int IS NULL OR date_created >= NOW() - (:days || ' days')::INTERVAL);
+        WHERE (:days_interval IS NULL OR date_created >= NOW() - CAST(:days_interval AS INTERVAL));
     """)
 
     funnel_query = text("""
@@ -237,15 +240,15 @@ def api_stats(range: str = "all"):
             COALESCE(SUM(l.opportunity), 0) AS total_opportunity
         FROM stages s
         LEFT JOIN leads l ON l.stage_id = s.id
-            AND (:days::int IS NULL OR l.date_created >= NOW() - (:days || ' days')::INTERVAL)
+            AND (:days_interval IS NULL OR l.date_created >= NOW() - CAST(:days_interval AS INTERVAL))
         WHERE s.entity_type = 'lead'
         GROUP BY s.id, s.bitrix_id, s.name_uz, s.sort_order
         ORDER BY s.sort_order;
     """)
 
     with bx_engine.connect() as conn:
-        stats = conn.execute(stats_query, {"days": days}).mappings().first()
-        funnel = conn.execute(funnel_query, {"days": days}).mappings().all()
+        stats = conn.execute(stats_query, {"days_interval": days_interval}).mappings().first()
+        funnel = conn.execute(funnel_query, {"days_interval": days_interval}).mappings().all()
 
     return {
         "header": dict(stats) if stats else {},
@@ -255,6 +258,7 @@ def api_stats(range: str = "all"):
 @app.get("/api/responsibles")
 def api_responsibles(range: str = "all"):
     days = None if range == "all" else (1 if range == "today" else int(range))
+    days_interval = f"{days} days" if days is not None else None
     
     query = text("""
         SELECT
@@ -273,14 +277,14 @@ def api_responsibles(range: str = "all"):
             COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:days::int IS NULL OR l.date_created >= NOW() - (:days || ' days')::INTERVAL)
+            AND (:days_interval IS NULL OR l.date_created >= NOW() - CAST(:days_interval AS INTERVAL))
         LEFT JOIN stages s ON s.id = l.stage_id
         WHERE r.is_active = TRUE
         GROUP BY r.id, r.name, r.last_name
         ORDER BY total DESC;
     """)
     with bx_engine.connect() as conn:
-        res = conn.execute(query, {"days": days}).mappings().all()
+        res = conn.execute(query, {"days_interval": days_interval}).mappings().all()
         
     return {"responsibles": [dict(r) for r in res]}
 

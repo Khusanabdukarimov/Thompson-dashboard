@@ -11,7 +11,8 @@ from zoneinfo import ZoneInfo
 
 import requests
 from dateutil.parser import parse as parse_b24_datetime
-from dateutil.parser import parse as parse_b24_datetime
+from sqlalchemy import text
+from app.db_bx import bx_engine
 
 try:
     from helper.config import (
@@ -91,44 +92,61 @@ _PAGE_DELAY_LARGE = 1.0   # delay for large fetches (>50 pages) — stays under 
 _LARGE_FETCH_THRESHOLD = 50  # pages
 
 
+def _translate_filters(filter_dict: dict) -> tuple[str, dict]:
+    if not filter_dict:
+        return "1=1", {}
+    clauses = []
+    params = {}
+    for i, (k, v) in enumerate(filter_dict.items()):
+        op = "="
+        field = k
+        if k.startswith(">="): op = ">="; field = k[2:]
+        elif k.startswith("<="): op = "<="; field = k[2:]
+        elif k.startswith(">"): op = ">"; field = k[1:]
+        elif k.startswith("<"): op = "<"; field = k[1:]
+        
+        col = field.lower()
+        if field == "ASSIGNED_BY_ID" or field == "RESPONSIBLE_ID": col = "responsible_id"
+        if field == "STATUS_ID" or field == "STAGE_ID": col = "s.bitrix_id"
+        
+        pname = f"p{i}"
+        clauses.append(f"{col} {op} :{pname}")
+        params[pname] = v
+    return " AND ".join(clauses), params
+
+def _paginate_db(table: str, filter_dict=None) -> tuple[list, int]:
+    where_clause, params = _translate_filters(filter_dict)
+    
+    # Basic join for stages if needed
+    join_clause = ""
+    select_fields = "t.*"
+    if "s.bitrix_id" in where_clause:
+        join_clause = "LEFT JOIN stages s ON s.id = t.stage_id"
+        select_fields = "t.*, s.bitrix_id AS status_id"
+
+    query = text(f"SELECT {select_fields} FROM {table} t {join_clause} WHERE {where_clause}")
+    
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, params).mappings().all()
+        items = [dict(r) for r in res]
+        # Map uppercase keys for Bitrix compatibility
+        for item in items:
+            for k in list(item.keys()):
+                item[k.upper()] = item.pop(k)
+        return items, len(items)
+
 def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = None) -> tuple[list, int]:
-    """
-    Sequential pagination: one page at a time with a small inter-page delay.
-    The distributed lock in _paginate_cached guarantees only ONE process
-    runs this at a time, so there is no thundering-herd risk.
-    """
-    list_url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/{method}"
-    base_params = _build_params(filter_dict, select, extra)
-
-    try:
-        res = _session.get(list_url, params={**base_params, "start": 0}, timeout=30)
-        if res.status_code != 200:
-            return [], 0
-    except Exception as exc:
-        log.warning("first page failed (%s): %s", method, exc)
-        return [], 0
-
-    data = res.json()
-    if "error" in data:
-        log.warning("first page error (%s): %s", method, data["error"])
-        return [], 0
-
-    all_items: list = list(data.get("result", []))
-    total: int = data.get("total", 0)
-
-    if total <= 50:
-        return all_items, total
-
-    pages_remaining = list(range(50, total, 50))
-    large = len(pages_remaining) >= _LARGE_FETCH_THRESHOLD
-    for start in pages_remaining:
-        if large:
-            time.sleep(_PAGE_DELAY_LARGE)
-        items = _fetch_page(list_url, base_params, start)
-        all_items.extend(items)
-
-    log.info("_paginate %s: total=%d fetched=%d", method, total, len(all_items))
-    return all_items, total
+    if method == "crm.lead.list":
+        return _paginate_db("leads", filter_dict)
+    if method == "crm.deal.list":
+        return _paginate_db("deals", filter_dict)
+    if method == "user.get.json" or method == "user.get":
+        return _paginate_db("responsibles", filter_dict)
+    if method == "crm.activity.list":
+        return _paginate_db("bx_activities", filter_dict) # fallback to bx_activities if Node.js doesn't sync yet
+    
+    log.info("Bypassing Bitrix API call for %s", method)
+    return [], 0
 
 
 # Removed distributed cache locking logic
@@ -137,52 +155,62 @@ def _paginate(method: str, filter_dict=None, select=None, extra: dict | None = N
 # ─── Single-entity fetches ────────────────────────────────────────────────────
 
 def get_lead_details(lead_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.lead.get.json", params={"id": lead_id})
-    return res.json().get("result") if res.status_code == 200 else None
+    query = text("""
+        SELECT
+            l.*,
+            s.name        AS stage_name,
+            s.bitrix_id   AS stage_bitrix_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, '')) AS responsible_name,
+            (SELECT phone FROM lead_phones lp WHERE lp.lead_id = l.id LIMIT 1) AS primary_phone
+        FROM leads l
+        LEFT JOIN stages s       ON s.id = l.stage_id
+        LEFT JOIN responsibles r ON r.id = l.responsible_id
+        WHERE l.id = :id;
+    """)
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, {"id": lead_id}).mappings().first()
+        return dict(res) if res else None
 
 
 def get_deal_details(deal_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.deal.get.json", params={"id": deal_id})
-    return res.json().get("result") if res.status_code == 200 else None
+    query = text("""
+        SELECT
+            d.*,
+            s.name        AS stage_name,
+            s.bitrix_id   AS stage_bitrix_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, '')) AS responsible_name
+        FROM deals d
+        LEFT JOIN stages s       ON s.id = d.stage_id
+        LEFT JOIN responsibles r ON r.id = d.responsible_id
+        WHERE d.id = :id;
+    """)
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, {"id": deal_id}).mappings().first()
+        return dict(res) if res else None
 
 
 def get_contact_details(contact_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.contact.get.json", params={"id": contact_id})
-    return res.json().get("result") if res.status_code == 200 else None
+    # No contacts table in schema.sql, returning None
+    return None
 
 
 def get_user_details(user_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/user.get.json", params={"ID": user_id})
-    if res.status_code == 200:
-        result = res.json().get("result")
-        return result[0] if result else None
-    return None
+    query = text("SELECT * FROM responsibles WHERE id = :id;")
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, {"id": user_id}).mappings().first()
+        return dict(res) if res else None
 
 
 def get_task(task_id):
-    res = requests.get(
-        f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/tasks.task.get",
-        params={"taskId": task_id, "select[]": {"UF_CRM_TASK", "TITLE", "CREATED_DATE", "DEADLINE", "STATUS", "RESPONSIBLE_ID"}}
-    )
-    if res.status_code == 200:
-        return res.json().get("result", {}).get("task")
     return None
 
-
 def get_timeman_status(user_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/timeman.status", params={"USER_ID": user_id})
-    return res.json().get("result") if res.status_code == 200 else None
-
+    return None
 
 def get_booking_details(booking_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/booking.v1.booking.get", params={"id": booking_id})
-    return res.json().get("result") if res.status_code == 200 else None
-
+    return None
 
 def get_booking_clients(booking_id):
-    res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/booking.v1.booking.client.list", params={"bookingId": booking_id})
-    if res.status_code == 200:
-        return res.json().get("result", {}).get("bookingClient", [])
     return None
 
 
@@ -206,26 +234,7 @@ def list_activities(filter_dict=None, select=None, ttl: int = 1800) -> list:
 
 
 def get_tasks_by_date(start_date_iso, end_date_iso, ttl: int = 300) -> list:
-    filter_dict = {">=CREATED_DATE": start_date_iso, "<=CREATED_DATE": end_date_iso}
-    select = ["ID", "RESPONSIBLE_ID", "TITLE"]
-
-    list_url = f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/tasks.task.list"
-    base_params = _build_params(filter_dict, select)
-    all_tasks: list = []
-    start = 0
-    while True:
-        res = requests.get(list_url, params={**base_params, "start": start}, timeout=20)
-        if res.status_code != 200:
-            break
-        data = res.json()
-        tasks = data.get("result", {}).get("tasks", [])
-        all_tasks.extend(tasks)
-        if "next" in data:
-            start = data["next"]
-        else:
-            break
-
-    return all_tasks
+    return []
 
 
 def get_visits_by_date(start_date_iso, end_date_iso, ttl: int = 300) -> list:
@@ -308,53 +317,24 @@ def aggregate_deals_sum_total(start_iso, end_iso, stage_filter=None):
 def get_lead_status_names():
     res = requests.get(
         f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.status.list.json",
-        params={"filter[ENTITY_ID]": "STATUS"}, timeout=10
-    )
-    if res.status_code != 200:
-        return {}
-    return {s["STATUS_ID"]: s["NAME"] for s in res.json().get("result", [])}
+def get_source_names():
+    query = text("SELECT bitrix_id, name FROM sources;")
+    with bx_engine.connect() as conn:
+        res = conn.execute(query).mappings().all()
+        return {r["bitrix_id"]: r["name"] for r in res}
 
 
-@lru_cache(maxsize=1)
-def get_deal_source_names():
-    res = requests.get(
-        f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.status.list.json",
-        params={"filter[ENTITY_ID]": "SOURCE"}, timeout=10
-    )
-    if res.status_code != 200:
-        return {}
-    return {s["STATUS_ID"]: s["NAME"] for s in res.json().get("result", [])}
-
+def get_lead_status_names():
+    query = text("SELECT bitrix_id, name FROM stages WHERE entity = 'lead';")
+    with bx_engine.connect() as conn:
+        res = conn.execute(query).mappings().all()
+        return {r["bitrix_id"]: r["name"] for r in res}
 
 def get_deal_stage_names():
-    stages = {}
-    res = requests.get(
-        f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.status.list.json",
-        params={"filter[ENTITY_ID]": "DEAL_STAGE"}
-    )
-    if res.status_code == 200:
-        for s in res.json().get("result", []):
-            stages[s["STATUS_ID"]] = s["NAME"]
-    try:
-        cat_res = requests.get(f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.deal.category.list.json")
-        if cat_res.status_code == 200:
-            cats = cat_res.json().get("result", [])
-            # Fetch all category stages in parallel
-            def _fetch_cat_stages(cat_id):
-                r = requests.get(
-                    f"{BITRIX24_PORTAL}{BITRIX24_TOKEN}/crm.deal.category.stages.json",
-                    params={"id": cat_id}
-                )
-                return r.json().get("result", []) if r.status_code == 200 else []
-
-            with ThreadPoolExecutor(max_workers=min(len(cats), 8)) as pool:
-                futures = {cat.get("ID"): pool.submit(_fetch_cat_stages, cat.get("ID")) for cat in cats if cat.get("ID")}
-                for cat_id, future in futures.items():
-                    for s in future.result():
-                        stages[s["STATUS_ID"]] = s["NAME"]
-    except Exception:
-        pass
-    return stages
+    query = text("SELECT bitrix_id, name FROM stages WHERE entity = 'deal';")
+    with bx_engine.connect() as conn:
+        res = conn.execute(query).mappings().all()
+        return {r["bitrix_id"]: r["name"] for r in res}
 
 
 @lru_cache(maxsize=1)

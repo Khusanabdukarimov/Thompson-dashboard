@@ -344,40 +344,20 @@ def get_sales_trend(months_back: int = 6) -> dict:
 
 
 def _won_revenue_in_range(start_iso: str, end_iso: str) -> dict:
-    """Sum OPPORTUNITY for WON deals (any stage with WON) closing in range."""
-    url = f"{bitrix.BITRIX24_PORTAL}{bitrix.BITRIX24_TOKEN}/crm.deal.list"
-    import requests
-    total = 0.0
-    count = 0
-    start = 0
-    while True:
-        params = {
-            "filter[>=CLOSEDATE]": start_iso,
-            "filter[<=CLOSEDATE]": end_iso,
-            "select[]": ["ID", "OPPORTUNITY", "STAGE_ID"],
-            "start": start,
-        }
-        try:
-            res = requests.get(url, params=params, timeout=15)
-        except requests.RequestException:
-            break
-        if res.status_code != 200:
-            break
-        data = res.json()
-        for d in data.get("result", []):
-            stage = (d.get("STAGE_ID") or "").upper()
-            if "WON" not in stage:
-                continue
-            try:
-                total += float(d.get("OPPORTUNITY") or 0)
-                count += 1
-            except Exception:
-                pass
-        if "next" in data:
-            start = data["next"]
-        else:
-            break
-    return {"sum": total, "count": count}
+    """Sum OPPORTUNITY for WON deals closing in range using PostgreSQL."""
+    from app.db_bx import bx_engine
+    from sqlalchemy import text
+    query = text("""
+        SELECT COALESCE(SUM(opportunity), 0) AS sum, COUNT(*) AS count
+        FROM deals d
+        JOIN stages s ON s.id = d.stage_id
+        WHERE s.entity = 'deal' AND s.is_won = TRUE
+          AND d.closedate >= CAST(:start AS TIMESTAMPTZ)
+          AND d.closedate <= CAST(:end AS TIMESTAMPTZ)
+    """)
+    with bx_engine.connect() as conn:
+        res = conn.execute(query, {"start": start_iso, "end": end_iso}).mappings().first()
+        return {"sum": float(res["sum"]), "count": int(res["count"])}
 
 
 @router.put("/target")
@@ -542,22 +522,22 @@ def auto_sync_logs(year: int, month: int, mode: str = "report", s: Session = Dep
                 skipped_users += 1
                 continue
 
-            # Fetch activities (best-effort — Bitrix structure varies per portal)
+            # Fetch activities from PostgreSQL
+            from app.db_bx import bx_engine
+            from sqlalchemy import text
+            query = text("""
+                SELECT * FROM bx_activities
+                WHERE responsible_id = :uid
+                  AND completed = TRUE
+                  AND provider_type_id = 'TODO'
+                  AND created >= CAST(:start AS TIMESTAMPTZ)
+                  AND created <= CAST(:end AS TIMESTAMPTZ)
+                LIMIT 200
+            """)
             try:
-                import requests
-                resp = requests.get(
-                    f"{bitrix.BITRIX24_PORTAL}{bitrix.BITRIX24_TOKEN}/crm.activity.list",
-                    params={
-                        "filter[RESPONSIBLE_ID]": uid,
-                        "filter[COMPLETED]":      "Y",
-                        "filter[PROVIDER_TYPE_ID]": "TODO",
-                        "filter[>=CREATED]":      start.isoformat(),
-                        "filter[<=CREATED]":      end.isoformat(),
-                        "select[]": ["ID", "DEADLINE", "END_TIME", "CREATED", "SUBJECT"],
-                    },
-                    timeout=15,
-                )
-                data = resp.json() if resp.status_code == 200 else {}
+                with bx_engine.connect() as conn:
+                    res = conn.execute(query, {"uid": uid, "start": start.isoformat(), "end": end.isoformat()}).mappings().all()
+                    data = {"result": [dict(r) for r in res]}
             except Exception:
                 data = {}
 

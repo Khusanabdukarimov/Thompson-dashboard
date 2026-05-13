@@ -28,9 +28,10 @@ async function upsertLead(r, client) {
        id, responsible_id, stage_id, opportunity, source_id,
        utm_source, utm_medium, utm_campaign, utm_content, utm_term,
        uf_segment, uf_filial, uf_service, uf_activity, uf_with_whom,
+       name, last_name, title,
        date_create, date_modify, synced_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW()
      )
      ON CONFLICT (id) DO UPDATE SET
        responsible_id = EXCLUDED.responsible_id,
@@ -47,6 +48,9 @@ async function upsertLead(r, client) {
        uf_service     = EXCLUDED.uf_service,
        uf_activity    = EXCLUDED.uf_activity,
        uf_with_whom   = EXCLUDED.uf_with_whom,
+       name           = EXCLUDED.name,
+       last_name      = EXCLUDED.last_name,
+       title          = EXCLUDED.title,
        date_modify    = EXCLUDED.date_modify,
        synced_at      = NOW()
      RETURNING id`,
@@ -66,6 +70,9 @@ async function upsertLead(r, client) {
       ufVal(r.UF_CRM_1775824803703),
       ufVal(r.UF_CRM_1775825155935),
       ufVal(r.UF_CRM_1770281264686),
+      r.NAME || null,
+      r.LAST_NAME || null,
+      r.TITLE || null,
       parseDate(r.DATE_CREATE),
       parseDate(r.DATE_MODIFY),
     ]

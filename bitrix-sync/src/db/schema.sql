@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS stages (
   sort_order  INTEGER DEFAULT 0,
   is_final    BOOLEAN DEFAULT FALSE,  -- won/lost stages
   is_won      BOOLEAN DEFAULT FALSE,
+  name_uz     TEXT,
   UNIQUE (entity, bitrix_id)
 );
 
@@ -42,6 +43,9 @@ CREATE TABLE IF NOT EXISTS leads (
   uf_service      TEXT,
   uf_activity     TEXT,
   uf_with_whom    TEXT,
+  name            TEXT,
+  last_name       TEXT,
+  title           TEXT,
   date_create     TIMESTAMPTZ,
   date_modify     TIMESTAMPTZ,
   synced_at       TIMESTAMPTZ DEFAULT NOW()
@@ -70,6 +74,7 @@ CREATE TABLE IF NOT EXISTS deals (
   currency_id     TEXT,
   source_id       TEXT,
   utm_source      TEXT,
+  title           TEXT,
   date_create     TIMESTAMPTZ,
   closedate       TIMESTAMPTZ,
   synced_at       TIMESTAMPTZ DEFAULT NOW()
