@@ -9,10 +9,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function httpGet(url) {
+function httpGet(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
-    lib.get(url, (res) => {
+    const req = lib.get(url, (res) => {
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
@@ -22,7 +22,12 @@ function httpGet(url) {
           reject(new Error(`JSON parse error: ${e.message}`));
         }
       });
-    }).on('error', reject);
+      res.on('error', reject);
+    });
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+    });
+    req.on('error', reject);
   });
 }
 

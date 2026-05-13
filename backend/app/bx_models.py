@@ -74,3 +74,19 @@ class BxSyncState(SQLModel, table=True):
     entity: str = Field(primary_key=True)  # leads | deals | users | activities
     last_sync: datetime = Field(default_factory=datetime.utcnow)
     total_rows: int = Field(default=0)
+
+
+class BxCache(SQLModel, table=True):
+    __tablename__ = "bx_cache"
+
+    key: str = Field(primary_key=True)
+    value: str  # JSON serialized string
+    expires_at: datetime = Field(index=True)
+
+
+class BxLock(SQLModel, table=True):
+    __tablename__ = "bx_locks"
+
+    key: str = Field(primary_key=True)
+    token: str
+    expires_at: datetime = Field(index=True)

@@ -10,7 +10,10 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import requests
-import redis as redis_lib
+from sqlmodel import Session, select, delete
+from sqlalchemy.exc import IntegrityError
+from app.db_bx import bx_engine
+from app.bx_models import BxCache, BxLock
 from dateutil.parser import parse as parse_b24_datetime
 
 try:
@@ -47,22 +50,7 @@ def _get_fetch_lock(key: str) -> threading.Lock:
         return _FETCH_LOCKS[key]
 
 
-# ─── Redis ────────────────────────────────────────────────────────────────────
-
-_redis: redis_lib.Redis | None = None
-
-def _get_redis() -> redis_lib.Redis | None:
-    global _redis
-    if _redis is not None:
-        return _redis
-    try:
-        r = redis_lib.Redis(host="localhost", port=6379, db=0, socket_timeout=1, socket_connect_timeout=1)
-        r.ping()
-        _redis = r
-    except Exception:
-        _redis = None
-    return _redis
-
+# ─── Database Cache ───────────────────────────────────────────────────────────
 
 def _cache_key(method: str, filter_dict=None, select=None, extra: dict | None = None) -> str:
     payload = json.dumps({"m": method, "f": filter_dict, "s": select, "e": extra}, sort_keys=True)
@@ -70,24 +58,34 @@ def _cache_key(method: str, filter_dict=None, select=None, extra: dict | None = 
 
 
 def _cache_get(key: str):
-    r = _get_redis()
-    if not r:
-        return None
     try:
-        raw = r.get(key)
-        return json.loads(raw) if raw else None
-    except Exception:
-        return None
+        with Session(bx_engine) as session:
+            # Clean up expired entries periodically
+            session.exec(delete(BxCache).where(BxCache.expires_at < datetime.utcnow()))
+            session.commit()
+            
+            cached = session.get(BxCache, key)
+            if cached and cached.expires_at > datetime.utcnow():
+                return json.loads(cached.value)
+    except Exception as e:
+        log.warning("Cache get error: %s", e)
+    return None
 
 
 def _cache_set(key: str, value, ttl: int = 300):
-    r = _get_redis()
-    if not r:
-        return
     try:
-        r.setex(key, ttl, json.dumps(value, default=str))
-    except Exception:
-        pass
+        with Session(bx_engine) as session:
+            expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+            cached = session.get(BxCache, key)
+            if cached:
+                cached.value = json.dumps(value, default=str)
+                cached.expires_at = expires_at
+            else:
+                cached = BxCache(key=key, value=json.dumps(value, default=str), expires_at=expires_at)
+                session.add(cached)
+            session.commit()
+    except Exception as e:
+        log.warning("Cache set error: %s", e)
 
 
 # ─── Batch-based pagination ───────────────────────────────────────────────────
@@ -180,12 +178,25 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
     if cached is not None:
         return cached
 
-    # 2. Distributed lock (Redis SETNX) — prevents thundering herd across
+    # 2. Distributed lock (DB) — prevents thundering herd across
     #    uvicorn worker processes.  Only ONE process fetches; others wait.
-    r = _get_redis()
     dist_lock_key = f"b24:lock:{key}"
     dist_token = f"{os.getpid()}:{threading.get_ident()}"
-    dist_acquired = bool(r.set(dist_lock_key, dist_token, nx=True, ex=360)) if r else True
+    dist_acquired = False
+    
+    try:
+        with Session(bx_engine) as session:
+            session.exec(delete(BxLock).where(BxLock.expires_at < datetime.utcnow()))
+            session.commit()
+            lock = BxLock(key=dist_lock_key, token=dist_token, expires_at=datetime.utcnow() + timedelta(seconds=360))
+            session.add(lock)
+            session.commit()
+            dist_acquired = True
+    except IntegrityError:
+        dist_acquired = False
+    except Exception as e:
+        log.warning("Lock acquire error: %s", e)
+        dist_acquired = True  # Fallback to fetching directly if DB fails
 
     if not dist_acquired:
         log.info("_paginate_cached %s: another process is fetching — waiting…", method)
@@ -204,7 +215,7 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
     with local_lock:
         cached = _cache_get(key)
         if cached is not None:
-            _release_dist_lock(r, dist_lock_key, dist_token, dist_acquired)
+            _release_dist_lock(dist_lock_key, dist_token, dist_acquired)
             return cached
 
         try:
@@ -217,18 +228,20 @@ def _paginate_cached(method: str, filter_dict=None, select=None,
                             method, len(result), total)
             return result
         finally:
-            _release_dist_lock(r, dist_lock_key, dist_token, dist_acquired)
+            _release_dist_lock(dist_lock_key, dist_token, dist_acquired)
 
 
-def _release_dist_lock(r, lock_key: str, token: str, acquired: bool):
-    if not acquired or not r:
+def _release_dist_lock(lock_key: str, token: str, acquired: bool):
+    if not acquired:
         return
     try:
-        current = r.get(lock_key)
-        if current and current.decode() == token:
-            r.delete(lock_key)
-    except Exception:
-        pass
+        with Session(bx_engine) as session:
+            lock = session.get(BxLock, lock_key)
+            if lock and lock.token == token:
+                session.delete(lock)
+                session.commit()
+    except Exception as e:
+        log.warning("Lock release error: %s", e)
 
 
 # ─── Single-entity fetches ────────────────────────────────────────────────────
