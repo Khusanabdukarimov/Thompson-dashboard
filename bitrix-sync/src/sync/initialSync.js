@@ -1,0 +1,130 @@
+/**
+ * One-time initial sync: imports all leads, deals, and users from Bitrix24.
+ * Run once: node src/sync/initialSync.js
+ * Safe to re-run — all upserts use ON CONFLICT DO UPDATE.
+ */
+require('dotenv').config();
+const pool = require('../db/pool');
+const { fetchAll } = require('../services/bitrix');
+const { upsertLead } = require('../services/upsertLead');
+const { upsertDeal } = require('../services/upsertDeal');
+const { loadAll: loadStages } = require('../services/stageResolver');
+
+const LEAD_SELECT = [
+  'ID', 'ASSIGNED_BY_ID', 'STATUS_ID', 'OPPORTUNITY', 'SOURCE_ID',
+  'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'UTM_CONTENT', 'UTM_TERM',
+  'DATE_CREATE', 'DATE_MODIFY',
+  'UF_CRM_1775825731211', 'UF_CRM_1777030859057',
+  'UF_CRM_1775824803703', 'UF_CRM_1775825155935', 'UF_CRM_1770281264686',
+];
+
+const DEAL_SELECT = [
+  'ID', 'ASSIGNED_BY_ID', 'STAGE_ID', 'OPPORTUNITY', 'CURRENCY_ID',
+  'SOURCE_ID', 'UTM_SOURCE', 'DATE_CREATE', 'CLOSEDATE',
+];
+
+async function syncUsers() {
+  console.log('[sync] Fetching users...');
+  const users = await fetchAll('user.get', { ACTIVE: 'Y' });
+  console.log(`[sync] Got ${users.length} users`);
+
+  for (const u of users) {
+    await pool.query(
+      `INSERT INTO responsibles (id, name, last_name, email, work_position, active, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         last_name = EXCLUDED.last_name,
+         email = EXCLUDED.email,
+         work_position = EXCLUDED.work_position,
+         active = EXCLUDED.active,
+         synced_at = NOW()`,
+      [
+        parseInt(u.ID),
+        u.NAME || null,
+        u.LAST_NAME || null,
+        u.EMAIL || null,
+        u.WORK_POSITION || null,
+        u.ACTIVE === 'Y',
+      ]
+    );
+  }
+
+  await pool.query(
+    `INSERT INTO sync_state (entity, last_sync, total_rows)
+     VALUES ('users', NOW(), $1)
+     ON CONFLICT (entity) DO UPDATE SET last_sync = NOW(), total_rows = $1`,
+    [users.length]
+  );
+
+  console.log(`[sync] Users done: ${users.length} upserted`);
+}
+
+async function syncLeads() {
+  console.log('[sync] Fetching leads...');
+  const leads = await fetchAll('crm.lead.list', {}, LEAD_SELECT);
+  console.log(`[sync] Got ${leads.length} leads, upserting...`);
+
+  let count = 0;
+  for (const r of leads) {
+    await upsertLead(r);
+    count++;
+    if (count % 500 === 0) {
+      console.log(`[sync] Leads progress: ${count}/${leads.length}`);
+    }
+  }
+
+  await pool.query(
+    `INSERT INTO sync_state (entity, last_sync, total_rows)
+     VALUES ('leads', NOW(), $1)
+     ON CONFLICT (entity) DO UPDATE SET last_sync = NOW(), total_rows = $1`,
+    [leads.length]
+  );
+
+  console.log(`[sync] Leads done: ${leads.length} upserted`);
+}
+
+async function syncDeals() {
+  console.log('[sync] Fetching deals...');
+  const deals = await fetchAll('crm.deal.list', {}, DEAL_SELECT);
+  console.log(`[sync] Got ${deals.length} deals, upserting...`);
+
+  let count = 0;
+  for (const r of deals) {
+    await upsertDeal(r);
+    count++;
+    if (count % 500 === 0) {
+      console.log(`[sync] Deals progress: ${count}/${deals.length}`);
+    }
+  }
+
+  await pool.query(
+    `INSERT INTO sync_state (entity, last_sync, total_rows)
+     VALUES ('deals', NOW(), $1)
+     ON CONFLICT (entity) DO UPDATE SET last_sync = NOW(), total_rows = $1`,
+    [deals.length]
+  );
+
+  console.log(`[sync] Deals done: ${deals.length} upserted`);
+}
+
+async function main() {
+  console.log('=== Bitrix24 Initial Sync ===');
+  console.log('Loading stages...');
+  await loadStages();
+
+  await syncUsers();
+  await syncLeads();
+  await syncDeals();
+
+  const { rows } = await pool.query('SELECT entity, total_rows, last_sync FROM sync_state ORDER BY entity');
+  console.log('\n=== Sync complete ===');
+  rows.forEach((r) => console.log(`  ${r.entity}: ${r.total_rows} rows (${r.last_sync.toISOString()})`));
+
+  await pool.end();
+}
+
+main().catch((err) => {
+  console.error('[sync] Fatal error:', err);
+  process.exit(1);
+});

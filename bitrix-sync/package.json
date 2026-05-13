@@ -1,0 +1,22 @@
+{
+  "name": "bitrix-sync",
+  "version": "1.0.0",
+  "description": "Bitrix24 → PostgreSQL sync service with webhook support",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "sync": "node src/sync/initialSync.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

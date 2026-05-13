@@ -26,8 +26,10 @@ PUBLIC_IP="207.180.198.41"
 REPO_DIR="/var/www/mountain"
 BACKEND_DIR="$REPO_DIR/backend"
 FRONTEND_DIR="$REPO_DIR/frontend/app"
+SYNC_DIR="$REPO_DIR/bitrix-sync"
 VENV_PIP="$BACKEND_DIR/venv/bin/pip"
 SERVICE="mountain"
+SYNC_SERVICE="bitrix-sync"
 BRANCH="main"
 
 # ─── Parse flags ──────────────────────────────────────────────────────────────
@@ -126,6 +128,14 @@ if $DEPLOY_BACKEND; then
     info "  Restarting $SERVICE.service..."
     remote "systemctl daemon-reload && systemctl restart $SERVICE"
     ok "  $SERVICE restarted"
+
+    info "  Node.js dependencies (bitrix-sync)..."
+    remote "cd $SYNC_DIR && npm ci --silent 2>&1 | tail -1"
+    ok "  bitrix-sync dependencies installed"
+
+    info "  Restarting $SYNC_SERVICE.service..."
+    remote "systemctl daemon-reload && systemctl restart $SYNC_SERVICE 2>/dev/null || true"
+    ok "  $SYNC_SERVICE restarted"
     echo
 fi
 

@@ -1,8 +1,6 @@
 import json
 import logging
 import os
-import threading
-import time as _time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -25,6 +23,7 @@ from datetime import date
 from app.api.routes import payroll as payroll_routes
 from app.core import auth as auth_module
 from app.db import init_db
+from app.db_bx import init_bx_db
 from app.services import bitrix
 from app.services import meta as meta_svc
 from app.services.bitrix import (
@@ -32,6 +31,7 @@ from app.services.bitrix import (
     get_visits_by_date,
     list_leads,
 )
+from app.services.bitrix_sync import start_sync_worker
 from app.services.meta import MetaClient
 
 app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
@@ -40,33 +40,11 @@ app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
 auth_module.install_auth_middleware(app)
 
 
-def _warm_cache():
-    """Background thread: warm & periodically refresh expensive caches.
-
-    Runs at startup (after 5s delay) then loops every 25 minutes so that the
-    30-minute Redis TTL never expires while the service is running.
-    The distributed lock in _paginate_cached ensures only one uvicorn worker
-    actually fetches; the other finds the result already in Redis.
-    """
-    _time.sleep(5)  # let uvicorn finish binding
-    while True:
-        _log.info("cache warmer: starting refresh for leads + deals + users")
-        for name, fn in [("leads", bitrix.list_leads),
-                         ("deals", bitrix.list_deals),
-                         ("users", bitrix.list_users)]:
-            try:
-                fn()
-                _log.info("cache warmer: %s done", name)
-            except Exception as e:
-                _log.warning("cache warmer: %s failed — %s", name, e)
-        _log.info("cache warmer: cycle complete — sleeping 25 min")
-        _time.sleep(25 * 60)  # refresh before 30-min TTL expires
-
-
 @app.on_event("startup")
 def _on_startup():
     init_db()
-    threading.Thread(target=_warm_cache, daemon=True).start()
+    init_bx_db()
+    start_sync_worker()
 
 
 app.include_router(payroll_routes.router)

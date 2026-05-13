@@ -48,8 +48,17 @@ Host mountain
 | Servis | Port | Manzil | Boshqarish |
 |---|---|---|---|
 | **mountain** (FastAPI) | 8001 | localhost only | `systemctl {start,stop,restart,status} mountain` |
+| **bitrix-sync** (Node.js) | 3001 | localhost only | `systemctl {start,stop,restart,status} bitrix-sync` |
 | **nginx** | 80 | public | `systemctl reload nginx` |
 | **fail2ban** | — | — | `fail2ban-client status` |
+
+`bitrix-sync.service` unit fayli `/etc/systemd/system/bitrix-sync.service`'da (nusxasi: `bitrix-sync/bitrix-sync.service`).
+
+Webhook URL'lar (Bitrix24 panelida ro'yxatdan o'tkaziladi):
+- `http://<server-ip>/webhook/lead/created`
+- `http://<server-ip>/webhook/lead/updated`
+- `http://<server-ip>/webhook/deal/created`
+- `http://<server-ip>/webhook/deal/updated`
 
 `mountain.service` unit fayli `/etc/systemd/system/mountain.service`'da:
 
@@ -148,6 +157,34 @@ ssh mountain "journalctl -u mountain -n 100"      # backend last 100 lines
 ssh mountain "tail -f /var/log/nginx/access.log"  # nginx access
 ssh mountain "tail -f /var/log/nginx/error.log"   # nginx errors
 ssh mountain "fail2ban-client status sshd"        # SSH ban list
+```
+
+## bitrix-sync birinchi marta sozlash (bir marta bajariladi)
+
+```bash
+# 1. Server'da .env fayli yaratish
+ssh mountain
+cat > /var/www/mountain/bitrix-sync/.env << 'EOF'
+DATABASE_URL=postgresql://mountain:mountain123@localhost:5432/mountain_db
+BITRIX_WEBHOOK_URL=https://your-domain.bitrix24.com/rest/1/your-token
+PORT=3001
+EOF
+
+# 2. PostgreSQL DB va foydalanuvchi yaratish (agar yo'q bo'lsa)
+sudo -u postgres psql -c "CREATE USER mountain WITH PASSWORD 'mountain123';"
+sudo -u postgres psql -c "CREATE DATABASE mountain_db OWNER mountain;"
+
+# 3. Schema apply qilish
+psql $DATABASE_URL -f /var/www/mountain/bitrix-sync/src/db/schema.sql
+
+# 4. systemd service o'rnatish
+cp /var/www/mountain/bitrix-sync/bitrix-sync.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable bitrix-sync
+systemctl start bitrix-sync
+
+# 5. Dastlabki sync (barcha leads/deals/users import)
+cd /var/www/mountain/bitrix-sync && node src/sync/initialSync.js
 ```
 
 ## Birinchi marta deploy (allaqachon bajarilgan)

@@ -1,0 +1,18 @@
+[Unit]
+Description=Bitrix24 Sync Service (Node.js)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/mountain/bitrix-sync
+EnvironmentFile=/var/www/mountain/bitrix-sync/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bitrix-sync
+
+[Install]
+WantedBy=multi-user.target
