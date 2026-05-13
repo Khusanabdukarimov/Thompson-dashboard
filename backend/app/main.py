@@ -227,8 +227,16 @@ def api_stats(range: str = "all"):
             ROUND(AVG(
                 EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
             ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days,
-            COUNT(*) FILTER (WHERE s.bitrix_id ILIKE '%CONSULT%')                   AS konsultatsiya_count,
-            COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')                            AS sifatsiz_count
+            -- Sifatli lid: O'ylab ko'radi + Tashrif belgilandi + Tashrif buyurdi + Bekor bo'ldi + Kelmadi
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
+                'THINKING', 'CONSULTATION', 'NOT_TRANSFERRED', 'RECYCLED'
+            ))                                                                      AS sifatli_lid_count,
+            -- Tashrif belgilandi (CONSULTATION = Konsultatsiya o'tkazildi/belgilandi)
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS tashrif_belgilandi_count,
+            -- Tashrif buyurdi = Konsultatsiya o'tdi (same stage key until separate stage confirmed)
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS tashrif_buyurdi_count,
+            -- Muvaffaqiyatsiz = Sifatsiz + Bekor bo'ldi
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK', 'RECYCLED'))         AS muvaffaqiyatsiz_count
         FROM leads l
         JOIN stages s ON s.id = l.stage_id
         WHERE (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL));
