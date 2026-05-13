@@ -231,10 +231,8 @@ def api_stats(range: str = "all"):
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
                 'THINKING', 'CONSULTATION', 'NOT_TRANSFERRED', 'RECYCLED'
             ))                                                                      AS sifatli_lid_count,
-            -- Tashrif belgilandi (CONSULTATION = Konsultatsiya o'tkazildi/belgilandi)
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS tashrif_belgilandi_count,
-            -- Tashrif buyurdi = Konsultatsiya o'tdi (same stage key until separate stage confirmed)
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS tashrif_buyurdi_count,
+            -- Konsultatsiya o'tkazildi
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS konsultatsiya_count,
             -- Muvaffaqiyatsiz = Sifatsiz + Bekor bo'ldi
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK', 'RECYCLED'))         AS muvaffaqiyatsiz_count
         FROM leads l

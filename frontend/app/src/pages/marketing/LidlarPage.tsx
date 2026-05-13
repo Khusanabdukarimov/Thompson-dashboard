@@ -92,16 +92,14 @@ export default function LidlarPage() {
   const funnel = statsQ.data?.funnel ?? [];
   const responsibles = respQ.data?.responsibles ?? [];
 
-  const total          = header?.total_leads              ?? 0;
-  const sifatliLid     = header?.sifatli_lid_count        ?? 0;
-  const tashrifBelg    = header?.tashrif_belgilandi_count ?? 0;
-  const tashrifBuy     = header?.tashrif_buyurdi_count    ?? 0;
-  const muvaffaqiyatsiz = header?.muvaffaqiyatsiz_count   ?? 0;
+  const total           = header?.total_leads         ?? 0;
+  const sifatliLid      = header?.sifatli_lid_count   ?? 0;
+  const konsultatsiya   = header?.konsultatsiya_count  ?? 0;
+  const muvaffaqiyatsiz = header?.muvaffaqiyatsiz_count ?? 0;
 
-  const sifatliKonv         = total       > 0 ? (sifatliLid  / total)       * 100 : 0;
-  const sifatliToTashrifBelg = sifatliLid > 0 ? (tashrifBelg / sifatliLid) * 100 : 0;
-  const sifatliToTashrifBuy  = sifatliLid > 0 ? (tashrifBuy  / sifatliLid) * 100 : 0;
-  const umumiyToTashrif      = total       > 0 ? (tashrifBelg / total)       * 100 : 0;
+  const sifatliKonv          = total      > 0 ? (sifatliLid    / total)      * 100 : 0;
+  const sifatliToKonsult     = sifatliLid > 0 ? (konsultatsiya / sifatliLid) * 100 : 0;
+  const umumiyToKonsult      = total      > 0 ? (konsultatsiya / total)      * 100 : 0;
 
   const byUserFiltered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -193,29 +191,27 @@ export default function LidlarPage() {
           </div>
         </div>
 
-        {/* KPI Row 1 — 7 cards (matches Bitrix24 analytics layout) */}
+        {/* KPI Row 1 — 5 cards */}
         {statsQ.isLoading && !header ? (
-          <MetricRowSkeleton count={7} />
+          <MetricRowSkeleton count={5} />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-3">
-            <MetricCard label="Umumiy lid"            value={fmtNum(total)}                                              tone="blue"   />
-            <MetricCard label="Sifatli lid"            value={fmtNum(sifatliLid)}                                         tone="blue"   />
-            <MetricCard label="Sifatli konversiya"     value={sifatliKonv   > 0 ? fmtPct(sifatliKonv,   1) : "—"}        tone="green"  />
-            <MetricCard label="Tashrif belgilandi"     value={fmtNum(tashrifBelg)}                                        tone="blue"   />
-            <MetricCard label="Sifatli → Tashrif belg" value={sifatliToTashrifBelg > 0 ? fmtPct(sifatliToTashrifBelg, 1) : "—"} tone="purple" />
-            <MetricCard label="Tashrif buyurdi"        value={fmtNum(tashrifBuy)}                                         tone="green"  />
-            <MetricCard label="Sifatli → Tashrif buy"  value={sifatliToTashrifBuy  > 0 ? fmtPct(sifatliToTashrifBuy,  1) : "—"} tone="green"  />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+            <MetricCard label="Umumiy lid"               value={fmtNum(total)}                                             tone="blue"   />
+            <MetricCard label="Sifatli lid"              value={fmtNum(sifatliLid)}                                        tone="blue"   />
+            <MetricCard label="Sifatli konversiya"       value={sifatliKonv    > 0 ? fmtPct(sifatliKonv,    1) : "—"}     tone="green"  />
+            <MetricCard label="Konsultatsiya o'tkazildi" value={fmtNum(konsultatsiya)}                                     tone="purple" />
+            <MetricCard label="Sifatli → Konsultatsiya"  value={sifatliToKonsult > 0 ? fmtPct(sifatliToKonsult, 1) : "—"} tone="purple" />
           </div>
         )}
 
-        {/* KPI Row 2 — Sifatsiz/bekor + conversion metrics */}
+        {/* KPI Row 2 */}
         {!statsQ.isLoading && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-            <MetricCard label="Sifatsiz/bekor"         value={fmtNum(muvaffaqiyatsiz)}                                   tone="red"    />
-            <div className="hidden lg:block lg:col-span-3" />
-            <MetricCard label="Umumiy → Tashrif belg"  value={umumiyToTashrif > 0 ? fmtPct(umumiyToTashrif, 1) : "—"}   tone="blue"   />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+            <MetricCard label="Sifatsiz/bekor"          value={fmtNum(muvaffaqiyatsiz)}                                   tone="red"    />
             <div className="hidden lg:block" />
-            <MetricCard label="Konversiya"             value={fmtPct(header?.conversion_pct ?? 0, 1)}                    tone="green"  />
+            <MetricCard label="Umumiy → Konsultatsiya"   value={umumiyToKonsult > 0 ? fmtPct(umumiyToKonsult, 1) : "—"}   tone="blue"   />
+            <div className="hidden lg:block" />
+            <MetricCard label="Konversiya"               value={fmtPct(header?.conversion_pct ?? 0, 1)}                   tone="green"  />
           </div>
         )}
 

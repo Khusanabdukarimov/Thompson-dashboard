@@ -25,8 +25,7 @@ export type DashboardStatsResponse = {
     frozen_leads: number;
     avg_age_days: number;
     sifatli_lid_count: number;
-    tashrif_belgilandi_count: number;
-    tashrif_buyurdi_count: number;
+    konsultatsiya_count: number;
     muvaffaqiyatsiz_count: number;
   };
   funnel: {
