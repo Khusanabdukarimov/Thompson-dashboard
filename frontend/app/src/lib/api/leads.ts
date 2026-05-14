@@ -71,7 +71,7 @@ export type DashFilter = {
 export type FilterOptions = {
   responsibles: { id: number; full_name: string }[];
   stages: { bitrix_id: string; name: string }[];
-  sources: string[];
+  sources: { id: string; name: string }[];
 };
 
 export function getDashboardStats(filter: DashFilter) {

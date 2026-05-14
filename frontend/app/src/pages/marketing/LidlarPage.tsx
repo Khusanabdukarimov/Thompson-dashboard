@@ -512,7 +512,7 @@ export default function LidlarPage() {
                       >
                         <option value="">Barchasi</option>
                         {filterOpts?.sources.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                       </select>
                     </div>

@@ -396,13 +396,27 @@ def api_filter_options():
             "WHERE entity = 'lead' AND sort_order > 0 ORDER BY sort_order"
         )).mappings().all()
 
+        SOURCE_NAMES = {
+            "UC_O9BLGT":   "Facebook",
+            "UC_3O8GTF":   "Instagram",
+            "UC_H1PMDS":   "Telegram forma",
+            "REPEAT_SALE": "Website forma",
+            "CALL":        "Qo'ng'iroq",
+            "ADVERTISING": "Reklama",
+            "UC_8BLFVY":   "Ko'chadan",
+            "UC_3F6D2K":   "Vakansiya",
+        }
         try:
             src_rows = conn.execute(text(
                 "SELECT DISTINCT source_id FROM leads "
                 "WHERE source_id IS NOT NULL AND source_id != '' "
+                "AND source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB' "
                 "ORDER BY source_id LIMIT 60"
             )).mappings().all()
-            sources = [r["source_id"] for r in src_rows]
+            sources = [
+                {"id": r["source_id"], "name": SOURCE_NAMES.get(r["source_id"], r["source_id"])}
+                for r in src_rows
+            ]
         except Exception:
             sources = []
 
