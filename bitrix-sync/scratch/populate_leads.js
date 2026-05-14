@@ -1,5 +1,5 @@
 'use strict';
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const pool = require('../src/db/pool');
 const { fetchLead, extractFields } = require('../src/services/facebook');
 const axios = require('axios');

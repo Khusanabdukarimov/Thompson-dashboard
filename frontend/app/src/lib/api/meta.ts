@@ -129,3 +129,21 @@ export type CampaignFormsResponse = {
 export function getCampaignForms(ad_account_id?: string) {
   return apiGet<CampaignFormsResponse>('/api/campaigns/forms', ad_account_id ? { ad_account_id } : {});
 }
+
+export interface FormLead {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  created_at: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_content: string;
+  utm_term: string;
+  field_data: Record<string, string>;
+}
+
+export function getFormLeads(formId: string) {
+  return apiGet<{ count: number; leads: FormLead[] }>('/api/campaigns/leads', { form_id: formId });
+}

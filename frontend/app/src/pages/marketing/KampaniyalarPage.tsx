@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Info, RefreshCw } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/Button";
@@ -18,10 +18,11 @@ import {
   getMetaInsights,
   getMetaCampaigns,
   getCampaignForms,
+  getFormLeads,
   MONTH_KEYS,
   MONTH_LABELS,
 } from "@/lib/api/meta";
-import type { MonthKey, CampaignAdRow, CampaignForms } from "@/lib/api/meta";
+import type { MonthKey, CampaignAdRow, CampaignForms, FormLead } from "@/lib/api/meta";
 import { fmtNum, fmtMoney } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
@@ -48,6 +49,91 @@ type DayRow = {
 const now = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
 const DEFAULT_YEAR = now.getFullYear();
+
+function LeadsSubTable({ formId }: { formId: string }) {
+  const q = useQuery({
+    queryKey: ["form-leads", formId],
+    queryFn: () => getFormLeads(formId),
+    staleTime: 5 * 60 * 1000
+  });
+
+  if (q.isLoading) return <div className="p-4 text-[11px] text-text3 italic">Lidlar yuklanmoqda...</div>;
+  if (!q.data?.leads.length) return <div className="p-4 text-[11px] text-text3 italic">Bu forma uchun hali lidlar yo'q.</div>;
+
+  return (
+    <div className="bg-bg/40 border-t border-border/50">
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="text-text3 border-b border-border/30">
+            <th className="text-left px-4 py-1.5 font-medium">Lid nomi</th>
+            <th className="text-left px-3 py-1.5 font-medium">Telefon</th>
+            <th className="text-left px-3 py-1.5 font-medium">UTM Source</th>
+            <th className="text-left px-3 py-1.5 font-medium">UTM Medium</th>
+            <th className="text-left px-3 py-1.5 font-medium">UTM Campaign</th>
+            <th className="text-right px-4 py-1.5 font-medium">Sana</th>
+          </tr>
+        </thead>
+        <tbody>
+          {q.data.leads.map((l) => (
+            <tr key={l.id} className="border-b border-border/20 last:border-0 hover:bg-white/5">
+              <td className="px-4 py-2 text-text font-medium">{l.name}</td>
+              <td className="px-3 py-2 text-text2 mono">{l.phone}</td>
+              <td className="px-3 py-2">
+                <span className="px-1.5 py-0.5 rounded-sm bg-blue/10 text-blue font-mono text-[9px]">{l.utm_source}</span>
+              </td>
+              <td className="px-3 py-2">
+                <span className="px-1.5 py-0.5 rounded-sm bg-purple/10 text-purple font-mono text-[9px]">{l.utm_medium}</span>
+              </td>
+              <td className="px-3 py-2 text-text3 truncate max-w-[120px]">{l.utm_campaign}</td>
+              <td className="px-4 py-2 text-right text-text3">
+                {new Date(l.created_at).toLocaleDateString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FormRow({ f }: { f: any }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <tr 
+        className={`border-b border-border last:border-0 hover:bg-bg3 transition-colors cursor-pointer ${expanded ? 'bg-bg3' : ''}`}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <td className="px-4 py-2 font-medium flex items-center gap-2">
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          {f.form_name || f.form_id}
+        </td>
+        <td className="px-3 py-2">
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+            f.status === "ACTIVE"
+              ? "bg-green/10 text-green"
+              : f.status === "ARCHIVED"
+              ? "bg-text3/10 text-text3"
+              : "bg-amber/10 text-amber"
+          }`}>
+            {f.status || "—"}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-text2 truncate max-w-[200px]">{f.adset_name || "—"}</td>
+        <td className="px-4 py-2 text-right mono font-semibold text-green">
+          {f.leads_count != null ? fmtNum(f.leads_count) : "—"}
+        </td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={4} className="p-0">
+            <LeadsSubTable formId={f.form_id} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
 
 export default function KampaniyalarPage() {
   const [month, setMonth] = useState<MonthKey>(DEFAULT_MONTH);
@@ -579,24 +665,7 @@ export default function KampaniyalarPage() {
                   </thead>
                   <tbody>
                     {camp.forms.map((f) => (
-                      <tr key={f.form_id} className="border-b border-border last:border-0 hover:bg-bg3 transition-colors">
-                        <td className="px-4 py-2 font-medium">{f.form_name || f.form_id}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            f.status === "ACTIVE"
-                              ? "bg-green/10 text-green"
-                              : f.status === "ARCHIVED"
-                              ? "bg-text3/10 text-text3"
-                              : "bg-amber/10 text-amber"
-                          }`}>
-                            {f.status || "—"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-text2">{f.adset_name || "—"}</td>
-                        <td className="px-4 py-2 text-right mono font-semibold text-green">
-                          {f.leads_count != null ? fmtNum(f.leads_count) : "—"}
-                        </td>
-                      </tr>
+                      <FormRow key={f.form_id} f={f} />
                     ))}
                   </tbody>
                 </table>
