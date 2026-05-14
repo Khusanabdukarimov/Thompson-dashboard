@@ -127,5 +127,5 @@ export type CampaignFormsResponse = {
 };
 
 export function getCampaignForms(ad_account_id?: string) {
-  return apiGet<CampaignFormsResponse>('/api/meta/campaign-forms', ad_account_id ? { ad_account_id } : {});
+  return apiGet<CampaignFormsResponse>('/api/campaigns/forms', ad_account_id ? { ad_account_id } : {});
 }
