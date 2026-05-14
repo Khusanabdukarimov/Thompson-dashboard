@@ -12,4 +12,8 @@ pool.on('error', (err) => {
   console.error('[pg] Unexpected pool error:', err.message);
 });
 
+pool.on('connect', (client) => {
+  client.query("SET TIME ZONE 'Asia/Tashkent'");
+});
+
 module.exports = pool;

@@ -6,7 +6,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Make the Bitrix/Postgres engine optional so the API can run without a DB.
 if DATABASE_URL:
-    bx_engine = create_engine(DATABASE_URL, pool_size=5, max_overflow=10, echo=False)
+    bx_engine = create_engine(
+        DATABASE_URL,
+        pool_size=5,
+        max_overflow=10,
+        echo=False,
+        connect_args={"options": "-c timezone=Asia/Tashkent"},
+    )
 
     def init_bx_db() -> None:
         from app import bx_models  # noqa: F401
