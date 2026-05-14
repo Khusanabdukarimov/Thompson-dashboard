@@ -392,14 +392,14 @@ router.get('/deals-list', async (req, res) => {
     status === 'active' ? 'AND s.is_final = false' : '';
 
   const searchFilter = search
-    ? `AND (r.full_name ILIKE '%' || $5 || '%' OR d.source_id ILIKE '%' || $5 || '%' OR ph.phone ILIKE '%' || $5 || '%')`
+    ? `AND (TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) ILIKE '%' || $5 || '%' OR d.source_id ILIKE '%' || $5 || '%' OR ph.phone ILIKE '%' || $5 || '%')`
     : '';
 
   try {
     const { rows } = await pool.query(
       `SELECT
          d.id,
-         r.full_name                  AS responsible,
+         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS responsible,
          COALESCE(ph.phone, '—')      AS mijoz,
          d.opportunity::numeric       AS summa,
          COALESCE(d.source_id, '—')   AS manba,
