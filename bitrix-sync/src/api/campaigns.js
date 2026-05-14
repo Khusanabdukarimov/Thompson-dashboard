@@ -234,8 +234,9 @@ router.get('/rows', async (req, res) => {
     await setCache('campaigns/rows', monthNum, year, payload);
     res.json(payload);
   } catch (err) {
-    console.error('[campaigns/rows]', err.message);
-    res.status(500).json({ error: err.message });
+    const errorBody = err.response?.data || err.message;
+    console.error('[campaigns/rows]', errorBody);
+    res.status(500).json({ error: errorBody });
   }
 });
 
@@ -271,8 +272,9 @@ router.get('/insights', async (req, res) => {
     await setCache('campaigns/insights', monthNum, year, payload);
     res.json(payload);
   } catch (err) {
-    console.error('[campaigns/insights]', err.message);
-    res.status(500).json({ error: err.message });
+    const errorBody = err.response?.data || err.message;
+    console.error('[campaigns/insights]', errorBody);
+    res.status(500).json({ error: errorBody });
   }
 });
 
