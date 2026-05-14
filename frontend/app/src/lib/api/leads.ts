@@ -28,6 +28,7 @@ export type DashboardStatsResponse = {
     konsultatsiya_belgilandi_count: number;
     konsultatsiya_otkazildi_count: number;
     muvaffaqiyatsiz_count: number;
+    sifatsiz_bekor_count: number;
   };
   funnel: {
     bitrix_id: string;
@@ -43,12 +44,15 @@ export type ResponsiblesStatsResponse = {
     responsible_id: number;
     full_name: string;
     total: number;
+    qongiroqlar: number;
     yangi_lid: number;
+    propushenniy: number;
     javob_bermadi: number;
     qayta_aloqa: number;
     oylab_koradi: number;
     konsultatsiya: number;
     otkazilmadi: number;
+    konsultatsiya_otkazildi: number;
     sandiq: number;
     sifatsiz: number;
     bekor_boldi: number;
@@ -80,6 +84,28 @@ export function getResponsiblesStats(filter: Pick<LeadFilter, "start_date" | "en
     range = String(diffDays);
   }
   return apiGet<ResponsiblesStatsResponse>("/api/responsibles", { range }, API_URL_CRM);
+}
+
+export type ConversionStatsResponse = {
+  conversion: {
+    responsible_id: number;
+    full_name: string;
+    total: number;
+    jarayonda: number;
+    sifatsiz_lid: number;
+    tashrif_buyurdi: number;
+  }[];
+};
+
+export function getConversionStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
+  let range = "all";
+  if (filter.start_date) {
+    const start = new Date(filter.start_date);
+    const now = new Date();
+    const diffDays = Math.ceil(Math.abs(now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    range = String(diffDays);
+  }
+  return apiGet<ConversionStatsResponse>("/api/conversion", { range }, API_URL_CRM);
 }
 
 // ── Lead list (raw + enriched) ───────────────────────────────────

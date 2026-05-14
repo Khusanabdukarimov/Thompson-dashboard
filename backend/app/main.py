@@ -227,17 +227,16 @@ def api_stats(range: str = "all"):
             ROUND(AVG(
                 EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
             ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days,
-            -- Sifatli lid: O'ylab ko'radi + Konsultatsiya belgilandi + Konsultatsiya o'tkazildi + O'tkazilmadi + Bekor bo'ldi
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
-                'UC_KXC3ZW', 'UC_L28G68', 'CONVERTED', 'UC_5G8244', 'UC_NAZK5J',
-                'THINKING', 'CONSULTATION', 'NOT_TRANSFERRED', 'RECYCLED'
-            ))                                                                      AS sifatli_lid_count,
+            -- Sifatsiz + Sandiq only (not Bekor bo'ldi)
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK'))        AS sifatsiz_bekor_count,
+            -- Sifatli = total minus sifatsiz/sandiq
+            COUNT(*) - COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK')) AS sifatli_lid_count,
             -- Konsultatsiya belgilandi
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68', 'CONSULTATION')) AS konsultatsiya_belgilandi_count,
             -- Konsultatsiya o'tkazildi
             COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')                   AS konsultatsiya_otkazildi_count,
-            -- Muvaffaqiyatsiz = Sifatsiz + Sandiq
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK', 'RECYCLED')) AS muvaffaqiyatsiz_count
+            -- Muvaffaqiyatsiz = Sifatsiz + Sandiq (same as sifatsiz_bekor_count, kept for compat)
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK'))        AS muvaffaqiyatsiz_count
         FROM leads l
         JOIN stages s ON s.id = l.stage_id
         WHERE (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL));
@@ -277,14 +276,17 @@ def api_responsibles(range: str = "all"):
             r.id                                                            AS responsible_id,
             TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
             COUNT(l.id)                                                     AS total,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('NEW','IN_PROCESS'))                  AS yangi_lid,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NEW')                                AS qongiroqlar,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'IN_PROCESS')                         AS yangi_lid,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'PROCESSED')                          AS propushenniy,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_1KPATX','NO_ANSWER'))           AS javob_bermadi,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_Q2U9EL','CALLBACK'))            AS qayta_aloqa,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_KXC3ZW','THINKING'))            AS oylab_koradi,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))        AS konsultatsiya,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_5G8244','NOT_TRANSFERRED'))     AS otkazilmadi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')                          AS konsultatsiya_otkazildi,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK','ARCHIVE'))                  AS sandiq,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI'))                      AS sifatsiz,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'UC_F8K4GI')                          AS sifatsiz,
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))            AS bekor_boldi,
             COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
         FROM responsibles r
@@ -299,6 +301,35 @@ def api_responsibles(range: str = "all"):
         res = conn.execute(query, {"days_interval": days_interval}).mappings().all()
         
     return {"responsibles": [dict(r) for r in res]}
+
+
+@app.get("/api/conversion")
+def api_conversion(range: str = "all"):
+    days = None if range == "all" else (1 if range == "today" else int(range))
+    days_interval = f"{days} days" if days is not None else None
+
+    query = text("""
+        SELECT
+            r.id                                                            AS responsible_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
+            COUNT(l.id)                                                     AS total,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
+                'NEW','IN_PROCESS','PROCESSED',
+                'UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW','UC_L28G68','UC_5G8244'
+            ))                                                              AS jarayonda,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK')) AS sifatsiz_lid,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')           AS tashrif_buyurdi
+        FROM responsibles r
+        LEFT JOIN leads l ON l.responsible_id = r.id
+            AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
+        LEFT JOIN stages s ON s.id = l.stage_id
+        WHERE r.active = TRUE
+        GROUP BY r.id, r.name, r.last_name
+        ORDER BY total DESC;
+    """)
+    with bx_engine.connect() as conn:
+        rows = conn.execute(query, {"days_interval": days_interval}).mappings().all()
+    return {"conversion": [dict(r) for r in rows]}
 
 
 @app.get("/api/stats/deals")

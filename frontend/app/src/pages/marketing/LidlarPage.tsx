@@ -11,8 +11,8 @@ import type {
   FilterValues,
 } from "@/components/FilterBar";
 import { MetricRowSkeleton } from "@/components/Skeleton";
-import { getDashboardStats, getResponsiblesStats } from "@/lib/api/leads";
-import { fmtNum, fmtPct, fmtMoney } from "@/lib/utils";
+import { getDashboardStats, getResponsiblesStats, getConversionStats } from "@/lib/api/leads";
+import { fmtNum, fmtPct } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
 const PRESETS: FilterPreset[] = [
@@ -41,27 +41,23 @@ const DATE_PRESETS = [
   { label: "Barchasi", start: () => "",             end: () => "" },
 ];
 
-// Funnel colors
-const PALETTE = [
-  "#f59e0b", "#a78bfa", "#22d3ee", "#fb923c",
-  "#f472b6", "#34d399", "#60a5fa", "#e879f9",
-];
-function sColor(idx: number) {
-  return PALETTE[idx % PALETTE.length];
-}
-
 // Stage headers for responsibles table
 const RESPONSIBLE_COLS = [
-  { key: "yangi_lid", label: "Yangi lid" },
-  { key: "javob_bermadi", label: "Javob bermadi" },
-  { key: "qayta_aloqa", label: "Qayta aloqa" },
-  { key: "oylab_koradi", label: "O'ylab ko'radi" },
-  { key: "konsultatsiya", label: "Konsultatsiya" },
-  { key: "otkazilmadi", label: "O'tkazilmadi" },
-  { key: "sandiq", label: "Sandiq" },
-  { key: "sifatsiz", label: "Sifatsiz" },
-  { key: "bekor_boldi", label: "Bekor bo'ldi" },
+  { key: "qongiroqlar",            label: "Qo'ng'iroqlar",           color: "#9E9E9E" },
+  { key: "yangi_lid",              label: "Yangi lid",               color: "#2196F3" },
+  { key: "propushenniy",           label: "Propushenniy",            color: "#B0BEC5" },
+  { key: "javob_bermadi",          label: "Javob bermadi",           color: "#FF9800" },
+  { key: "qayta_aloqa",            label: "Qayta aloqa",             color: "#00BCD4" },
+  { key: "oylab_koradi",           label: "O'ylab ko'radi",          color: "#E91E63" },
+  { key: "konsultatsiya",          label: "Konsultatsiya belgilandi", color: "#9C27B0" },
+  { key: "otkazilmadi",            label: "O'tkazilmadi",            color: "#FF00FF" },
+  { key: "konsultatsiya_otkazildi", label: "Konsultatsiya o'tkazildi", color: "#4CAF50" },
+  { key: "sandiq",                 label: "Sandiq",                  color: "#90CAF9" },
+  { key: "sifatsiz",               label: "Sifatsiz",                color: "#F44336" },
+  { key: "bekor_boldi",            label: "Bekor bo'ldi",            color: "#FFC107" },
 ] as const;
+
+type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
 
 export default function LidlarPage() {
   const [activePreset, setActivePreset] = useLocalStorage<string | null>("lidlar.preset", "all");
@@ -83,25 +79,30 @@ export default function LidlarPage() {
     queryFn: () => getResponsiblesStats(apiFilter),
   });
 
+  const conversionQ = useQuery({
+    queryKey: ["stats/conversion", apiFilter],
+    queryFn: () => getConversionStats(apiFilter),
+  });
+
   const fields: FilterField[] = [
     { key: "start_date", label: "Sanadan", type: "date" },
     { key: "end_date", label: "Sanagacha", type: "date" },
   ];
 
   const header = statsQ.data?.header;
-  const funnel = statsQ.data?.funnel ?? [];
   const responsibles = respQ.data?.responsibles ?? [];
 
   const total              = header?.total_leads                    ?? 0;
-  const sifatliLid         = header?.sifatli_lid_count             ?? 0;
-  const konsultBelgilandi  = header?.konsultatsiya_belgilandi_count ?? 0;
-  const konsultOtkazildi   = header?.konsultatsiya_otkazildi_count  ?? 0;
-  const muvaffaqiyatsiz    = header?.muvaffaqiyatsiz_count          ?? 0;
+  const sifatsizBekor      = header?.sifatsiz_bekor_count           ?? 0;
+  const sifatliLid         = header?.sifatli_lid_count              ?? 0;
+  const konsultBelgilandi  = header?.konsultatsiya_belgilandi_count  ?? 0;
+  const konsultOtkazildi   = header?.konsultatsiya_otkazildi_count   ?? 0;
 
-  const sifatliKonv            = total         > 0 ? (sifatliLid        / total)         * 100 : 0;
-  const sifatliToBelgilandi    = sifatliLid    > 0 ? (konsultBelgilandi / sifatliLid)    * 100 : 0;
-  const sifatliToOtkazildi     = sifatliLid    > 0 ? (konsultOtkazildi  / sifatliLid)    * 100 : 0;
-  const umumiyToBelgilandi     = total         > 0 ? (konsultBelgilandi / total)         * 100 : 0;
+  const sifatliKonv         = total      > 0 ? (sifatliLid       / total)      * 100 : 0;
+  const sifatliToBelgilandi = sifatliLid > 0 ? (konsultBelgilandi/ sifatliLid) * 100 : 0;
+  const sifatliToOtkazildi  = sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0;
+  const umumiyToBelgilandi  = total      > 0 ? (konsultBelgilandi / total)      * 100 : 0;
+  const konversiya          = total      > 0 ? (konsultOtkazildi  / total)      * 100 : 0;
 
   const byUserFiltered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -109,24 +110,22 @@ export default function LidlarPage() {
   }, [responsibles, search]);
 
   const colMaxes = useMemo(() => {
-    const m: Record<string, number> = {};
+    const m: Partial<Record<RespColKey, number>> = {};
     for (const col of RESPONSIBLE_COLS) {
-      m[col.key] = Math.max(1, ...responsibles.map((u) => u[col.key as keyof typeof u] as number));
+      m[col.key] = Math.max(1, ...responsibles.map((u) => (u as Record<string, number>)[col.key] ?? 0));
     }
     return m;
   }, [responsibles]);
 
   const totalsRow = useMemo(() => {
-    const bs: Record<string, number> = {};
+    const bs: Partial<Record<RespColKey, number>> = {};
     for (const u of responsibles) {
       for (const col of RESPONSIBLE_COLS) {
-        bs[col.key] = (bs[col.key] ?? 0) + (u[col.key as keyof typeof u] as number);
+        bs[col.key] = (bs[col.key] ?? 0) + ((u as Record<string, number>)[col.key] ?? 0);
       }
     }
     return bs;
   }, [responsibles]);
-
-  const maxFunnelCount = Math.max(1, ...funnel.map((f) => f.lead_count));
 
   return (
     <>
@@ -138,7 +137,7 @@ export default function LidlarPage() {
             : "Barcha vaqt"
         }
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); }}>
+          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); }}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
@@ -160,7 +159,7 @@ export default function LidlarPage() {
               setValues(EMPTY_FILTER);
               setActivePreset("all");
             }}
-            onApply={() => { statsQ.refetch(); respQ.refetch(); }}
+            onApply={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); }}
             activeChipLabel={activePreset && activePreset !== "all" ? PRESETS.find((p) => p.id === activePreset)?.label : undefined}
             onActiveChipClear={() => setActivePreset("all")}
             storageKey="marketing.lidlar"
@@ -178,7 +177,7 @@ export default function LidlarPage() {
                   type="button"
                   onClick={() => {
                     setValues((prev) => ({ ...prev, start_date: s || undefined, end_date: e || undefined }));
-                    statsQ.refetch(); respQ.refetch();
+                    statsQ.refetch(); respQ.refetch(); conversionQ.refetch();
                   }}
                   className={`px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors border ${
                     active
@@ -211,34 +210,115 @@ export default function LidlarPage() {
         {/* KPI Row 2 */}
         {!statsQ.isLoading && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-            <MetricCard label="Sifatsiz/bekor"            value={fmtNum(muvaffaqiyatsiz)}                                              tone="red"    />
+            <MetricCard label="Sifatsiz/bekor"        value={fmtNum(sifatsizBekor)}                                            tone="red"    />
             <div className="hidden lg:block lg:col-span-3" />
-            <MetricCard label="Umumiy → K.belgilandi"     value={umumiyToBelgilandi > 0 ? fmtPct(umumiyToBelgilandi, 1) : "—"}        tone="blue"   />
+            <MetricCard label="Umumiy → K.belgilandi" value={umumiyToBelgilandi > 0 ? fmtPct(umumiyToBelgilandi, 1) : "—"}  tone="blue"   />
             <div className="hidden lg:block" />
-            <MetricCard label="Konversiya"                value={fmtPct(header?.conversion_pct ?? 0, 1)}                              tone="green"  />
+            <MetricCard label="Konversiya"             value={konversiya > 0 ? fmtPct(konversiya, 1) : "—"}                  tone="green"  />
           </div>
         )}
 
-        {/* Stage Funnel Visual */}
+        {/* Lid va Konversiya funnel table */}
         <div className="bg-bg2 border border-border rounded-lg shadow mb-4 overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <span className="text-[13px] font-semibold">Sotuv voronkasi (Funnel)</span>
+            <span className="text-[13px] font-semibold">Lid va Konversiya</span>
           </div>
-          <div className="p-4 flex flex-col gap-2">
-            {funnel.map((stage, i) => {
-              const pct = maxFunnelCount ? (stage.lead_count / maxFunnelCount) * 100 : 0;
-              return (
-                <div key={stage.bitrix_id} className="flex items-center gap-3">
-                  <span className="text-[12px] text-text2 w-48 shrink-0 truncate">{stage.name_uz}</span>
-                  <div className="flex-1 h-6 rounded overflow-hidden bg-bg3">
-                    <div className="h-full rounded transition-all" style={{ width: `${pct}%`, background: sColor(i) }} />
-                  </div>
-                  <span className="mono text-[12px] font-semibold w-12 text-right">{stage.lead_count}</span>
-                  <span className="mono text-[11px] text-text3 w-20 text-right">{fmtMoney(stage.total_opportunity)}</span>
-                </div>
-              );
-            })}
-          </div>
+          {conversionQ.isLoading ? (
+            <div className="p-6 text-text3 text-[12px]">Yuklanmoqda…</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11.5px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border bg-bg">
+                    <th className="px-4 py-2.5 text-left font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[160px]">Mas'ul</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#60a5fa" }}>Jami lid</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#f59e0b" }}>Jarayonda</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#f87171" }}>Sifatsiz lid</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[120px]" style={{ color: "#34d399" }}>Konsultatsiya o'tkazildi</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#4ade80" }}>Konversiya</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const rows = conversionQ.data?.conversion ?? [];
+                    const maxTotal = Math.max(1, ...rows.map((r) => r.total));
+                    const totTotal = rows.reduce((s, r) => s + r.total, 0);
+                    const totJarayonda = rows.reduce((s, r) => s + r.jarayonda, 0);
+                    const totSifatsiz = rows.reduce((s, r) => s + r.sifatsiz_lid, 0);
+                    const totTashrif = rows.reduce((s, r) => s + r.tashrif_buyurdi, 0);
+                    return (
+                      <>
+                        {rows.map((r) => {
+                          const konv = r.total > 0 ? (r.tashrif_buyurdi / r.total) * 100 : 0;
+                          return (
+                            <tr key={r.responsible_id} className="border-b border-border hover:bg-bg3 transition-colors">
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-blue-bg text-blue text-[9px] font-bold flex items-center justify-center shrink-0">
+                                    {(r.full_name || "?").split(" ").filter(Boolean).slice(0, 2).map((s) => s[0]).join("").toUpperCase() || "?"}
+                                  </div>
+                                  <span className="font-medium text-[12px] whitespace-nowrap">{r.full_name}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <div>
+                                  <span className="mono font-semibold text-[12px]">{fmtNum(r.total)}</span>
+                                  <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
+                                    <div className="h-full rounded" style={{ width: `${(r.total / maxTotal) * 100}%`, background: "#60a5fa" }} />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <div>
+                                  <span className="mono text-[12px]">{fmtNum(r.jarayonda)}</span>
+                                  <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
+                                    <div className="h-full rounded" style={{ width: r.total > 0 ? `${(r.jarayonda / r.total) * 100}%` : "0%", background: "#f59e0b" }} />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <div>
+                                  <span className="mono text-[12px]">{fmtNum(r.sifatsiz_lid)}</span>
+                                  <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
+                                    <div className="h-full rounded" style={{ width: r.total > 0 ? `${(r.sifatsiz_lid / r.total) * 100}%` : "0%", background: "#f87171" }} />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <div>
+                                  <span className="mono text-[12px]">{fmtNum(r.tashrif_buyurdi)}</span>
+                                  <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
+                                    <div className="h-full rounded" style={{ width: r.total > 0 ? `${(r.tashrif_buyurdi / r.total) * 100}%` : "0%", background: "#34d399" }} />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <span className="mono font-semibold text-[12px]" style={{ color: "#4ade80" }}>
+                                  {konv > 0 ? fmtPct(konv, 1) : "—"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-bg3 border-t-2 border-border">
+                          <td className="px-4 py-2.5 text-[10px] text-text3 uppercase tracking-wider font-semibold">Итого</td>
+                          <td className="px-3 py-2.5 text-right"><span className="mono font-bold text-[13px]">{fmtNum(totTotal)}</span></td>
+                          <td className="px-3 py-2.5 text-right"><span className="mono font-semibold text-[12px]">{fmtNum(totJarayonda)}</span></td>
+                          <td className="px-3 py-2.5 text-right"><span className="mono font-semibold text-[12px]">{fmtNum(totSifatsiz)}</span></td>
+                          <td className="px-3 py-2.5 text-right"><span className="mono font-semibold text-[12px]">{fmtNum(totTashrif)}</span></td>
+                          <td className="px-3 py-2.5 text-right">
+                            <span className="mono font-semibold text-[12px]" style={{ color: "#4ade80" }}>
+                              {totTotal > 0 ? fmtPct((totTashrif / totTotal) * 100, 1) : "—"}
+                            </span>
+                          </td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Lid mas'ullar kesimida */}
@@ -260,8 +340,8 @@ export default function LidlarPage() {
                     <th className="px-3 py-2.5 text-right font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[56px]">
                       Jami
                     </th>
-                    {RESPONSIBLE_COLS.map((col, i) => (
-                      <th key={col.key} className="px-3 py-2.5 text-left font-medium text-[10px] uppercase tracking-wider min-w-[88px]" style={{ color: sColor(i) }}>
+                    {RESPONSIBLE_COLS.map((col) => (
+                      <th key={col.key} className="px-3 py-2.5 text-left font-medium text-[10px] uppercase tracking-wider min-w-[88px]" style={{ color: col.color }}>
                         {col.label}
                       </th>
                     ))}
@@ -281,16 +361,16 @@ export default function LidlarPage() {
                       <td className="px-3 py-2.5 text-right">
                         <span className="mono font-semibold text-[13px]">{fmtNum(u.total)}</span>
                       </td>
-                      {RESPONSIBLE_COLS.map((col, i) => {
-                        const cnt = u[col.key as keyof typeof u] as number ?? 0;
-                        const color = sColor(i);
+                      {RESPONSIBLE_COLS.map((col) => {
+                        const cnt = (u as Record<string, number>)[col.key] ?? 0;
+                        const max = colMaxes[col.key] ?? 1;
                         return (
                           <td key={col.key} className="px-3 py-2.5">
                             {cnt > 0 ? (
                               <div>
                                 <span className="mono text-[12px]">{fmtNum(cnt)}</span>
                                 <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
-                                  <div className="h-full rounded" style={{ width: `${(cnt / colMaxes[col.key]) * 100}%`, background: color }} />
+                                  <div className="h-full rounded" style={{ width: `${(cnt / max) * 100}%`, background: col.color }} />
                                 </div>
                               </div>
                             ) : (
