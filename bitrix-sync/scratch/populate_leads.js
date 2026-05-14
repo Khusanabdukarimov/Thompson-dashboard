@@ -60,7 +60,7 @@ async function run() {
         );
       }
     } catch (err) {
-      console.error(`    Error fetching leads for form ${form.id}:`, err.response?.data || err.message);
+      console.error(`    Error fetching leads for form ${form.id}:`, JSON.stringify(err.response?.data || err.message, null, 2));
     }
   }
   
