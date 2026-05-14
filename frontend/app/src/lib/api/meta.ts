@@ -55,7 +55,10 @@ export const MONTH_LABELS: Record<MonthKey, string> = {
 };
 
 export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string) {
-  return apiGet<MetaInsightsResponse>('/api/meta/insights', { month, year, ad_account_id });
+  // Served by Node.js (port 3001) with PostgreSQL 1-hour cache.
+  // ad_account_id is ignored here (account configured server-side via env).
+  void ad_account_id;
+  return apiGet<MetaInsightsResponse>('/api/campaigns/insights', { month, year });
 }
 
 export function getBitrixDaily(month: MonthKey, year: number) {
@@ -79,6 +82,7 @@ export type CampaignAdRow = {
   landing_page_views: number;
   cpm: number;
   cpc: number;
+  cpl: number;
   ctr: number;
   hook_rate: number;
   visit_rate: number;
@@ -92,7 +96,8 @@ export type CampaignsResponse = {
 };
 
 export function getMetaCampaigns(month: MonthKey, year: number) {
-  return apiGet<CampaignsResponse>('/api/meta/campaigns', { month, year });
+  // Served by Node.js (port 3001) with PostgreSQL 1-hour cache.
+  return apiGet<CampaignsResponse>('/api/campaigns/rows', { month, year });
 }
 
 export function getDashboardDaily(date: string) {

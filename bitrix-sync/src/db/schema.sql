@@ -159,6 +159,17 @@ CREATE TABLE IF NOT EXISTS sync_state (
   total_rows  INTEGER DEFAULT 0
 );
 
+-- Meta Ads API response cache (1-hour TTL)
+CREATE TABLE IF NOT EXISTS campaign_cache (
+  id         SERIAL PRIMARY KEY,
+  endpoint   VARCHAR(100) NOT NULL,
+  month      INT NOT NULL,
+  year       INT NOT NULL,
+  data       JSONB NOT NULL,
+  fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE(endpoint, month, year)
+);
+
 -- ============================================================
 -- Seed lead stages (Bitrix24 default lead statuses)
 -- ============================================================

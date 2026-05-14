@@ -12,7 +12,8 @@ const { verifyWebhook: fbVerify, receiveWebhook: fbReceive } = require('./webhoo
 const taskCreated  = require('./webhooks/taskCreated');
 const taskUpdated  = require('./webhooks/taskUpdated');
 const taskDeleted  = require('./webhooks/taskDeleted');
-const dashboardRouter = require('./api/dashboard');
+const dashboardRouter  = require('./api/dashboard');
+const campaignsRouter  = require('./api/campaigns');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +41,9 @@ app.post('/webhook/facebook', fbReceive);
 
 // ── Dashboard API ─────────────────────────────────────────────
 app.use('/api/dashboard', dashboardRouter);
+
+// ── Campaigns API (Meta Ads, cached) ──────────────────────────
+app.use('/api/campaigns', campaignsRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', async (req, res) => {
@@ -69,4 +73,6 @@ app.listen(PORT, () => {
   console.log(`  POST /webhook/task/deleted`);
   console.log(`  GET  /webhook/facebook  (FB verification)`);
   console.log(`  POST /webhook/facebook  (FB leadgen events)`);
+  console.log(`  GET  /api/campaigns/rows`);
+  console.log(`  GET  /api/campaigns/insights`);
 });

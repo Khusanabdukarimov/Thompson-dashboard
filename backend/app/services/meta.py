@@ -333,6 +333,7 @@ def ads_to_table(rows):
             "landing_page_views": b["lpv"],
             "cpm":           round(b["spend"] / impr * 1000, 2) if impr else 0.0,
             "cpc":           round(b["spend"] / clicks, 2) if clicks else 0.0,
+            "cpl":           round(b["spend"] / b["leads"], 2) if b["leads"] else 0.0,
             "ctr":           round(clicks / impr * 100, 2) if impr else 0.0,
             "hook_rate":     round(b["v3"] / impr * 100, 2) if impr else 0.0,
             "visit_rate":    round(b["lpv"] / link * 100, 2) if link else 0.0,
