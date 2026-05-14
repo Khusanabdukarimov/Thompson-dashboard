@@ -402,16 +402,20 @@ router.get('/leads', async (req, res) => {
       SELECT 
         id, full_name, phone, email, 
         ad_name, adset_name, campaign_name,
-        created_time, field_data
+        created_time, field_data, platform, is_organic
       FROM facebook_leads
       WHERE form_id = $1
       ORDER BY created_time DESC
-      LIMIT 100
+      LIMIT 1000
     `, [form_id]);
 
     const leads = rows.map(r => {
-      // Determine platform from campaign/adset naming conventions if possible, default to facebook
-      const platform = r.campaign_name?.toLowerCase().includes('ig') ? 'instagram' : 'facebook';
+      // Use platform from DB, normalize instagram to ig
+      const platform = (r.platform || 'facebook').toLowerCase();
+      const utm_source = platform === 'instagram' ? 'ig' : platform;
+      
+      // Medium logic: organic vs paid
+      const utm_medium = r.is_organic ? 'organic' : 'paid';
       
       return {
         id: r.id,
@@ -419,9 +423,9 @@ router.get('/leads', async (req, res) => {
         phone: r.phone || '',
         email: r.email || '',
         created_at: r.created_time,
-        // Synthesized UTMs as requested by user
-        utm_source: platform,
-        utm_medium: 'cpc',
+        // Synthesized UTMs matching user logic
+        utm_source,
+        utm_medium,
         utm_campaign: r.campaign_name || '',
         utm_content: r.adset_name || '',
         utm_term: r.ad_name || '',

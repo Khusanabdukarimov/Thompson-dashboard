@@ -38,7 +38,7 @@ async function fetchLead(leadgenId) {
   const token = process.env.FB_ACCESS_TOKEN;
   if (!token) throw new Error('FB_ACCESS_TOKEN is not set');
 
-  const fields = 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data';
+  const fields = 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data,platform,is_organic';
   const url = `${BASE}/${leadgenId}?fields=${fields}&access_token=${token}`;
   return httpGet(url);
 }

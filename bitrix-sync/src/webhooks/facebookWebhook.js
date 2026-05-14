@@ -59,9 +59,15 @@ async function receiveWebhook(req, res) {
           `INSERT INTO facebook_leads (
              id, form_id, ad_id, ad_name, adset_id, adset_name,
              campaign_id, campaign_name, page_id,
-             full_name, phone, email, field_data, created_time
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-           ON CONFLICT (id) DO NOTHING`,
+             full_name, phone, email, field_data, created_time,
+             platform, is_organic
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           ON CONFLICT (id) DO UPDATE SET
+             full_name = EXCLUDED.full_name,
+             phone = EXCLUDED.phone,
+             field_data = EXCLUDED.field_data,
+             platform = EXCLUDED.platform,
+             is_organic = EXCLUDED.is_organic`,
           [
             leadgenId,
             raw.form_id     || null,
@@ -77,6 +83,8 @@ async function receiveWebhook(req, res) {
             fields.email    || null,
             JSON.stringify(fields),
             raw.created_time ? new Date(raw.created_time) : new Date(),
+            raw.platform || 'facebook',
+            !!raw.is_organic
           ]
         );
 
