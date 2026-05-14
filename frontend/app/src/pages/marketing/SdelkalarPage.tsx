@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   RefreshCw, Search, ChevronLeft, ChevronRight,
   TrendingUp, DollarSign, XCircle, CheckCircle, Percent,
@@ -103,7 +103,7 @@ export default function SdelkalarPage() {
   const listQ = useQuery({
     queryKey: ["deals-list", from, to, search, status, page],
     queryFn: () => getDealsList({ from, to, search: search || undefined, status: status || undefined, page, limit: LIMIT }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const refresh = useCallback(() => {
