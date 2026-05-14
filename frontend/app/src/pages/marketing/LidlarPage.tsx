@@ -60,7 +60,7 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
   const gid  = `spk${variant}${color.replace(/[^a-z0-9]/gi, "")}`;
   const last = pts[pts.length - 1];
   return (
-    <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: "100%", height: 60, display: "block" }}>
+    <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: "100%", height: 40, display: "block" }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%"   stopColor={color} stopOpacity="0.25" />
@@ -93,23 +93,23 @@ function GradCard({ gradient, border, shadow, icon, title, children, sparkColor,
       border: `1px solid ${border}`,
       boxShadow: shadow,
       borderRadius: 16,
-      padding: "24px 24px 0 24px",
+      padding: "16px 16px 0 16px",
       display: "flex",
       flexDirection: "column",
       overflow: "hidden",
-      minHeight: 200,
+      maxHeight: 160,
     }}>
       <div style={{
-        width: 48, height: 48, borderRadius: "50%",
+        width: 36, height: 36, borderRadius: "50%",
         background: border.replace(/[\d.]+\)$/, "0.18)"),
         display: "flex", alignItems: "center", justifyContent: "center",
-        marginBottom: 12, flexShrink: 0,
+        marginBottom: 8, flexShrink: 0,
       }}>
         {icon}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 3 }}>{title}</div>
       {children}
-      <div style={{ marginTop: "auto", marginLeft: -24, marginRight: -24 }}>
+      <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
         <Sparkline color={sparkColor} variant={sparkVariant} />
       </div>
     </div>
@@ -218,191 +218,192 @@ export default function LidlarPage() {
 
         {/* ── Row 1 — 4 gradient KPI cards ── */}
         {isLoading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
             {[0,1,2,3].map((i) => (
-              <div key={i} style={{ height: 200, borderRadius: 16, background: "#111827", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div key={i} style={{ height: 160, borderRadius: 16, background: "#111827", animation: "pulse 1.5s ease-in-out infinite" }} />
             ))}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 16 }}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}
                className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
 
-            {/* Card 1 – Total Leads */}
+            {/* Card 1 – Umumiy Lidlar */}
             <GradCard
               gradient="linear-gradient(135deg, #0d1b4a 0%, #1a3a7a 100%)"
               border="rgba(33,150,243,0.3)"
               shadow="0 4px 20px rgba(33,150,243,0.15)"
-              icon={<Users size={24} style={{ color: "#2196F3" }} />}
-              title="Total Leads"
+              icon={<Users size={20} style={{ color: "#2196F3" }} />}
+              title="Umumiy Lidlar"
               sparkColor="#2196F3"
               sparkVariant={0}
             >
-              <div style={{ fontSize: 46, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 6 }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 3 }}>
                 {fmtNum(total)}
               </div>
-              <div style={{ fontSize: 12, color: "#9E9E9E" }}>Umumiy Lid</div>
+              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Umumiy Lid</div>
             </GradCard>
 
-            {/* Card 2 – Qualified Leads */}
+            {/* Card 2 – Sifatli Lidlar */}
             <GradCard
               gradient="linear-gradient(135deg, #002a2a 0%, #005555 100%)"
               border="rgba(0,188,212,0.3)"
               shadow="0 4px 20px rgba(0,188,212,0.15)"
-              icon={<Star size={24} style={{ color: "#00BCD4" }} />}
-              title="Qualified Leads"
+              icon={<Star size={20} style={{ color: "#00BCD4" }} />}
+              title="Sifatli Lidlar"
               sparkColor="#00BCD4"
               sparkVariant={1}
             >
-              <div style={{ fontSize: 46, fontWeight: 800, color: "#00BCD4", lineHeight: 1.1, marginBottom: 6 }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: "#00BCD4", lineHeight: 1.1, marginBottom: 3 }}>
                 {fmtNum(sifatliLid)}
               </div>
-              <div style={{ fontSize: 12, color: "#9E9E9E" }}>Sifatli Lid</div>
+              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Sifatli Lid</div>
             </GradCard>
 
-            {/* Card 3 – Consultations */}
+            {/* Card 3 – Konsultatsiyalar */}
             <GradCard
               gradient="linear-gradient(135deg, #1a0033 0%, #3d1a6e 100%)"
               border="rgba(156,39,176,0.3)"
               shadow="0 4px 20px rgba(156,39,176,0.15)"
-              icon={<Calendar size={24} style={{ color: "#9C27B0" }} />}
-              title="Consultations"
+              icon={<Calendar size={20} style={{ color: "#9C27B0" }} />}
+              title="Konsultatsiyalar"
               sparkColor="#9C27B0"
               sparkVariant={2}
             >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6, lineHeight: 1.1, marginBottom: 4 }}>
-                <span style={{ fontSize: 46, fontWeight: 800, color: "#4CAF50" }}>{fmtNum(konsultBelgilandi)}</span>
-                <span style={{ fontSize: 32, fontWeight: 700, color: "#fff"   }}>/</span>
-                <span style={{ fontSize: 46, fontWeight: 800, color: "#fff"   }}>{fmtNum(konsultOtkazildi)}</span>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 5, lineHeight: 1.1, marginBottom: 3 }}>
+                <span style={{ fontSize: 36, fontWeight: 800, color: "#4CAF50" }}>{fmtNum(konsultBelgilandi)}</span>
+                <span style={{ fontSize: 24, fontWeight: 700, color: "#fff"   }}>/</span>
+                <span style={{ fontSize: 36, fontWeight: 800, color: "#fff"   }}>{fmtNum(konsultOtkazildi)}</span>
               </div>
-              <div style={{ fontSize: 11, marginBottom: 2 }}>
-                <span style={{ color: "#4CAF50" }}>Scheduled</span>
+              <div style={{ fontSize: 10, marginBottom: 1 }}>
+                <span style={{ color: "#4CAF50" }}>Belgilandi</span>
                 <span style={{ color: "#9E9E9E" }}> / </span>
-                <span style={{ color: "#4CAF50" }}>Conducted</span>
+                <span style={{ color: "#4CAF50" }}>O'tkazildi</span>
               </div>
-              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Konsultatsiya Belgilandi / O'tkazildi</div>
             </GradCard>
 
-            {/* Card 4 – Final Conversion */}
+            {/* Card 4 – Yakuniy Konversiya */}
             <GradCard
               gradient="linear-gradient(135deg, #0a2e0a 0%, #1b5e20 100%)"
               border="rgba(76,175,80,0.3)"
               shadow="0 4px 20px rgba(76,175,80,0.15)"
-              icon={<TrendingUp size={24} style={{ color: "#4CAF50" }} />}
-              title="Final Conversion"
+              icon={<TrendingUp size={20} style={{ color: "#4CAF50" }} />}
+              title="Yakuniy Konversiya"
               sparkColor="#4CAF50"
               sparkVariant={3}
             >
-              <div style={{ fontSize: 46, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 6 }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 3 }}>
                 {overallConvPct.toFixed(1)}%
               </div>
-              <div style={{ fontSize: 12, color: "#9E9E9E" }}>Konversiya</div>
+              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Konversiya</div>
             </GradCard>
           </div>
         )}
 
         {/* ── Row 2 — Funnel Efficiency + Discarded ── */}
         {!isLoading && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, marginBottom: 20 }}
-               className="grid-cols-1 lg:grid-cols-[1fr_320px]">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 12, marginBottom: 16 }}
+               className="grid-cols-1 lg:grid-cols-[1fr_280px]">
 
-            {/* Funnel Efficiency */}
+            {/* Voronka samaradorligi */}
             <div style={{
               background: "#111827",
               border: "1px solid #2a2a4a",
               borderRadius: 16,
-              padding: 28,
+              padding: 16,
+              maxHeight: 140,
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
-                <Filter size={18} style={{ color: "#9E9E9E" }} />
-                <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>Funnel Efficiency</span>
-                <span style={{ fontSize: 12, color: "#9E9E9E", marginLeft: 4 }}>Konversiya ko'rsatkichlari</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <Filter size={15} style={{ color: "#9E9E9E" }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Voronka samaradorligi</span>
+                <span style={{ fontSize: 11, color: "#9E9E9E", marginLeft: 2 }}>Konversiya ko'rsatkichlari</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
 
                 {/* Metric 1 */}
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{
-                    width: 56, height: 56, borderRadius: "50%", flexShrink: 0,
+                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
                     background: "rgba(0,188,212,0.15)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <Percent size={24} style={{ color: "#00BCD4" }} />
+                    <Percent size={18} style={{ color: "#00BCD4" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 6 }}>Sifatli Konversiya</div>
-                    <div style={{ fontSize: 32, fontWeight: 800, color: "#00BCD4", lineHeight: 1.1, marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 3 }}>Sifatli Konversiya</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: "#00BCD4", lineHeight: 1.1, marginBottom: 3 }}>
                       {sifatliKonvPct.toFixed(1)}%
                     </div>
-                    <div style={{ fontSize: 11, color: "#9E9E9E" }}>Qualified / Total Leads</div>
+                    <div style={{ fontSize: 10, color: "#9E9E9E" }}>Sifatli / Umumiy</div>
                   </div>
                 </div>
 
                 {/* Metric 2 */}
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{
-                    width: 56, height: 56, borderRadius: "50%", flexShrink: 0,
+                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
                     background: "rgba(76,175,80,0.15)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <ArrowLeftRight size={24} style={{ color: "#4CAF50" }} />
+                    <ArrowLeftRight size={18} style={{ color: "#4CAF50" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 6 }}>Lead to Consultation</div>
-                    <div style={{ fontSize: 32, fontWeight: 800, color: "#4CAF50", lineHeight: 1.1, marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 3 }}>Lid → Konsultatsiya</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: "#4CAF50", lineHeight: 1.1, marginBottom: 3 }}>
                       {leadToConsultPct.toFixed(1)}%
                     </div>
-                    <div style={{ fontSize: 11, color: "#9E9E9E" }}>Umumiy → K.Belgilandi</div>
+                    <div style={{ fontSize: 10, color: "#9E9E9E" }}>Umumiy → K.Belgilandi</div>
                   </div>
                 </div>
 
                 {/* Metric 3 */}
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{
-                    width: 56, height: 56, borderRadius: "50%", flexShrink: 0,
+                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
                     background: "rgba(76,175,80,0.15)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <Target size={24} style={{ color: "#4CAF50" }} />
+                    <Target size={18} style={{ color: "#4CAF50" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 6 }}>Overall Conversion</div>
-                    <div style={{ fontSize: 32, fontWeight: 800, color: "#4CAF50", lineHeight: 1.1, marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 3 }}>Umumiy Konversiya</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: "#4CAF50", lineHeight: 1.1, marginBottom: 3 }}>
                       {overallConvPct.toFixed(1)}%
                     </div>
-                    <div style={{ fontSize: 11, color: "#9E9E9E" }}>Umumiy → K.O'tkazildi</div>
+                    <div style={{ fontSize: 10, color: "#9E9E9E" }}>Umumiy → K.O'tkazildi</div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Discarded / Cancelled */}
+            {/* Sifatsiz / Bekor */}
             <div style={{
               background: "linear-gradient(135deg, #2a0000 0%, #6e1a1a 100%)",
               border: "1px solid rgba(244,67,54,0.3)",
               boxShadow: "0 4px 20px rgba(244,67,54,0.15)",
               borderRadius: 16,
-              padding: "24px 24px 0 24px",
+              padding: "16px 16px 0 16px",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
+              maxHeight: 140,
             }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{
-                  width: 60, height: 60, borderRadius: "50%", flexShrink: 0,
+                  width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
                   background: "rgba(244,67,54,0.2)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                  <XCircle size={30} style={{ color: "#F44336" }} />
+                  <XCircle size={20} style={{ color: "#F44336" }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>Discarded / Cancelled</div>
-                  <div style={{ fontSize: 52, fontWeight: 800, color: "#F44336", lineHeight: 1.1, marginTop: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#fff" }}>Sifatsiz / Bekor</div>
+                  <div style={{ fontSize: 36, fontWeight: 800, color: "#F44336", lineHeight: 1.1, marginTop: 3 }}>
                     {fmtNum(sifatsizBekor)}
                   </div>
-                  <div style={{ fontSize: 12, color: "#9E9E9E", marginTop: 4 }}>Sifatsiz / Bekor</div>
+                  <div style={{ fontSize: 11, color: "#9E9E9E", marginTop: 2 }}>Bekor qilingan lidlar</div>
                 </div>
               </div>
-              <div style={{ marginTop: "auto", marginLeft: -24, marginRight: -24 }}>
+              <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
                 <Sparkline color="#F44336" variant={0} />
               </div>
             </div>
