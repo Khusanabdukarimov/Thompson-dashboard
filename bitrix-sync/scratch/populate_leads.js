@@ -1,7 +1,6 @@
 'use strict';
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const pool = require('../src/db/pool');
-const { fetchLead, extractFields } = require('../src/services/facebook');
 const axios = require('axios');
 
 const API_VERSION = process.env.FB_API_VERSION || 'v21.0';
@@ -12,18 +11,41 @@ async function run() {
   const accountId = process.env.META_AD_ACCOUNT_ID || process.env.FB_AD_ACCOUNT_ID;
   const actId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
   
-  console.log(`Fetching forms for ${actId}...`);
-  const { data: { data: forms } } = await axios.get(`${BASE}/${actId}/leadgen_forms`, {
-    params: { access_token: token, fields: 'id,name', limit: 100 }
+  console.log(`Fetching ads for ${actId} to find forms...`);
+  const { data: { data: ads } } = await axios.get(`${BASE}/${actId}/ads`, {
+    params: { 
+      access_token: token, 
+      fields: 'id,name,campaign{id,name},adset{id,name},creative{object_story_spec}',
+      limit: 200 
+    }
   });
   
-  console.log(`Found ${forms.length} forms. Fetching leads...`);
+  const formMap = new Map();
+  for (const ad of ads) {
+    const formId = ad.creative?.object_story_spec?.link_data?.call_to_action?.value?.lead_gen_form_id;
+    if (formId) {
+      formMap.set(formId, {
+        ad_id: ad.id,
+        ad_name: ad.name,
+        adset_id: ad.adset?.id,
+        adset_name: ad.adset?.name,
+        campaign_id: ad.campaign?.id,
+        campaign_name: ad.campaign?.name
+      });
+    }
+  }
   
-  for (const form of forms) {
+  console.log(`Found ${formMap.size} unique forms in ads. Fetching leads...`);
+  
+  for (const [formId, info] of formMap.entries()) {
     try {
-      console.log(`  Fetching leads for form ${form.name} (${form.id})...`);
-      const { data: { data: leads } } = await axios.get(`${BASE}/${form.id}/leads`, {
-        params: { access_token: token, fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,field_data', limit: 20 }
+      console.log(`  Fetching leads for form ${formId}...`);
+      const { data: { data: leads } } = await axios.get(`${BASE}/${formId}/leads`, {
+        params: { 
+          access_token: token, 
+          fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data', 
+          limit: 50 
+        }
       });
       
       console.log(`    Got ${leads.length} leads.`);
@@ -33,6 +55,11 @@ async function run() {
           fields[f.name] = Array.isArray(f.values) ? (f.values[0] ?? null) : null;
         }
         
+        // Use info from lead if available, fallback to ad info
+        const ad_name = raw.ad_name || info.ad_name;
+        const adset_name = raw.adset_name || info.adset_name;
+        const campaign_name = raw.campaign_name || info.campaign_name;
+
         await pool.query(
           `INSERT INTO facebook_leads (
              id, form_id, ad_id, ad_name, adset_id, adset_name,
@@ -44,13 +71,13 @@ async function run() {
              campaign_name = EXCLUDED.campaign_name`,
           [
             raw.id,
-            raw.form_id,
-            raw.ad_id,
-            raw.ad_name,
-            raw.adset_id,
-            raw.adset_name,
-            raw.campaign_id,
-            raw.campaign_name,
+            formId,
+            raw.ad_id || info.ad_id,
+            ad_name,
+            raw.adset_id || info.adset_id,
+            adset_name,
+            raw.campaign_id || info.campaign_id,
+            campaign_name,
             fields.full_name || fields.name || null,
             fields.phone_number || fields.phone || null,
             fields.email || null,
@@ -60,7 +87,7 @@ async function run() {
         );
       }
     } catch (err) {
-      console.error(`    Error fetching leads for form ${form.id}:`, JSON.stringify(err.response?.data || err.message, null, 2));
+      console.error(`    Error fetching leads for form ${formId}:`, err.response?.data || err.message);
     }
   }
   
