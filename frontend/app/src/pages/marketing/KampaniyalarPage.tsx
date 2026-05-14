@@ -5,7 +5,8 @@ import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/Button";
-import { CardChart, MultiLine, StackedBar } from "@/components/charts";
+import { CardChart, MultiLine, StackedBar, DonutChart } from "@/components/charts";
+import type { PieDatum } from "@/components/charts";
 import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import type {
@@ -262,6 +263,26 @@ export default function KampaniyalarPage() {
 
   const cpl = totals.leads ? totals.spend / totals.leads : 0;
   const ctr = totals.impr ? (totals.clicks / totals.impr) * 100 : 0;
+
+  const sourcePieData = useMemo<PieDatum[]>(() => {
+    const all = qCamp.data?.rows ?? [];
+    const fb = all.filter(r => r.platform === "facebook").reduce((s, r) => s + r.leads, 0);
+    const ig = all.filter(r => r.platform === "instagram").reduce((s, r) => s + r.leads, 0);
+    return [
+      { name: "Facebook", value: fb, color: "#3b82f6" },
+      { name: "Instagram", value: ig, color: "#a855f7" },
+    ].filter(d => d.value > 0);
+  }, [qCamp.data]);
+
+  const spendPieData = useMemo<PieDatum[]>(() => {
+    const all = qCamp.data?.rows ?? [];
+    const fb = all.filter(r => r.platform === "facebook").reduce((s, r) => s + r.spend, 0);
+    const ig = all.filter(r => r.platform === "instagram").reduce((s, r) => s + r.spend, 0);
+    return [
+      { name: "Facebook", value: Math.round(fb * 100) / 100, color: "#3b82f6" },
+      { name: "Instagram", value: Math.round(ig * 100) / 100, color: "#a855f7" },
+    ].filter(d => d.value > 0);
+  }, [qCamp.data]);
 
   const trendData = rows.map((r) => ({
     name: String(r.day),
@@ -559,6 +580,18 @@ export default function KampaniyalarPage() {
               value={fmtNum(totals.impr)}
               hint="ko'rishlar"
             />
+          </div>
+        )}
+
+        {/* Manbalar kesimida — pie charts */}
+        {!qCamp.isLoading && sourcePieData.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+            <CardChart title="Manbalar kesimida (Lidlar)" hint="FB vs Instagram" height={220}>
+              <DonutChart data={sourcePieData} height={180} />
+            </CardChart>
+            <CardChart title="Manbalar kesimida (Sarf $)" hint="FB vs Instagram" height={220}>
+              <DonutChart data={spendPieData} height={180} />
+            </CardChart>
           </div>
         )}
 

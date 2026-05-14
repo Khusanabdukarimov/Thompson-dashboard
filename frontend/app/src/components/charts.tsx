@@ -9,6 +9,9 @@ import {
   LineChart,
   Line,
   Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import type { ReactNode } from "react";
 
@@ -158,6 +161,57 @@ export function MultiLine({
         />
       ))}
     </LineChart>
+  );
+}
+
+export type PieDatum = { name: string; value: number; color: string };
+
+export function DonutChart({ data, height = 220 }: { data: PieDatum[]; height?: number }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 16, height }}>
+      <ResponsiveContainer width={height} height={height}>
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={height * 0.28}
+            outerRadius={height * 0.42}
+            paddingAngle={3}
+            dataKey="value"
+          >
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip
+            formatter={(v: number) => [`${v} (${total ? ((v / total) * 100).toFixed(1) : 0}%)`, ""]}
+            {...TOOLTIP_STYLE}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+        {data.map((d) => (
+          <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: d.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: "var(--text2)", flex: 1 }}>{d.name}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", fontFamily: "monospace" }}>
+              {d.value.toLocaleString("ru-RU")}
+            </span>
+            <span style={{ fontSize: 11, color: "var(--text3)", width: 38, textAlign: "right" }}>
+              {total ? `${((d.value / total) * 100).toFixed(1)}%` : "0%"}
+            </span>
+          </div>
+        ))}
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, marginTop: 2, display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 11, color: "var(--text3)" }}>Jami</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", fontFamily: "monospace" }}>
+            {total.toLocaleString("ru-RU")}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
