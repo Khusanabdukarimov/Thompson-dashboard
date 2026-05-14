@@ -15,7 +15,7 @@ function token() {
 }
 
 function accountId() {
-  const id = process.env.FB_AD_ACCOUNT_ID || '';
+  const id = process.env.META_AD_ACCOUNT_ID || process.env.FB_AD_ACCOUNT_ID || '';
   return id.startsWith('act_') ? id : `act_${id}`;
 }
 
