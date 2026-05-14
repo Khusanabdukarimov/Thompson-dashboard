@@ -104,30 +104,52 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
 }
 
 // ── Sparkline ─────────────────────────────────────────────────────
+// Catmull-Rom → cubic Bézier smooth path
+function smoothPath(pts: [number, number][]): string {
+  if (pts.length < 2) return "";
+  const d: string[] = [`M ${pts[0][0]},${pts[0][1]}`];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d.push(`C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2[0]},${p2[1]}`);
+  }
+  return d.join(" ");
+}
+
 function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) {
-  // Wide amplitude — y ranges 5–55 in a 60-unit viewBox for clear peaks/valleys
+  // Sine-wave–style control points: y=0 is top, y=60 is bottom; peaks ~10, troughs ~52
   const variants: [number, number][][] = [
-    [[0,55],[22,30],[45,50],[70,15],[95,42],[120,10],[145,35],[165,8],[185,22],[200,12]],
-    [[0,48],[20,18],[42,52],[65,12],[90,45],[115,8],[140,40],[162,6],[182,28],[200,8]],
-    [[0,52],[25,55],[50,20],[75,48],[100,10],[125,45],[148,15],[168,38],[188,6],[200,10]],
-    [[0,58],[25,35],[48,55],[72,22],[96,50],[122,14],[148,42],[168,10],[188,30],[200,15]],
+    // 0: Blue — classic 2.5-cycle sine wave
+    [[0,42],[25,54],[50,28],[75,10],[100,28],[125,52],[150,30],[175,10],[200,28]],
+    // 1: Teal — phase-shifted, starts at mid-rise
+    [[0,28],[25,10],[50,30],[75,52],[100,32],[125,10],[150,32],[175,54],[200,36]],
+    // 2: Purple — slightly stretched, 2 full cycles
+    [[0,36],[30,52],[60,28],[90,10],[120,28],[150,52],[175,32],[200,12]],
+    // 3: Green — upward-trending wave (used for conversion)
+    [[0,54],[30,46],[58,32],[85,18],[110,30],[135,42],[158,26],[180,14],[200,12]],
   ];
-  const pts  = variants[variant % variants.length];
-  const poly = pts.map(([x, y]) => `${x},${y}`).join(" ");
-  const area = `0,60 ${poly} 200,60`;
-  const gid  = `spk${variant}${color.replace(/[^a-z0-9]/gi, "")}`;
+  const pts = variants[variant % variants.length];
+  const linePath = smoothPath(pts);
+  const areaPath = `${linePath} L 200,60 L 0,60 Z`;
   const last = pts[pts.length - 1];
+  const gid = `spk${variant}${color.replace(/[^a-z0-9]/gi, "")}`;
   return (
     <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: "100%", height: 80, display: "block" }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={color} stopOpacity="0.45" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.04" />
+          <stop offset="0%"   stopColor={color} stopOpacity="0.52" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.03" />
         </linearGradient>
       </defs>
-      <polygon  points={area} fill={`url(#${gid})`} />
-      <polyline points={poly}  fill="none" stroke={color} strokeWidth="2.5"
-                strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+      <path d={areaPath} fill={`url(#${gid})`} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round" opacity="0.95" />
       <circle cx={last[0]} cy={last[1]} r="3.5" fill={color} />
     </svg>
   );
