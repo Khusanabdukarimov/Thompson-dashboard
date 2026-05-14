@@ -354,6 +354,10 @@ router.get('/forms', async (req, res) => {
       const formsList = [];
       for (const [fid, adsetInfo] of Object.entries(camp.forms)) {
         const fd = formDetails[fid] || {};
+        
+        // Only include active forms
+        if (fd.status !== 'ACTIVE') continue;
+
         formsList.push({
           form_id: fid,
           form_name: fd.name || fid,
@@ -364,6 +368,9 @@ router.get('/forms', async (req, res) => {
           adset_name: adsetInfo.adset_name
         });
       }
+      
+      if (formsList.length === 0) continue;
+
       formsList.sort((a,b) => a.form_name.localeCompare(b.form_name));
       result.push({
         campaign_id: camp.campaign_id,
