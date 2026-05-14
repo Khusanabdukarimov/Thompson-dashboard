@@ -70,7 +70,7 @@ function AvatarCircle({ name, size = 36 }: { name: string; size?: number }) {
 function MiniBar({ value, max, color, height = 3 }: { value: number; max: number; color: string; height?: number }) {
   const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div style={{ height, borderRadius: 2, background: "rgba(255,255,255,0.08)", marginTop: 5, overflow: "hidden" }}>
+    <div style={{ height, borderRadius: 2, background: "var(--bg4)", marginTop: 5, overflow: "hidden" }}>
       <div style={{ height: "100%", width: `${w}%`, background: color, borderRadius: 2, transition: "width 0.3s" }} />
     </div>
   );
@@ -85,7 +85,7 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
     return (
       <div style={{ width: size, height: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <svg width={size} height={size} style={{ position: "absolute" }}>
-          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#2a2a3a" strokeWidth={sw} />
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={sw} />
         </svg>
         <span style={{ fontSize: 10, color: "#555", zIndex: 1 }}>—</span>
       </div>
@@ -95,7 +95,7 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
   return (
     <div style={{ width: size, height: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <svg width={size} height={size} style={{ position: "absolute", transform: "rotate(-90deg)" }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#2a2a3a" strokeWidth={sw} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={sw} />
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#4CAF50" strokeWidth={sw}
                 strokeDasharray={circ} strokeDashoffset={fill} strokeLinecap="round" />
       </svg>
@@ -190,12 +190,12 @@ function GradCard({ gradient, border, shadow, icon, title, children, sparkColor,
 const TH = (color: string, minW = 140): React.CSSProperties => ({
   padding: "11px 14px", textAlign: "left", fontSize: 12, fontWeight: 700,
   color, textTransform: "uppercase", letterSpacing: "0.04em",
-  background: "#0f1623", borderBottom: "1px solid rgba(255,255,255,0.06)",
+  background: "var(--bg2)", borderBottom: "1px solid var(--border)",
   whiteSpace: "nowrap", minWidth: minW,
 });
 const TD: React.CSSProperties = {
   padding: "10px 14px", verticalAlign: "middle",
-  borderBottom: "1px solid rgba(255,255,255,0.04)",
+  borderBottom: "1px solid var(--border)",
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ export default function LidlarPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px]" style={{ background: "#0a0a1a" }}>
+      <div className="flex-1 overflow-y-auto px-[22px] py-[18px]" style={{ background: "var(--bg)" }}>
 
         {/* ── Filter panel ── */}
         <div ref={filterRef} style={{ position: "relative", marginBottom: 20 }}>
@@ -320,8 +320,8 @@ export default function LidlarPage() {
             onClick={() => { setPending({ ...applied }); setFilterOpen((o) => !o); }}
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
-              background: "#111827",
-              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 ? "rgba(33,150,243,0.5)" : "#2a2a4a"}`,
+              background: "var(--bg2)",
+              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
               borderRadius: filterOpen ? "10px 10px 0 0" : 10,
               padding: "10px 16px", color: "#fff", fontSize: 13, fontWeight: 500,
               cursor: "pointer", textAlign: "left",
@@ -348,13 +348,13 @@ export default function LidlarPage() {
           {filterOpen && (
             <div style={{
               position: "absolute", left: 0, right: 0, zIndex: 100,
-              background: "#111827", border: "1px solid #2a2a4a", borderTop: "none",
+              background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none",
               borderRadius: "0 0 12px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
             }}>
               <div style={{ display: "flex" }}>
                 {/* Left sidebar — presets */}
                 <div style={{
-                  width: "26%", borderRight: "1px solid rgba(255,255,255,0.06)",
+                  width: "26%", borderRight: "1px solid var(--border)",
                   padding: "16px 12px", flexShrink: 0,
                 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
@@ -373,7 +373,7 @@ export default function LidlarPage() {
                     Barcha lidlar
                   </button>
                   <div style={{
-                    border: "1px dashed #2a2a4a", borderRadius: 8,
+                    border: "1px dashed var(--border)", borderRadius: 8,
                     padding: "12px 10px", color: "#444", fontSize: 11, textAlign: "center",
                   }}>
                     Saqlangan filtr yo'q
@@ -404,8 +404,8 @@ export default function LidlarPage() {
                                 end_date:   p.end   || undefined,
                               }))}
                               style={{
-                                background: active ? "#2196F3" : "#1a1f2e",
-                                border: `1px solid ${active ? "#2196F3" : "#2a2a4a"}`,
+                                background: active ? "#2196F3" : "var(--bg3)",
+                                border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
                                 color: active ? "#fff" : "#9E9E9E",
                                 borderRadius: 20, padding: "5px 14px",
                                 fontSize: 12, fontWeight: active ? 600 : 400,
@@ -431,7 +431,7 @@ export default function LidlarPage() {
                         value={pending.start_date ?? ""}
                         onChange={(e) => setPending((p) => ({ ...p, start_date: e.target.value || undefined }))}
                         style={{
-                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
                           borderRadius: 8, color: "#fff", fontSize: 12, padding: "8px 10px",
                           outline: "none", boxSizing: "border-box",
                         }}
@@ -446,7 +446,7 @@ export default function LidlarPage() {
                         value={pending.end_date ?? ""}
                         onChange={(e) => setPending((p) => ({ ...p, end_date: e.target.value || undefined }))}
                         style={{
-                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
                           borderRadius: 8, color: "#fff", fontSize: 12, padding: "8px 10px",
                           outline: "none", boxSizing: "border-box",
                         }}
@@ -464,7 +464,7 @@ export default function LidlarPage() {
                         value={pending.responsible_id ?? ""}
                         onChange={(e) => setPending((p) => ({ ...p, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}
                         style={{
-                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
                           borderRadius: 8, color: pending.responsible_id ? "#fff" : "#555",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
@@ -484,7 +484,7 @@ export default function LidlarPage() {
                         value={pending.stage ?? ""}
                         onChange={(e) => setPending((p) => ({ ...p, stage: e.target.value || undefined }))}
                         style={{
-                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
                           borderRadius: 8, color: pending.stage ? "#fff" : "#555",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
@@ -504,7 +504,7 @@ export default function LidlarPage() {
                         value={pending.source ?? ""}
                         onChange={(e) => setPending((p) => ({ ...p, source: e.target.value || undefined }))}
                         style={{
-                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
                           borderRadius: 8, color: pending.source ? "#fff" : "#555",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
@@ -523,12 +523,12 @@ export default function LidlarPage() {
               {/* Bottom action bar */}
               <div style={{
                 display: "flex", justifyContent: "flex-end", gap: 10,
-                padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)",
+                padding: "12px 20px", borderTop: "1px solid var(--border)",
               }}>
                 <button
                   onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setFilterOpen(false); }}
                   style={{
-                    background: "#1a1f2e", border: "1px solid #2a2a4a", color: "#9E9E9E",
+                    background: "var(--bg3)", border: "1px solid var(--border)", color: "#9E9E9E",
                     borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 500, cursor: "pointer",
                   }}
                 >
@@ -551,7 +551,7 @@ export default function LidlarPage() {
         {/* ── Row 1 — 4 gradient KPI cards ── */}
         {isLoading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
-            {[0,1,2,3].map((i) => <div key={i} style={{ height: 200, borderRadius: 16, background: "#111827" }} />)}
+            {[0,1,2,3].map((i) => <div key={i} style={{ height: 200, borderRadius: 16, background: "var(--bg2)" }} />)}
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
@@ -593,7 +593,7 @@ export default function LidlarPage() {
         {/* ── Row 2 — Funnel Efficiency + Discarded ── */}
         {!isLoading && (
           <div style={{ display:"grid", gridTemplateColumns:"1fr 280px", gap:12, marginBottom:20 }}>
-            <div style={{ background:"#111827", border:"1px solid #2a2a4a", borderRadius:16, padding:16, maxHeight:140 }}>
+            <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16, maxHeight:140 }}>
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
                 <Filter size={15} style={{ color:"#9E9E9E" }} />
                 <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
@@ -639,8 +639,8 @@ export default function LidlarPage() {
         {/* ══════════════════════════════════════════════════════════
             Lid va Konversiya table
         ══════════════════════════════════════════════════════════ */}
-        <div style={{ background:"#111827", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
-          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)" }}>
             <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid va Konversiya</span>
           </div>
 
@@ -674,9 +674,9 @@ export default function LidlarPage() {
                     const konv = r.total > 0 ? (r.tashrif_buyurdi / r.total) * 100 : 0;
                     return (
                       <tr key={r.responsible_id}
-                          style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)")}>
+                          style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
                         <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44 }}>
                           {String(i + 1).padStart(2, "0")}
                         </td>
@@ -712,7 +712,7 @@ export default function LidlarPage() {
                   })}
 
                   {/* JAMI row */}
-                  <tr style={{ background:"rgba(255,255,255,0.04)", borderTop:"1px solid rgba(255,255,255,0.1)" }}>
+                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
                     <td style={{ ...TD, color:"#666" }} />
                     <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em" }}>
                       JAMI
@@ -746,8 +746,8 @@ export default function LidlarPage() {
         {/* ══════════════════════════════════════════════════════════
             Lid mas'ullar kesimida table
         ══════════════════════════════════════════════════════════ */}
-        <div style={{ background:"#111827", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
-          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid rgba(255,255,255,0.06)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid mas'ullar kesimida</span>
               <span style={{ fontSize:12, color:"#555" }}>{byUserFiltered.length} ta xodim</span>
@@ -762,7 +762,7 @@ export default function LidlarPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 style={{
                   paddingLeft:30, paddingRight:12, paddingTop:7, paddingBottom:7,
-                  background:"#0f1623", border:"1px solid #2a2a3a", borderRadius:8,
+                  background:"var(--bg)", border:"1px solid var(--border)", borderRadius:8,
                   color:"#fff", fontSize:12, outline:"none", width:180,
                 }}
               />
@@ -787,13 +787,13 @@ export default function LidlarPage() {
                 <tbody>
                   {byUserFiltered.map((u, i) => (
                     <tr key={u.responsible_id}
-                        style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)")}>
-                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"#111827" }}>
+                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
-                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"#111827", zIndex:2 }}>
+                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                           <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
                           <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
@@ -824,9 +824,9 @@ export default function LidlarPage() {
                   ))}
 
                   {/* JAMI row */}
-                  <tr style={{ background:"rgba(255,255,255,0.04)", borderTop:"1px solid rgba(255,255,255,0.1)" }}>
-                    <td style={{ ...TD, position:"sticky", left:0, background:"#1a1f2e" }} />
-                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"#1a1f2e", zIndex:2 }}>
+                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
+                    <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
                       JAMI
                     </td>
                     <td style={TD}>
@@ -873,8 +873,8 @@ export default function LidlarPage() {
             { total: 0, in_progress: 0, completed: 0, overdue: 0 }
           );
           return (
-            <div style={{ background: "#111827", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
-              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
+              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Vazifalar kesimida</span>
                 <span style={{ fontSize: 12, color: "#555" }}>{taskRows.length} ta xodim</span>
               </div>
@@ -911,9 +911,9 @@ export default function LidlarPage() {
                         const pct = r.total > 0 ? (r.completed / r.total) * 100 : 0;
                         return (
                           <tr key={r.responsible_id}
-                              style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)")}>
+                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
                             <td style={{ ...TD, color: "#555", fontSize: 13, fontWeight: 600, width: 44 }}>
                               {String(i + 1).padStart(2, "0")}
                             </td>
@@ -961,7 +961,7 @@ export default function LidlarPage() {
                       })}
 
                       {/* JAMI row */}
-                      <tr style={{ background: "rgba(255,255,255,0.04)", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
                         <td style={{ ...TD, color: "#666" }} />
                         <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                           JAMI
@@ -1021,10 +1021,10 @@ export default function LidlarPage() {
             barColor: string,
             loading: boolean,
           ) => (
-            <div style={{ background: "#111827", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
               <div style={{
                 padding: "14px 20px 12px",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                borderBottom: "1px solid var(--border)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
               }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{title}</span>
@@ -1046,7 +1046,7 @@ export default function LidlarPage() {
                           {fmtNum(r.total)}
                         </span>
                       </div>
-                      <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                      <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
                         <div style={{
                           height: "100%",
                           width: `${(r.total / max) * 100}%`,
