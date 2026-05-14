@@ -17,7 +17,7 @@ async function run() {
   let adsParams = { 
     access_token: token, 
     fields: 'id,name,campaign{id,name},adset{id,name},creative{object_story_spec}',
-    limit: 500 
+    limit: 100 
   };
 
   while (adsUrl) {
@@ -53,7 +53,7 @@ async function run() {
       let leadsParams = { 
         access_token: token, 
         fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data', 
-        limit: 500 
+        limit: 100 
       };
 
       let totalLeads = 0;
