@@ -186,7 +186,10 @@ export function DonutChart({ data, height = 220 }: { data: PieDatum[]; height?: 
             ))}
           </Pie>
           <Tooltip
-            formatter={(v: number) => [`${v} (${total ? ((v / total) * 100).toFixed(1) : 0}%)`, ""]}
+            formatter={(v) => {
+              const n = Number(v);
+              return [`${n} (${total ? ((n / total) * 100).toFixed(1) : 0}%)`, ""];
+            }}
             {...TOOLTIP_STYLE}
           />
         </PieChart>
