@@ -305,38 +305,17 @@ router.get('/forms', async (req, res) => {
 
     const adsParams = {
       access_token: token(),
-      fields: 'id,name,adset_id,campaign_id,creative{id}',
+      fields: 'id,name,campaign{id,name,objective},adset{id,name},creative{id,object_story_spec}',
       limit: 200,
       filtering: JSON.stringify([{field:"campaign.objective",operator:"IN",value:["OUTCOME_LEADS","LEAD_GENERATION"]}])
     };
     const ads = await paginate(`${BASE}/${accountId()}/ads`, adsParams);
 
-    const creativeIds = [...new Set(ads.map(a => a.creative && a.creative.id).filter(Boolean))];
-    const campIds = [...new Set(ads.map(a => a.campaign_id).filter(Boolean))];
-    const adsetIds = [...new Set(ads.map(a => a.adset_id).filter(Boolean))];
-
-    async function fetchMany(ids, fields) {
-      const result = {};
-      const chunk = 50;
-      for (let i = 0; i < ids.length; i += chunk) {
-        const c = ids.slice(i, i + chunk);
-        const { data } = await axios.get(BASE, { params: { access_token: token(), ids: c.join(','), fields } });
-        for (const [id, node] of Object.entries(data)) {
-          if (node && node.id) result[id] = node;
-        }
-      }
-      return result;
-    }
-
-    const [creativeMap, campMap, adsetMap] = await Promise.all([
-      fetchMany(creativeIds, 'id,object_story_spec'),
-      fetchMany(campIds, 'id,name,objective'),
-      fetchMany(adsetIds, 'id,name,status')
-    ]);
-
     const campaignMap = {};
+    const formIdsToFetch = new Set();
+
     for (const ad of ads) {
-      const creative = creativeMap[ad.creative && ad.creative.id] || {};
+      const creative = ad.creative || {};
       const spec = creative.object_story_spec || {};
       let formId = null;
       for (const section of ['video_data', 'link_data']) {
@@ -345,22 +324,30 @@ router.get('/forms', async (req, res) => {
       }
       if (!formId) continue;
       
-      const camp = campMap[ad.campaign_id] || {};
-      const adset = adsetMap[ad.adset_id] || {};
-      const cId = camp.id || ad.campaign_id;
+      const camp = ad.campaign || {};
+      const adset = ad.adset || {};
+      const cId = camp.id;
+      if (!cId) continue;
       
       if (!campaignMap[cId]) {
         campaignMap[cId] = { campaign_id: cId, campaign_name: camp.name || '', objective: camp.objective || '', forms: {} };
       }
       campaignMap[cId].forms[formId] = {
         form_id: formId,
-        adset_id: adset.id || ad.adset_id,
+        adset_id: adset.id || '',
         adset_name: adset.name || ''
       };
+      formIdsToFetch.add(formId);
     }
 
-    const allFormIds = [...new Set(Object.values(campaignMap).flatMap(c => Object.keys(c.forms)))];
-    const formDetails = await fetchMany(allFormIds, 'id,name,status,leads_count,created_time');
+    const allFormIds = [...formIdsToFetch];
+    const formDetails = {};
+    const chunk = 50;
+    for (let i = 0; i < allFormIds.length; i += chunk) {
+      const c = allFormIds.slice(i, i + chunk);
+      const { data } = await axios.get(BASE, { params: { access_token: token(), ids: c.join(','), fields: 'id,name,status,leads_count,created_time' } });
+      Object.assign(formDetails, data);
+    }
 
     const result = [];
     for (const camp of Object.values(campaignMap)) {
@@ -388,10 +375,10 @@ router.get('/forms', async (req, res) => {
     result.sort((a,b) => a.campaign_name.localeCompare(b.campaign_name));
     
     const payload = { count: result.length, campaigns: result };
-    await setCache('campaigns/forms', 0, 0, payload);
+    await setCache('campaigns/forms', 0, 0, payload, 3600); // cache for 1 hour
     return res.json(payload);
   } catch (err) {
-    console.error('[campaigns/forms]', err.message);
+    console.error('[campaigns/forms]', err.response?.data || err.message);
     res.status(500).json({ error: err.message });
   }
 });
