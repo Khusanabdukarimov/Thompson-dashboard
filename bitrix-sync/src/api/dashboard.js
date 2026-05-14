@@ -345,4 +345,108 @@ router.get('/junk-reasons', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/dashboard/deals-stats?from=&to=
+ * KPI summary cards for Sdelkalar page.
+ */
+router.get('/deals-stats', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COUNT(d.id)::int                                            AS total,
+         COUNT(d.id) FILTER (WHERE s.is_won = true)::int            AS won,
+         COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int AS lost,
+         COUNT(d.id) FILTER (WHERE s.is_final = false)::int         AS in_progress,
+         COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won = true), 0)::numeric  AS jami_sotuv,
+         COALESCE(AVG(d.opportunity) FILTER (WHERE s.is_won = true), 0)::numeric  AS ortacha_chek,
+         CASE WHEN COUNT(d.id) > 0
+              THEN ROUND((COUNT(d.id) FILTER (WHERE s.is_won = true) * 100.0 / COUNT(d.id))::numeric, 1)
+              ELSE 0 END                                             AS konversiya
+       FROM deals d
+       JOIN stages s ON s.id = d.stage_id
+       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR d.date_create::date <= $2::date)`,
+      [from || null, to || null]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[dashboard/deals-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/deals-list?from=&to=&page=1&limit=20&search=&status=
+ * Paginated individual deals for Sdelkalar page.
+ */
+router.get('/deals-list', async (req, res) => {
+  const { from, to, search, status } = req.query;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(100, parseInt(req.query.limit) || 20);
+  const offset = (page - 1) * limit;
+
+  const statusFilter =
+    status === 'won'  ? 'AND s.is_won = true' :
+    status === 'lost' ? 'AND s.is_final = true AND s.is_won = false' :
+    status === 'active' ? 'AND s.is_final = false' : '';
+
+  const searchFilter = search
+    ? `AND (r.full_name ILIKE '%' || $5 || '%' OR d.source_id ILIKE '%' || $5 || '%' OR ph.phone ILIKE '%' || $5 || '%')`
+    : '';
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         d.id,
+         r.full_name                  AS responsible,
+         COALESCE(ph.phone, '—')      AS mijoz,
+         d.opportunity::numeric       AS summa,
+         COALESCE(d.source_id, '—')   AS manba,
+         d.date_create                AS sana,
+         s.name                       AS stage_name,
+         s.is_won,
+         s.is_final
+       FROM deals d
+       JOIN stages s ON s.id = d.stage_id
+       LEFT JOIN responsibles r ON r.id = d.responsible_id
+       LEFT JOIN LATERAL (
+         SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1
+       ) ph ON true
+       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         ${statusFilter}
+         ${search ? searchFilter : ''}
+       ORDER BY d.date_create DESC
+       LIMIT $3 OFFSET $4`,
+      search ? [from || null, to || null, limit, offset, search] : [from || null, to || null, limit, offset]
+    );
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM deals d
+       JOIN stages s ON s.id = d.stage_id
+       LEFT JOIN responsibles r ON r.id = d.responsible_id
+       LEFT JOIN LATERAL (
+         SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1
+       ) ph ON true
+       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         ${statusFilter}
+         ${search ? searchFilter : ''}`,
+      search ? [from || null, to || null, search] : [from || null, to || null]
+    );
+
+    res.json({
+      total: countRes.rows[0].total,
+      page,
+      limit,
+      items: rows,
+    });
+  } catch (err) {
+    console.error('[dashboard/deals-list]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

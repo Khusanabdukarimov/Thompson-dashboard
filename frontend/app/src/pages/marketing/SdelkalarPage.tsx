@@ -1,430 +1,343 @@
-import { useMemo, useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
-import { RefreshCw } from "lucide-react";
-import { Topbar } from "@/components/Topbar";
-import { MetricCard } from "@/components/MetricCard";
-import { Badge } from "@/components/Badge";
-import { Button } from "@/components/Button";
-import { FilterBar } from "@/components/FilterBar";
-import type {
-  FilterField,
-  FilterPreset,
-  FilterValues,
-} from "@/components/FilterBar";
-import { DataTable } from "@/components/DataTable";
-import { CardChart, SimpleBar, FunnelBars } from "@/components/charts";
 import {
-  MetricRowSkeleton,
-  FunnelSkeleton,
-  ChartCardSkeleton,
-} from "@/components/Skeleton";
-import { getDealsStats, getDealsBySource } from "@/lib/api/deals";
-import type {
-  StatsDealsByUser,
-  DealsBySource,
-  DealsFilter,
-} from "@/lib/api/deals";
-import { fmtNum, fmtMoney, fmtPct } from "@/lib/utils";
+  RefreshCw, Search, ChevronLeft, ChevronRight,
+  TrendingUp, DollarSign, XCircle, CheckCircle, Percent,
+} from "lucide-react";
+import { Topbar } from "@/components/Topbar";
+import { Button } from "@/components/Button";
+import { getDealKpiStats, getDealsList } from "@/lib/api/deals";
+import type { DealRow } from "@/lib/api/deals";
+import { fmtNum } from "@/lib/utils";
 
-const PRESETS: FilterPreset[] = [
-  { id: "all", label: "Barcha sdelkalar", pinned: true },
-  { id: "won", label: "Yopildi (won)", pinned: true },
-  { id: "lost", label: "Yo'qotildi (lost)" },
-];
+// ── Date helpers ─────────────────────────────────────────────────
+const localISO = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayISO   = () => localISO(new Date());
+const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const oneYearAgoISO = () => {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+function fmtMoney(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${fmtNum(Math.round(v))}`;
+}
+
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+// ── Status badge ─────────────────────────────────────────────────
+function StatusBadge({ row }: { row: DealRow }) {
+  if (row.is_won)   return <span style={badge("green")}>Yutuldi</span>;
+  if (row.is_final) return <span style={badge("red")}>Bekor</span>;
+  return <span style={badge("amber")}>Jarayonda</span>;
+}
+
+function badge(color: "green" | "red" | "amber") {
+  const map = {
+    green: { bg: "rgba(16,185,129,0.12)", color: "#10b981", border: "rgba(16,185,129,0.25)" },
+    red:   { bg: "rgba(239,68,68,0.12)",  color: "#ef4444", border: "rgba(239,68,68,0.25)" },
+    amber: { bg: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "rgba(245,158,11,0.25)" },
+  }[color];
+  return {
+    display: "inline-flex", alignItems: "center",
+    padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+    background: map.bg, color: map.color, border: `1px solid ${map.border}`,
+  } as React.CSSProperties;
+}
+
+// ── KPI card ─────────────────────────────────────────────────────
+type CardDef = {
+  label: string;
+  value: string;
+  sub?: string;
+  gradient: string;
+  icon: React.ReactNode;
 };
 
+function KpiCard({ card }: { card: CardDef }) {
+  return (
+    <div style={{
+      borderRadius: 12, padding: "16px 18px",
+      background: card.gradient,
+      display: "flex", flexDirection: "column", gap: 6,
+      minWidth: 0,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>{card.label}</span>
+        <span style={{ opacity: 0.6 }}>{card.icon}</span>
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>{card.value}</div>
+      {card.sub && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{card.sub}</div>}
+    </div>
+  );
+}
+
+// ── Table styles ─────────────────────────────────────────────────
+const TH: React.CSSProperties = {
+  padding: "10px 12px", fontSize: 11, fontWeight: 600,
+  color: "var(--text3)", textAlign: "left", whiteSpace: "nowrap",
+  background: "var(--bg2)", borderBottom: "1px solid var(--border)",
+  position: "sticky", top: 0,
+};
+const TD: React.CSSProperties = {
+  padding: "9px 12px", fontSize: 12.5, color: "var(--text)",
+  borderBottom: "1px solid var(--border)", whiteSpace: "nowrap",
+};
+
+// ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
-  const [activePreset, setActivePreset] = useState<string | null>("all");
+  const [from, setFrom]     = useState(daysAgoISO(365));
+  const [to,   setTo]       = useState(todayISO());
   const [search, setSearch] = useState("");
-  const [values, setValues] = useState<FilterValues>({
-    start_date: oneYearAgoISO(),
-    end_date: todayISO(),
+  const [status, setStatus] = useState<"" | "won" | "lost" | "active">("");
+  const [page, setPage]     = useState(1);
+  const LIMIT = 20;
+
+  const kpiQ = useQuery({
+    queryKey: ["deals-kpi", from, to],
+    queryFn: () => getDealKpiStats({ from, to }),
   });
 
-  const apiFilter: DealsFilter = useMemo(
-    () => ({
-      start_date: values.start_date,
-      end_date: values.end_date,
-      assigned_by: values.assigned_by ? Number(values.assigned_by) : undefined,
-      stage_id: values.stage_id,
-      source_id: values.source_id,
-    }),
-    [values],
-  );
-
-  const statsQ = useQuery({
-    queryKey: ["stats/deals", apiFilter],
-    queryFn: () => getDealsStats(apiFilter),
+  const listQ = useQuery({
+    queryKey: ["deals-list", from, to, search, status, page],
+    queryFn: () => getDealsList({ from, to, search: search || undefined, status: status || undefined, page, limit: LIMIT }),
+    keepPreviousData: true,
   });
 
-  const sourceQ = useQuery({
-    queryKey: ["stats/deals/by-source", apiFilter],
-    queryFn: () => getDealsBySource(apiFilter),
-  });
+  const refresh = useCallback(() => {
+    kpiQ.refetch();
+    listQ.refetch();
+  }, [kpiQ, listQ]);
 
-  const fields: FilterField[] = useMemo(() => {
-    const users = statsQ.data?.users ?? [];
-    const stages = statsQ.data?.stage_names ?? {};
-    const sources = sourceQ.data?.source_names ?? {};
-    return [
-      { key: "start_date", label: "Sanadan", type: "date" },
-      { key: "end_date", label: "Sanagacha", type: "date" },
-      {
-        key: "assigned_by",
-        label: "Mas'ul",
-        type: "select",
-        options: users.map((u) => ({
-          value: u.id,
-          label: u.name || `User ${u.id}`,
-        })),
-      },
-      {
-        key: "stage_id",
-        label: "Bosqich",
-        type: "select",
-        options: Object.entries(stages).map(([v, l]) => ({
-          value: v,
-          label: l,
-        })),
-      },
-      {
-        key: "source_id",
-        label: "Manba",
-        type: "select",
-        options: Object.entries(sources).map(([v, l]) => ({
-          value: v,
-          label: l,
-        })),
-      },
-    ];
-  }, [statsQ.data, sourceQ.data]);
+  const kpi = kpiQ.data;
+  const totalPages = listQ.data ? Math.ceil(listQ.data.total / LIMIT) : 1;
 
-  const byUserFiltered = useMemo(() => {
-    let list = statsQ.data?.by_user ?? [];
-    if (activePreset === "won") {
-      list = list.filter((u) =>
-        Object.entries(u.by_stage).some(
-          ([k, v]) => k.toUpperCase().includes("WON") && v > 0,
-        ),
-      );
-    } else if (activePreset === "lost") {
-      list = list.filter((u) =>
-        Object.entries(u.by_stage).some(
-          ([k, v]) => k.toUpperCase().includes("LOSE") && v > 0,
-        ),
-      );
-    }
-    const s = search.trim().toLowerCase();
-    return s ? list.filter((u) => u.name.toLowerCase().includes(s)) : list;
-  }, [statsQ.data, search, activePreset]);
-
-  const userColumns = useMemo<ColumnDef<StatsDealsByUser, unknown>[]>(
-    () => [
-      {
-        header: "Mas'ul",
-        accessorKey: "name",
-        cell: (c) => {
-          const name = c.getValue<string>() || `User ${c.row.original.id}`;
-          const initials =
-            name
-              .split(" ")
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((s) => s[0])
-              .join("")
-              .toUpperCase() || "?";
-          return (
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-blue-bg text-blue text-[10px] font-bold flex items-center justify-center border-2 border-bg2 shadow-xs">
-                {initials}
-              </div>
-              <span className="font-medium">{name}</span>
-            </div>
-          );
-        },
-      },
-      {
-        header: "Sdelkalar",
-        accessorKey: "total",
-        cell: (c) => (
-          <span className="mono">{fmtNum(c.getValue<number>())}</span>
-        ),
-      },
-      {
-        header: "Won",
-        accessorFn: (r) =>
-          Object.entries(r.by_stage).reduce(
-            (acc, [k, v]) => acc + (k.toUpperCase().includes("WON") ? v : 0),
-            0,
-          ),
-        cell: (c) => <Badge tone="green">{fmtNum(c.getValue<number>())}</Badge>,
-      },
-      {
-        header: "Lost",
-        accessorFn: (r) =>
-          Object.entries(r.by_stage).reduce(
-            (acc, [k, v]) => acc + (k.toUpperCase().includes("LOSE") ? v : 0),
-            0,
-          ),
-        cell: (c) => <Badge tone="red">{fmtNum(c.getValue<number>())}</Badge>,
-      },
-      {
-        header: "Won daromad",
-        accessorKey: "won_revenue",
-        cell: (c) => (
-          <span className="mono text-green font-semibold">
-            {fmtMoney(c.getValue<number>())}
-          </span>
-        ),
-      },
-      {
-        header: "Konversiya",
-        accessorFn: (r) => {
-          const won = Object.entries(r.by_stage).reduce(
-            (acc, [k, v]) => acc + (k.toUpperCase().includes("WON") ? v : 0),
-            0,
-          );
-          return r.total ? (won / r.total) * 100 : 0;
-        },
-        cell: (c) => {
-          const v = c.getValue<number>();
-          const tone = v >= 30 ? "green" : v >= 10 ? "amber" : "gray";
-          return <Badge tone={tone}>{fmtPct(v, 1)}</Badge>;
-        },
-      },
-    ],
-    [],
-  );
-
-  const sourceColumns = useMemo<ColumnDef<DealsBySource, unknown>[]>(
-    () => [
-      {
-        header: "Manba",
-        accessorKey: "label",
-        cell: (c) => (
-          <span className="font-medium">{c.getValue<string>()}</span>
-        ),
-      },
-      {
-        header: "Jarayonda",
-        accessorKey: "ishlaydi",
-        cell: (c) => (
-          <span className="mono">{fmtNum(c.getValue<number>())}</span>
-        ),
-      },
-      {
-        header: "Won",
-        accessorKey: "success",
-        cell: (c) => <Badge tone="green">{fmtNum(c.getValue<number>())}</Badge>,
-      },
-      {
-        header: "Lost",
-        accessorKey: "provodka",
-        cell: (c) => <Badge tone="red">{fmtNum(c.getValue<number>())}</Badge>,
-      },
-      {
-        header: "Daromad",
-        accessorKey: "revenue",
-        cell: (c) => (
-          <span className="mono text-green font-semibold">
-            {fmtMoney(c.getValue<number>())}
-          </span>
-        ),
-      },
-      {
-        header: "Konversiya",
-        accessorKey: "conversion",
-        cell: (c) => {
-          const v = c.getValue<number>();
-          const tone = v >= 30 ? "green" : v >= 10 ? "amber" : "gray";
-          return <Badge tone={tone}>{fmtPct(v, 1)}</Badge>;
-        },
-      },
-    ],
-    [],
-  );
-
-  const total = statsQ.data?.total ?? 0;
-  const won = statsQ.data?.won_count ?? 0;
-  const lost = statsQ.data?.lost_count ?? 0;
-  const wonRev = statsQ.data?.total_won_revenue ?? 0;
-  const conv = statsQ.data?.conversion_rate ?? 0;
-
-  const stageChartData = useMemo(() => {
-    const byStage = statsQ.data?.by_stage ?? {};
-    const stageNames = statsQ.data?.stage_names ?? {};
-    return Object.entries(byStage)
-      .map(([k, v]) => ({ name: stageNames[k] ?? k, value: v }))
-      .sort((a, b) => Number(b.value) - Number(a.value))
-      .slice(0, 8);
-  }, [statsQ.data]);
-
-  const funnelSteps = useMemo(() => {
-    const byStage = statsQ.data?.by_stage ?? {};
-    const inProcess = Object.entries(byStage).reduce(
-      (a, [k, v]) =>
-        a +
-        (k.toUpperCase().includes("WON") || k.toUpperCase().includes("LOSE")
-          ? 0
-          : v),
-      0,
-    );
-    return [
-      { label: "Jami sdelkalar", value: total, color: "var(--blue)" },
-      { label: "Jarayonda", value: inProcess, color: "var(--amber)" },
-      { label: "Won", value: won, color: "var(--green)" },
-      { label: "Lost", value: lost, color: "var(--red)" },
-    ];
-  }, [statsQ.data, total, won, lost]);
+  const cards: CardDef[] = [
+    {
+      label: "Yangi Sdelkalar",
+      value: fmtNum(kpi?.in_progress ?? 0),
+      sub: "Jarayondagi",
+      gradient: "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+      icon: <TrendingUp size={16} color="#fff" />,
+    },
+    {
+      label: "Yutqizilgan",
+      value: fmtNum(kpi?.lost ?? 0),
+      sub: "Bekor bo'ldi",
+      gradient: "linear-gradient(135deg,#b91c1c,#ef4444)",
+      icon: <XCircle size={16} color="#fff" />,
+    },
+    {
+      label: "Jami Sotuv",
+      value: fmtMoney(kpi?.jami_sotuv ?? 0),
+      sub: `${fmtNum(kpi?.won ?? 0)} ta yutildi`,
+      gradient: "linear-gradient(135deg,#065f46,#10b981)",
+      icon: <DollarSign size={16} color="#fff" />,
+    },
+    {
+      label: "O'rtacha Chek",
+      value: fmtMoney(kpi?.ortacha_chek ?? 0),
+      sub: "Won sdelkalar bo'yicha",
+      gradient: "linear-gradient(135deg,#92400e,#f59e0b)",
+      icon: <CheckCircle size={16} color="#fff" />,
+    },
+    {
+      label: "Konversiya",
+      value: `${kpi?.konversiya ?? 0}%`,
+      sub: `${fmtNum(kpi?.total ?? 0)} ta jami`,
+      gradient: "linear-gradient(135deg,#5b21b6,#8b5cf6)",
+      icon: <Percent size={16} color="#fff" />,
+    },
+  ];
 
   return (
     <>
       <Topbar
         title="Sdelkalar"
-        sub={`Davr: ${values.start_date ?? "—"} → ${values.end_date ?? "—"}`}
+        sub={`${from} → ${to}`}
         actions={
-          <Button
-            onClick={() => {
-              statsQ.refetch();
-              sourceQ.refetch();
-            }}
-          >
+          <Button onClick={refresh}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
       />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
-        <div className="bg-bg2 border border-border rounded-lg shadow p-3 mb-4 flex items-center gap-3">
-          <FilterBar
-            presets={PRESETS}
-            activePreset={activePreset}
-            onPresetChange={setActivePreset}
-            searchValue={search}
-            onSearchChange={setSearch}
-            fields={fields}
-            values={values}
-            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
-            onClear={() => {
-              setSearch("");
-              setValues({ start_date: oneYearAgoISO(), end_date: todayISO() });
-              setActivePreset("all");
-            }}
-            onApply={() => {
-              statsQ.refetch();
-              sourceQ.refetch();
-            }}
-            activeChipLabel={
-              activePreset && activePreset !== "all"
-                ? PRESETS.find((p) => p.id === activePreset)?.label
-                : undefined
-            }
-            onActiveChipClear={() => setActivePreset("all")}
-          />
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", background: "var(--bg)" }}>
+
+        {/* Date filter */}
+        <div style={{
+          background: "var(--bg2)", border: "1px solid var(--border)",
+          borderRadius: 10, padding: "12px 16px", marginBottom: 16,
+          display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+        }}>
+          <label style={{ fontSize: 12, color: "var(--text3)" }}>Dan:</label>
+          <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
+            style={{ fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 6, padding: "5px 8px" }} />
+          <label style={{ fontSize: 12, color: "var(--text3)" }}>Gacha:</label>
+          <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
+            style={{ fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 6, padding: "5px 8px" }} />
+          {[
+            { label: "Bugun",  f: todayISO(),     t: todayISO() },
+            { label: "7 kun",  f: daysAgoISO(7),  t: todayISO() },
+            { label: "30 kun", f: daysAgoISO(30), t: todayISO() },
+            { label: "1 yil",  f: daysAgoISO(365),t: todayISO() },
+          ].map(p => {
+            const active = p.f === from && p.t === to;
+            return (
+              <button key={p.label} onClick={() => { setFrom(p.f); setTo(p.t); setPage(1); }}
+                style={{
+                  fontSize: 11, padding: "4px 10px", borderRadius: 20, cursor: "pointer",
+                  background: active ? "#3b82f6" : "var(--bg3)",
+                  border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`,
+                  color: active ? "#fff" : "var(--text2)", fontWeight: active ? 600 : 400,
+                }}>
+                {p.label}
+              </button>
+            );
+          })}
         </div>
 
-        {statsQ.isLoading && !statsQ.data ? (
-          <MetricRowSkeleton count={5} />
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
-            <MetricCard
-              label="Jami sdelkalar"
-              value={fmtNum(total)}
-              tone="blue"
-            />
-            <MetricCard
-              label="Yopildi (won)"
-              value={fmtNum(won)}
-              tone="green"
-            />
-            <MetricCard label="Yo'qotildi" value={fmtNum(lost)} tone="red" />
-            <MetricCard
-              label="Won daromad"
-              value={fmtMoney(wonRev)}
-              tone="green"
-            />
-            <MetricCard
-              label="Konversiya"
-              value={fmtPct(conv, 1)}
-              tone="amber"
-            />
-          </div>
-        )}
+        {/* KPI cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 }}>
+          {cards.map(c => <KpiCard key={c.label} card={c} />)}
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
-          {statsQ.isLoading && !statsQ.data ? (
-            <ChartCardSkeleton height={260} />
-          ) : (
-            <CardChart
-              title="Bosqichlar bo'yicha"
-              hint={`${stageChartData.length} ta bosqich`}
-              height={260}
-            >
-              <SimpleBar data={stageChartData as never} dataKey="value" />
-            </CardChart>
-          )}
-          <div className="bg-bg2 border border-border rounded-lg shadow overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <span className="text-[13px] font-semibold">Voronka</span>
-              <span className="text-[11px] text-text3 ml-2">
-                jami → won/lost
+        {/* Deals list */}
+        <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+
+          {/* Table toolbar */}
+          <div style={{
+            padding: "12px 16px", borderBottom: "1px solid var(--border)",
+            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginRight: 4 }}>
+              Sdelkalar ro'yxati
+            </span>
+            {listQ.data && (
+              <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                · {fmtNum(listQ.data.total)} ta
               </span>
-            </div>
-            <div className="p-4">
-              {statsQ.isLoading && !statsQ.data ? (
-                <FunnelSkeleton rows={4} />
-              ) : (
-                <FunnelBars steps={funnelSteps} />
-              )}
+            )}
+
+            {/* Search */}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ position: "relative" }}>
+                <Search size={12} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text3)" }} />
+                <input
+                  value={search} placeholder="Qidirish…"
+                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  style={{
+                    paddingLeft: 26, paddingRight: 10, paddingTop: 5, paddingBottom: 5,
+                    fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)",
+                    borderRadius: 6, color: "var(--text)", width: 160,
+                  }}
+                />
+              </div>
+
+              {/* Status filter */}
+              {(["", "active", "won", "lost"] as const).map(s => {
+                const labels = { "": "Barchasi", active: "Jarayonda", won: "Yutuldi", lost: "Bekor" };
+                const active = status === s;
+                return (
+                  <button key={s} onClick={() => { setStatus(s); setPage(1); }}
+                    style={{
+                      fontSize: 11, padding: "4px 10px", borderRadius: 20, cursor: "pointer",
+                      background: active ? "#3b82f6" : "var(--bg3)",
+                      border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`,
+                      color: active ? "#fff" : "var(--text2)",
+                    }}>
+                    {labels[s]}
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {/* Table */}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["#", "Mas'ul", "Mijoz (tel)", "Summa", "Manba", "Sana", "Status"].map(h => (
+                    <th key={h} style={TH}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {listQ.isLoading && (
+                  <tr><td colSpan={7} style={{ ...TD, textAlign: "center", padding: 32, color: "var(--text3)" }}>
+                    Yuklanmoqda…
+                  </td></tr>
+                )}
+                {!listQ.isLoading && listQ.data?.items.length === 0 && (
+                  <tr><td colSpan={7} style={{ ...TD, textAlign: "center", padding: 32, color: "var(--text3)" }}>
+                    Ma'lumot topilmadi
+                  </td></tr>
+                )}
+                {listQ.data?.items.map((row: DealRow, i: number) => (
+                  <tr key={row.id}
+                    style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                    <td style={{ ...TD, color: "var(--text3)", width: 40 }}>
+                      {(page - 1) * LIMIT + i + 1}
+                    </td>
+                    <td style={TD}>{row.responsible || "—"}</td>
+                    <td style={{ ...TD, fontFamily: "monospace", fontSize: 12 }}>{row.mijoz}</td>
+                    <td style={{ ...TD, color: "#10b981", fontWeight: 600, fontFamily: "monospace" }}>
+                      {row.summa > 0 ? fmtMoney(Number(row.summa)) : "—"}
+                    </td>
+                    <td style={{ ...TD, color: "var(--text2)" }}>{row.manba}</td>
+                    <td style={{ ...TD, color: "var(--text3)", fontSize: 12 }}>{fmtDate(row.sana)}</td>
+                    <td style={TD}><StatusBadge row={row} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{
+              padding: "10px 16px", borderTop: "1px solid var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                {page} / {totalPages} sahifa · {fmtNum(listQ.data?.total ?? 0)} ta jami
+              </span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                  style={{
+                    padding: "4px 10px", borderRadius: 6, fontSize: 12, cursor: page === 1 ? "not-allowed" : "pointer",
+                    background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text2)",
+                    opacity: page === 1 ? 0.4 : 1,
+                  }}>
+                  <ChevronLeft size={13} />
+                </button>
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                  style={{
+                    padding: "4px 10px", borderRadius: 6, fontSize: 12, cursor: page === totalPages ? "not-allowed" : "pointer",
+                    background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text2)",
+                    opacity: page === totalPages ? 0.4 : 1,
+                  }}>
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        <SectionHead
-          title="Mas'ullar kesimida"
-          hint={`${byUserFiltered.length} ta xodim`}
-        />
-        <DataTable<StatsDealsByUser>
-          columns={userColumns}
-          data={byUserFiltered}
-          pageSize={10}
-          loading={statsQ.isLoading}
-        />
-
-        <div className="mt-4">
-          <SectionHead
-            title="Manbalar bo'yicha"
-            hint={`${sourceQ.data?.sources.length ?? 0} ta manba`}
-          />
-          <DataTable<DealsBySource>
-            columns={sourceColumns}
-            data={sourceQ.data?.sources ?? []}
-            pageSize={10}
-            loading={sourceQ.isLoading}
-          />
-        </div>
-
-        {(statsQ.error || sourceQ.error) && (
-          <div className="mt-4 p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
-            Xatolik: {((statsQ.error ?? sourceQ.error) as Error).message}
+        {(kpiQ.error || listQ.error) && (
+          <div style={{
+            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12,
+            background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444",
+          }}>
+            Xatolik: {((kpiQ.error ?? listQ.error) as Error).message}
           </div>
         )}
       </div>
     </>
-  );
-}
-
-function SectionHead({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2 mt-1">
-      <span className="text-[12.5px] font-semibold text-text">{title}</span>
-      {hint && <span className="text-[11px] text-text3">· {hint}</span>}
-    </div>
   );
 }

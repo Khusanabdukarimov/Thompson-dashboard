@@ -92,7 +92,6 @@ function RoleRoute({ roles, children }: { roles: DashboardRole[]; children: Reac
   return <>{children}</>;
 }
 
-const ALL:  DashboardRole[] = ["admin", "owner", "closer", "marketolog", "hunter"];
 const MGMT: DashboardRole[] = ["admin", "owner"];
 const MKT:  DashboardRole[] = ["admin", "owner", "marketolog"];
 

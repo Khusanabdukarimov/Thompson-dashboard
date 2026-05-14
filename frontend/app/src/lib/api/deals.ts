@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, API_URL_CRM } from './client';
 
 export type DealsFilter = {
   start_date?: string;
@@ -51,4 +51,52 @@ export function getDealsStats(filter: DealsFilter) {
 
 export function getDealsBySource(filter: DealsFilter) {
   return apiGet<DealsBySourceResponse>('/api/stats/deals/by-source', filter);
+}
+
+// ── New endpoints (bitrix-sync) ──────────────────────────────────
+
+export type DealKpiStats = {
+  total: number;
+  won: number;
+  lost: number;
+  in_progress: number;
+  jami_sotuv: number;
+  ortacha_chek: number;
+  konversiya: number;
+};
+
+export type DealRow = {
+  id: number;
+  responsible: string;
+  mijoz: string;
+  summa: number;
+  manba: string;
+  sana: string;
+  stage_name: string;
+  is_won: boolean;
+  is_final: boolean;
+};
+
+export type DealsListResponse = {
+  total: number;
+  page: number;
+  limit: number;
+  items: DealRow[];
+};
+
+export type DealsListFilter = {
+  from?: string;
+  to?: string;
+  search?: string;
+  status?: 'won' | 'lost' | 'active' | '';
+  page?: number;
+  limit?: number;
+};
+
+export function getDealKpiStats(filter: { from?: string; to?: string }) {
+  return apiGet<DealKpiStats>('/api/dashboard/deals-stats', filter, API_URL_CRM);
+}
+
+export function getDealsList(filter: DealsListFilter) {
+  return apiGet<DealsListResponse>('/api/dashboard/deals-list', filter as Record<string, string | number | undefined>, API_URL_CRM);
 }
