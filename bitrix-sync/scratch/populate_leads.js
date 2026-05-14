@@ -5,7 +5,7 @@ const axios = require('axios');
 
 const API_VERSION = process.env.FB_API_VERSION || 'v21.0';
 const BASE = `https://graph.facebook.com/${API_VERSION}`;
-const token = process.env.FB_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
+const token = process.env.META_ACCESS_TOKEN || process.env.FB_ACCESS_TOKEN;
 
 async function run() {
   const accountId = process.env.META_AD_ACCOUNT_ID || process.env.FB_AD_ACCOUNT_ID;
