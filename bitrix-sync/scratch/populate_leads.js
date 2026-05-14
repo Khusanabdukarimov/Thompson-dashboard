@@ -44,7 +44,7 @@ async function run() {
         params: { 
           access_token: token, 
           fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data', 
-          limit: 50 
+          limit: 1000 
         }
       });
       
@@ -60,15 +60,19 @@ async function run() {
         const adset_name = raw.adset_name || info.adset_name;
         const campaign_name = raw.campaign_name || info.campaign_name;
 
+        // Extract name/phone with smarter mapping
+        const name = fields.full_name || fields.name || fields['ismingiz:'] || fields['Ismingiz:'] || null;
+        const phone = fields.phone_number || fields.phone || fields['tel:'] || fields['Telefon raqamingiz:'] || null;
+
         await pool.query(
           `INSERT INTO facebook_leads (
              id, form_id, ad_id, ad_name, adset_id, adset_name,
              campaign_id, campaign_name, full_name, phone, email, field_data, created_time
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
            ON CONFLICT (id) DO UPDATE SET 
-             ad_name = EXCLUDED.ad_name,
-             adset_name = EXCLUDED.adset_name,
-             campaign_name = EXCLUDED.campaign_name`,
+             full_name = EXCLUDED.full_name,
+             phone = EXCLUDED.phone,
+             field_data = EXCLUDED.field_data`,
           [
             raw.id,
             formId,
@@ -78,8 +82,8 @@ async function run() {
             adset_name,
             raw.campaign_id || info.campaign_id,
             campaign_name,
-            fields.full_name || fields.name || null,
-            fields.phone_number || fields.phone || null,
+            name,
+            phone,
             fields.email || null,
             JSON.stringify(fields),
             new Date(raw.created_time)
