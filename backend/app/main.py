@@ -206,11 +206,18 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
 
 
 @app.get("/api/stats")
-def api_stats(range: str = "all"):
-    days = None if range == "all" else (1 if range == "today" else int(range))
-    days_interval = f"{days} days" if days is not None else None
-    
-    stats_query = text("""
+def api_stats(start_date: Optional[str] = None, end_date: Optional[str] = None, range: str = "all"):
+    params: dict = {"start_date": start_date, "end_date": end_date}
+    date_where = """
+        (:start_date IS NULL OR l.date_create >= :start_date::date)
+        AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
+    """
+    date_join = """
+        (:start_date IS NULL OR l.date_create >= :start_date::date)
+        AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
+    """
+
+    stats_query = text(f"""
         SELECT
             COUNT(*)                                                                AS total_leads,
             COUNT(*) FILTER (WHERE NOT s.is_final)                                  AS in_process,
@@ -227,22 +234,17 @@ def api_stats(range: str = "all"):
             ROUND(AVG(
                 EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
             ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days,
-            -- Sifatsiz + Sandiq only (not Bekor bo'ldi)
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK'))        AS sifatsiz_bekor_count,
-            -- Sifatli = total minus sifatsiz/sandiq
             COUNT(*) - COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK')) AS sifatli_lid_count,
-            -- Konsultatsiya belgilandi
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68', 'CONSULTATION')) AS konsultatsiya_belgilandi_count,
-            -- Konsultatsiya o'tkazildi
             COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')                   AS konsultatsiya_otkazildi_count,
-            -- Muvaffaqiyatsiz = Sifatsiz + Sandiq (same as sifatsiz_bekor_count, kept for compat)
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK'))        AS muvaffaqiyatsiz_count
         FROM leads l
         JOIN stages s ON s.id = l.stage_id
-        WHERE (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL));
+        WHERE {date_where};
     """)
 
-    funnel_query = text("""
+    funnel_query = text(f"""
         SELECT
             s.bitrix_id,
             s.name AS name_uz,
@@ -251,15 +253,15 @@ def api_stats(range: str = "all"):
             COALESCE(SUM(l.opportunity), 0) AS total_opportunity
         FROM stages s
         LEFT JOIN leads l ON l.stage_id = s.id
-            AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
+            AND {date_join}
         WHERE s.entity = 'lead' AND s.sort_order > 0
         GROUP BY s.id, s.bitrix_id, s.name, s.sort_order
         ORDER BY s.sort_order;
     """)
 
     with bx_engine.connect() as conn:
-        stats = conn.execute(stats_query, {"days_interval": days_interval}).mappings().first()
-        funnel = conn.execute(funnel_query, {"days_interval": days_interval}).mappings().all()
+        stats = conn.execute(stats_query, params).mappings().first()
+        funnel = conn.execute(funnel_query, params).mappings().all()
 
     return {
         "header": dict(stats) if stats else {},
@@ -267,10 +269,8 @@ def api_stats(range: str = "all"):
     }
 
 @app.get("/api/responsibles")
-def api_responsibles(range: str = "all"):
-    days = None if range == "all" else (1 if range == "today" else int(range))
-    days_interval = f"{days} days" if days is not None else None
-    
+def api_responsibles(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    params: dict = {"start_date": start_date, "end_date": end_date}
     query = text("""
         SELECT
             r.id                                                            AS responsible_id,
@@ -291,22 +291,22 @@ def api_responsibles(range: str = "all"):
             COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
+            AND (:start_date IS NULL OR l.date_create >= :start_date::date)
+            AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
         LEFT JOIN stages s ON s.id = l.stage_id
         WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
         ORDER BY total DESC;
     """)
     with bx_engine.connect() as conn:
-        res = conn.execute(query, {"days_interval": days_interval}).mappings().all()
-        
+        res = conn.execute(query, params).mappings().all()
+
     return {"responsibles": [dict(r) for r in res]}
 
 
 @app.get("/api/conversion")
-def api_conversion(range: str = "all"):
-    days = None if range == "all" else (1 if range == "today" else int(range))
-    days_interval = f"{days} days" if days is not None else None
+def api_conversion(start_date: Optional[str] = None, end_date: Optional[str] = None):
+    params: dict = {"start_date": start_date, "end_date": end_date}
 
     query = text("""
         SELECT
@@ -321,14 +321,15 @@ def api_conversion(range: str = "all"):
             COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')           AS tashrif_buyurdi
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
+            AND (:start_date IS NULL OR l.date_create >= :start_date::date)
+            AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
         LEFT JOIN stages s ON s.id = l.stage_id
         WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
         ORDER BY total DESC;
     """)
     with bx_engine.connect() as conn:
-        rows = conn.execute(query, {"days_interval": days_interval}).mappings().all()
+        rows = conn.execute(query, params).mappings().all()
     return {"conversion": [dict(r) for r in rows]}
 
 

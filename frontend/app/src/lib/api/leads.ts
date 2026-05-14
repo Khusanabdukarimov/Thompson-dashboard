@@ -61,29 +61,17 @@ export type ResponsiblesStatsResponse = {
 };
 
 export function getDashboardStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
-  // Map our start_date/end_date to the 'range' parameter the backend expects.
-  // The backend expects 'range' as a number of days or 'all'.
-  let range = "all";
-  if (filter.start_date) {
-    const start = new Date(filter.start_date);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    range = String(diffDays);
-  }
-  return apiGet<DashboardStatsResponse>("/api/stats", { range }, API_URL_CRM);
+  return apiGet<DashboardStatsResponse>("/api/stats", {
+    start_date: filter.start_date,
+    end_date: filter.end_date,
+  }, API_URL_CRM);
 }
 
 export function getResponsiblesStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
-  let range = "all";
-  if (filter.start_date) {
-    const start = new Date(filter.start_date);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    range = String(diffDays);
-  }
-  return apiGet<ResponsiblesStatsResponse>("/api/responsibles", { range }, API_URL_CRM);
+  return apiGet<ResponsiblesStatsResponse>("/api/responsibles", {
+    start_date: filter.start_date,
+    end_date: filter.end_date,
+  }, API_URL_CRM);
 }
 
 export type ConversionStatsResponse = {
@@ -98,14 +86,10 @@ export type ConversionStatsResponse = {
 };
 
 export function getConversionStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
-  let range = "all";
-  if (filter.start_date) {
-    const start = new Date(filter.start_date);
-    const now = new Date();
-    const diffDays = Math.ceil(Math.abs(now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    range = String(diffDays);
-  }
-  return apiGet<ConversionStatsResponse>("/api/conversion", { range }, API_URL_CRM);
+  return apiGet<ConversionStatsResponse>("/api/conversion", {
+    start_date: filter.start_date,
+    end_date: filter.end_date,
+  }, API_URL_CRM);
 }
 
 // ── Lead list (raw + enriched) ───────────────────────────────────
