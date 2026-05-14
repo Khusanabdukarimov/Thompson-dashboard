@@ -60,17 +60,37 @@ export type ResponsiblesStatsResponse = {
   }[];
 };
 
-export function getDashboardStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
+export type DashFilter = {
+  start_date?: string;
+  end_date?: string;
+  responsible_id?: number;
+  stage?: string;
+  source?: string;
+};
+
+export type FilterOptions = {
+  responsibles: { id: number; full_name: string }[];
+  stages: { bitrix_id: string; name: string }[];
+  sources: string[];
+};
+
+export function getDashboardStats(filter: DashFilter) {
   return apiGet<DashboardStatsResponse>("/api/stats", {
     start_date: filter.start_date,
     end_date: filter.end_date,
+    responsible_id: filter.responsible_id,
+    stage: filter.stage,
+    source: filter.source,
   }, API_URL_CRM);
 }
 
-export function getResponsiblesStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
+export function getResponsiblesStats(filter: DashFilter) {
   return apiGet<ResponsiblesStatsResponse>("/api/responsibles", {
     start_date: filter.start_date,
     end_date: filter.end_date,
+    responsible_id: filter.responsible_id,
+    stage: filter.stage,
+    source: filter.source,
   }, API_URL_CRM);
 }
 
@@ -85,11 +105,18 @@ export type ConversionStatsResponse = {
   }[];
 };
 
-export function getConversionStats(filter: Pick<LeadFilter, "start_date" | "end_date">) {
+export function getConversionStats(filter: DashFilter) {
   return apiGet<ConversionStatsResponse>("/api/conversion", {
     start_date: filter.start_date,
     end_date: filter.end_date,
+    responsible_id: filter.responsible_id,
+    stage: filter.stage,
+    source: filter.source,
   }, API_URL_CRM);
+}
+
+export function getFilterOptions() {
+  return apiGet<FilterOptions>("/api/filter-options", {}, API_URL_CRM);
 }
 
 // ── Lead list (raw + enriched) ───────────────────────────────────

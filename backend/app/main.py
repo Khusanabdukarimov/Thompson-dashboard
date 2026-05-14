@@ -206,15 +206,30 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
 
 
 @app.get("/api/stats")
-def api_stats(start_date: Optional[str] = None, end_date: Optional[str] = None, range: str = "all"):
-    params: dict = {"start_date": start_date, "end_date": end_date}
+def api_stats(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    responsible_id: Optional[int] = None,
+    stage: Optional[str] = None,
+    source: Optional[str] = None,
+    range: str = "all",
+):
+    params: dict = {
+        "start_date": start_date, "end_date": end_date,
+        "responsible_id": responsible_id, "stage": stage, "source": source,
+    }
     date_where = """
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
+        AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
+        AND (:stage IS NULL OR s.bitrix_id = :stage)
+        AND (:source IS NULL OR l.source_id = :source)
     """
     date_join = """
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
+        AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
+        AND (:source IS NULL OR l.source_id = :source)
     """
 
     stats_query = text(f"""
@@ -269,61 +284,91 @@ def api_stats(start_date: Optional[str] = None, end_date: Optional[str] = None, 
     }
 
 @app.get("/api/responsibles")
-def api_responsibles(start_date: Optional[str] = None, end_date: Optional[str] = None):
-    params: dict = {"start_date": start_date, "end_date": end_date}
+def api_responsibles(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    responsible_id: Optional[int] = None,
+    stage: Optional[str] = None,
+    source: Optional[str] = None,
+):
+    params: dict = {
+        "start_date": start_date, "end_date": end_date,
+        "responsible_id": responsible_id, "stage": stage, "source": source,
+    }
     query = text("""
+        WITH fl AS (
+            SELECT l.id, l.responsible_id, l.opportunity, s.bitrix_id AS stage_bid
+            FROM leads l
+            JOIN stages s ON s.id = l.stage_id
+            WHERE (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
+            AND (:end_date IS NULL OR l.date_create < CAST(:end_date AS date) + INTERVAL '1 day')
+            AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
+            AND (:stage IS NULL OR s.bitrix_id = :stage)
+            AND (:source IS NULL OR l.source_id = :source)
+        )
         SELECT
-            r.id                                                            AS responsible_id,
-            TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
-            COUNT(l.id)                                                     AS total,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NEW')                                AS qongiroqlar,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'IN_PROCESS')                         AS yangi_lid,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'PROCESSED')                          AS propushenniy,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_1KPATX','NO_ANSWER'))           AS javob_bermadi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_Q2U9EL','CALLBACK'))            AS qayta_aloqa,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_KXC3ZW','THINKING'))            AS oylab_koradi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))        AS konsultatsiya,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_5G8244','NOT_TRANSFERRED'))     AS otkazilmadi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')                          AS konsultatsiya_otkazildi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK','ARCHIVE'))                  AS sandiq,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'UC_F8K4GI')                          AS sifatsiz,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))            AS bekor_boldi,
-            COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
+            r.id                                                                      AS responsible_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, ''))                         AS full_name,
+            COUNT(fl.id)                                                              AS total,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'NEW')                         AS qongiroqlar,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'IN_PROCESS')                  AS yangi_lid,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'PROCESSED')                   AS propushenniy,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_1KPATX','NO_ANSWER'))    AS javob_bermadi,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_Q2U9EL','CALLBACK'))     AS qayta_aloqa,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_KXC3ZW','THINKING'))     AS oylab_koradi,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_L28G68','CONSULTATION')) AS konsultatsiya,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_5G8244','NOT_TRANSFERRED')) AS otkazilmadi,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')                   AS konsultatsiya_otkazildi,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('JUNK','ARCHIVE'))            AS sandiq,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_F8K4GI')                   AS sifatsiz,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_NAZK5J','RECYCLED'))     AS bekor_boldi,
+            COALESCE(SUM(fl.opportunity), 0)                                          AS total_opportunity
         FROM responsibles r
-        LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
-            AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
-        LEFT JOIN stages s ON s.id = l.stage_id
+        LEFT JOIN fl ON fl.responsible_id = r.id
         WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
         ORDER BY total DESC;
     """)
     with bx_engine.connect() as conn:
         res = conn.execute(query, params).mappings().all()
-
     return {"responsibles": [dict(r) for r in res]}
 
 
 @app.get("/api/conversion")
-def api_conversion(start_date: Optional[str] = None, end_date: Optional[str] = None):
-    params: dict = {"start_date": start_date, "end_date": end_date}
-
+def api_conversion(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    responsible_id: Optional[int] = None,
+    stage: Optional[str] = None,
+    source: Optional[str] = None,
+):
+    params: dict = {
+        "start_date": start_date, "end_date": end_date,
+        "responsible_id": responsible_id, "stage": stage, "source": source,
+    }
     query = text("""
+        WITH fl AS (
+            SELECT l.id, l.responsible_id, s.bitrix_id AS stage_bid
+            FROM leads l
+            JOIN stages s ON s.id = l.stage_id
+            WHERE (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
+            AND (:end_date IS NULL OR l.date_create < CAST(:end_date AS date) + INTERVAL '1 day')
+            AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
+            AND (:stage IS NULL OR s.bitrix_id = :stage)
+            AND (:source IS NULL OR l.source_id = :source)
+        )
         SELECT
-            r.id                                                            AS responsible_id,
-            TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
-            COUNT(l.id)                                                     AS total,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
+            r.id                                                                        AS responsible_id,
+            TRIM(r.name || ' ' || COALESCE(r.last_name, ''))                           AS full_name,
+            COUNT(fl.id)                                                                AS total,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (
                 'NEW','IN_PROCESS','PROCESSED',
                 'UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW','UC_L28G68','UC_5G8244'
-            ))                                                              AS jarayonda,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK')) AS sifatsiz_lid,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')           AS tashrif_buyurdi
+            ))                                                                          AS jarayonda,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_F8K4GI','JUNK'))           AS sifatsiz_lid,
+            COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')                     AS tashrif_buyurdi
         FROM responsibles r
-        LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
-            AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
-        LEFT JOIN stages s ON s.id = l.stage_id
+        LEFT JOIN fl ON fl.responsible_id = r.id
         WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
         ORDER BY total DESC;
@@ -331,6 +376,36 @@ def api_conversion(start_date: Optional[str] = None, end_date: Optional[str] = N
     with bx_engine.connect() as conn:
         rows = conn.execute(query, params).mappings().all()
     return {"conversion": [dict(r) for r in rows]}
+
+
+@app.get("/api/filter-options")
+def api_filter_options():
+    with bx_engine.connect() as conn:
+        resp_rows = conn.execute(text(
+            "SELECT id, TRIM(name || ' ' || COALESCE(last_name, '')) AS full_name "
+            "FROM responsibles WHERE active = TRUE ORDER BY name"
+        )).mappings().all()
+
+        stage_rows = conn.execute(text(
+            "SELECT bitrix_id, name FROM stages "
+            "WHERE entity = 'lead' AND sort_order > 0 ORDER BY sort_order"
+        )).mappings().all()
+
+        try:
+            src_rows = conn.execute(text(
+                "SELECT DISTINCT source_id FROM leads "
+                "WHERE source_id IS NOT NULL AND source_id != '' "
+                "ORDER BY source_id LIMIT 60"
+            )).mappings().all()
+            sources = [r["source_id"] for r in src_rows]
+        except Exception:
+            sources = []
+
+    return {
+        "responsibles": [dict(r) for r in resp_rows],
+        "stages": [dict(s) for s in stage_rows],
+        "sources": sources,
+    }
 
 
 @app.get("/api/stats/deals")

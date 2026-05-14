@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   RefreshCw, Calendar, Users, Star, TrendingUp, Filter,
@@ -6,7 +6,10 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
-import { getDashboardStats, getResponsiblesStats, getConversionStats } from "@/lib/api/leads";
+import {
+  getDashboardStats, getResponsiblesStats, getConversionStats,
+  getFilterOptions, type DashFilter,
+} from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
@@ -16,14 +19,10 @@ const localISO = (d: Date) =>
 const todayISO   = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 
-type PeriodId = "today" | "7d" | "30d" | "90d" | "all";
-const DATE_OPTIONS: { id: PeriodId; label: string; start: () => string; end: () => string }[] = [
-  { id: "today", label: "Bugun",          start: todayISO,             end: todayISO },
-  { id: "7d",    label: "Oxirgi 7 kun",   start: () => daysAgoISO(7),  end: todayISO },
-  { id: "30d",   label: "Oxirgi 30 kun",  start: () => daysAgoISO(30), end: todayISO },
-  { id: "90d",   label: "Oxirgi 90 kun",  start: () => daysAgoISO(90), end: todayISO },
-  { id: "all",   label: "Barchasi",       start: () => "",              end: () => "" },
-];
+const getDefaultFilter = (): DashFilter => ({
+  start_date: daysAgoISO(365),
+  end_date: todayISO(),
+});
 
 // ── Responsible table column definitions ─────────────────────────
 const RESPONSIBLE_COLS = [
@@ -180,19 +179,41 @@ const TD: React.CSSProperties = {
 // Page
 // ─────────────────────────────────────────────────────────────────
 export default function LidlarPage() {
-  const [period, setPeriod] = useLocalStorage<PeriodId>("lidlar.period", "30d");
-  const [search, setSearch]  = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState("");
 
-  const opt = DATE_OPTIONS.find((o) => o.id === period) ?? DATE_OPTIONS[2];
-  const apiFilter = useMemo(() => ({
-    start_date: opt.start() || undefined,
-    end_date:   opt.end()   || undefined,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [period]);
+  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v2", getDefaultFilter());
+  const [pending, setPending] = useState<DashFilter>(applied);
 
-  const statsQ      = useQuery({ queryKey: ["stats/dashboard",    apiFilter], queryFn: () => getDashboardStats(apiFilter) });
-  const respQ       = useQuery({ queryKey: ["stats/responsibles", apiFilter], queryFn: () => getResponsiblesStats(apiFilter) });
-  const conversionQ = useQuery({ queryKey: ["stats/conversion",   apiFilter], queryFn: () => getConversionStats(apiFilter) });
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node))
+        setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
+
+  const filterOptsQ = useQuery({
+    queryKey: ["filter-options"],
+    queryFn: getFilterOptions,
+    staleTime: 5 * 60 * 1000,
+  });
+  const filterOpts = filterOptsQ.data;
+
+  const def = getDefaultFilter();
+  const activeCount = [
+    applied.responsible_id != null,
+    applied.stage != null,
+    applied.source != null,
+    applied.start_date !== def.start_date || applied.end_date !== def.end_date,
+  ].filter(Boolean).length;
+
+  const statsQ      = useQuery({ queryKey: ["stats/dashboard",    applied], queryFn: () => getDashboardStats(applied) });
+  const respQ       = useQuery({ queryKey: ["stats/responsibles", applied], queryFn: () => getResponsiblesStats(applied) });
+  const conversionQ = useQuery({ queryKey: ["stats/conversion",   applied], queryFn: () => getConversionStats(applied) });
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -266,19 +287,201 @@ export default function LidlarPage() {
 
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px]" style={{ background: "#0a0a1a" }}>
 
-        {/* ── Date filter dropdown ── */}
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-            <Calendar size={16} style={{ position: "absolute", left: 12, color: "#9E9E9E", pointerEvents: "none" }} />
-            <select value={period} onChange={(e) => setPeriod(e.target.value as PeriodId)} style={{
-              background: "#111827", border: "1px solid #2a2a4a", color: "#fff",
-              borderRadius: 10, padding: "8px 36px 8px 36px",
-              fontSize: 13, fontWeight: 500, appearance: "none", cursor: "pointer", outline: "none",
+        {/* ── Filter panel ── */}
+        <div ref={filterRef} style={{ position: "relative", marginBottom: 20 }}>
+          {/* Trigger button */}
+          <button
+            onClick={() => { setPending({ ...applied }); setFilterOpen((o) => !o); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%",
+              background: "#111827",
+              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 ? "rgba(33,150,243,0.5)" : "#2a2a4a"}`,
+              borderRadius: filterOpen ? "10px 10px 0 0" : 10,
+              padding: "10px 16px", color: "#fff", fontSize: 13, fontWeight: 500,
+              cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <Search size={16} style={{ color: "#9E9E9E", flexShrink: 0 }} />
+            <span style={{ color: "#666", flex: 1 }}>Qidirish va filtrlash…</span>
+            {activeCount > 0 && (
+              <span style={{
+                background: "#2196F3", color: "#fff", borderRadius: 10,
+                padding: "2px 9px", fontSize: 11, fontWeight: 700,
+              }}>
+                {activeCount} filtr
+              </span>
+            )}
+            <ChevronDown size={16} style={{
+              color: "#9E9E9E",
+              transform: filterOpen ? "rotate(180deg)" : "none",
+              transition: "transform 0.2s",
+            }} />
+          </button>
+
+          {/* Dropdown */}
+          {filterOpen && (
+            <div style={{
+              position: "absolute", left: 0, right: 0, zIndex: 100,
+              background: "#111827", border: "1px solid #2a2a4a", borderTop: "none",
+              borderRadius: "0 0 12px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
             }}>
-              {DATE_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <ChevronDown size={16} style={{ position: "absolute", right: 10, color: "#9E9E9E", pointerEvents: "none" }} />
-          </div>
+              <div style={{ display: "flex" }}>
+                {/* Left sidebar — presets */}
+                <div style={{
+                  width: "26%", borderRight: "1px solid rgba(255,255,255,0.06)",
+                  padding: "16px 12px", flexShrink: 0,
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                    Saqlangan filtrlar
+                  </div>
+                  <button
+                    onClick={() => setPending(getDefaultFilter())}
+                    style={{
+                      width: "100%", textAlign: "left",
+                      background: "rgba(33,150,243,0.08)",
+                      border: "1px solid rgba(33,150,243,0.3)",
+                      borderRadius: 8, color: "#2196F3", fontSize: 12, fontWeight: 600,
+                      padding: "8px 12px", cursor: "pointer", marginBottom: 8,
+                    }}
+                  >
+                    Barcha lidlar
+                  </button>
+                  <div style={{
+                    border: "1px dashed #2a2a4a", borderRadius: 8,
+                    padding: "12px 10px", color: "#444", fontSize: 11, textAlign: "center",
+                  }}>
+                    Saqlangan filtr yo'q
+                  </div>
+                </div>
+
+                {/* Right form */}
+                <div style={{ flex: 1, padding: "16px 20px" }}>
+                  {/* Date row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                    <div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                        <Calendar size={12} />Dan (boshlanish)
+                      </label>
+                      <input
+                        type="date"
+                        value={pending.start_date ?? ""}
+                        onChange={(e) => setPending((p) => ({ ...p, start_date: e.target.value || undefined }))}
+                        style={{
+                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          borderRadius: 8, color: "#fff", fontSize: 12, padding: "8px 10px",
+                          outline: "none", boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                        <Calendar size={12} />Gacha (tugash)
+                      </label>
+                      <input
+                        type="date"
+                        value={pending.end_date ?? ""}
+                        onChange={(e) => setPending((p) => ({ ...p, end_date: e.target.value || undefined }))}
+                        style={{
+                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          borderRadius: 8, color: "#fff", fontSize: 12, padding: "8px 10px",
+                          outline: "none", boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dropdown filters row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                        <Users size={12} />Mas'ul xodim
+                      </label>
+                      <select
+                        value={pending.responsible_id ?? ""}
+                        onChange={(e) => setPending((p) => ({ ...p, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}
+                        style={{
+                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          borderRadius: 8, color: pending.responsible_id ? "#fff" : "#555",
+                          fontSize: 12, padding: "8px 10px", outline: "none",
+                          appearance: "none", cursor: "pointer",
+                        }}
+                      >
+                        <option value="">Barchasi</option>
+                        {filterOpts?.responsibles.map((r) => (
+                          <option key={r.id} value={r.id}>{r.full_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                        <Filter size={12} />Bosqich
+                      </label>
+                      <select
+                        value={pending.stage ?? ""}
+                        onChange={(e) => setPending((p) => ({ ...p, stage: e.target.value || undefined }))}
+                        style={{
+                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          borderRadius: 8, color: pending.stage ? "#fff" : "#555",
+                          fontSize: 12, padding: "8px 10px", outline: "none",
+                          appearance: "none", cursor: "pointer",
+                        }}
+                      >
+                        <option value="">Barchasi</option>
+                        {filterOpts?.stages.map((s) => (
+                          <option key={s.bitrix_id} value={s.bitrix_id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                        <TrendingUp size={12} />Manba
+                      </label>
+                      <select
+                        value={pending.source ?? ""}
+                        onChange={(e) => setPending((p) => ({ ...p, source: e.target.value || undefined }))}
+                        style={{
+                          width: "100%", background: "#0f1623", border: "1px solid #2a2a3a",
+                          borderRadius: 8, color: pending.source ? "#fff" : "#555",
+                          fontSize: 12, padding: "8px 10px", outline: "none",
+                          appearance: "none", cursor: "pointer",
+                        }}
+                      >
+                        <option value="">Barchasi</option>
+                        {filterOpts?.sources.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom action bar */}
+              <div style={{
+                display: "flex", justifyContent: "flex-end", gap: 10,
+                padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.06)",
+              }}>
+                <button
+                  onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setFilterOpen(false); }}
+                  style={{
+                    background: "#1a1f2e", border: "1px solid #2a2a4a", color: "#9E9E9E",
+                    borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  }}
+                >
+                  Tozalash
+                </button>
+                <button
+                  onClick={() => { setApplied({ ...pending }); setFilterOpen(false); }}
+                  style={{
+                    background: "#2196F3", border: "none", color: "#fff",
+                    borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Topish
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Row 1 — 4 gradient KPI cards ── */}
