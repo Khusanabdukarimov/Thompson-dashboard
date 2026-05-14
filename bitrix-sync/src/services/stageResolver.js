@@ -21,14 +21,22 @@ async function resolve(entity, bitrixId) {
   const key = `${entity}:${bitrixId}`;
   if (_cache.has(key)) return _cache.get(key);
 
-  // Unknown stage — insert it so we don't lose data
-  const { rows } = await pool.query(
+  // Unknown stage — insert it so we don't lose data; never overwrite existing names
+  let { rows } = await pool.query(
     `INSERT INTO stages (entity, bitrix_id, name, sort_order)
      VALUES ($1, $2, $3, 999)
-     ON CONFLICT (entity, bitrix_id) DO UPDATE SET name = EXCLUDED.name
+     ON CONFLICT (entity, bitrix_id) DO NOTHING
      RETURNING id`,
     [entity, bitrixId, bitrixId]
   );
+
+  if (!rows.length) {
+    const res = await pool.query(
+      'SELECT id FROM stages WHERE entity = $1 AND bitrix_id = $2',
+      [entity, bitrixId]
+    );
+    rows = res.rows;
+  }
 
   const id = rows[0].id;
   _cache.set(key, id);

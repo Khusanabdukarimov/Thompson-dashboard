@@ -227,16 +227,17 @@ def api_stats(range: str = "all"):
             ROUND(AVG(
                 EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0
             ) FILTER (WHERE NOT s.is_final), 1)                                     AS avg_age_days,
-            -- Sifatli lid: O'ylab ko'radi + Konsultatsiya belgilandi + Konsultatsiya o'tkazildi + Bekor bo'ldi + O'tkazilmadi
+            -- Sifatli lid: O'ylab ko'radi + Konsultatsiya belgilandi + Konsultatsiya o'tkazildi + O'tkazilmadi + Bekor bo'ldi
             COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
-                'THINKING', 'CONSULTATION', 'CONVERTED', 'NOT_TRANSFERRED', 'RECYCLED'
+                'UC_KXC3ZW', 'UC_L28G68', 'CONVERTED', 'UC_5G8244', 'UC_NAZK5J',
+                'THINKING', 'CONSULTATION', 'NOT_TRANSFERRED', 'RECYCLED'
             ))                                                                      AS sifatli_lid_count,
             -- Konsultatsiya belgilandi
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')                AS konsultatsiya_belgilandi_count,
-            -- Konsultatsiya o'tkazildi (CONVERTED in Bitrix24)
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68', 'CONSULTATION')) AS konsultatsiya_belgilandi_count,
+            -- Konsultatsiya o'tkazildi
             COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')                   AS konsultatsiya_otkazildi_count,
-            -- Muvaffaqiyatsiz = Sifatsiz + Bekor bo'ldi
-            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK', 'RECYCLED'))         AS muvaffaqiyatsiz_count
+            -- Muvaffaqiyatsiz = Sifatsiz + Sandiq
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI', 'JUNK', 'RECYCLED')) AS muvaffaqiyatsiz_count
         FROM leads l
         JOIN stages s ON s.id = l.stage_id
         WHERE (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL));
@@ -252,7 +253,7 @@ def api_stats(range: str = "all"):
         FROM stages s
         LEFT JOIN leads l ON l.stage_id = s.id
             AND (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
-        WHERE s.entity = 'lead'
+        WHERE s.entity = 'lead' AND s.sort_order > 0
         GROUP BY s.id, s.bitrix_id, s.name, s.sort_order
         ORDER BY s.sort_order;
     """)
@@ -276,15 +277,15 @@ def api_responsibles(range: str = "all"):
             r.id                                                            AS responsible_id,
             TRIM(r.name || ' ' || COALESCE(r.last_name, ''))               AS full_name,
             COUNT(l.id)                                                     AS total,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NEW')                 AS yangi_lid,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NO_ANSWER')           AS javob_bermadi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CALLBACK')            AS qayta_aloqa,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'THINKING')            AS oylab_koradi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONSULTATION')        AS konsultatsiya,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'NOT_TRANSFERRED')     AS otkazilmadi,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'ARCHIVE')             AS sandiq,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'JUNK')                AS sifatsiz,
-            COUNT(l.id) FILTER (WHERE s.bitrix_id = 'RECYCLED')            AS bekor_boldi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('NEW','IN_PROCESS'))                  AS yangi_lid,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_1KPATX','NO_ANSWER'))           AS javob_bermadi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_Q2U9EL','CALLBACK'))            AS qayta_aloqa,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_KXC3ZW','THINKING'))            AS oylab_koradi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))        AS konsultatsiya,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_5G8244','NOT_TRANSFERRED'))     AS otkazilmadi,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('JUNK','ARCHIVE'))                  AS sandiq,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI'))                      AS sifatsiz,
+            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))            AS bekor_boldi,
             COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
