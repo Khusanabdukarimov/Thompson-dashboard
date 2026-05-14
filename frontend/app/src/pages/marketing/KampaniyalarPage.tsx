@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, Info, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/Button";
@@ -22,7 +22,7 @@ import {
   MONTH_KEYS,
   MONTH_LABELS,
 } from "@/lib/api/meta";
-import type { MonthKey, CampaignAdRow, CampaignForms, FormLead } from "@/lib/api/meta";
+import type { MonthKey, CampaignAdRow, CampaignForms } from "@/lib/api/meta";
 import { fmtNum, fmtMoney } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
