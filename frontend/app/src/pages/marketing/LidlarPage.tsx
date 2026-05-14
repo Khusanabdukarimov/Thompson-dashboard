@@ -106,11 +106,12 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
 
 // ── Sparkline ─────────────────────────────────────────────────────
 function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) {
+  // Wide amplitude — y ranges 5–55 in a 60-unit viewBox for clear peaks/valleys
   const variants: [number, number][][] = [
-    [[0,50],[25,42],[50,48],[80,35],[110,38],[140,22],[165,28],[190,12],[200,15]],
-    [[0,45],[30,38],[60,44],[90,32],[120,36],[150,20],[175,26],[195,10],[200,12]],
-    [[0,48],[35,40],[65,46],[95,28],[125,34],[150,18],[175,24],[195,14],[200,16]],
-    [[0,52],[30,44],[60,48],[90,36],[120,40],[150,24],[170,30],[190,16],[200,18]],
+    [[0,55],[22,30],[45,50],[70,15],[95,42],[120,10],[145,35],[165,8],[185,22],[200,12]],
+    [[0,48],[20,18],[42,52],[65,12],[90,45],[115,8],[140,40],[162,6],[182,28],[200,8]],
+    [[0,52],[25,55],[50,20],[75,48],[100,10],[125,45],[148,15],[168,38],[188,6],[200,10]],
+    [[0,58],[25,35],[48,55],[72,22],[96,50],[122,14],[148,42],[168,10],[188,30],[200,15]],
   ];
   const pts  = variants[variant % variants.length];
   const poly = pts.map(([x, y]) => `${x},${y}`).join(" ");
@@ -118,17 +119,17 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
   const gid  = `spk${variant}${color.replace(/[^a-z0-9]/gi, "")}`;
   const last = pts[pts.length - 1];
   return (
-    <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: "100%", height: 40, display: "block" }}>
+    <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: "100%", height: 80, display: "block" }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          <stop offset="0%"   stopColor={color} stopOpacity="0.45" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.04" />
         </linearGradient>
       </defs>
       <polygon  points={area} fill={`url(#${gid})`} />
-      <polyline points={poly}  fill="none" stroke={color} strokeWidth="2"
-                strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-      <circle cx={last[0]} cy={last[1]} r="3" fill={color} />
+      <polyline points={poly}  fill="none" stroke={color} strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+      <circle cx={last[0]} cy={last[1]} r="3.5" fill={color} />
     </svg>
   );
 }
@@ -144,7 +145,7 @@ function GradCard({ gradient, border, shadow, icon, title, children, sparkColor,
     <div style={{
       background: gradient, border: `1px solid ${border}`, boxShadow: shadow,
       borderRadius: 16, padding: "16px 16px 0 16px",
-      display: "flex", flexDirection: "column", overflow: "hidden", maxHeight: 160,
+      display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 200,
     }}>
       <div style={{
         width: 36, height: 36, borderRadius: "50%",
@@ -283,7 +284,7 @@ export default function LidlarPage() {
         {/* ── Row 1 — 4 gradient KPI cards ── */}
         {isLoading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
-            {[0,1,2,3].map((i) => <div key={i} style={{ height: 160, borderRadius: 16, background: "#111827" }} />)}
+            {[0,1,2,3].map((i) => <div key={i} style={{ height: 200, borderRadius: 16, background: "#111827" }} />)}
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
