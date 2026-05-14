@@ -11,27 +11,36 @@ async function run() {
   const accountId = process.env.META_AD_ACCOUNT_ID || process.env.FB_AD_ACCOUNT_ID;
   const actId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
   
-  console.log(`Fetching ads for ${actId} to find forms...`);
-  const { data: { data: ads } } = await axios.get(`${BASE}/${actId}/ads`, {
-    params: { 
-      access_token: token, 
-      fields: 'id,name,campaign{id,name},adset{id,name},creative{object_story_spec}',
-      limit: 200 
-    }
-  });
+  console.log(`Fetching all ads for ${actId} to find forms...`);
+  let ads = [];
+  let adsUrl = `${BASE}/${actId}/ads`;
+  let adsParams = { 
+    access_token: token, 
+    fields: 'id,name,campaign{id,name},adset{id,name},creative{object_story_spec}',
+    limit: 500 
+  };
+
+  while (adsUrl) {
+    const { data: resp } = await axios.get(adsUrl, { params: adsUrl.includes('?') ? {} : adsParams });
+    ads = ads.concat(resp.data);
+    adsUrl = resp.paging?.next;
+    adsParams = {}; // Clear params for next pages
+  }
   
   const formMap = new Map();
   for (const ad of ads) {
     const formId = ad.creative?.object_story_spec?.link_data?.call_to_action?.value?.lead_gen_form_id;
     if (formId) {
-      formMap.set(formId, {
-        ad_id: ad.id,
-        ad_name: ad.name,
-        adset_id: ad.adset?.id,
-        adset_name: ad.adset?.name,
-        campaign_id: ad.campaign?.id,
-        campaign_name: ad.campaign?.name
-      });
+      if (!formMap.has(formId)) {
+        formMap.set(formId, {
+          ad_id: ad.id,
+          ad_name: ad.name,
+          adset_id: ad.adset?.id,
+          adset_name: ad.adset?.name,
+          campaign_id: ad.campaign?.id,
+          campaign_name: ad.campaign?.name
+        });
+      }
     }
   }
   
@@ -40,59 +49,66 @@ async function run() {
   for (const [formId, info] of formMap.entries()) {
     try {
       console.log(`  Fetching leads for form ${formId}...`);
-      const { data: { data: leads } } = await axios.get(`${BASE}/${formId}/leads`, {
-        params: { 
-          access_token: token, 
-          fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data', 
-          limit: 1000 
-        }
-      });
-      
-      console.log(`    Got ${leads.length} leads.`);
-      for (const raw of leads) {
-        const fields = {};
-        for (const f of raw.field_data || []) {
-          fields[f.name] = Array.isArray(f.values) ? (f.values[0] ?? null) : null;
-        }
-        
-        // Use info from lead if available, fallback to ad info
-        const ad_name = raw.ad_name || info.ad_name;
-        const adset_name = raw.adset_name || info.adset_name;
-        const campaign_name = raw.campaign_name || info.campaign_name;
+      let leadsUrl = `${BASE}/${formId}/leads`;
+      let leadsParams = { 
+        access_token: token, 
+        fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data', 
+        limit: 500 
+      };
 
-        // Extract name/phone with smarter mapping
-        const name = fields.full_name || fields.name || fields['ismingiz:'] || fields['Ismingiz:'] || null;
-        const phone = fields.phone_number || fields.phone || fields['tel:'] || fields['Telefon raqamingiz:'] || null;
+      let totalLeads = 0;
+      while (leadsUrl) {
+        const { data: resp } = await axios.get(leadsUrl, { params: leadsUrl.includes('?') ? {} : leadsParams });
+        const leads = resp.data;
+        totalLeads += leads.length;
 
-        await pool.query(
-          `INSERT INTO facebook_leads (
-             id, form_id, ad_id, ad_name, adset_id, adset_name,
-             campaign_id, campaign_name, full_name, phone, email, field_data, created_time
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-           ON CONFLICT (id) DO UPDATE SET 
-             full_name = EXCLUDED.full_name,
-             phone = EXCLUDED.phone,
-             field_data = EXCLUDED.field_data`,
-          [
-            raw.id,
-            formId,
-            raw.ad_id || info.ad_id,
-            ad_name,
-            raw.adset_id || info.adset_id,
-            adset_name,
-            raw.campaign_id || info.campaign_id,
-            campaign_name,
-            name,
-            phone,
-            fields.email || null,
-            JSON.stringify(fields),
-            new Date(raw.created_time)
-          ]
-        );
+        for (const raw of leads) {
+          const fields = {};
+          for (const f of raw.field_data || []) {
+            fields[f.name] = Array.isArray(f.values) ? (f.values[0] ?? null) : null;
+          }
+          
+          const ad_name = raw.ad_name || info.ad_name;
+          const adset_name = raw.adset_name || info.adset_name;
+          const campaign_name = raw.campaign_name || info.campaign_name;
+
+          const name = fields.full_name || fields.name || fields['ismingiz:'] || fields['Ismingiz:'] || fields['Ismingiz'] || null;
+          const phone = fields.phone_number || fields.phone || fields['tel:'] || fields['Telefon raqamingiz:'] || fields['Telefon raqami'] || null;
+
+          await pool.query(
+            `INSERT INTO facebook_leads (
+               id, form_id, ad_id, ad_name, adset_id, adset_name,
+               campaign_id, campaign_name, full_name, phone, email, field_data, created_time
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             ON CONFLICT (id) DO UPDATE SET 
+               full_name = EXCLUDED.full_name,
+               phone = EXCLUDED.phone,
+               field_data = EXCLUDED.field_data`,
+            [
+              raw.id,
+              formId,
+              raw.ad_id || info.ad_id,
+              ad_name,
+              raw.adset_id || info.adset_id,
+              adset_name,
+              raw.campaign_id || info.campaign_id,
+              campaign_name,
+              name,
+              phone,
+              fields.email || null,
+              JSON.stringify(fields),
+              new Date(raw.created_time)
+            ]
+          );
+        }
+
+        leadsUrl = resp.paging?.next;
+        leadsParams = {};
+        if (totalLeads > 5000) break; // Safety limit
       }
+      console.log(`    Finished form ${formId}: ${totalLeads} leads processed.`);
     } catch (err) {
       console.error(`    Error fetching leads for form ${formId}:`, err.message);
-      console.dir(err.response?.data || err.message, { depth: null });
     }
   }
   
