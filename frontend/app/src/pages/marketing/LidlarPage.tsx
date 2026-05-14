@@ -7,20 +7,16 @@ import {
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
 import { getDashboardStats, getResponsiblesStats, getConversionStats } from "@/lib/api/leads";
-import { fmtNum, fmtPct } from "@/lib/utils";
+import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
+// ── Date helpers ──────────────────────────────────────────────────
 const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const todayISO = () => localISO(new Date());
-const daysAgoISO = (n: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return localISO(d);
-};
+const todayISO   = () => localISO(new Date());
+const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 
 type PeriodId = "today" | "7d" | "30d" | "90d" | "all";
-
 const DATE_OPTIONS: { id: PeriodId; label: string; start: () => string; end: () => string }[] = [
   { id: "today", label: "Bugun",          start: todayISO,             end: todayISO },
   { id: "7d",    label: "Oxirgi 7 kun",   start: () => daysAgoISO(7),  end: todayISO },
@@ -29,24 +25,86 @@ const DATE_OPTIONS: { id: PeriodId; label: string; start: () => string; end: () 
   { id: "all",   label: "Barchasi",       start: () => "",              end: () => "" },
 ];
 
+// ── Responsible table column definitions ─────────────────────────
 const RESPONSIBLE_COLS = [
   { key: "qongiroqlar",             label: "Qo'ng'iroqlar",            color: "#9E9E9E" },
   { key: "yangi_lid",               label: "Yangi lid",                color: "#2196F3" },
-  { key: "propushenniy",            label: "Propushenniy",             color: "#B0BEC5" },
+  { key: "propushenniy",            label: "Propushenniy",             color: "#9E9E9E" },
   { key: "javob_bermadi",           label: "Javob bermadi",            color: "#FF9800" },
   { key: "qayta_aloqa",             label: "Qayta aloqa",              color: "#00BCD4" },
   { key: "oylab_koradi",            label: "O'ylab ko'radi",           color: "#E91E63" },
   { key: "konsultatsiya",           label: "Konsultatsiya belgilandi", color: "#9C27B0" },
   { key: "otkazilmadi",             label: "O'tkazilmadi",             color: "#FF00FF" },
   { key: "konsultatsiya_otkazildi", label: "Konsultatsiya o'tkazildi", color: "#4CAF50" },
-  { key: "sandiq",                  label: "Sandiq",                   color: "#90CAF9" },
+  { key: "sandiq",                  label: "Sandiq",                   color: "#42A5F5" },
   { key: "sifatsiz",                label: "Sifatsiz",                 color: "#F44336" },
   { key: "bekor_boldi",             label: "Bekor bo'ldi",             color: "#FFC107" },
 ] as const;
-
 type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
 
-// ── Decorative sparkline ──────────────────────────────────────────
+// ── Shared mini-components ────────────────────────────────────────
+const AVATAR_COLORS = [
+  "#2196F3","#E91E63","#9C27B0","#00BCD4","#FF9800",
+  "#4CAF50","#FF5722","#3F51B5","#009688","#795548",
+];
+
+function AvatarCircle({ name, size = 36 }: { name: string; size?: number }) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const initials = parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : (parts[0]?.[0] ?? "?").toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  const bg = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%", background: bg, flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: "#fff", fontSize: size * 0.36, fontWeight: 700, userSelect: "none",
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+function MiniBar({ value, max, color, height = 3 }: { value: number; max: number; color: string; height?: number }) {
+  const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div style={{ height, borderRadius: 2, background: "rgba(255,255,255,0.08)", marginTop: 5, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${w}%`, background: color, borderRadius: 2, transition: "width 0.3s" }} />
+    </div>
+  );
+}
+
+function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
+  const sw = 3;
+  const r  = (size - sw * 2) / 2;
+  const circ = 2 * Math.PI * r;
+  const fill = circ - (Math.min(100, pct) / 100) * circ;
+  if (pct <= 0) {
+    return (
+      <div style={{ width: size, height: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width={size} height={size} style={{ position: "absolute" }}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#2a2a3a" strokeWidth={sw} />
+        </svg>
+        <span style={{ fontSize: 10, color: "#555", zIndex: 1 }}>—</span>
+      </div>
+    );
+  }
+  const label = pct < 10 ? `${pct.toFixed(1)}%` : `${Math.round(pct)}%`;
+  return (
+    <div style={{ width: size, height: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width={size} height={size} style={{ position: "absolute", transform: "rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#2a2a3a" strokeWidth={sw} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#4CAF50" strokeWidth={sw}
+                strokeDasharray={circ} strokeDashoffset={fill} strokeLinecap="round" />
+      </svg>
+      <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700, zIndex: 1 }}>{label}</span>
+    </div>
+  );
+}
+
+// ── Sparkline ─────────────────────────────────────────────────────
 function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) {
   const variants: [number, number][][] = [
     [[0,50],[25,42],[50,48],[80,35],[110,38],[140,22],[165,28],[190,12],[200,15]],
@@ -54,7 +112,7 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
     [[0,48],[35,40],[65,46],[95,28],[125,34],[150,18],[175,24],[195,14],[200,16]],
     [[0,52],[30,44],[60,48],[90,36],[120,40],[150,24],[170,30],[190,16],[200,18]],
   ];
-  const pts = variants[variant % variants.length];
+  const pts  = variants[variant % variants.length];
   const poly = pts.map(([x, y]) => `${x},${y}`).join(" ");
   const area = `0,60 ${poly} 200,60`;
   const gid  = `spk${variant}${color.replace(/[^a-z0-9]/gi, "")}`;
@@ -77,27 +135,16 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
 
 // ── Gradient card shell ───────────────────────────────────────────
 type GradCardProps = {
-  gradient: string;
-  border: string;
-  shadow: string;
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-  sparkColor: string;
-  sparkVariant?: number;
+  gradient: string; border: string; shadow: string;
+  icon: React.ReactNode; title: string; children: React.ReactNode;
+  sparkColor: string; sparkVariant?: number;
 };
 function GradCard({ gradient, border, shadow, icon, title, children, sparkColor, sparkVariant = 0 }: GradCardProps) {
   return (
     <div style={{
-      background: gradient,
-      border: `1px solid ${border}`,
-      boxShadow: shadow,
-      borderRadius: 16,
-      padding: "16px 16px 0 16px",
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-      maxHeight: 160,
+      background: gradient, border: `1px solid ${border}`, boxShadow: shadow,
+      borderRadius: 16, padding: "16px 16px 0 16px",
+      display: "flex", flexDirection: "column", overflow: "hidden", maxHeight: 160,
     }}>
       <div style={{
         width: 36, height: 36, borderRadius: "50%",
@@ -116,29 +163,35 @@ function GradCard({ gradient, border, shadow, icon, title, children, sparkColor,
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────
+// ── Shared table header cell style ────────────────────────────────
+const TH = (color: string, minW = 140): React.CSSProperties => ({
+  padding: "11px 14px", textAlign: "left", fontSize: 12, fontWeight: 700,
+  color, textTransform: "uppercase", letterSpacing: "0.04em",
+  background: "#0f1623", borderBottom: "1px solid rgba(255,255,255,0.06)",
+  whiteSpace: "nowrap", minWidth: minW,
+});
+const TD: React.CSSProperties = {
+  padding: "10px 14px", verticalAlign: "middle",
+  borderBottom: "1px solid rgba(255,255,255,0.04)",
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────
 export default function LidlarPage() {
   const [period, setPeriod] = useLocalStorage<PeriodId>("lidlar.period", "30d");
-  const [search, setSearch] = useState("");
+  const [search, setSearch]  = useState("");
 
   const opt = DATE_OPTIONS.find((o) => o.id === period) ?? DATE_OPTIONS[2];
   const apiFilter = useMemo(() => ({
     start_date: opt.start() || undefined,
     end_date:   opt.end()   || undefined,
-  }), [period]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [period]);
 
-  const statsQ = useQuery({
-    queryKey: ["stats/dashboard",    apiFilter],
-    queryFn:  () => getDashboardStats(apiFilter),
-  });
-  const respQ = useQuery({
-    queryKey: ["stats/responsibles", apiFilter],
-    queryFn:  () => getResponsiblesStats(apiFilter),
-  });
-  const conversionQ = useQuery({
-    queryKey: ["stats/conversion",   apiFilter],
-    queryFn:  () => getConversionStats(apiFilter),
-  });
+  const statsQ      = useQuery({ queryKey: ["stats/dashboard",    apiFilter], queryFn: () => getDashboardStats(apiFilter) });
+  const respQ       = useQuery({ queryKey: ["stats/responsibles", apiFilter], queryFn: () => getResponsiblesStats(apiFilter) });
+  const conversionQ = useQuery({ queryKey: ["stats/conversion",   apiFilter], queryFn: () => getConversionStats(apiFilter) });
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -175,6 +228,30 @@ export default function LidlarPage() {
 
   const isLoading = statsQ.isLoading;
 
+  // ── Lid va Konversiya rows (sorted by total desc) ───────────────
+  const convRows = useMemo(() => {
+    const rows = [...(conversionQ.data?.conversion ?? [])];
+    rows.sort((a, b) => b.total - a.total);
+    return rows;
+  }, [conversionQ.data]);
+
+  const convMax = useMemo(() => ({
+    total:    Math.max(1, ...convRows.map((r) => r.total)),
+    jarayonda: Math.max(1, ...convRows.map((r) => r.jarayonda)),
+    sifatsiz:  Math.max(1, ...convRows.map((r) => r.sifatsiz_lid)),
+    otkazildi: Math.max(1, ...convRows.map((r) => r.tashrif_buyurdi)),
+  }), [convRows]);
+
+  const convTotals = useMemo(() => convRows.reduce(
+    (acc, r) => ({
+      total:    acc.total    + r.total,
+      jarayonda: acc.jarayonda + r.jarayonda,
+      sifatsiz:  acc.sifatsiz  + r.sifatsiz_lid,
+      otkazildi: acc.otkazildi + r.tashrif_buyurdi,
+    }),
+    { total: 0, jarayonda: 0, sifatsiz: 0, otkazildi: 0 }
+  ), [convRows]);
+
   return (
     <>
       <Topbar
@@ -191,398 +268,307 @@ export default function LidlarPage() {
         {/* ── Date filter dropdown ── */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
           <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-            <Calendar size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9E9E9E", pointerEvents: "none" }} />
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as PeriodId)}
-              style={{
-                background: "#111827",
-                border: "1px solid #2a2a4a",
-                color: "#fff",
-                borderRadius: 10,
-                padding: "8px 36px 8px 36px",
-                fontSize: 13,
-                fontWeight: 500,
-                appearance: "none",
-                cursor: "pointer",
-                outline: "none",
-              }}
-            >
-              {DATE_OPTIONS.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
+            <Calendar size={16} style={{ position: "absolute", left: 12, color: "#9E9E9E", pointerEvents: "none" }} />
+            <select value={period} onChange={(e) => setPeriod(e.target.value as PeriodId)} style={{
+              background: "#111827", border: "1px solid #2a2a4a", color: "#fff",
+              borderRadius: 10, padding: "8px 36px 8px 36px",
+              fontSize: 13, fontWeight: 500, appearance: "none", cursor: "pointer", outline: "none",
+            }}>
+              {DATE_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
-            <ChevronDown size={16} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#9E9E9E", pointerEvents: "none" }} />
+            <ChevronDown size={16} style={{ position: "absolute", right: 10, color: "#9E9E9E", pointerEvents: "none" }} />
           </div>
         </div>
 
         {/* ── Row 1 — 4 gradient KPI cards ── */}
         {isLoading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
-            {[0,1,2,3].map((i) => (
-              <div key={i} style={{ height: 160, borderRadius: 16, background: "#111827", animation: "pulse 1.5s ease-in-out infinite" }} />
-            ))}
+            {[0,1,2,3].map((i) => <div key={i} style={{ height: 160, borderRadius: 16, background: "#111827" }} />)}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}
-               className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-
-            {/* Card 1 – Umumiy Lidlar */}
-            <GradCard
-              gradient="linear-gradient(135deg, #0d1b4a 0%, #1a3a7a 100%)"
-              border="rgba(33,150,243,0.3)"
-              shadow="0 4px 20px rgba(33,150,243,0.15)"
-              icon={<Users size={20} style={{ color: "#2196F3" }} />}
-              title="Umumiy Lidlar"
-              sparkColor="#2196F3"
-              sparkVariant={0}
-            >
-              <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 3 }}>
-                {fmtNum(total)}
-              </div>
-              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Umumiy Lid</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+            <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" border="rgba(33,150,243,0.3)"
+                      shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
+                      title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0}>
+              <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
+              <div style={{ fontSize:11, color:"#9E9E9E" }}>Umumiy Lid</div>
             </GradCard>
-
-            {/* Card 2 – Sifatli Lidlar */}
-            <GradCard
-              gradient="linear-gradient(135deg, #002a2a 0%, #005555 100%)"
-              border="rgba(0,188,212,0.3)"
-              shadow="0 4px 20px rgba(0,188,212,0.15)"
-              icon={<Star size={20} style={{ color: "#00BCD4" }} />}
-              title="Sifatli Lidlar"
-              sparkColor="#00BCD4"
-              sparkVariant={1}
-            >
-              <div style={{ fontSize: 36, fontWeight: 800, color: "#00BCD4", lineHeight: 1.1, marginBottom: 3 }}>
-                {fmtNum(sifatliLid)}
-              </div>
-              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Sifatli Lid</div>
+            <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" border="rgba(0,188,212,0.3)"
+                      shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
+                      title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1}>
+              <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
+              <div style={{ fontSize:11, color:"#9E9E9E" }}>Sifatli Lid</div>
             </GradCard>
-
-            {/* Card 3 – Konsultatsiyalar */}
-            <GradCard
-              gradient="linear-gradient(135deg, #1a0033 0%, #3d1a6e 100%)"
-              border="rgba(156,39,176,0.3)"
-              shadow="0 4px 20px rgba(156,39,176,0.15)"
-              icon={<Calendar size={20} style={{ color: "#9C27B0" }} />}
-              title="Konsultatsiyalar"
-              sparkColor="#9C27B0"
-              sparkVariant={2}
-            >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 5, lineHeight: 1.1, marginBottom: 3 }}>
-                <span style={{ fontSize: 36, fontWeight: 800, color: "#4CAF50" }}>{fmtNum(konsultBelgilandi)}</span>
-                <span style={{ fontSize: 24, fontWeight: 700, color: "#fff"   }}>/</span>
-                <span style={{ fontSize: 36, fontWeight: 800, color: "#fff"   }}>{fmtNum(konsultOtkazildi)}</span>
+            <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" border="rgba(156,39,176,0.3)"
+                      shadow="0 4px 20px rgba(156,39,176,0.15)" icon={<Calendar size={20} style={{ color:"#9C27B0" }} />}
+                      title="Konsultatsiyalar" sparkColor="#9C27B0" sparkVariant={2}>
+              <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginBottom:3 }}>
+                <span style={{ fontSize:36, fontWeight:800, color:"#4CAF50" }}>{fmtNum(konsultBelgilandi)}</span>
+                <span style={{ fontSize:24, fontWeight:700, color:"#fff" }}>/</span>
+                <span style={{ fontSize:36, fontWeight:800, color:"#fff" }}>{fmtNum(konsultOtkazildi)}</span>
               </div>
-              <div style={{ fontSize: 10, marginBottom: 1 }}>
-                <span style={{ color: "#4CAF50" }}>Belgilandi</span>
-                <span style={{ color: "#9E9E9E" }}> / </span>
-                <span style={{ color: "#4CAF50" }}>O'tkazildi</span>
+              <div style={{ fontSize:10 }}>
+                <span style={{ color:"#4CAF50" }}>Belgilandi</span>
+                <span style={{ color:"#9E9E9E" }}> / </span>
+                <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
               </div>
             </GradCard>
-
-            {/* Card 4 – Yakuniy Konversiya */}
-            <GradCard
-              gradient="linear-gradient(135deg, #0a2e0a 0%, #1b5e20 100%)"
-              border="rgba(76,175,80,0.3)"
-              shadow="0 4px 20px rgba(76,175,80,0.15)"
-              icon={<TrendingUp size={20} style={{ color: "#4CAF50" }} />}
-              title="Yakuniy Konversiya"
-              sparkColor="#4CAF50"
-              sparkVariant={3}
-            >
-              <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 3 }}>
-                {overallConvPct.toFixed(1)}%
-              </div>
-              <div style={{ fontSize: 11, color: "#9E9E9E" }}>Konversiya</div>
+            <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" border="rgba(76,175,80,0.3)"
+                      shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
+                      title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
+              <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
+              <div style={{ fontSize:11, color:"#9E9E9E" }}>Konversiya</div>
             </GradCard>
           </div>
         )}
 
         {/* ── Row 2 — Funnel Efficiency + Discarded ── */}
         {!isLoading && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 12, marginBottom: 16 }}
-               className="grid-cols-1 lg:grid-cols-[1fr_280px]">
-
-            {/* Voronka samaradorligi */}
-            <div style={{
-              background: "#111827",
-              border: "1px solid #2a2a4a",
-              borderRadius: 16,
-              padding: 16,
-              maxHeight: 140,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <Filter size={15} style={{ color: "#9E9E9E" }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Voronka samaradorligi</span>
-                <span style={{ fontSize: 11, color: "#9E9E9E", marginLeft: 2 }}>Konversiya ko'rsatkichlari</span>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 280px", gap:12, marginBottom:20 }}>
+            <div style={{ background:"#111827", border:"1px solid #2a2a4a", borderRadius:16, padding:16, maxHeight:140 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
+                <Filter size={15} style={{ color:"#9E9E9E" }} />
+                <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
+                <span style={{ fontSize:11, color:"#9E9E9E", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-
-                {/* Metric 1 */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                    background: "rgba(0,188,212,0.15)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <Percent size={18} style={{ color: "#00BCD4" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 3 }}>Sifatli Konversiya</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: "#00BCD4", lineHeight: 1.1, marginBottom: 3 }}>
-                      {sifatliKonvPct.toFixed(1)}%
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                {[
+                  { icon:<Percent size={18} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
+                  { icon:<ArrowLeftRight size={18} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
+                  { icon:<Target size={18} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:overallConvPct,   color:"#4CAF50", title:"Umumiy Konversiya",    sub:"Umumiy → K.O'tkazildi" },
+                ].map((m) => (
+                  <div key={m.title} style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:36, height:36, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:600, color:"#fff", marginBottom:3 }}>{m.title}</div>
+                      <div style={{ fontSize:24, fontWeight:800, color:m.color, lineHeight:1.1, marginBottom:3 }}>{m.val.toFixed(1)}%</div>
+                      <div style={{ fontSize:10, color:"#9E9E9E" }}>{m.sub}</div>
                     </div>
-                    <div style={{ fontSize: 10, color: "#9E9E9E" }}>Sifatli / Umumiy</div>
                   </div>
-                </div>
-
-                {/* Metric 2 */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                    background: "rgba(76,175,80,0.15)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <ArrowLeftRight size={18} style={{ color: "#4CAF50" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 3 }}>Lid → Konsultatsiya</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: "#4CAF50", lineHeight: 1.1, marginBottom: 3 }}>
-                      {leadToConsultPct.toFixed(1)}%
-                    </div>
-                    <div style={{ fontSize: 10, color: "#9E9E9E" }}>Umumiy → K.Belgilandi</div>
-                  </div>
-                </div>
-
-                {/* Metric 3 */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                    background: "rgba(76,175,80,0.15)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <Target size={18} style={{ color: "#4CAF50" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#fff", marginBottom: 3 }}>Umumiy Konversiya</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: "#4CAF50", lineHeight: 1.1, marginBottom: 3 }}>
-                      {overallConvPct.toFixed(1)}%
-                    </div>
-                    <div style={{ fontSize: 10, color: "#9E9E9E" }}>Umumiy → K.O'tkazildi</div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
-
-            {/* Sifatsiz / Bekor */}
-            <div style={{
-              background: "linear-gradient(135deg, #2a0000 0%, #6e1a1a 100%)",
-              border: "1px solid rgba(244,67,54,0.3)",
-              boxShadow: "0 4px 20px rgba(244,67,54,0.15)",
-              borderRadius: 16,
-              padding: "16px 16px 0 16px",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-              maxHeight: 140,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                  background: "rgba(244,67,54,0.2)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <XCircle size={20} style={{ color: "#F44336" }} />
+            <div style={{ background:"linear-gradient(135deg,#2a0000,#6e1a1a)", border:"1px solid rgba(244,67,54,0.3)",
+                          boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
+                          padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden", maxHeight:140 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(244,67,54,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <XCircle size={20} style={{ color:"#F44336" }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#fff" }}>Sifatsiz / Bekor</div>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: "#F44336", lineHeight: 1.1, marginTop: 3 }}>
-                    {fmtNum(sifatsizBekor)}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#9E9E9E", marginTop: 2 }}>Bekor qilingan lidlar</div>
+                  <div style={{ fontSize:12, fontWeight:600, color:"#fff" }}>Sifatsiz / Bekor</div>
+                  <div style={{ fontSize:36, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:3 }}>{fmtNum(sifatsizBekor)}</div>
+                  <div style={{ fontSize:11, color:"#9E9E9E", marginTop:2 }}>Bekor qilingan lidlar</div>
                 </div>
               </div>
-              <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
+              <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
                 <Sparkline color="#F44336" variant={0} />
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Lid va Konversiya table ── */}
-        <div className="bg-bg2 border border-border rounded-lg shadow mb-4 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border">
-            <span className="text-[13px] font-semibold">Lid va Konversiya</span>
+        {/* ══════════════════════════════════════════════════════════
+            Lid va Konversiya table
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background:"#111827", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+            <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid va Konversiya</span>
           </div>
+
           {conversionQ.isLoading ? (
-            <div className="p-6 text-text3 text-[12px]">Yuklanmoqda…</div>
+            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[11.5px] border-collapse">
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+                <colgroup>
+                  <col style={{ width:44 }} />
+                  <col style={{ width:200 }} />
+                  <col />
+                  <col />
+                  <col />
+                  <col />
+                  <col style={{ width:80 }} />
+                </colgroup>
                 <thead>
-                  <tr className="border-b border-border bg-bg">
-                    <th className="px-4 py-2.5 text-left font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[160px]">Mas'ul</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#60a5fa" }}>Jami lid</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#f59e0b" }}>Jarayonda</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#f87171" }}>Sifatsiz lid</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[120px]" style={{ color: "#34d399" }}>Konsultatsiya o'tkazildi</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-[10px] uppercase tracking-wider min-w-[80px]" style={{ color: "#4ade80" }}>Konversiya</th>
+                  <tr>
+                    <th style={TH("#555", 44)}>#</th>
+                    <th style={TH("#9E9E9E", 200)}>Menejer</th>
+                    <th style={TH("#2196F3")}>Jami Lid</th>
+                    <th style={TH("#FF9800")}>Jarayonda</th>
+                    <th style={TH("#F44336")}>Sifatsiz Lid</th>
+                    <th style={TH("#4CAF50")}>Konsultatsiya O'tkazildi</th>
+                    <th style={{ ...TH("#4CAF50", 80), textAlign:"center" }}>Konversiya</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    const rows = conversionQ.data?.conversion ?? [];
-                    const maxTotal     = Math.max(1, ...rows.map((r) => r.total));
-                    const totTotal     = rows.reduce((s, r) => s + r.total,           0);
-                    const totJarayonda = rows.reduce((s, r) => s + r.jarayonda,        0);
-                    const totSifatsiz  = rows.reduce((s, r) => s + r.sifatsiz_lid,     0);
-                    const totTashrif   = rows.reduce((s, r) => s + r.tashrif_buyurdi,  0);
+                  {convRows.map((r, i) => {
+                    const konv = r.total > 0 ? (r.tashrif_buyurdi / r.total) * 100 : 0;
                     return (
-                      <>
-                        {rows.map((r) => {
-                          const konv = r.total > 0 ? (r.tashrif_buyurdi / r.total) * 100 : 0;
-                          return (
-                            <tr key={r.responsible_id} className="border-b border-border hover:bg-bg3 transition-colors">
-                              <td className="px-4 py-2.5">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-blue-bg text-blue text-[9px] font-bold flex items-center justify-center shrink-0">
-                                    {(r.full_name || "?").split(" ").filter(Boolean).slice(0,2).map((s) => s[0]).join("").toUpperCase() || "?"}
-                                  </div>
-                                  <span className="font-medium text-[12px] whitespace-nowrap">{r.full_name}</span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <span className="mono font-semibold text-[12px]">{fmtNum(r.total)}</span>
-                                <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
-                                  <div className="h-full rounded" style={{ width: `${(r.total / maxTotal) * 100}%`, background: "#60a5fa" }} />
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <span className="mono text-[12px]">{fmtNum(r.jarayonda)}</span>
-                                <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
-                                  <div className="h-full rounded" style={{ width: r.total > 0 ? `${(r.jarayonda / r.total) * 100}%` : "0%", background: "#f59e0b" }} />
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <span className="mono text-[12px]">{fmtNum(r.sifatsiz_lid)}</span>
-                                <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
-                                  <div className="h-full rounded" style={{ width: r.total > 0 ? `${(r.sifatsiz_lid / r.total) * 100}%` : "0%", background: "#f87171" }} />
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <span className="mono text-[12px]">{fmtNum(r.tashrif_buyurdi)}</span>
-                                <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
-                                  <div className="h-full rounded" style={{ width: r.total > 0 ? `${(r.tashrif_buyurdi / r.total) * 100}%` : "0%", background: "#34d399" }} />
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                <span className="mono font-semibold text-[12px]" style={{ color: "#4ade80" }}>
-                                  {konv > 0 ? fmtPct(konv, 1) : "—"}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        <tr className="bg-bg3 border-t-2 border-border">
-                          <td className="px-4 py-2.5 text-[10px] text-text3 uppercase tracking-wider font-semibold">Итого</td>
-                          <td className="px-3 py-2.5 text-right"><span className="mono font-bold text-[13px]">{fmtNum(totTotal)}</span></td>
-                          <td className="px-3 py-2.5 text-right"><span className="mono font-semibold text-[12px]">{fmtNum(totJarayonda)}</span></td>
-                          <td className="px-3 py-2.5 text-right"><span className="mono font-semibold text-[12px]">{fmtNum(totSifatsiz)}</span></td>
-                          <td className="px-3 py-2.5 text-right"><span className="mono font-semibold text-[12px]">{fmtNum(totTashrif)}</span></td>
-                          <td className="px-3 py-2.5 text-right">
-                            <span className="mono font-semibold text-[12px]" style={{ color: "#4ade80" }}>
-                              {totTotal > 0 ? fmtPct((totTashrif / totTotal) * 100, 1) : "—"}
+                      <tr key={r.responsible_id}
+                          style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)")}>
+                        <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44 }}>
+                          {String(i + 1).padStart(2, "0")}
+                        </td>
+                        <td style={{ ...TD, width:200 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                            <AvatarCircle name={r.full_name || "?"} size={34} />
+                            <span style={{ fontSize:13, color:"#fff", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                              {r.full_name}
                             </span>
-                          </td>
-                        </tr>
-                      </>
+                          </div>
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.total)}</span>
+                          <MiniBar value={r.total} max={convMax.total} color="#2196F3" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.jarayonda)}</span>
+                          <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.sifatsiz_lid)}</span>
+                          <MiniBar value={r.sifatsiz_lid} max={convMax.sifatsiz} color="#F44336" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.tashrif_buyurdi)}</span>
+                          <MiniBar value={r.tashrif_buyurdi} max={convMax.otkazildi} color="#4CAF50" />
+                        </td>
+                        <td style={{ ...TD, textAlign:"center" }}>
+                          <ConversionDonut pct={konv} size={38} />
+                        </td>
+                      </tr>
                     );
-                  })()}
+                  })}
+
+                  {/* JAMI row */}
+                  <tr style={{ background:"rgba(255,255,255,0.04)", borderTop:"1px solid rgba(255,255,255,0.1)" }}>
+                    <td style={{ ...TD, color:"#666" }} />
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                      JAMI
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.total)}</span>
+                      <MiniBar value={1} max={1} color="#2196F3" />
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.jarayonda)}</span>
+                      <MiniBar value={1} max={1} color="#FF9800" />
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.sifatsiz)}</span>
+                      <MiniBar value={1} max={1} color="#F44336" />
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.otkazildi)}</span>
+                      <MiniBar value={1} max={1} color="#4CAF50" />
+                    </td>
+                    <td style={{ ...TD, textAlign:"center" }}>
+                      <ConversionDonut pct={convTotals.total > 0 ? (convTotals.otkazildi / convTotals.total) * 100 : 0} size={38} />
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        {/* ── Lid mas'ullar kesimida ── */}
-        <div className="bg-bg2 border border-border rounded-lg shadow mb-4 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex justify-between items-center flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <span className="text-[13px] font-semibold">Lid mas'ullar kesimida</span>
-              <span className="text-[11px] text-text3">{byUserFiltered.length} ta xodim</span>
+        {/* ══════════════════════════════════════════════════════════
+            Lid mas'ullar kesimida table
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background:"#111827", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid rgba(255,255,255,0.06)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid mas'ullar kesimida</span>
+              <span style={{ fontSize:12, color:"#555" }}>{byUserFiltered.length} ta xodim</span>
             </div>
-            {/* Search bar (Qidirish) */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text3 pointer-events-none" />
+            {/* Search */}
+            <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+              <Search size={14} style={{ position:"absolute", left:10, color:"#555", pointerEvents:"none" }} />
               <input
                 type="text"
                 placeholder="Qidirish…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 pr-3 py-1.5 bg-bg border border-border rounded-lg text-[12px] text-text placeholder-text3 outline-none focus:border-blue w-[180px]"
+                style={{
+                  paddingLeft:30, paddingRight:12, paddingTop:7, paddingBottom:7,
+                  background:"#0f1623", border:"1px solid #2a2a3a", borderRadius:8,
+                  color:"#fff", fontSize:12, outline:"none", width:180,
+                }}
               />
             </div>
           </div>
+
           {respQ.isLoading && !responsibles.length ? (
-            <div className="p-6 text-text3 text-[12px]">Yuklanmoqda…</div>
+            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[11.5px] border-collapse">
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
                 <thead>
-                  <tr className="border-b border-border bg-bg">
-                    <th className="sticky left-0 bg-bg px-4 py-2.5 text-left font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[160px] z-10">
-                      Mas'ul
-                    </th>
-                    <th className="px-3 py-2.5 text-right font-medium text-text3 uppercase tracking-wider text-[10px] min-w-[56px]">
-                      Jami
-                    </th>
+                  <tr>
+                    <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
+                    <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
+                    <th style={TH("#9E9E9E", 60)}>Jami</th>
                     {RESPONSIBLE_COLS.map((col) => (
-                      <th key={col.key} className="px-3 py-2.5 text-left font-medium text-[10px] uppercase tracking-wider min-w-[88px]" style={{ color: col.color }}>
-                        {col.label}
-                      </th>
+                      <th key={col.key} style={TH(col.color)}>{col.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {byUserFiltered.map((u) => (
-                    <tr key={u.responsible_id} className="border-b border-border hover:bg-bg3 transition-colors">
-                      <td className="sticky left-0 bg-bg2 px-4 py-2.5 z-10">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-blue-bg text-blue text-[9px] font-bold flex items-center justify-center shrink-0">
-                            {(u.full_name || `U${u.responsible_id}`).split(" ").filter(Boolean).slice(0,2).map((s) => s[0]).join("").toUpperCase() || "?"}
-                          </div>
-                          <span className="font-medium text-[12px] whitespace-nowrap">{u.full_name || `User ${u.responsible_id}`}</span>
+                  {byUserFiltered.map((u, i) => (
+                    <tr key={u.responsible_id}
+                        style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)")}>
+                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"#111827" }}>
+                        {String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"#111827", zIndex:2 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
+                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                            {u.full_name || `User ${u.responsible_id}`}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="mono font-semibold text-[13px]">{fmtNum(u.total)}</span>
+                      <td style={{ ...TD, minWidth:60 }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{fmtNum(u.total)}</span>
                       </td>
                       {RESPONSIBLE_COLS.map((col) => {
                         const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
                         const max = colMaxes[col.key] ?? 1;
                         return (
-                          <td key={col.key} className="px-3 py-2.5">
+                          <td key={col.key} style={{ ...TD, minWidth:90 }}>
                             {cnt > 0 ? (
-                              <div>
-                                <span className="mono text-[12px]">{fmtNum(cnt)}</span>
-                                <div className="h-[3px] rounded mt-1 bg-bg4 overflow-hidden">
-                                  <div className="h-full rounded" style={{ width: `${(cnt / max) * 100}%`, background: col.color }} />
-                                </div>
-                              </div>
+                              <>
+                                <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
+                                <MiniBar value={cnt} max={max} color={col.color} height={3} />
+                              </>
                             ) : (
-                              <span className="text-text3">—</span>
+                              <span style={{ fontSize:13, color:"#333" }}>—</span>
                             )}
                           </td>
                         );
                       })}
                     </tr>
                   ))}
-                  <tr className="bg-bg3 border-t-2 border-border">
-                    <td className="sticky left-0 bg-bg3 px-4 py-2.5 text-[10px] text-text3 uppercase tracking-wider font-semibold z-10">Jami</td>
-                    <td className="px-3 py-2.5 text-right"><span className="mono font-bold text-[13px]">{fmtNum(responsibles.reduce((s, u) => s + u.total, 0))}</span></td>
+
+                  {/* JAMI row */}
+                  <tr style={{ background:"rgba(255,255,255,0.04)", borderTop:"1px solid rgba(255,255,255,0.1)" }}>
+                    <td style={{ ...TD, position:"sticky", left:0, background:"#1a1f2e" }} />
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"#1a1f2e", zIndex:2 }}>
+                      JAMI
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{fmtNum(responsibles.reduce((s, u) => s + u.total, 0))}</span>
+                    </td>
                     {RESPONSIBLE_COLS.map((col) => (
-                      <td key={col.key} className="px-3 py-2.5"><span className="mono text-[12px] font-semibold">{fmtNum(totalsRow[col.key] ?? 0)}</span></td>
+                      <td key={col.key} style={TD}>
+                        <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
+                        <MiniBar value={1} max={1} color={col.color} height={3} />
+                      </td>
                     ))}
                   </tr>
                 </tbody>
@@ -592,7 +578,7 @@ export default function LidlarPage() {
         </div>
 
         {statsQ.error && (
-          <div className="mt-4 p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
+          <div className="p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
             Xatolik: {(statsQ.error as Error).message}
           </div>
         )}
