@@ -209,12 +209,12 @@ def api_deals_aggregate(user_id: int, start_date: str, end_date: str, stage: Opt
 def api_stats(start_date: Optional[str] = None, end_date: Optional[str] = None, range: str = "all"):
     params: dict = {"start_date": start_date, "end_date": end_date}
     date_where = """
-        (:start_date IS NULL OR l.date_create >= :start_date::date)
-        AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
+        (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
+        AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
     """
     date_join = """
-        (:start_date IS NULL OR l.date_create >= :start_date::date)
-        AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
+        (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
+        AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
     """
 
     stats_query = text(f"""
@@ -291,8 +291,8 @@ def api_responsibles(start_date: Optional[str] = None, end_date: Optional[str] =
             COALESCE(SUM(l.opportunity), 0)                                 AS total_opportunity
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:start_date IS NULL OR l.date_create >= :start_date::date)
-            AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
+            AND (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
+            AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         LEFT JOIN stages s ON s.id = l.stage_id
         WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
@@ -321,8 +321,8 @@ def api_conversion(start_date: Optional[str] = None, end_date: Optional[str] = N
             COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')           AS tashrif_buyurdi
         FROM responsibles r
         LEFT JOIN leads l ON l.responsible_id = r.id
-            AND (:start_date IS NULL OR l.date_create >= :start_date::date)
-            AND (:end_date   IS NULL OR l.date_create <  :end_date::date + INTERVAL '1 day')
+            AND (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
+            AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         LEFT JOIN stages s ON s.id = l.stage_id
         WHERE r.active = TRUE
         GROUP BY r.id, r.name, r.last_name
