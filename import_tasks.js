@@ -122,7 +122,7 @@ async function main() {
 
     // ── 2. Ensure Data365 responsible exists ──
     await client.query(
-      `INSERT INTO responsibles (id, name, is_active) VALUES (90012, 'Data365', TRUE)
+      `INSERT INTO responsibles (id, name, active) VALUES (90012, 'Data365', TRUE)
        ON CONFLICT (id) DO NOTHING`
     );
 

@@ -119,6 +119,24 @@ export function getFilterOptions() {
   return apiGet<FilterOptions>("/api/filter-options", {}, API_URL_CRM);
 }
 
+export type TasksSummaryResponse = {
+  tasks: {
+    responsible_id: number;
+    full_name: string;
+    total: number;
+    in_progress: number;
+    completed: number;
+    overdue: number;
+  }[];
+};
+
+export function getTasksSummary(filter: Pick<DashFilter, "start_date" | "end_date">) {
+  return apiGet<TasksSummaryResponse>("/api/dashboard/tasks-summary", {
+    from: filter.start_date,
+    to: filter.end_date,
+  }, API_URL_CRM);
+}
+
 // ── Lead list (raw + enriched) ───────────────────────────────────
 export type LeadRow = {
   ID: string;
