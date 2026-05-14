@@ -112,7 +112,7 @@ export default function LidlarPage() {
   const colMaxes = useMemo(() => {
     const m: Partial<Record<RespColKey, number>> = {};
     for (const col of RESPONSIBLE_COLS) {
-      m[col.key] = Math.max(1, ...responsibles.map((u) => (u as Record<string, number>)[col.key] ?? 0));
+      m[col.key] = Math.max(1, ...responsibles.map((u) => (u as unknown as Record<string, number>)[col.key] ?? 0));
     }
     return m;
   }, [responsibles]);
@@ -121,7 +121,7 @@ export default function LidlarPage() {
     const bs: Partial<Record<RespColKey, number>> = {};
     for (const u of responsibles) {
       for (const col of RESPONSIBLE_COLS) {
-        bs[col.key] = (bs[col.key] ?? 0) + ((u as Record<string, number>)[col.key] ?? 0);
+        bs[col.key] = (bs[col.key] ?? 0) + ((u as unknown as Record<string, number>)[col.key] ?? 0);
       }
     }
     return bs;
@@ -362,7 +362,7 @@ export default function LidlarPage() {
                         <span className="mono font-semibold text-[13px]">{fmtNum(u.total)}</span>
                       </td>
                       {RESPONSIBLE_COLS.map((col) => {
-                        const cnt = (u as Record<string, number>)[col.key] ?? 0;
+                        const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
                         const max = colMaxes[col.key] ?? 1;
                         return (
                           <td key={col.key} className="px-3 py-2.5">
