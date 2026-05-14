@@ -26,17 +26,17 @@ const STATUS_MAP = {
 };
 
 const RESPONSIBLE_MAP = {
-  "Shahzod Yormamatov":     90001,
-  "Temurmalik Xoshimjonov": 90002,
-  "Bekzod Ergashev":        90003,
-  "Davlatyor":              90004,
-  "Samandar Samadov":       90005,
-  "Muhriddin Atoullayev":   90006,
-  "Behzod Esonov":          90007,
-  "Sardor Jumayev":         90008,
-  "Abror":                  90009,
-  "Nematilla":              90010,
-  "Main (asosiy)":          90011,
+  "Shahzod Yormamatov":     22,
+  "Temurmalik Xoshimjonov": 32,
+  "Bekzod Ergashev":        14,
+  "Davlatyor":              16,
+  "Samandar Samadov":       18,
+  "Muhriddin Atoullayev":   12,
+  "Behzod Esonov":          26,
+  "Sardor Jumayev":         20,
+  "Abror":                  30,
+  "Nematilla":              34,
+  "Main (asosiy)":           1,
   "Data365":                90012,
 };
 

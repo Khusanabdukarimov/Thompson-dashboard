@@ -379,6 +379,44 @@ export default function LidlarPage() {
 
                 {/* Right form */}
                 <div style={{ flex: 1, padding: "16px 20px" }}>
+                  {/* Quick date presets */}
+                  {(() => {
+                    const presets = [
+                      { label: "Bugun",   start: todayISO(),       end: todayISO() },
+                      { label: "7 kun",   start: daysAgoISO(7),    end: todayISO() },
+                      { label: "30 kun",  start: daysAgoISO(30),   end: todayISO() },
+                      { label: "90 kun",  start: daysAgoISO(90),   end: todayISO() },
+                      { label: "Barchasi", start: "",               end: "" },
+                    ];
+                    return (
+                      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                        {presets.map((p) => {
+                          const active = pending.start_date === (p.start || undefined) && pending.end_date === (p.end || undefined);
+                          return (
+                            <button
+                              key={p.label}
+                              onClick={() => setPending((prev) => ({
+                                ...prev,
+                                start_date: p.start || undefined,
+                                end_date:   p.end   || undefined,
+                              }))}
+                              style={{
+                                background: active ? "#2196F3" : "#1a1f2e",
+                                border: `1px solid ${active ? "#2196F3" : "#2a2a4a"}`,
+                                color: active ? "#fff" : "#9E9E9E",
+                                borderRadius: 20, padding: "5px 14px",
+                                fontSize: 12, fontWeight: active ? 600 : 400,
+                                cursor: "pointer", transition: "all 0.15s",
+                              }}
+                            >
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
                   {/* Date row */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                     <div>
@@ -808,7 +846,14 @@ export default function LidlarPage() {
             Vazifalar kesimida table
         ══════════════════════════════════════════════════════════ */}
         {(() => {
-          const taskRows = tasksQ.data?.tasks ?? [];
+          // pg returns COUNT() as strings — parse to int before any arithmetic
+          const taskRows = (tasksQ.data?.tasks ?? []).map((r) => ({
+            ...r,
+            total:       parseInt(String(r.total),       10) || 0,
+            in_progress: parseInt(String(r.in_progress), 10) || 0,
+            completed:   parseInt(String(r.completed),   10) || 0,
+            overdue:     parseInt(String(r.overdue),     10) || 0,
+          }));
           const taskMax = {
             total:       Math.max(1, ...taskRows.map((r) => r.total)),
             in_progress: Math.max(1, ...taskRows.map((r) => r.in_progress)),
