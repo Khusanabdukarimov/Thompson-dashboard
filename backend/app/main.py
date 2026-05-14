@@ -151,6 +151,7 @@ def api_leads(
             (:days_interval IS NULL OR l.date_create >= NOW() - CAST(:days_interval AS INTERVAL))
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage_id IS NULL OR s.bitrix_id = :stage_id)
+            AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
             AND (:search IS NULL OR l.name ILIKE :search
                                  OR l.last_name ILIKE :search
                                  OR l.title ILIKE :search
@@ -224,12 +225,14 @@ def api_stats(
         AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
         AND (:stage IS NULL OR s.bitrix_id = :stage)
         AND (:source IS NULL OR l.source_id = :source)
+        AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
     """
     date_join = """
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
         AND (:source IS NULL OR l.source_id = :source)
+        AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
     """
 
     stats_query = text(f"""
@@ -305,6 +308,7 @@ def api_responsibles(
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage IS NULL OR s.bitrix_id = :stage)
             AND (:source IS NULL OR l.source_id = :source)
+            AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
         )
         SELECT
             r.id                                                                      AS responsible_id,
@@ -356,6 +360,7 @@ def api_conversion(
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage IS NULL OR s.bitrix_id = :stage)
             AND (:source IS NULL OR l.source_id = :source)
+            AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
         )
         SELECT
             r.id                                                                        AS responsible_id,
