@@ -270,4 +270,70 @@ router.get('/tasks-summary', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/dashboard/cancel-reasons
+ * Cancellation reason breakdown for UC_NAZK5J (Bekor bo'ldi) stage.
+ * Params: from, to, responsible_id
+ */
+router.get('/cancel-reasons', async (req, res) => {
+  const { from, to, responsible_id } = req.query;
+  const params = [
+    from || null,
+    to || null,
+    responsible_id ? parseInt(responsible_id) : null,
+  ];
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(l.uf_cancel_reason, 'Noma''lum') AS reason,
+         COUNT(*)::int AS total
+       FROM leads l
+       JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_NAZK5J'
+       WHERE ($1::date IS NULL OR l.date_create >= $1::date)
+         AND ($2::date IS NULL OR l.date_create <= $2::date)
+         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+       GROUP BY l.uf_cancel_reason
+       ORDER BY total DESC`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/cancel-reasons]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/junk-reasons
+ * Disqualification reason breakdown for UC_F8K4GI (Sifatsiz) stage.
+ * Params: from, to, responsible_id
+ */
+router.get('/junk-reasons', async (req, res) => {
+  const { from, to, responsible_id } = req.query;
+  const params = [
+    from || null,
+    to || null,
+    responsible_id ? parseInt(responsible_id) : null,
+  ];
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(l.uf_junk_reason, 'Noma''lum') AS reason,
+         COUNT(*)::int AS total
+       FROM leads l
+       JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_F8K4GI'
+       WHERE ($1::date IS NULL OR l.date_create >= $1::date)
+         AND ($2::date IS NULL OR l.date_create <= $2::date)
+         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+       GROUP BY l.uf_junk_reason
+       ORDER BY total DESC`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/junk-reasons]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

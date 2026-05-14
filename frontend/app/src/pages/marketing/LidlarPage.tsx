@@ -8,7 +8,8 @@ import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
-  getFilterOptions, getTasksSummary, type DashFilter,
+  getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
+  type DashFilter,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -237,6 +238,8 @@ export default function LidlarPage() {
   const respQ       = useQuery({ queryKey: ["stats/responsibles", applied], queryFn: () => getResponsiblesStats(applied) });
   const conversionQ = useQuery({ queryKey: ["stats/conversion",   applied], queryFn: () => getConversionStats(applied) });
   const tasksQ      = useQuery({ queryKey: ["stats/tasks",        applied], queryFn: () => getTasksSummary(applied) });
+  const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", applied], queryFn: () => getCancelReasons(applied) });
+  const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   applied], queryFn: () => getJunkReasons(applied) });
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -989,6 +992,80 @@ export default function LidlarPage() {
                   </table>
                 </div>
               )}
+            </div>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════
+            Bekor bo'lish va Sifatsiz sabablari (side-by-side)
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const cancelItems = (cancelQ.data?.items ?? []).map((r) => ({
+            ...r,
+            total: parseInt(String(r.total), 10) || 0,
+          }));
+          const junkItems = (junkQ.data?.items ?? []).map((r) => ({
+            ...r,
+            total: parseInt(String(r.total), 10) || 0,
+          }));
+          const cancelMax   = Math.max(1, ...cancelItems.map((r) => r.total));
+          const junkMax     = Math.max(1, ...junkItems.map((r) => r.total));
+          const cancelTotal = cancelItems.reduce((s, r) => s + r.total, 0);
+          const junkTotal   = junkItems.reduce((s, r) => s + r.total, 0);
+
+          const renderTable = (
+            title: string,
+            items: { reason: string; total: number }[],
+            max: number,
+            grandTotal: number,
+            barColor: string,
+            loading: boolean,
+          ) => (
+            <div style={{ background: "#111827", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{
+                padding: "14px 20px 12px",
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{title}</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
+              </div>
+              {loading ? (
+                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : items.length === 0 ? (
+                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+              ) : (
+                <div style={{ padding: "6px 0 10px" }}>
+                  {items.map((r, i) => (
+                    <div key={i} style={{ padding: "7px 20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                          {r.reason}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0, marginLeft: 8 }}>
+                          {fmtNum(r.total)}
+                        </span>
+                      </div>
+                      <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%",
+                          width: `${(r.total / max) * 100}%`,
+                          background: barColor,
+                          borderRadius: 2,
+                          transition: "width 0.3s",
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading)}
+              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading)}
             </div>
           );
         })()}

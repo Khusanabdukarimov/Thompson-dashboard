@@ -1,10 +1,42 @@
 const pool = require('../db/pool');
 const stageResolver = require('./stageResolver');
 
+const CANCEL_REASON_MAP = {
+  '1062': "Qimmatlik qildi",
+  '1064': "Puli yo'q",
+  '1068': "Boshqalardan sotib oldi",
+  '1490': "Biznes egasi emas",
+  '1492': "Maqul kelmadi",
+  '1494': "Nomi patentdan o'tmaydi",
+  '1496': "Qadriyatimizga to'g'ri kelmadi",
+  '1498': "Sheriklarga maqul kelmadi",
+  '1500': "2 xafta ichida umuman javob berishmadi",
+  '1502': "Hamkorlik bo'yicha ish boshlandi",
+  '1504': "Faoliyat to'xtatildi",
+  '1506': "Kerak emas",
+};
+
+const JUNK_REASON_MAP = {
+  '1126': "Raqam mavjud emas",
+  '1128': "Ariza qoldirmagan",
+  '1130': "5 marotaba javob bermadi",
+  '1132': "Dublikat",
+  '1134': "Test",
+  '1136': "Gaplashmasdan boshqa joyga bordi",
+  '1138': "Umuman boshqa narsani so'radi",
+  '2716': "Qimmatlik qildi",
+};
+
 function ufVal(raw) {
   if (raw == null) return null;
   if (Array.isArray(raw)) return raw.length ? String(raw[0]) : null;
   return String(raw);
+}
+
+function ufEnum(raw, map) {
+  const v = ufVal(raw);
+  if (!v) return null;
+  return map[v] || null;
 }
 
 function parseDate(s) {
@@ -28,31 +60,34 @@ async function upsertLead(r, client) {
        id, responsible_id, stage_id, opportunity, source_id,
        utm_source, utm_medium, utm_campaign, utm_content, utm_term,
        uf_segment, uf_filial, uf_service, uf_activity, uf_with_whom,
+       uf_cancel_reason, uf_junk_reason,
        name, last_name, title,
        date_create, date_modify, synced_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW()
      )
      ON CONFLICT (id) DO UPDATE SET
-       responsible_id = EXCLUDED.responsible_id,
-       stage_id       = EXCLUDED.stage_id,
-       opportunity    = EXCLUDED.opportunity,
-       source_id      = EXCLUDED.source_id,
-       utm_source     = EXCLUDED.utm_source,
-       utm_medium     = EXCLUDED.utm_medium,
-       utm_campaign   = EXCLUDED.utm_campaign,
-       utm_content    = EXCLUDED.utm_content,
-       utm_term       = EXCLUDED.utm_term,
-       uf_segment     = EXCLUDED.uf_segment,
-       uf_filial      = EXCLUDED.uf_filial,
-       uf_service     = EXCLUDED.uf_service,
-       uf_activity    = EXCLUDED.uf_activity,
-       uf_with_whom   = EXCLUDED.uf_with_whom,
-       name           = EXCLUDED.name,
-       last_name      = EXCLUDED.last_name,
-       title          = EXCLUDED.title,
-       date_modify    = EXCLUDED.date_modify,
-       synced_at      = NOW()
+       responsible_id   = EXCLUDED.responsible_id,
+       stage_id         = EXCLUDED.stage_id,
+       opportunity      = EXCLUDED.opportunity,
+       source_id        = EXCLUDED.source_id,
+       utm_source       = EXCLUDED.utm_source,
+       utm_medium       = EXCLUDED.utm_medium,
+       utm_campaign     = EXCLUDED.utm_campaign,
+       utm_content      = EXCLUDED.utm_content,
+       utm_term         = EXCLUDED.utm_term,
+       uf_segment       = EXCLUDED.uf_segment,
+       uf_filial        = EXCLUDED.uf_filial,
+       uf_service       = EXCLUDED.uf_service,
+       uf_activity      = EXCLUDED.uf_activity,
+       uf_with_whom     = EXCLUDED.uf_with_whom,
+       uf_cancel_reason = EXCLUDED.uf_cancel_reason,
+       uf_junk_reason   = EXCLUDED.uf_junk_reason,
+       name             = EXCLUDED.name,
+       last_name        = EXCLUDED.last_name,
+       title            = EXCLUDED.title,
+       date_modify      = EXCLUDED.date_modify,
+       synced_at        = NOW()
      RETURNING id`,
     [
       parseInt(r.ID),
@@ -70,6 +105,8 @@ async function upsertLead(r, client) {
       ufVal(r.UF_CRM_1775824803703),
       ufVal(r.UF_CRM_1775825155935),
       ufVal(r.UF_CRM_1770281264686),
+      ufEnum(r.UF_CRM_1770976355232, CANCEL_REASON_MAP),
+      ufEnum(r.UF_CRM_1770282341169, JUNK_REASON_MAP),
       r.NAME || null,
       r.LAST_NAME || null,
       r.TITLE || null,
