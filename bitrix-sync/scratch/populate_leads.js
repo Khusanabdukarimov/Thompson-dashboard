@@ -87,7 +87,8 @@ async function run() {
         );
       }
     } catch (err) {
-      console.error(`    Error fetching leads for form ${formId}:`, err.response?.data || err.message);
+      console.error(`    Error fetching leads for form ${formId}:`, err.message);
+      console.dir(err.response?.data || err.message, { depth: null });
     }
   }
   
@@ -96,6 +97,6 @@ async function run() {
 }
 
 run().catch(err => {
-  console.error(err);
+  console.dir(err.response?.data || err.message, { depth: null });
   process.exit(1);
 });
