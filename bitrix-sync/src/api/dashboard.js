@@ -11,7 +11,7 @@ router.get('/stats', async (req, res) => {
   try {
     const [leadsRes, dealsRes, syncRes] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS total FROM leads
-                  WHERE (source_id IS NULL OR source_id NOT ILIKE '%amocrm%')`),
+                  WHERE (source_id IS NULL OR (source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB'))`),
       pool.query('SELECT COUNT(*) AS total FROM deals'),
       pool.query('SELECT entity, last_sync, total_rows FROM sync_state ORDER BY entity'),
     ]);
@@ -52,7 +52,7 @@ router.get('/responsibles', async (req, res) => {
            AND ($3::int  IS NULL OR l.responsible_id = $3::int)
            AND ($4::text IS NULL OR s.bitrix_id = $4::text)
            AND ($5::text IS NULL OR l.source_id = $5::text)
-           AND (l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')
+           AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
        )
        SELECT
          r.id,
@@ -112,7 +112,7 @@ router.get('/funnel', async (req, res) => {
          AND ($2::date IS NULL OR l.date_create <= $2::date)
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
          AND ($4::text IS NULL OR l.source_id = $4::text)
-         AND (l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')
+         AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
        WHERE s.entity = 'lead'
        GROUP BY s.id, s.name, s.bitrix_id, s.sort_order, s.is_final, s.is_won
        ORDER BY s.sort_order`,
@@ -137,7 +137,7 @@ router.get('/leads', async (req, res) => {
     source_id, utm_source, utm_campaign,
   } = req.query;
 
-  const conditions = [`(l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')`];
+  const conditions = [`(l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))`];
   const params = [];
 
   if (responsible_id) { params.push(parseInt(responsible_id)); conditions.push(`l.responsible_id = $${params.length}`); }
@@ -229,7 +229,7 @@ router.get('/sources-list', async (_req, res) => {
     const { rows } = await pool.query(
       `SELECT DISTINCT source_id FROM leads
        WHERE source_id IS NOT NULL AND source_id != ''
-         AND source_id NOT ILIKE '%amocrm%'
+         AND (source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB')
        ORDER BY source_id LIMIT 60`
     );
     res.json(rows.map(r => r.source_id));
@@ -262,7 +262,7 @@ router.get('/tasks-summary', async (req, res) => {
          AND ($1::date IS NULL OR t.date_created >= $1::date)
          AND ($2::date IS NULL OR t.date_created <= $2::date)
          AND (t.lead_id IS NULL OR t.lead_id NOT IN (
-           SELECT id FROM leads WHERE source_id ILIKE '%amocrm%'
+           SELECT id FROM leads WHERE (source_id ILIKE '%amocrm%' OR source_id = 'UC_1WUFJB')
          ))
        WHERE r.active = TRUE
        GROUP BY r.id, r.name, r.last_name
@@ -299,7 +299,7 @@ router.get('/cancel-reasons', async (req, res) => {
        WHERE ($1::date IS NULL OR l.date_create >= $1::date)
          AND ($2::date IS NULL OR l.date_create <= $2::date)
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-         AND (l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')
+         AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
        GROUP BY l.uf_cancel_reason
        ORDER BY total DESC`,
       params
@@ -333,7 +333,7 @@ router.get('/junk-reasons', async (req, res) => {
        WHERE ($1::date IS NULL OR l.date_create >= $1::date)
          AND ($2::date IS NULL OR l.date_create <= $2::date)
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-         AND (l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')
+         AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
        GROUP BY l.uf_junk_reason
        ORDER BY total DESC`,
       params
