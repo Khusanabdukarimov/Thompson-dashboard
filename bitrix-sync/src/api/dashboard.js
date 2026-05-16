@@ -401,7 +401,8 @@ router.get('/deals-stats', async (req, res) => {
   let pi = 3;
   if (responsible_id) { extra.push(`AND d.responsible_id = $${pi++}`); params.push(parseInt(responsible_id)); }
   if (stage_id)       { extra.push(`AND d.stage_id = $${pi++}`);       params.push(parseInt(stage_id)); }
-  if (source)         { extra.push(`AND d.source_id = $${pi++}`);       params.push(source); }
+  if (source === '__none__') { extra.push(`AND (d.source_id IS NULL OR d.source_id = '')`); }
+  else if (source)   { extra.push(`AND d.source_id = $${pi++}`);       params.push(source); }
 
   try {
     const { rows } = await pool.query(
@@ -455,7 +456,8 @@ router.get('/deals-list', async (req, res) => {
   const extra = [];
   if (responsible_id) { extra.push(`d.responsible_id = $${pi++}`); baseParams.push(parseInt(responsible_id)); }
   if (stage_id)       { extra.push(`d.stage_id = $${pi++}`);       baseParams.push(parseInt(stage_id)); }
-  if (source)         { extra.push(`d.source_id = $${pi++}`);       baseParams.push(source); }
+  if (source === '__none__') { extra.push(`(d.source_id IS NULL OR d.source_id = '')`); }
+  else if (source)   { extra.push(`d.source_id = $${pi++}`);       baseParams.push(source); }
   if (search)         { extra.push(`(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) ILIKE '%' || $${pi} || '%' OR d.source_id ILIKE '%' || $${pi} || '%' OR ph.phone ILIKE '%' || $${pi} || '%')`); baseParams.push(search); pi++; }
 
   try {

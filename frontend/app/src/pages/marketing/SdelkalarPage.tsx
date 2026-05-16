@@ -278,7 +278,10 @@ export default function SdelkalarPage() {
 
   const respOptions  = useMemo(() => (filterQ.data?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name })), [filterQ.data]);
   const stageOptions = useMemo(() => (filterQ.data?.stages ?? []).map(s => ({ value: String(s.id), label: s.name })), [filterQ.data]);
-  const srcOptions   = useMemo(() => (filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })), [filterQ.data]);
+  const srcOptions   = useMemo(() => [
+    { value: "__none__", label: "Manbasiz" },
+    ...(filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })),
+  ], [filterQ.data]);
 
   const PRESETS = [
     { label: "Bugun",    f: todayISO(),       t: todayISO() },
