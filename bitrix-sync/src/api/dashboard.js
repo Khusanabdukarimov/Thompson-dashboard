@@ -493,4 +493,83 @@ router.get('/deals-list', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/dashboard/deals-conversion?from=&to=
+ * Per-responsible deal counts + jami_sotuv + konversiya donut.
+ */
+router.get('/deals-conversion', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `WITH fd AS (
+         SELECT d.id, d.responsible_id, d.opportunity, s.is_won, s.is_final
+         FROM deals d
+         JOIN stages s ON s.id = d.stage_id
+         WHERE (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
+           AND ($1::date IS NULL OR d.date_create::date >= $1::date)
+           AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+       )
+       SELECT
+         r.id AS responsible_id,
+         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+         COUNT(fd.id)::int AS total,
+         COUNT(fd.id) FILTER (WHERE NOT fd.is_won AND NOT fd.is_final)::int AS jarayonda,
+         COUNT(fd.id) FILTER (WHERE fd.is_won)::int AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int AS bekor_boldi,
+         COALESCE(SUM(fd.opportunity) FILTER (WHERE fd.is_won), 0)::numeric AS jami_sotuv
+       FROM responsibles r
+       LEFT JOIN fd ON fd.responsible_id = r.id
+       WHERE r.active = TRUE
+       GROUP BY r.id, r.name, r.last_name
+       HAVING COUNT(fd.id) > 0
+       ORDER BY total DESC`,
+      [from || null, to || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/deals-conversion]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/deals-responsibles?from=&to=
+ * Per-responsible deal counts broken down by actual deal stages.
+ */
+router.get('/deals-responsibles', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `WITH fd AS (
+         SELECT d.id, d.responsible_id, s.bitrix_id AS stage_bid
+         FROM deals d
+         JOIN stages s ON s.id = d.stage_id
+         WHERE (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
+           AND ($1::date IS NULL OR d.date_create::date >= $1::date)
+           AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+       )
+       SELECT
+         r.id AS responsible_id,
+         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+         COUNT(fd.id)::int AS total,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:PRESENTATION')::int AS taqdimot,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:CONSULTATION_DONE')::int AS konsultatsiya,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:AGREEMENT')::int AS kelishuv,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:WON')::int AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:LOSE')::int AS bekor_boldi
+       FROM responsibles r
+       LEFT JOIN fd ON fd.responsible_id = r.id
+       WHERE r.active = TRUE
+       GROUP BY r.id, r.name, r.last_name
+       HAVING COUNT(fd.id) > 0
+       ORDER BY total DESC`,
+      [from || null, to || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/deals-responsibles]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -116,3 +116,32 @@ export function getDealsList(filter: DealsListFilter) {
 export function getDealFilterOptions() {
   return apiGet<DealFilterOptions>('/api/dashboard/deal-filter-options', {}, API_URL_CRM);
 }
+
+export type DealsConversionRow = {
+  responsible_id: number;
+  full_name: string;
+  total: number;
+  jarayonda: number;
+  sotuv_boldi: number;
+  bekor_boldi: number;
+  jami_sotuv: number;
+};
+
+export type DealsResponsiblesRow = {
+  responsible_id: number;
+  full_name: string;
+  total: number;
+  taqdimot: number;
+  konsultatsiya: number;
+  kelishuv: number;
+  sotuv_boldi: number;
+  bekor_boldi: number;
+};
+
+export function getDealsConversion(filter: { from?: string; to?: string }) {
+  return apiGet<DealsConversionRow[]>('/api/dashboard/deals-conversion', filter as Record<string, string | undefined>, API_URL_CRM);
+}
+
+export function getDealsResponsibles(filter: { from?: string; to?: string }) {
+  return apiGet<DealsResponsiblesRow[]>('/api/dashboard/deals-responsibles', filter as Record<string, string | undefined>, API_URL_CRM);
+}

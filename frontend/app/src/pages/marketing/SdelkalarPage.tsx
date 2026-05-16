@@ -3,11 +3,14 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   RefreshCw, Search, ChevronLeft, ChevronRight,
   TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
-  ChevronDown, Filter,
+  ChevronDown, Filter, Users, Calendar,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
-import { getDealKpiStats, getDealsList, getDealFilterOptions } from "@/lib/api/deals";
+import {
+  getDealKpiStats, getDealsList, getDealFilterOptions,
+  getDealsConversion, getDealsResponsibles,
+} from "@/lib/api/deals";
 import type { DealRow } from "@/lib/api/deals";
 import { fmtNum } from "@/lib/utils";
 
@@ -73,6 +76,79 @@ const TD: React.CSSProperties = {
   borderBottom:"1px solid var(--border)", whiteSpace:"nowrap",
 };
 
+// ── Colored TH for analytics tables (LidlarPage style) ───────────
+const THc = (color: string, minW = 120): React.CSSProperties => ({
+  padding:"11px 14px", textAlign:"left", fontSize:12, fontWeight:700,
+  color, textTransform:"uppercase", letterSpacing:"0.04em",
+  background:"var(--bg2)", borderBottom:"1px solid var(--border)",
+  whiteSpace:"nowrap", minWidth:minW,
+});
+const TDa: React.CSSProperties = {
+  padding:"10px 14px", verticalAlign:"middle",
+  borderBottom:"1px solid var(--border)",
+};
+
+// ── AvatarCircle ─────────────────────────────────────────────────
+const AVATAR_COLORS = [
+  "#2196F3","#E91E63","#9C27B0","#00BCD4","#FF9800",
+  "#4CAF50","#FF5722","#3F51B5","#009688","#795548",
+];
+function AvatarCircle({ name, size = 34 }: { name: string; size?: number }) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const initials = parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : (parts[0]?.[0] ?? "?").toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  const bg = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return (
+    <div style={{
+      width:size, height:size, borderRadius:"50%", background:bg, flexShrink:0,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      color:"#fff", fontSize:size * 0.36, fontWeight:700, userSelect:"none",
+    }}>{initials}</div>
+  );
+}
+
+// ── MiniBar ───────────────────────────────────────────────────────
+function MiniBar({ value, max, color, height = 3 }: { value: number; max: number; color: string; height?: number }) {
+  const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div style={{ height, borderRadius:2, background:"var(--bg4)", marginTop:5, overflow:"hidden" }}>
+      <div style={{ height:"100%", width:`${w}%`, background:color, borderRadius:2, transition:"width 0.3s" }} />
+    </div>
+  );
+}
+
+// ── ConversionDonut ───────────────────────────────────────────────
+function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
+  const sw = 3;
+  const r  = (size - sw * 2) / 2;
+  const circ = 2 * Math.PI * r;
+  const fill = circ - (Math.min(100, pct) / 100) * circ;
+  if (pct <= 0) {
+    return (
+      <div style={{ width:size, height:size, position:"relative", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <svg width={size} height={size} style={{ position:"absolute" }}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={sw} />
+        </svg>
+        <span style={{ fontSize:10, color:"#555", zIndex:1 }}>—</span>
+      </div>
+    );
+  }
+  const label = pct < 10 ? `${pct.toFixed(1)}%` : `${Math.round(pct)}%`;
+  return (
+    <div style={{ width:size, height:size, position:"relative", display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <svg width={size} height={size} style={{ position:"absolute", transform:"rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={sw} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#4CAF50" strokeWidth={sw}
+                strokeDasharray={circ} strokeDashoffset={fill} strokeLinecap="round" />
+      </svg>
+      <span style={{ fontSize:9, color:"#4CAF50", fontWeight:700, zIndex:1 }}>{label}</span>
+    </div>
+  );
+}
+
 // ── Select dropdown ───────────────────────────────────────────────
 function SelectFilter({ label, value, onChange, options }: {
   label: string;
@@ -104,20 +180,28 @@ function SelectFilter({ label, value, onChange, options }: {
   );
 }
 
+// ── Deal stage columns for "mas'ullar kesimida" table ─────────────
+const DEAL_STAGE_COLS = [
+  { key: "taqdimot",    label: "Taqdimot",     color: "#9C27B0" },
+  { key: "konsultatsiya", label: "Konsultatsiya", color: "#2196F3" },
+  { key: "kelishuv",    label: "Kelishuv",     color: "#FF9800" },
+  { key: "sotuv_boldi", label: "Sotuv bo'ldi", color: "#4CAF50" },
+  { key: "bekor_boldi", label: "Bekor bo'ldi", color: "#F44336" },
+] as const;
+
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // pending = what's in the UI, applied = what's sent to API
   const [pending, setPending] = useState({
     from: daysAgoISO(365), to: todayISO(),
     responsible_id: "", stage_id: "", source: "",
   });
   const [applied, setApplied] = useState({ ...pending });
 
-  const [search, setSearch]     = useState("");
-  const [status, setStatus]     = useState<"" | "won" | "lost" | "active">("");
-  const [page,   setPage]       = useState(1);
+  const [search, setSearch]   = useState("");
+  const [status, setStatus]   = useState<"" | "won" | "lost" | "active">("");
+  const [page,   setPage]     = useState(1);
   const LIMIT = 20;
 
   const filterQ = useQuery({
@@ -150,6 +234,18 @@ export default function SdelkalarPage() {
     placeholderData: keepPreviousData,
   });
 
+  const convQ = useQuery({
+    queryKey: ["deals-conversion", applied.from, applied.to],
+    queryFn: () => getDealsConversion({ from: applied.from || undefined, to: applied.to || undefined }),
+    staleTime: 60_000,
+  });
+
+  const respQ = useQuery({
+    queryKey: ["deals-responsibles", applied.from, applied.to],
+    queryFn: () => getDealsResponsibles({ from: applied.from || undefined, to: applied.to || undefined }),
+    staleTime: 60_000,
+  });
+
   const apply = useCallback(() => {
     setApplied({ ...pending });
     setPage(1);
@@ -167,7 +263,9 @@ export default function SdelkalarPage() {
   const refresh = useCallback(() => {
     kpiQ.refetch();
     listQ.refetch();
-  }, [kpiQ, listQ]);
+    convQ.refetch();
+    respQ.refetch();
+  }, [kpiQ, listQ, convQ, respQ]);
 
   const kpi = kpiQ.data;
   const totalPages = listQ.data ? Math.ceil(listQ.data.total / LIMIT) : 1;
@@ -183,12 +281,51 @@ export default function SdelkalarPage() {
   const srcOptions   = useMemo(() => (filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })), [filterQ.data]);
 
   const PRESETS = [
-    { label: "Bugun",  f: todayISO(),      t: todayISO() },
-    { label: "7 kun",  f: daysAgoISO(7),   t: todayISO() },
-    { label: "30 kun", f: daysAgoISO(30),  t: todayISO() },
-    { label: "90 kun", f: daysAgoISO(90),  t: todayISO() },
+    { label: "Bugun",    f: todayISO(),       t: todayISO() },
+    { label: "7 kun",   f: daysAgoISO(7),    t: todayISO() },
+    { label: "30 kun",  f: daysAgoISO(30),   t: todayISO() },
+    { label: "90 kun",  f: daysAgoISO(90),   t: todayISO() },
     { label: "Barchasi", f: daysAgoISO(365), t: todayISO() },
   ];
+
+  // ── Conversion table derived data ────────────────────────────────
+  const convRows = convQ.data ?? [];
+  const convMax = useMemo(() => ({
+    total:       Math.max(1, ...convRows.map(r => r.total)),
+    jarayonda:   Math.max(1, ...convRows.map(r => r.jarayonda)),
+    sotuv_boldi: Math.max(1, ...convRows.map(r => r.sotuv_boldi)),
+    bekor_boldi: Math.max(1, ...convRows.map(r => r.bekor_boldi)),
+    jami_sotuv:  Math.max(1, ...convRows.map(r => r.jami_sotuv)),
+  }), [convRows]);
+  const convTotals = useMemo(() => convRows.reduce(
+    (acc, r) => ({
+      total:       acc.total       + r.total,
+      jarayonda:   acc.jarayonda   + r.jarayonda,
+      sotuv_boldi: acc.sotuv_boldi + r.sotuv_boldi,
+      bekor_boldi: acc.bekor_boldi + r.bekor_boldi,
+      jami_sotuv:  acc.jami_sotuv  + Number(r.jami_sotuv),
+    }),
+    { total:0, jarayonda:0, sotuv_boldi:0, bekor_boldi:0, jami_sotuv:0 }
+  ), [convRows]);
+
+  // ── Responsibles table derived data ──────────────────────────────
+  const dealRespRows = respQ.data ?? [];
+  const dealRespMax = useMemo(() => {
+    const m: Record<string, number> = { total: 1 };
+    for (const col of DEAL_STAGE_COLS)
+      m[col.key] = Math.max(1, ...dealRespRows.map(r => (r as unknown as Record<string, number>)[col.key] ?? 0));
+    return m;
+  }, [dealRespRows]);
+  const dealRespTotals = useMemo(() => {
+    const t: Record<string, number> = { total: 0 };
+    for (const col of DEAL_STAGE_COLS) t[col.key] = 0;
+    for (const r of dealRespRows) {
+      t.total += r.total;
+      for (const col of DEAL_STAGE_COLS)
+        t[col.key] += (r as unknown as Record<string, number>)[col.key] ?? 0;
+    }
+    return t;
+  }, [dealRespRows]);
 
   return (
     <>
@@ -205,7 +342,6 @@ export default function SdelkalarPage() {
           background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10,
           marginBottom:16, overflow:"hidden",
         }}>
-          {/* Header row */}
           <div
             style={{ padding:"10px 16px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}
             onClick={() => setFilterOpen(o => !o)}
@@ -223,7 +359,6 @@ export default function SdelkalarPage() {
 
           {filterOpen && (
             <div style={{ borderTop:"1px solid var(--border)", padding:"16px 20px" }}>
-              {/* Date presets */}
               <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
                 {PRESETS.map(p => {
                   const active = pending.from === p.f && pending.to === p.t;
@@ -241,7 +376,6 @@ export default function SdelkalarPage() {
                 })}
               </div>
 
-              {/* Date inputs */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
                 <div>
                   <div style={{ fontSize:11, color:"var(--text3)", marginBottom:4 }}>Dan (boshlanish)</div>
@@ -261,7 +395,6 @@ export default function SdelkalarPage() {
                 </div>
               </div>
 
-              {/* Dropdowns */}
               <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:16 }}>
                 <SelectFilter label="Mas'ul xodim" value={pending.responsible_id}
                   onChange={v => setPending(s => ({ ...s, responsible_id: v }))}
@@ -274,7 +407,6 @@ export default function SdelkalarPage() {
                   options={srcOptions} />
               </div>
 
-              {/* Actions */}
               <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
                 <button onClick={clear}
                   style={{ padding:"7px 18px", borderRadius:8, fontSize:12, cursor:"pointer",
@@ -310,20 +442,16 @@ export default function SdelkalarPage() {
             icon={<Percent size={16} color="#fff" />} />
         </div>
 
-        {/* ── Deals table ── */}
-        <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, overflow:"hidden" }}>
-          {/* Toolbar */}
+        {/* ── Deals list table ── */}
+        <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, overflow:"hidden", marginBottom:20 }}>
           <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)",
             display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
             <Filter size={14} style={{ color:"var(--text3)" }} />
-            <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>
-              Sdelkalar ro'yxati
-            </span>
+            <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>Sdelkalar ro'yxati</span>
             {listQ.data && (
               <span style={{ fontSize:11, color:"var(--text3)" }}>· {fmtNum(listQ.data.total)} ta</span>
             )}
             <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-              {/* Search */}
               <div style={{ position:"relative" }}>
                 <Search size={12} style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)", color:"var(--text3)" }} />
                 <input value={search} placeholder="Qidirish…"
@@ -332,7 +460,6 @@ export default function SdelkalarPage() {
                     fontSize:12, background:"var(--bg3)", border:"1px solid var(--border)",
                     borderRadius:6, color:"var(--text)", width:160 }} />
               </div>
-              {/* Status tabs */}
               {(["", "active", "won", "lost"] as const).map(s => {
                 const labels: Record<string, string> = { "":"Barchasi", active:"Jarayonda", won:"Sotuv bo'ldi", lost:"Bekor" };
                 const isActive = status === s;
@@ -349,7 +476,6 @@ export default function SdelkalarPage() {
             </div>
           </div>
 
-          {/* Table */}
           <div style={{ overflowX:"auto" }}>
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
@@ -386,7 +512,6 @@ export default function SdelkalarPage() {
             </table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div style={{ padding:"10px 16px", borderTop:"1px solid var(--border)",
               display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -405,6 +530,213 @@ export default function SdelkalarPage() {
                   <ChevronRight size={13} />
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Sdelka va Konversiya table
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:10 }}>
+            <CheckCircle size={16} style={{ color:"#4CAF50" }} />
+            <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Sdelka va Konversiya</span>
+            <span style={{ fontSize:12, color:"#555" }}>{convRows.length} ta menejer</span>
+          </div>
+
+          {convQ.isLoading ? (
+            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
+          ) : (
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+                <colgroup>
+                  <col style={{ width:44 }} />
+                  <col style={{ width:200 }} />
+                  <col />
+                  <col />
+                  <col />
+                  <col />
+                  <col />
+                  <col style={{ width:84 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={THc("#555", 44)}>#</th>
+                    <th style={THc("#9E9E9E", 200)}>Menejer</th>
+                    <th style={THc("#2196F3")}>Jami Sdelka</th>
+                    <th style={THc("#FF9800")}>Jarayonda</th>
+                    <th style={THc("#4CAF50")}>Sotuv bo'ldi</th>
+                    <th style={THc("#F44336")}>Bekor bo'ldi</th>
+                    <th style={THc("#00BCD4")}>Jami Sotuv ($)</th>
+                    <th style={{ ...THc("#4CAF50", 84), textAlign:"center" }}>Konversiya</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {convRows.map((r, i) => {
+                    const konv = r.total > 0 ? (r.sotuv_boldi / r.total) * 100 : 0;
+                    return (
+                      <tr key={r.responsible_id}
+                          style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                        <td style={{ ...TDa, color:"#555", fontSize:13, fontWeight:600 }}>
+                          {String(i + 1).padStart(2, "0")}
+                        </td>
+                        <td style={TDa}>
+                          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                            <AvatarCircle name={r.full_name || "?"} size={34} />
+                            <span style={{ fontSize:13, color:"#fff", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                              {r.full_name}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={TDa}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.total)}</span>
+                          <MiniBar value={r.total} max={convMax.total} color="#2196F3" />
+                        </td>
+                        <td style={TDa}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.jarayonda)}</span>
+                          <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
+                        </td>
+                        <td style={TDa}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.sotuv_boldi)}</span>
+                          <MiniBar value={r.sotuv_boldi} max={convMax.sotuv_boldi} color="#4CAF50" />
+                        </td>
+                        <td style={TDa}>
+                          <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.bekor_boldi)}</span>
+                          <MiniBar value={r.bekor_boldi} max={convMax.bekor_boldi} color="#F44336" />
+                        </td>
+                        <td style={TDa}>
+                          <span style={{ fontSize:14, fontWeight:600, color:"#00BCD4" }}>{fmtMoney(Number(r.jami_sotuv))}</span>
+                          <MiniBar value={Number(r.jami_sotuv)} max={convMax.jami_sotuv} color="#00BCD4" />
+                        </td>
+                        <td style={{ ...TDa, textAlign:"center" }}>
+                          <ConversionDonut pct={konv} size={38} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {/* JAMI row */}
+                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
+                    <td style={{ ...TDa, color:"#666" }} />
+                    <td style={{ ...TDa, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                      JAMI
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.total)}</span>
+                      <MiniBar value={1} max={1} color="#2196F3" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.jarayonda)}</span>
+                      <MiniBar value={1} max={1} color="#FF9800" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.sotuv_boldi)}</span>
+                      <MiniBar value={1} max={1} color="#4CAF50" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.bekor_boldi)}</span>
+                      <MiniBar value={1} max={1} color="#F44336" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize:15, fontWeight:700, color:"#00BCD4" }}>{fmtMoney(convTotals.jami_sotuv)}</span>
+                      <MiniBar value={1} max={1} color="#00BCD4" />
+                    </td>
+                    <td style={{ ...TDa, textAlign:"center" }}>
+                      <ConversionDonut pct={convTotals.total > 0 ? (convTotals.sotuv_boldi / convTotals.total) * 100 : 0} size={38} />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Sdelka mas'ullar kesimida table
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:10 }}>
+            <Users size={16} style={{ color:"#9E9E9E" }} />
+            <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Sdelka mas'ullar kesimida</span>
+            <span style={{ fontSize:12, color:"#555" }}>{dealRespRows.length} ta xodim</span>
+          </div>
+
+          {respQ.isLoading ? (
+            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
+          ) : (
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...THc("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
+                    <th style={{ ...THc("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
+                    <th style={THc("#9E9E9E", 60)}>Jami</th>
+                    {DEAL_STAGE_COLS.map(col => (
+                      <th key={col.key} style={THc(col.color)}>{col.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dealRespRows.map((u, i) => (
+                    <tr key={u.responsible_id}
+                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      <td style={{ ...TDa, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
+                        {String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td style={{ ...TDa, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <AvatarCircle name={u.full_name || "?"} size={32} />
+                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                            {u.full_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ ...TDa, minWidth:60 }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{fmtNum(u.total)}</span>
+                      </td>
+                      {DEAL_STAGE_COLS.map(col => {
+                        const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
+                        const max = dealRespMax[col.key] ?? 1;
+                        return (
+                          <td key={col.key} style={{ ...TDa, minWidth:120 }}>
+                            {cnt > 0 ? (
+                              <>
+                                <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
+                                <MiniBar value={cnt} max={max} color={col.color} height={3} />
+                              </>
+                            ) : (
+                              <span style={{ fontSize:13, color:"#333" }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+
+                  {/* JAMI row */}
+                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
+                    <td style={{ ...TDa, position:"sticky", left:0, background:"var(--bg3)" }} />
+                    <td style={{ ...TDa, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
+                      JAMI
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(dealRespTotals.total)}</span>
+                    </td>
+                    {DEAL_STAGE_COLS.map(col => (
+                      <td key={col.key} style={TDa}>
+                        <span style={{ fontSize:15, fontWeight:700, color:"#fff" }}>
+                          {fmtNum(dealRespTotals[col.key] ?? 0)}
+                        </span>
+                        <MiniBar value={1} max={1} color={col.color} />
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
             </div>
           )}
         </div>
