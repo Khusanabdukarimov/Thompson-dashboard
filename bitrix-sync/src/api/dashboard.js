@@ -346,28 +346,73 @@ router.get('/junk-reasons', async (req, res) => {
 });
 
 /**
- * GET /api/dashboard/deals-stats?from=&to=
- * KPI summary cards for Sdelkalar page.
+ * GET /api/dashboard/deal-filter-options
+ * Responsibles, deal stages, and sources for Sdelkalar filter panel.
+ */
+router.get('/deal-filter-options', async (_req, res) => {
+  const SOURCE_NAMES = {
+    'UC_O9BLGT': 'Facebook', 'UC_3O8GTF': 'Instagram',
+    'UC_H1PMDS': 'Telegram forma', 'REPEAT_SALE': 'Website forma',
+    'CALL': "Qo'ng'iroq", 'ADVERTISING': 'Reklama',
+    'UC_8BLFVY': "Ko'chadan",
+  };
+  try {
+    const [respRes, stageRes, srcRes] = await Promise.all([
+      pool.query(`SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
+                  FROM responsibles WHERE active = true ORDER BY name`),
+      pool.query(`SELECT DISTINCT s.id, s.name FROM stages s
+                  INNER JOIN deals d ON d.stage_id = s.id
+                  ORDER BY s.name`),
+      pool.query(`SELECT DISTINCT source_id FROM deals
+                  WHERE source_id IS NOT NULL AND source_id != ''
+                    AND source_id NOT ILIKE '%amocrm%'
+                  ORDER BY source_id LIMIT 30`),
+    ]);
+    res.json({
+      responsibles: respRes.rows,
+      stages: stageRes.rows,
+      sources: srcRes.rows.map(r => ({
+        id: r.source_id,
+        name: SOURCE_NAMES[r.source_id] || r.source_id,
+      })),
+    });
+  } catch (err) {
+    console.error('[dashboard/deal-filter-options]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/deals-stats?from=&to=&responsible_id=&stage_id=&source=
+ * KPI summary cards for Sdelkalar page (amoCRM excluded).
  */
 router.get('/deals-stats', async (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, responsible_id, stage_id, source } = req.query;
+
+  const extra = [];
+  const params = [from || null, to || null];
+  let pi = 3;
+  if (responsible_id) { extra.push(`AND d.responsible_id = $${pi++}`); params.push(parseInt(responsible_id)); }
+  if (stage_id)       { extra.push(`AND d.stage_id = $${pi++}`);       params.push(parseInt(stage_id)); }
+  if (source)         { extra.push(`AND d.source_id = $${pi++}`);       params.push(source); }
+
   try {
     const { rows } = await pool.query(
       `SELECT
-         COUNT(d.id)::int                                            AS total,
-         COUNT(d.id) FILTER (WHERE s.is_won = true)::int            AS won,
-         COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int AS lost,
-         COUNT(d.id) FILTER (WHERE s.is_final = false)::int         AS in_progress,
-         COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won = true), 0)::numeric  AS jami_sotuv,
-         COALESCE(AVG(d.opportunity) FILTER (WHERE s.is_won = true), 0)::numeric  AS ortacha_chek,
-         CASE WHEN COUNT(d.id) > 0
-              THEN ROUND((COUNT(d.id) FILTER (WHERE s.is_won = true) * 100.0 / COUNT(d.id))::numeric, 1)
-              ELSE 0 END                                             AS konversiya
+         COUNT(d.id)::int AS total,
+         COUNT(d.id) FILTER (WHERE s.is_final = false AND s.is_won = false)::int AS yangi,
+         COUNT(d.id) FILTER (WHERE s.is_won = true)::int                         AS sotuv_boldi,
+         COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int  AS bekor,
+         COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won = true), 0)::numeric AS jami_sotuv,
+         COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.is_won = true), 0), 0)::numeric AS ortacha_chek,
+         ROUND(COUNT(d.id) FILTER (WHERE s.is_won = true)::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
-       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-         AND ($2::date IS NULL OR d.date_create::date <= $2::date)`,
-      [from || null, to || null]
+       WHERE (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
+         AND ($1::date IS NULL OR d.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         ${extra.join(' ')}`,
+      params
     );
     res.json(rows[0]);
   } catch (err) {
@@ -377,72 +422,71 @@ router.get('/deals-stats', async (req, res) => {
 });
 
 /**
- * GET /api/dashboard/deals-list?from=&to=&page=1&limit=20&search=&status=
- * Paginated individual deals for Sdelkalar page.
+ * GET /api/dashboard/deals-list?from=&to=&page=1&limit=20&search=&status=&responsible_id=&stage_id=&source=
+ * Paginated individual deals for Sdelkalar page (amoCRM excluded).
  */
 router.get('/deals-list', async (req, res) => {
-  const { from, to, search, status } = req.query;
+  const { from, to, search, status, responsible_id, stage_id, source } = req.query;
   const page  = Math.max(1, parseInt(req.query.page)  || 1);
   const limit = Math.min(100, parseInt(req.query.limit) || 20);
   const offset = (page - 1) * limit;
 
-  const statusFilter =
-    status === 'won'  ? 'AND s.is_won = true' :
-    status === 'lost' ? 'AND s.is_final = true AND s.is_won = false' :
-    status === 'active' ? 'AND s.is_final = false' : '';
+  const buildWhere = (extra = []) => {
+    const parts = [
+      `(d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')`,
+      `($1::date IS NULL OR d.date_create::date >= $1::date)`,
+      `($2::date IS NULL OR d.date_create::date <= $2::date)`,
+    ];
+    const statusPart =
+      status === 'won'    ? 'AND s.is_won = true' :
+      status === 'lost'   ? 'AND s.is_final = true AND s.is_won = false' :
+      status === 'active' ? 'AND s.is_final = false' : '';
+    if (statusPart) parts.push(statusPart.slice(4));
+    return parts.concat(extra).map((p, i) => (i === 0 ? `WHERE ${p}` : `  AND ${p}`)).join('\n');
+  };
 
-  const searchFilter = search
-    ? `AND (TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) ILIKE '%' || $5 || '%' OR d.source_id ILIKE '%' || $5 || '%' OR ph.phone ILIKE '%' || $5 || '%')`
-    : '';
+  const baseParams = [from || null, to || null];
+  let pi = 3;
+  const extra = [];
+  if (responsible_id) { extra.push(`d.responsible_id = $${pi++}`); baseParams.push(parseInt(responsible_id)); }
+  if (stage_id)       { extra.push(`d.stage_id = $${pi++}`);       baseParams.push(parseInt(stage_id)); }
+  if (source)         { extra.push(`d.source_id = $${pi++}`);       baseParams.push(source); }
+  if (search)         { extra.push(`(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) ILIKE '%' || $${pi} || '%' OR d.source_id ILIKE '%' || $${pi} || '%' OR ph.phone ILIKE '%' || $${pi} || '%')`); baseParams.push(search); pi++; }
 
   try {
+    const listParams = [...baseParams, limit, offset];
     const { rows } = await pool.query(
       `SELECT
          d.id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS responsible,
-         COALESCE(ph.phone, '—')      AS mijoz,
-         d.opportunity::numeric       AS summa,
-         COALESCE(d.source_id, '—')   AS manba,
-         d.date_create                AS sana,
-         s.name                       AS stage_name,
+         COALESCE(ph.phone, '—')    AS mijoz,
+         d.opportunity::numeric     AS summa,
+         COALESCE(d.source_id, '—') AS manba,
+         d.date_create              AS sana,
+         s.name                     AS stage_name,
          s.is_won,
          s.is_final
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
        LEFT JOIN responsibles r ON r.id = d.responsible_id
-       LEFT JOIN LATERAL (
-         SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1
-       ) ph ON true
-       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
-         ${statusFilter}
-         ${search ? searchFilter : ''}
+       LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
+       ${buildWhere(extra)}
        ORDER BY d.date_create DESC
-       LIMIT $3 OFFSET $4`,
-      search ? [from || null, to || null, limit, offset, search] : [from || null, to || null, limit, offset]
+       LIMIT $${pi} OFFSET $${pi + 1}`,
+      listParams
     );
 
-    const countRes = await pool.query(
+    const { rows: countRows } = await pool.query(
       `SELECT COUNT(*)::int AS total
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
        LEFT JOIN responsibles r ON r.id = d.responsible_id
-       LEFT JOIN LATERAL (
-         SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1
-       ) ph ON true
-       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
-         ${statusFilter}
-         ${search ? searchFilter : ''}`,
-      search ? [from || null, to || null, search] : [from || null, to || null]
+       LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
+       ${buildWhere(extra)}`,
+      baseParams
     );
 
-    res.json({
-      total: countRes.rows[0].total,
-      page,
-      limit,
-      items: rows,
-    });
+    res.json({ total: countRows[0].total, page, limit, items: rows });
   } catch (err) {
     console.error('[dashboard/deals-list]', err.message);
     res.status(500).json({ error: err.message });

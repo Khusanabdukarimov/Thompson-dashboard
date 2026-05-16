@@ -57,12 +57,18 @@ export function getDealsBySource(filter: DealsFilter) {
 
 export type DealKpiStats = {
   total: number;
-  won: number;
-  lost: number;
-  in_progress: number;
+  yangi: number;
+  sotuv_boldi: number;
+  bekor: number;
   jami_sotuv: number;
   ortacha_chek: number;
   konversiya: number;
+};
+
+export type DealFilterOptions = {
+  responsibles: { id: number; full_name: string }[];
+  stages: { id: number; name: string }[];
+  sources: { id: string; name: string }[];
 };
 
 export type DealRow = {
@@ -89,14 +95,24 @@ export type DealsListFilter = {
   to?: string;
   search?: string;
   status?: 'won' | 'lost' | 'active' | '';
+  responsible_id?: number;
+  stage_id?: number;
+  source?: string;
   page?: number;
   limit?: number;
 };
 
-export function getDealKpiStats(filter: { from?: string; to?: string }) {
-  return apiGet<DealKpiStats>('/api/dashboard/deals-stats', filter, API_URL_CRM);
+export function getDealKpiStats(filter: {
+  from?: string; to?: string;
+  responsible_id?: number; stage_id?: number; source?: string;
+}) {
+  return apiGet<DealKpiStats>('/api/dashboard/deals-stats', filter as Record<string, string | number | undefined>, API_URL_CRM);
 }
 
 export function getDealsList(filter: DealsListFilter) {
   return apiGet<DealsListResponse>('/api/dashboard/deals-list', filter as Record<string, string | number | undefined>, API_URL_CRM);
+}
+
+export function getDealFilterOptions() {
+  return apiGet<DealFilterOptions>('/api/dashboard/deal-filter-options', {}, API_URL_CRM);
 }
