@@ -20,19 +20,16 @@ async function upsertDeal(r, client) {
   const { rows } = await db.query(
     `INSERT INTO deals (
        id, responsible_id, stage_id, opportunity, currency_id,
-        source_id, utm_source, title, date_create, closedate, synced_at
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()
-      )
+       source_id, utm_source, date_create, closedate, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id = EXCLUDED.responsible_id,
        stage_id       = EXCLUDED.stage_id,
        opportunity    = EXCLUDED.opportunity,
        currency_id    = EXCLUDED.currency_id,
        source_id      = EXCLUDED.source_id,
-        utm_source     = EXCLUDED.utm_source,
-        title          = EXCLUDED.title,
-        closedate      = EXCLUDED.closedate,
+       utm_source     = EXCLUDED.utm_source,
+       closedate      = EXCLUDED.closedate,
        synced_at      = NOW()
      RETURNING id`,
     [
@@ -43,7 +40,6 @@ async function upsertDeal(r, client) {
       r.CURRENCY_ID || null,
       r.SOURCE_ID || null,
       r.UTM_SOURCE || null,
-      r.TITLE || null,
       parseDate(r.DATE_CREATE),
       parseDate(r.CLOSEDATE),
     ]
