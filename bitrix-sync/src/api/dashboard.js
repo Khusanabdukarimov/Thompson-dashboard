@@ -505,8 +505,7 @@ router.get('/deals-conversion', async (req, res) => {
          SELECT d.id, d.responsible_id, d.opportunity, s.is_won, s.is_final
          FROM deals d
          JOIN stages s ON s.id = d.stage_id
-         WHERE (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
-           AND ($1::date IS NULL OR d.date_create::date >= $1::date)
+         WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
            AND ($2::date IS NULL OR d.date_create::date <= $2::date)
        )
        SELECT
@@ -543,8 +542,7 @@ router.get('/deals-responsibles', async (req, res) => {
          SELECT d.id, d.responsible_id, s.bitrix_id AS stage_bid
          FROM deals d
          JOIN stages s ON s.id = d.stage_id
-         WHERE (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
-           AND ($1::date IS NULL OR d.date_create::date >= $1::date)
+         WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
            AND ($2::date IS NULL OR d.date_create::date <= $2::date)
        )
        SELECT
