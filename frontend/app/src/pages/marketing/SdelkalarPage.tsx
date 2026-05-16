@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   RefreshCw, Search, ChevronLeft, ChevronRight,
   TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
-  ChevronDown, Filter, Users, Calendar,
+  ChevronDown, Filter, Users,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
