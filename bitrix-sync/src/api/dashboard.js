@@ -3,6 +3,19 @@ const pool = require('../db/pool');
 
 const router = Router();
 
+const SOURCE_NAMES = {
+  'UC_O9BLGT': 'Facebook',
+  'UC_3O8GTF': 'Instagram',
+  'UC_H1PMDS': 'Telegram forma',
+  'REPEAT_SALE': 'Website forma',
+  'CALL': "Qo'ng'iroq",
+  'Звонок': "Qo'ng'iroq",
+  'ADVERTISING': 'Reklama',
+  'UC_8BLFVY': "Ko'chadan",
+  'UC_3F6D2K': 'Vakansiya',
+  'UC_1WUFJB': 'amoCRM',
+};
+
 /**
  * GET /api/dashboard/stats
  * Simple counts + last sync state.
@@ -350,12 +363,6 @@ router.get('/junk-reasons', async (req, res) => {
  * Responsibles, deal stages, and sources for Sdelkalar filter panel.
  */
 router.get('/deal-filter-options', async (_req, res) => {
-  const SOURCE_NAMES = {
-    'UC_O9BLGT': 'Facebook', 'UC_3O8GTF': 'Instagram',
-    'UC_H1PMDS': 'Telegram forma', 'REPEAT_SALE': 'Website forma',
-    'CALL': "Qo'ng'iroq", 'ADVERTISING': 'Reklama',
-    'UC_8BLFVY': "Ko'chadan",
-  };
   try {
     const [respRes, stageRes, srcRes] = await Promise.all([
       pool.query(`SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
@@ -486,7 +493,11 @@ router.get('/deals-list', async (req, res) => {
       baseParams
     );
 
-    res.json({ total: countRows[0].total, page, limit, items: rows });
+    const items = rows.map(r => ({
+      ...r,
+      manba: SOURCE_NAMES[r.manba] || r.manba || '—',
+    }));
+    res.json({ total: countRows[0].total, page, limit, items });
   } catch (err) {
     console.error('[dashboard/deals-list]', err.message);
     res.status(500).json({ error: err.message });
