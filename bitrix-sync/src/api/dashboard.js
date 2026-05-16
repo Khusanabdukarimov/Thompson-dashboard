@@ -415,8 +415,7 @@ router.get('/deals-stats', async (req, res) => {
          ROUND(COUNT(d.id) FILTER (WHERE s.is_won = true)::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
-       WHERE (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
-         AND ($1::date IS NULL OR d.date_create::date >= $1::date)
+       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
          AND ($2::date IS NULL OR d.date_create::date <= $2::date)
          ${extra.join(' ')}`,
       params
@@ -440,7 +439,6 @@ router.get('/deals-list', async (req, res) => {
 
   const buildWhere = (extra = []) => {
     const parts = [
-      `(d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')`,
       `($1::date IS NULL OR d.date_create::date >= $1::date)`,
       `($2::date IS NULL OR d.date_create::date <= $2::date)`,
     ];
