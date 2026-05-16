@@ -518,8 +518,7 @@ router.get('/deals-conversion', async (req, res) => {
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int AS bekor_boldi,
          COALESCE(SUM(fd.opportunity) FILTER (WHERE fd.is_won), 0)::numeric AS jami_sotuv
        FROM responsibles r
-       LEFT JOIN fd ON fd.responsible_id = r.id
-       WHERE r.active = TRUE
+       JOIN fd ON fd.responsible_id = r.id
        GROUP BY r.id, r.name, r.last_name
        HAVING COUNT(fd.id) > 0
        ORDER BY total DESC`,
@@ -558,8 +557,7 @@ router.get('/deals-responsibles', async (req, res) => {
          COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:WON')::int AS sotuv_boldi,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:LOSE')::int AS bekor_boldi
        FROM responsibles r
-       LEFT JOIN fd ON fd.responsible_id = r.id
-       WHERE r.active = TRUE
+       JOIN fd ON fd.responsible_id = r.id
        GROUP BY r.id, r.name, r.last_name
        HAVING COUNT(fd.id) > 0
        ORDER BY total DESC`,
