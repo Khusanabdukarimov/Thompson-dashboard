@@ -548,9 +548,11 @@ export default function LidlarPage() {
                       >
                         <option value="">Barchasi</option>
                         {mode === 'amocrm'
-                          ? (amocrmSrcQ.data ?? []).map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))
+                          ? amocrmSrcQ.isLoading
+                            ? <option disabled>Yuklanmoqda…</option>
+                            : (amocrmSrcQ.data ?? []).map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))
                           : filterOpts?.sources.map((s) => (
                               <option key={s.id} value={s.id}>{s.name}</option>
                             ))
