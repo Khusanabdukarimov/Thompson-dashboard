@@ -157,6 +157,14 @@ export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date
   }, API_URL_CRM);
 }
 
+export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
+  return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_id,
+  }, API_URL_CRM);
+}
+
 // ── Lead list (raw + enriched) ───────────────────────────────────
 export type LeadRow = {
   ID: string;

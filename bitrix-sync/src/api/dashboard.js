@@ -359,6 +359,40 @@ router.get('/junk-reasons', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/deal-cancel-reasons
+ * Cancellation reason breakdown for lost/cancelled deals.
+ * Params: from, to, responsible_id
+ */
+router.get('/deal-cancel-reasons', async (req, res) => {
+  const { from, to, responsible_id } = req.query;
+  const params = [
+    from || null,
+    to || null,
+    responsible_id ? parseInt(responsible_id) : null,
+  ];
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(d.uf_cancel_reason, 'Noma''lum') AS reason,
+         COUNT(*)::int AS total
+       FROM deals d
+       JOIN stages s ON s.id = d.stage_id AND s.is_final = true AND s.is_won = false
+       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         AND ($3::int  IS NULL OR d.responsible_id = $3::int)
+         AND (d.source_id IS NULL OR d.source_id NOT ILIKE '%amocrm%')
+       GROUP BY d.uf_cancel_reason
+       ORDER BY total DESC`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/deal-cancel-reasons]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/dashboard/deal-filter-options
  * Responsibles, deal stages, and sources for Sdelkalar filter panel.
  */

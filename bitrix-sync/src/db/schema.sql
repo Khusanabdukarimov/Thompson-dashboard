@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS deals (
   title           TEXT,
   date_create     TIMESTAMPTZ,
   closedate       TIMESTAMPTZ,
+  uf_cancel_reason TEXT,
   synced_at       TIMESTAMPTZ DEFAULT NOW()
 );
 

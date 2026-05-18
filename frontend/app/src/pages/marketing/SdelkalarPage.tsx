@@ -12,6 +12,7 @@ import {
   getDealsConversion, getDealsResponsibles,
 } from "@/lib/api/deals";
 import type { DealRow } from "@/lib/api/deals";
+import { getDealCancelReasons } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -246,6 +247,16 @@ export default function SdelkalarPage() {
     staleTime: 60_000,
   });
 
+  const cancelQ = useQuery({
+    queryKey: ["stats/deal-cancel-reasons", applied],
+    queryFn: () => getDealCancelReasons({
+      start_date: applied.from || undefined,
+      end_date: applied.to || undefined,
+      responsible_id: applied.responsible_id ? Number(applied.responsible_id) : undefined,
+    }),
+    staleTime: 60_000,
+  });
+
   const apply = useCallback(() => {
     setApplied({ ...pending });
     setPage(1);
@@ -445,98 +456,6 @@ export default function SdelkalarPage() {
             icon={<Percent size={16} color="#fff" />} />
         </div>
 
-        {/* ── Deals list table ── */}
-        <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, overflow:"hidden", marginBottom:20 }}>
-          <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)",
-            display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            <Filter size={14} style={{ color:"var(--text3)" }} />
-            <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>Sdelkalar ro'yxati</span>
-            {listQ.data && (
-              <span style={{ fontSize:11, color:"var(--text3)" }}>· {fmtNum(listQ.data.total)} ta</span>
-            )}
-            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-              <div style={{ position:"relative" }}>
-                <Search size={12} style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)", color:"var(--text3)" }} />
-                <input value={search} placeholder="Qidirish…"
-                  onChange={e => { setSearch(e.target.value); setPage(1); }}
-                  style={{ paddingLeft:26, paddingRight:10, paddingTop:5, paddingBottom:5,
-                    fontSize:12, background:"var(--bg3)", border:"1px solid var(--border)",
-                    borderRadius:6, color:"var(--text)", width:160 }} />
-              </div>
-              {(["", "active", "won", "lost"] as const).map(s => {
-                const labels: Record<string, string> = { "":"Barchasi", active:"Jarayonda", won:"Sotuv bo'ldi", lost:"Bekor" };
-                const isActive = status === s;
-                return (
-                  <button key={s} onClick={() => { setStatus(s); setPage(1); }}
-                    style={{ fontSize:11, padding:"4px 10px", borderRadius:20, cursor:"pointer",
-                      background: isActive ? "#3b82f6" : "var(--bg3)",
-                      border:`1px solid ${isActive ? "#3b82f6" : "var(--border)"}`,
-                      color: isActive ? "#fff" : "var(--text2)" }}>
-                    {labels[s]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse" }}>
-              <thead>
-                <tr>
-                  {["#", "Mas'ul", "Mijoz (tel)", "Summa", "Manba", "Sana", "Status"].map(h => (
-                    <th key={h} style={TH}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {listQ.isLoading && (
-                  <tr><td colSpan={7} style={{ ...TD, textAlign:"center", padding:32, color:"var(--text3)" }}>Yuklanmoqda…</td></tr>
-                )}
-                {!listQ.isLoading && listQ.data?.items.length === 0 && (
-                  <tr><td colSpan={7} style={{ ...TD, textAlign:"center", padding:32, color:"var(--text3)" }}>Ma'lumot topilmadi</td></tr>
-                )}
-                {listQ.data?.items.map((row: DealRow, i: number) => (
-                  <tr key={row.id}
-                    style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                    <td style={{ ...TD, color:"var(--text3)", width:40 }}>{(page-1)*LIMIT+i+1}</td>
-                    <td style={TD}>{row.responsible || "—"}</td>
-                    <td style={{ ...TD, fontFamily:"monospace", fontSize:12 }}>{row.mijoz}</td>
-                    <td style={{ ...TD, color:"#10b981", fontWeight:600, fontFamily:"monospace" }}>
-                      {Number(row.summa) > 0 ? fmtMoney(Number(row.summa)) : "—"}
-                    </td>
-                    <td style={{ ...TD, color:"var(--text2)" }}>{row.manba}</td>
-                    <td style={{ ...TD, color:"var(--text3)", fontSize:12 }}>{fmtDate(row.sana)}</td>
-                    <td style={TD}><StatusBadge row={row} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {totalPages > 1 && (
-            <div style={{ padding:"10px 16px", borderTop:"1px solid var(--border)",
-              display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:11, color:"var(--text3)" }}>
-                {page} / {totalPages} sahifa · {fmtNum(listQ.data?.total ?? 0)} ta jami
-              </span>
-              <div style={{ display:"flex", gap:6 }}>
-                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
-                  style={{ padding:"4px 10px", borderRadius:6, fontSize:12, cursor:page===1?"not-allowed":"pointer",
-                    background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text2)", opacity:page===1?.4:1 }}>
-                  <ChevronLeft size={13} />
-                </button>
-                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages}
-                  style={{ padding:"4px 10px", borderRadius:6, fontSize:12, cursor:page===totalPages?"not-allowed":"pointer",
-                    background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text2)", opacity:page===totalPages?.4:1 }}>
-                  <ChevronRight size={13} />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* ══════════════════════════════════════════════════════════
             Sdelka va Konversiya table
         ══════════════════════════════════════════════════════════ */}
@@ -733,6 +652,154 @@ export default function SdelkalarPage() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Bekor bo'lish sabablari
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const cancelItems = (cancelQ.data?.items ?? []).map((r) => ({
+            ...r,
+            total: parseInt(String(r.total), 10) || 0,
+          }));
+          const cancelMax   = Math.max(1, ...cancelItems.map((r) => r.total));
+          const cancelTotal = cancelItems.reduce((s, r) => s + r.total, 0);
+
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", marginBottom: 20 }}>
+              <div style={{ background: "var(--bg2)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
+                <div style={{
+                  padding: "14px 20px 12px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>Bekor bo'lish sabablari</span>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: "#FFC107" }}>{fmtNum(cancelTotal)}</span>
+                </div>
+                {cancelQ.isLoading ? (
+                  <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                ) : cancelItems.length === 0 ? (
+                  <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+                ) : (
+                  <div style={{ padding: "6px 0 10px" }}>
+                    {cancelItems.map((r, i) => (
+                      <div key={i} style={{ padding: "7px 20px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                          <span style={{ fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                            {r.reason}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0, marginLeft: 8 }}>
+                            {fmtNum(r.total)}
+                          </span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%",
+                            width: `${(r.total / cancelMax) * 100}%`,
+                            background: "#FFC107",
+                            borderRadius: 2,
+                            transition: "width 0.3s",
+                          }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Deals list table ── */}
+        <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:10, overflow:"hidden", marginBottom:20 }}>
+          <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)",
+            display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <Filter size={14} style={{ color:"var(--text3)" }} />
+            <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>Sdelkalar ro'yxati</span>
+            {listQ.data && (
+              <span style={{ fontSize:11, color:"var(--text3)" }}>· {fmtNum(listQ.data.total)} ta</span>
+            )}
+            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <div style={{ position:"relative" }}>
+                <Search size={12} style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)", color:"var(--text3)" }} />
+                <input value={search} placeholder="Qidirish…"
+                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  style={{ paddingLeft:26, paddingRight:10, paddingTop:5, paddingBottom:5,
+                    fontSize:12, background:"var(--bg3)", border:"1px solid var(--border)",
+                    borderRadius:6, color:"var(--text)", width:160 }} />
+              </div>
+              {(["", "active", "won", "lost"] as const).map(s => {
+                const labels: Record<string, string> = { "":"Barchasi", active:"Jarayonda", won:"Sotuv bo'ldi", lost:"Bekor" };
+                const isActive = status === s;
+                return (
+                  <button key={s} onClick={() => { setStatus(s); setPage(1); }}
+                    style={{ fontSize:11, padding:"4px 10px", borderRadius:20, cursor:"pointer",
+                      background: isActive ? "#3b82f6" : "var(--bg3)",
+                      border:`1px solid ${isActive ? "#3b82f6" : "var(--border)"}`,
+                      color: isActive ? "#fff" : "var(--text2)" }}>
+                    {labels[s]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr>
+                  {["#", "Mas'ul", "Mijoz (tel)", "Summa", "Manba", "Sana", "Status"].map(h => (
+                    <th key={h} style={TH}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {listQ.isLoading && (
+                  <tr><td colSpan={7} style={{ ...TD, textAlign:"center", padding:32, color:"var(--text3)" }}>Yuklanmoqda…</td></tr>
+                )}
+                {!listQ.isLoading && listQ.data?.items.length === 0 && (
+                  <tr><td colSpan={7} style={{ ...TD, textAlign:"center", padding:32, color:"var(--text3)" }}>Ma'lumot topilmadi</td></tr>
+                )}
+                {listQ.data?.items.map((row: DealRow, i: number) => (
+                  <tr key={row.id}
+                    style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                    <td style={{ ...TD, color:"var(--text3)", width:40 }}>{(page-1)*LIMIT+i+1}</td>
+                    <td style={TD}>{row.responsible || "—"}</td>
+                    <td style={{ ...TD, fontFamily:"monospace", fontSize:12 }}>{row.mijoz}</td>
+                    <td style={{ ...TD, color:"#10b981", fontWeight:600, fontFamily:"monospace" }}>
+                      {Number(row.summa) > 0 ? fmtMoney(Number(row.summa)) : "—"}
+                    </td>
+                    <td style={{ ...TD, color:"var(--text2)" }}>{row.manba}</td>
+                    <td style={{ ...TD, color:"var(--text3)", fontSize:12 }}>{fmtDate(row.sana)}</td>
+                    <td style={TD}><StatusBadge row={row} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{ padding:"10px 16px", borderTop:"1px solid var(--border)",
+              display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:11, color:"var(--text3)" }}>
+                {page} / {totalPages} sahifa · {fmtNum(listQ.data?.total ?? 0)} ta jami
+              </span>
+              <div style={{ display:"flex", gap:6 }}>
+                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+                  style={{ padding:"4px 10px", borderRadius:6, fontSize:12, cursor:page===1?"not-allowed":"pointer",
+                    background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text2)", opacity:page===1?.4:1 }}>
+                  <ChevronLeft size={13} />
+                </button>
+                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages}
+                  style={{ padding:"4px 10px", borderRadius:6, fontSize:12, cursor:page===totalPages?"not-allowed":"pointer",
+                    background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text2)", opacity:page===totalPages?.4:1 }}>
+                  <ChevronRight size={13} />
+                </button>
+              </div>
             </div>
           )}
         </div>
