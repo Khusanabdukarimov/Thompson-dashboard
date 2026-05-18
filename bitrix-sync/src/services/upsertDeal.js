@@ -43,12 +43,13 @@ async function upsertDeal(r, client) {
 
   const stageId = await stageResolver.resolve('deal', r.STAGE_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
+  const contactId = r.CONTACT_ID ? parseInt(r.CONTACT_ID) : null;
 
   const { rows } = await db.query(
     `INSERT INTO deals (
        id, responsible_id, stage_id, opportunity, currency_id,
-       source_id, utm_source, date_create, closedate, uf_cancel_reason, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+       source_id, utm_source, date_create, closedate, uf_cancel_reason, contact_id, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -58,6 +59,7 @@ async function upsertDeal(r, client) {
        utm_source       = EXCLUDED.utm_source,
        closedate        = EXCLUDED.closedate,
        uf_cancel_reason = EXCLUDED.uf_cancel_reason,
+       contact_id       = EXCLUDED.contact_id,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -71,6 +73,7 @@ async function upsertDeal(r, client) {
       parseDate(r.DATE_CREATE),
       parseDate(r.CLOSEDATE),
       ufEnum(r.UF_CRM_69EBC105EAA93, DEAL_CANCEL_REASON_MAP),
+      contactId,
     ]
   );
 
@@ -78,3 +81,4 @@ async function upsertDeal(r, client) {
 }
 
 module.exports = { upsertDeal };
+

@@ -21,6 +21,7 @@ const LEAD_SELECT = [
 const DEAL_SELECT = [
   'ID', 'ASSIGNED_BY_ID', 'STAGE_ID', 'OPPORTUNITY', 'CURRENCY_ID',
   'SOURCE_ID', 'UTM_SOURCE', 'DATE_CREATE', 'CLOSEDATE', 'UF_CRM_69EBC105EAA93',
+  'CONTACT_ID',
 ];
 
 async function syncUsers() {
@@ -108,6 +109,39 @@ async function syncDeals() {
   console.log(`[sync] Deals done: ${deals.length} upserted`);
 }
 
+async function syncContacts() {
+  console.log('[sync] Fetching contacts...');
+  const contacts = await fetchAll('crm.contact.list', {}, ['ID', 'PHONE']);
+  console.log(`[sync] Got ${contacts.length} contacts, upserting...`);
+
+  await pool.query('DELETE FROM contact_phones');
+
+  for (const c of contacts) {
+    if (c.PHONE && Array.isArray(c.PHONE)) {
+      for (const p of c.PHONE) {
+        const phone = p.VALUE;
+        if (phone) {
+          await pool.query(
+            `INSERT INTO contact_phones (contact_id, phone)
+             VALUES ($1, $2)
+             ON CONFLICT DO NOTHING`,
+            [parseInt(c.ID), phone]
+          );
+        }
+      }
+    }
+  }
+
+  await pool.query(
+    `INSERT INTO sync_state (entity, last_sync, total_rows)
+     VALUES ('contacts', NOW(), $1)
+     ON CONFLICT (entity) DO UPDATE SET last_sync = NOW(), total_rows = $1`,
+    [contacts.length]
+  );
+
+  console.log(`[sync] Contacts done: ${contacts.length} synced`);
+}
+
 async function main() {
   console.log('=== Bitrix24 Initial Sync ===');
   console.log('Loading stages...');
@@ -116,6 +150,18 @@ async function main() {
   await syncUsers();
   await syncLeads();
   await syncDeals();
+  await syncContacts();
+
+  console.log('[sync] Populating deal_phones from contact_phones...');
+  await pool.query('DELETE FROM deal_phones');
+  await pool.query(`
+    INSERT INTO deal_phones (deal_id, phone)
+    SELECT DISTINCT d.id, cp.phone
+    FROM deals d
+    JOIN contact_phones cp ON cp.contact_id = d.contact_id
+    ON CONFLICT DO NOTHING
+  `);
+  console.log('[sync] deal_phones populated successfully');
 
   const { rows } = await pool.query('SELECT entity, total_rows, last_sync FROM sync_state ORDER BY entity');
   console.log('\n=== Sync complete ===');

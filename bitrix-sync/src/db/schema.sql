@@ -78,7 +78,14 @@ CREATE TABLE IF NOT EXISTS deals (
   date_create     TIMESTAMPTZ,
   closedate       TIMESTAMPTZ,
   uf_cancel_reason TEXT,
+  contact_id      INTEGER,
   synced_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS contact_phones (
+  contact_id INTEGER NOT NULL,
+  phone TEXT NOT NULL,
+  PRIMARY KEY (contact_id, phone)
 );
 
 CREATE INDEX IF NOT EXISTS deals_responsible_idx ON deals(responsible_id);
