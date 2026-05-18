@@ -21,7 +21,7 @@ function leadSrcCond(mode, pi) {
 }
 
 function dealModeClause(mode) {
-  return '';
+  return mode === 'amocrm' ? `AND d.source_id = 'UC_1WUFJB'` : ``;
 }
 
 function dealSrcCond(mode, pi) {
