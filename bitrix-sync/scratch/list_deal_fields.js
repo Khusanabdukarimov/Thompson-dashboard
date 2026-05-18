@@ -26,7 +26,8 @@ async function main() {
     return;
   }
   for (const f of res.result) {
-    console.log(`- ${f.FIELD_NAME}: ${f.EDIT_FORM_LABEL.ru || f.EDIT_FORM_LABEL.en || f.USER_TYPE_ID}`);
+    const label = f.EDIT_FORM_LABEL ? (f.EDIT_FORM_LABEL.ru || f.EDIT_FORM_LABEL.en || '') : '';
+    console.log(`- ${f.FIELD_NAME}: ${label} (${f.USER_TYPE_ID})`);
   }
 }
 
