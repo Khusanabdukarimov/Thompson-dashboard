@@ -20,6 +20,24 @@ function leadSrcCond(mode, pi) {
   return `($${pi}::text IS NULL OR ${col} = $${pi}::text)`;
 }
 
+function dealModeClause(mode) {
+  return mode === 'amocrm'
+    ? `AND d.source_id = 'UC_1WUFJB'`
+    : `AND (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')`;
+}
+
+function dealSrcCond(mode, pi) {
+  if (mode === 'amocrm') {
+    return `($${pi}::text IS NULL OR EXISTS (
+      SELECT 1 FROM lead_phones lp
+      JOIN leads l ON l.id = lp.lead_id
+      WHERE lp.phone = ph.phone AND l.uf_filial = $${pi}::text
+    ))`;
+  } else {
+    return `($${pi}::text IS NULL OR d.source_id = $${pi}::text)`;
+  }
+}
+
 const SOURCE_NAMES = {
   'UC_O9BLGT': 'Facebook',
   'UC_3O8GTF': 'Instagram',
@@ -39,11 +57,12 @@ const SOURCE_NAMES = {
  */
 router.get('/stats', async (req, res) => {
   const { mode } = req.query;
-  const leadsWhere = mode === 'amocrm' ? `WHERE source_id = 'UC_1WUFJB'` : ``;
+  const leadsWhere = mode === 'amocrm' ? `WHERE source_id = 'UC_1WUFJB'` : `WHERE (source_id IS NULL OR source_id != 'UC_1WUFJB')`;
+  const dealsWhere = mode === 'amocrm' ? `WHERE source_id = 'UC_1WUFJB'` : `WHERE (source_id IS NULL OR source_id != 'UC_1WUFJB')`;
   try {
     const [leadsRes, dealsRes, syncRes] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS total FROM leads ${leadsWhere}`),
-      pool.query('SELECT COUNT(*) AS total FROM deals'),
+      pool.query(`SELECT COUNT(*) AS total FROM deals ${dealsWhere}`),
       pool.query('SELECT entity, last_sync, total_rows FROM sync_state ORDER BY entity'),
     ]);
     res.json({
@@ -424,26 +443,46 @@ router.get('/deal-cancel-reasons', async (req, res) => {
  * GET /api/dashboard/deal-filter-options
  * Responsibles, deal stages, and sources for Sdelkalar filter panel.
  */
-router.get('/deal-filter-options', async (_req, res) => {
+router.get('/deal-filter-options', async (req, res) => {
+  const { mode } = req.query;
   try {
     const [respRes, stageRes, srcRes] = await Promise.all([
       pool.query(`SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
                   FROM responsibles WHERE active = true ORDER BY name`),
       pool.query(`SELECT DISTINCT s.id, s.name FROM stages s
                   INNER JOIN deals d ON d.stage_id = s.id
+                  ${mode === 'amocrm' ? "WHERE d.source_id = 'UC_1WUFJB'" : "WHERE (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')"}
                   ORDER BY s.name`),
-      pool.query(`SELECT DISTINCT source_id FROM deals
-                  WHERE source_id IS NOT NULL AND source_id != ''
-                    AND source_id NOT ILIKE '%amocrm%'
-                  ORDER BY source_id LIMIT 30`),
+      mode === 'amocrm'
+        ? Promise.resolve({ rows: [] })
+        : pool.query(`SELECT DISTINCT source_id FROM deals
+                    WHERE source_id IS NOT NULL AND source_id != ''
+                      AND source_id NOT ILIKE '%amocrm%'
+                    ORDER BY source_id LIMIT 30`),
     ]);
+
+    let sources = [];
+    if (mode === 'amocrm') {
+      sources = [
+        { id: 'Instagram', name: 'Instagram' },
+        { id: 'Target', name: 'Target' },
+        { id: 'Veb sayt', name: 'Veb sayt' },
+        { id: 'Networking', name: 'Networking' },
+        { id: 'Sovuq qo\'ng\'iroq', name: 'Sovuq qo\'ng\'iroq' },
+        { id: 'Qidiruv', name: 'Qidiruv' },
+        { id: 'Boshqalar', name: 'Boshqalar' }
+      ];
+    } else {
+      sources = srcRes.rows.map(r => ({
+        id: r.source_id,
+        name: SOURCE_NAMES[r.source_id] || r.source_id,
+      }));
+    }
+
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
-      sources: srcRes.rows.map(r => ({
-        id: r.source_id,
-        name: SOURCE_NAMES[r.source_id] || r.source_id,
-      })),
+      sources,
     });
   } catch (err) {
     console.error('[dashboard/deal-filter-options]', err.message);
@@ -451,20 +490,29 @@ router.get('/deal-filter-options', async (_req, res) => {
   }
 });
 
-/**
- * GET /api/dashboard/deals-stats?from=&to=&responsible_id=&stage_id=&source=
- * KPI summary cards for Sdelkalar page (amoCRM excluded).
- */
 router.get('/deals-stats', async (req, res) => {
-  const { from, to, responsible_id, stage_id, source } = req.query;
+  const { from, to, responsible_id, stage_id, source, mode } = req.query;
 
   const extra = [];
   const params = [from || null, to || null];
   let pi = 3;
   if (responsible_id) { extra.push(`AND d.responsible_id = $${pi++}`); params.push(parseInt(responsible_id)); }
   if (stage_id)       { extra.push(`AND d.stage_id = $${pi++}`);       params.push(parseInt(stage_id)); }
-  if (source === '__none__') { extra.push(`AND (d.source_id IS NULL OR d.source_id = '')`); }
-  else if (source)   { extra.push(`AND d.source_id = $${pi++}`);       params.push(source); }
+  
+  if (source === '__none__') {
+    if (mode === 'amocrm') {
+      extra.push(`AND NOT EXISTS (
+        SELECT 1 FROM lead_phones lp
+        JOIN leads l ON l.id = lp.lead_id
+        WHERE lp.phone = ph.phone AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
+      )`);
+    } else {
+      extra.push(`AND (d.source_id IS NULL OR d.source_id = '')`);
+    }
+  } else if (source) {
+    extra.push(`AND ${dealSrcCond(mode, pi++)}`);
+    params.push(source);
+  }
 
   try {
     const { rows } = await pool.query(
@@ -478,8 +526,10 @@ router.get('/deals-stats', async (req, res) => {
          ROUND(COUNT(d.id) FILTER (WHERE s.is_won = true)::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
+       LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
        WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
          AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         ${dealModeClause(mode)}
          ${extra.join(' ')}`,
       params
     );
@@ -490,12 +540,8 @@ router.get('/deals-stats', async (req, res) => {
   }
 });
 
-/**
- * GET /api/dashboard/deals-list?from=&to=&page=1&limit=20&search=&status=&responsible_id=&stage_id=&source=
- * Paginated individual deals for Sdelkalar page (amoCRM excluded).
- */
 router.get('/deals-list', async (req, res) => {
-  const { from, to, search, status, responsible_id, stage_id, source } = req.query;
+  const { from, to, search, status, responsible_id, stage_id, source, mode } = req.query;
   const page  = Math.max(1, parseInt(req.query.page)  || 1);
   const limit = Math.min(100, parseInt(req.query.limit) || 20);
   const offset = (page - 1) * limit;
@@ -504,6 +550,7 @@ router.get('/deals-list', async (req, res) => {
     const parts = [
       `($1::date IS NULL OR d.date_create::date >= $1::date)`,
       `($2::date IS NULL OR d.date_create::date <= $2::date)`,
+      dealModeClause(mode).slice(4)
     ];
     const statusPart =
       status === 'won'    ? 'AND s.is_won = true' :
@@ -518,9 +565,27 @@ router.get('/deals-list', async (req, res) => {
   const extra = [];
   if (responsible_id) { extra.push(`d.responsible_id = $${pi++}`); baseParams.push(parseInt(responsible_id)); }
   if (stage_id)       { extra.push(`d.stage_id = $${pi++}`);       baseParams.push(parseInt(stage_id)); }
-  if (source === '__none__') { extra.push(`(d.source_id IS NULL OR d.source_id = '')`); }
-  else if (source)   { extra.push(`d.source_id = $${pi++}`);       baseParams.push(source); }
-  if (search)         { extra.push(`(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) ILIKE '%' || $${pi} || '%' OR d.source_id ILIKE '%' || $${pi} || '%' OR ph.phone ILIKE '%' || $${pi} || '%')`); baseParams.push(search); pi++; }
+  
+  if (source === '__none__') {
+    if (mode === 'amocrm') {
+      extra.push(`NOT EXISTS (
+        SELECT 1 FROM lead_phones lp
+        JOIN leads l ON l.id = lp.lead_id
+        WHERE lp.phone = ph.phone AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
+      )`);
+    } else {
+      extra.push(`(d.source_id IS NULL OR d.source_id = '')`);
+    }
+  } else if (source) {
+    extra.push(dealSrcCond(mode, pi++));
+    baseParams.push(source);
+  }
+
+  if (search) {
+    extra.push(`(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) ILIKE '%' || $${pi} || '%' OR d.source_id ILIKE '%' || $${pi} || '%' OR ph.phone ILIKE '%' || $${pi} || '%')`);
+    baseParams.push(search);
+    pi++;
+  }
 
   try {
     const listParams = [...baseParams, limit, offset];
@@ -555,10 +620,24 @@ router.get('/deals-list', async (req, res) => {
       baseParams
     );
 
-    const items = rows.map(r => ({
-      ...r,
-      manba: SOURCE_NAMES[r.manba] || r.manba || '—',
-    }));
+    const items = [];
+    for (const row of rows) {
+      let resolvedManba = row.manba;
+      if (mode === 'amocrm' && row.mijoz && row.mijoz !== '—') {
+        const { rows: filialRes } = await pool.query(`
+          SELECT l.uf_filial FROM lead_phones lp
+          JOIN leads l ON l.id = lp.lead_id
+          WHERE lp.phone = $1 AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
+          LIMIT 1
+        `, [row.mijoz]);
+        resolvedManba = filialRes.length ? filialRes[0].uf_filial : 'Boshqalar';
+      }
+      items.push({
+        ...row,
+        manba: SOURCE_NAMES[resolvedManba] || resolvedManba || '—',
+      });
+    }
+
     res.json({ total: countRows[0].total, page, limit, items });
   } catch (err) {
     console.error('[dashboard/deals-list]', err.message);
@@ -566,12 +645,8 @@ router.get('/deals-list', async (req, res) => {
   }
 });
 
-/**
- * GET /api/dashboard/deals-conversion?from=&to=
- * Per-responsible deal counts + jami_sotuv + konversiya donut.
- */
 router.get('/deals-conversion', async (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, mode } = req.query;
   try {
     const { rows } = await pool.query(
       `WITH fd AS (
@@ -580,6 +655,7 @@ router.get('/deals-conversion', async (req, res) => {
          JOIN stages s ON s.id = d.stage_id
          WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
            AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+           ${dealModeClause(mode)}
        )
        SELECT
          r.id AS responsible_id,
@@ -608,7 +684,7 @@ router.get('/deals-conversion', async (req, res) => {
  * Per-responsible deal counts broken down by actual deal stages.
  */
 router.get('/deals-responsibles', async (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, mode } = req.query;
   try {
     const { rows } = await pool.query(
       `WITH fd AS (
@@ -617,6 +693,7 @@ router.get('/deals-responsibles', async (req, res) => {
          JOIN stages s ON s.id = d.stage_id
          WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
            AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+           ${dealModeClause(mode)}
        )
        SELECT
          r.id AS responsible_id,
