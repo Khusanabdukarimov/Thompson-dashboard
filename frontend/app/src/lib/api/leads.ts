@@ -76,9 +76,9 @@ export type FilterOptions = {
 };
 
 export function getDashboardStats(filter: DashFilter) {
-  return apiGet<DashboardStatsResponse>("/api/stats", {
-    start_date: filter.start_date,
-    end_date: filter.end_date,
+  return apiGet<DashboardStatsResponse>("/api/dashboard/lead-stats", {
+    from: filter.start_date,
+    to: filter.end_date,
     responsible_id: filter.responsible_id,
     stage: filter.stage,
     source: filter.source,
@@ -87,9 +87,9 @@ export function getDashboardStats(filter: DashFilter) {
 }
 
 export function getResponsiblesStats(filter: DashFilter) {
-  return apiGet<ResponsiblesStatsResponse>("/api/responsibles", {
-    start_date: filter.start_date,
-    end_date: filter.end_date,
+  return apiGet<ResponsiblesStatsResponse>("/api/dashboard/lead-responsibles", {
+    from: filter.start_date,
+    to: filter.end_date,
     responsible_id: filter.responsible_id,
     stage: filter.stage,
     source: filter.source,
@@ -109,9 +109,9 @@ export type ConversionStatsResponse = {
 };
 
 export function getConversionStats(filter: DashFilter) {
-  return apiGet<ConversionStatsResponse>("/api/conversion", {
-    start_date: filter.start_date,
-    end_date: filter.end_date,
+  return apiGet<ConversionStatsResponse>("/api/dashboard/lead-conversion", {
+    from: filter.start_date,
+    to: filter.end_date,
     responsible_id: filter.responsible_id,
     stage: filter.stage,
     source: filter.source,
@@ -120,7 +120,7 @@ export function getConversionStats(filter: DashFilter) {
 }
 
 export function getFilterOptions() {
-  return apiGet<FilterOptions>("/api/filter-options", {}, API_URL_CRM);
+  return apiGet<FilterOptions>("/api/dashboard/lead-filter-options", {}, API_URL_CRM);
 }
 
 export type TasksSummaryResponse = {

@@ -189,19 +189,12 @@ router.get('/leads', async (req, res) => {
 
   if (responsible_id) { params.push(parseInt(responsible_id)); conditions.push(`l.responsible_id = $${params.length}`); }
   if (stage_id)       { params.push(parseInt(stage_id));       conditions.push(`l.stage_id = $${params.length}`); }
-  if (date_from) {
-    params.push(date_from);
-    const f = isAmo ? `(l.raw_data->>'Дата создания (amoCRM)')::date` : `l.date_create`;
-    conditions.push(`${f} >= $${params.length}`);
-  }
-  if (date_to) {
-    params.push(date_to);
-    const f = isAmo ? `(l.raw_data->>'Дата создания (amoCRM)')::date` : `l.date_create`;
-    conditions.push(`${f} <= $${params.length}`);
-  }
+  if (date_from) { params.push(date_from); conditions.push(`l.date_create::date >= $${params.length}::date`); }
+  if (date_to)   { params.push(date_to);   conditions.push(`l.date_create::date <= $${params.length}::date`); }
   if (source_id) {
     params.push(source_id);
-    conditions.push(`l.raw_data->>'UF_CRM_1778260858916' = $${params.length}`);
+    const srcCol = isAmo ? 'l.uf_filial' : 'l.source_id';
+    conditions.push(`${srcCol} = $${params.length}`);
   }
   if (utm_source)     { params.push(utm_source);               conditions.push(`l.utm_source = $${params.length}`); }
   if (utm_campaign)   { params.push(utm_campaign);             conditions.push(`l.utm_campaign = $${params.length}`); }
@@ -744,6 +737,207 @@ router.get('/amocrm-sources', async (_req, res) => {
       console.error('[dashboard/amocrm-sources] fallback read failed:', fe.message || fe);
     }
     res.status(500).json({ error: 'Failed to load amoCRM sources (DB error and no fallback file)' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// Lead dashboard endpoints — single source of truth (replaces Python)
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/dashboard/lead-stats
+ * Header KPIs + funnel per stage.  Replaces Python /api/stats.
+ * Params: from, to, responsible_id, stage, source, mode
+ */
+router.get('/lead-stats', async (req, res) => {
+  const { from, to, responsible_id, stage, source, mode } = req.query;
+
+  const statsParams  = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+  const funnelParams = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, source || null];
+
+  const statsWhere = `${leadDateCond(mode, 1, 2)}
+      AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+      AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+      AND ${leadSrcCond(mode, 5)}
+      ${leadModeClause(mode)}`;
+
+  const funnelJoin = `${leadDateCond(mode, 1, 2)}
+      AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+      AND ${leadSrcCond(mode, 4)}
+      ${leadModeClause(mode)}`;
+
+  try {
+    const [statsRes, funnelRes] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*)::int                                                                       AS total_leads,
+           COUNT(*) FILTER (WHERE NOT s.is_final)::int                                        AS in_process,
+           COUNT(*) FILTER (WHERE s.is_final AND NOT s.is_won)::int                           AS failed,
+           COUNT(*) FILTER (WHERE s.is_final AND s.is_won)::int                               AS converted,
+           ROUND(COUNT(*) FILTER (WHERE s.is_final AND s.is_won)::numeric
+                 / NULLIF(COUNT(*), 0) * 100, 2)                                              AS conversion_pct,
+           COALESCE(SUM(l.opportunity), 0)::numeric                                           AS total_opportunity,
+           COALESCE(ROUND(AVG(l.opportunity), 0), 0)::numeric                                 AS avg_opportunity,
+           COUNT(*) FILTER (WHERE NOT s.is_final AND l.date_modify < NOW() - INTERVAL '7 days')::int AS frozen_leads,
+           ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0)
+             FILTER (WHERE NOT s.is_final), 1)                                                AS avg_age_days,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_bekor_count,
+           (COUNT(*) - COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK')))::int   AS sifatli_lid_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int        AS konsultatsiya_belgilandi_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')::int                         AS konsultatsiya_otkazildi_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS muvaffaqiyatsiz_count
+         FROM leads l
+         JOIN stages s ON s.id = l.stage_id
+         WHERE ${statsWhere}`,
+        statsParams
+      ),
+      pool.query(
+        `SELECT
+           s.bitrix_id,
+           s.name AS name_uz,
+           s.sort_order,
+           COUNT(l.id)::int                          AS lead_count,
+           COALESCE(SUM(l.opportunity), 0)::numeric  AS total_opportunity
+         FROM stages s
+         LEFT JOIN leads l ON l.stage_id = s.id AND ${funnelJoin}
+         WHERE s.entity = 'lead' AND s.sort_order > 0
+         GROUP BY s.id, s.bitrix_id, s.name, s.sort_order
+         ORDER BY s.sort_order`,
+        funnelParams
+      ),
+    ]);
+    res.json({ header: statsRes.rows[0] || {}, funnel: funnelRes.rows });
+  } catch (err) {
+    console.error('[dashboard/lead-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/lead-responsibles
+ * Per-responsible lead breakdown with all stage columns.  Replaces Python /api/responsibles.
+ */
+router.get('/lead-responsibles', async (req, res) => {
+  const { from, to, responsible_id, stage, source, mode } = req.query;
+  const params = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+
+  try {
+    const { rows } = await pool.query(
+      `WITH fl AS (
+         SELECT l.id, l.responsible_id, l.opportunity, s.bitrix_id AS stage_bid
+         FROM leads l
+         JOIN stages s ON s.id = l.stage_id
+         WHERE ${leadDateCond(mode, 1, 2)}
+           AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+           AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+           AND ${leadSrcCond(mode, 5)}
+           ${leadModeClause(mode)}
+       )
+       SELECT
+         r.id                                                                                  AS responsible_id,
+         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))                         AS full_name,
+         COUNT(fl.id)::int                                                                     AS total,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'NEW')::int                                AS qongiroqlar,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'IN_PROCESS')::int                         AS yangi_lid,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'PROCESSED')::int                          AS propushenniy,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_1KPATX','NO_ANSWER'))::int            AS javob_bermadi,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_Q2U9EL','CALLBACK'))::int             AS qayta_aloqa,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_KXC3ZW','THINKING'))::int             AS oylab_koradi,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_L28G68','CONSULTATION'))::int         AS konsultatsiya,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_5G8244','NOT_TRANSFERRED'))::int      AS otkazilmadi,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')::int                          AS konsultatsiya_otkazildi,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('JUNK','ARCHIVE'))::int                   AS sandiq,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_F8K4GI')::int                          AS sifatsiz,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_NAZK5J','RECYCLED'))::int             AS bekor_boldi,
+         COALESCE(SUM(fl.opportunity), 0)::numeric                                            AS total_opportunity
+       FROM responsibles r
+       LEFT JOIN fl ON fl.responsible_id = r.id
+       WHERE r.active = TRUE
+       GROUP BY r.id, r.name, r.last_name
+       ORDER BY total DESC`,
+      params
+    );
+    res.json({ responsibles: rows });
+  } catch (err) {
+    console.error('[dashboard/lead-responsibles]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/lead-conversion
+ * Per-responsible conversion funnel.  Replaces Python /api/conversion.
+ */
+router.get('/lead-conversion', async (req, res) => {
+  const { from, to, responsible_id, stage, source, mode } = req.query;
+  const params = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+
+  try {
+    const { rows } = await pool.query(
+      `WITH fl AS (
+         SELECT l.id, l.responsible_id, s.bitrix_id AS stage_bid
+         FROM leads l
+         JOIN stages s ON s.id = l.stage_id
+         WHERE ${leadDateCond(mode, 1, 2)}
+           AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+           AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+           AND ${leadSrcCond(mode, 5)}
+           ${leadModeClause(mode)}
+       )
+       SELECT
+         r.id                                                                                  AS responsible_id,
+         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))                         AS full_name,
+         COUNT(fl.id)::int                                                                     AS total,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (
+           'NEW','IN_PROCESS','PROCESSED',
+           'UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW','UC_L28G68','UC_5G8244'
+         ))::int                                                                               AS jarayonda,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_lid,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')::int                         AS tashrif_buyurdi
+       FROM responsibles r
+       LEFT JOIN fl ON fl.responsible_id = r.id
+       WHERE r.active = TRUE
+       GROUP BY r.id, r.name, r.last_name
+       ORDER BY total DESC`,
+      params
+    );
+    res.json({ conversion: rows });
+  } catch (err) {
+    console.error('[dashboard/lead-conversion]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/lead-filter-options
+ * Responsibles, lead stages, and sources.  Replaces Python /api/filter-options.
+ */
+router.get('/lead-filter-options', async (_req, res) => {
+  try {
+    const [respRes, stageRes, srcRes] = await Promise.all([
+      pool.query(
+        `SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
+         FROM responsibles WHERE active = TRUE ORDER BY name`
+      ),
+      pool.query(
+        `SELECT bitrix_id, name FROM stages
+         WHERE entity = 'lead' AND sort_order > 0
+         ORDER BY sort_order`
+      ),
+      pool.query(
+        `SELECT DISTINCT source_id FROM leads
+         WHERE source_id IS NOT NULL AND source_id != '' AND source_id != 'UC_1WUFJB'
+         ORDER BY source_id LIMIT 60`
+      ),
+    ]);
+    res.json({
+      responsibles: respRes.rows,
+      stages: stageRes.rows,
+      sources: srcRes.rows.map(r => ({ id: r.source_id, name: SOURCE_NAMES[r.source_id] || r.source_id })),
+    });
+  } catch (err) {
+    console.error('[dashboard/lead-filter-options]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
