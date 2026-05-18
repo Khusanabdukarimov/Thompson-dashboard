@@ -13,8 +13,9 @@ function leadDateCond(_mode, p1, p2) {
   return `($${p1}::date IS NULL OR l.date_create::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR l.date_create::date <= $${p2}::date)`;
 }
 
-function leadSrcCond(pi) {
-  return `($${pi}::text IS NULL OR l.source_id = $${pi}::text)`;
+function leadSrcCond(mode, pi) {
+  const col = mode === 'amocrm' ? 'l.uf_filial' : 'l.source_id';
+  return `($${pi}::text IS NULL OR ${col} = $${pi}::text)`;
 }
 
 const SOURCE_NAMES = {
@@ -78,7 +79,7 @@ router.get('/responsibles', async (req, res) => {
          WHERE ${leadDateCond(mode, 1, 2)}
            AND ($3::int  IS NULL OR l.responsible_id = $3::int)
            AND ($4::text IS NULL OR s.bitrix_id = $4::text)
-           AND ${leadSrcCond(5)}
+           AND ${leadSrcCond(mode, 5)}
            ${leadModeClause(mode)}
        )
        SELECT
@@ -137,7 +138,7 @@ router.get('/funnel', async (req, res) => {
        LEFT JOIN leads l ON l.stage_id = s.id
          AND ${leadDateCond(mode, 1, 2)}
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-         AND ${leadSrcCond(4)}
+         AND ${leadSrcCond(mode, 4)}
          ${leadModeClause(mode)}
        WHERE s.entity = 'lead'
        GROUP BY s.id, s.name, s.bitrix_id, s.sort_order, s.is_final, s.is_won
@@ -640,10 +641,22 @@ router.get('/deals-responsibles', async (req, res) => {
 
 /**
  * GET /api/dashboard/amocrm-sources
- * No sub-source field in DB — returns empty list.
+ * Distinct amoCRM sub-source values (uf_filial = UF_CRM_1778260858916).
  */
-router.get('/amocrm-sources', (_req, res) => {
-  res.json([]);
+router.get('/amocrm-sources', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT uf_filial AS source
+       FROM leads
+       WHERE source_id = 'UC_1WUFJB'
+         AND uf_filial IS NOT NULL AND uf_filial != '' AND uf_filial != 'false'
+       ORDER BY source`
+    );
+    res.json(rows.map(r => r.source));
+  } catch (err) {
+    console.error('[dashboard/amocrm-sources]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

@@ -101,7 +101,7 @@ async function upsertLead(r, client) {
       r.UTM_CONTENT || null,
       r.UTM_TERM || null,
       ufVal(r.UF_CRM_1775825731211),
-      ufVal(r.UF_CRM_1777030859057),
+      ufVal(r.UF_CRM_1778260858916),
       ufVal(r.UF_CRM_1775824803703),
       ufVal(r.UF_CRM_1775825155935),
       ufVal(r.UF_CRM_1770281264686),

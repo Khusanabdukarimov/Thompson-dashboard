@@ -9,6 +9,7 @@ import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
+  getAmocrmSources,
   type DashFilter,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
@@ -224,6 +225,12 @@ export default function LidlarPage() {
   });
   const filterOpts = filterOptsQ.data;
 
+  const amocrmSrcQ = useQuery({
+    queryKey: ["amocrm-sources"],
+    queryFn: getAmocrmSources,
+    staleTime: 10 * 60 * 1000,
+    enabled: mode === 'amocrm',
+  });
 
   const def = getDefaultFilter();
   const activeCount = [
@@ -481,7 +488,7 @@ export default function LidlarPage() {
                   </div>
 
                   {/* Dropdown filters row */}
-                  <div style={{ display: "grid", gridTemplateColumns: mode === 'amocrm' ? "1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                     <div>
                       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
                         <Users size={12} />Mas'ul xodim
@@ -522,7 +529,6 @@ export default function LidlarPage() {
                         ))}
                       </select>
                     </div>
-                    {mode !== 'amocrm' && (
                     <div>
                       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
                         <TrendingUp size={12} />Manba
@@ -538,12 +544,18 @@ export default function LidlarPage() {
                         }}
                       >
                         <option value="">Barchasi</option>
-                        {filterOpts?.sources.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
+                        {mode === 'amocrm'
+                          ? amocrmSrcQ.isLoading
+                            ? <option disabled>Yuklanmoqda…</option>
+                            : (amocrmSrcQ.data ?? []).map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))
+                          : filterOpts?.sources.map((s) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))
+                        }
                       </select>
                     </div>
-                    )}
                   </div>
                 </div>
               </div>

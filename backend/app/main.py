@@ -221,19 +221,20 @@ def api_stats(
         "responsible_id": responsible_id, "stage": stage, "source": source,
     }
     mode_clause = "AND l.source_id = 'UC_1WUFJB'" if mode == "amocrm" else ""
+    src_col = "l.uf_filial" if mode == "amocrm" else "l.source_id"
     date_where = f"""
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
         AND (:stage IS NULL OR s.bitrix_id = :stage)
-        AND (:source IS NULL OR l.source_id = :source)
+        AND (:source IS NULL OR {src_col} = :source)
         {mode_clause}
     """
     date_join = f"""
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
-        AND (:source IS NULL OR l.source_id = :source)
+        AND (:source IS NULL OR {src_col} = :source)
         {mode_clause}
     """
 
@@ -302,6 +303,7 @@ def api_responsibles(
         "responsible_id": responsible_id, "stage": stage, "source": source,
     }
     mode_clause = "AND l.source_id = 'UC_1WUFJB'" if mode == "amocrm" else ""
+    src_col = "l.uf_filial" if mode == "amocrm" else "l.source_id"
     query = text(f"""
         WITH fl AS (
             SELECT l.id, l.responsible_id, l.opportunity, s.bitrix_id AS stage_bid
@@ -311,7 +313,7 @@ def api_responsibles(
             AND (:end_date IS NULL OR l.date_create < CAST(:end_date AS date) + INTERVAL '1 day')
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage IS NULL OR s.bitrix_id = :stage)
-            AND (:source IS NULL OR l.source_id = :source)
+            AND (:source IS NULL OR {src_col} = :source)
             {mode_clause}
         )
         SELECT
@@ -356,6 +358,7 @@ def api_conversion(
         "responsible_id": responsible_id, "stage": stage, "source": source,
     }
     mode_clause = "AND l.source_id = 'UC_1WUFJB'" if mode == "amocrm" else ""
+    src_col = "l.uf_filial" if mode == "amocrm" else "l.source_id"
     query = text(f"""
         WITH fl AS (
             SELECT l.id, l.responsible_id, s.bitrix_id AS stage_bid
@@ -365,7 +368,7 @@ def api_conversion(
             AND (:end_date IS NULL OR l.date_create < CAST(:end_date AS date) + INTERVAL '1 day')
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage IS NULL OR s.bitrix_id = :stage)
-            AND (:source IS NULL OR l.source_id = :source)
+            AND (:source IS NULL OR {src_col} = :source)
             {mode_clause}
         )
         SELECT
