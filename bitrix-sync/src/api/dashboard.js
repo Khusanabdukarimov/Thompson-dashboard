@@ -21,9 +21,7 @@ function leadSrcCond(mode, pi) {
 }
 
 function dealModeClause(mode) {
-  return mode === 'amocrm'
-    ? `AND d.source_id = 'UC_1WUFJB'`
-    : `AND (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')`;
+  return '';
 }
 
 function dealSrcCond(mode, pi) {
@@ -557,7 +555,7 @@ router.get('/deals-list', async (req, res) => {
       status === 'lost'   ? 'AND s.is_final = true AND s.is_won = false' :
       status === 'active' ? 'AND s.is_final = false' : '';
     if (statusPart) parts.push(statusPart.slice(4));
-    return parts.concat(extra).map((p, i) => (i === 0 ? `WHERE ${p}` : `  AND ${p}`)).join('\n');
+    return parts.concat(extra).filter(Boolean).map((p, i) => (i === 0 ? `WHERE ${p}` : `  AND ${p}`)).join('\n');
   };
 
   const baseParams = [from || null, to || null];
