@@ -941,4 +941,47 @@ router.get('/lead-filter-options', async (_req, res) => {
   }
 });
 
+/**
+ * GET /api/dashboard/taqsimot
+ * Returns all active responsibles with their taqsimot_pct values.
+ */
+router.get('/taqsimot', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.id, TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+              r.email, r.work_position, r.taqsimot_pct
+       FROM responsibles r
+       WHERE r.active = TRUE
+       ORDER BY r.name`
+    );
+    res.json({ responsibles: rows });
+  } catch (err) {
+    console.error('[dashboard/taqsimot GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/dashboard/taqsimot/:id
+ * Body: { "taqsimot_pct": 25 }
+ * Updates responsibles.taqsimot_pct for the given responsible id.
+ */
+router.put('/taqsimot/:id', async (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const pct = parseInt(req.body?.taqsimot_pct, 10);
+  if (isNaN(id) || isNaN(pct) || pct < 0 || pct > 100) {
+    return res.status(400).json({ error: 'Invalid id or taqsimot_pct (0–100)' });
+  }
+  try {
+    await pool.query(
+      `UPDATE responsibles SET taqsimot_pct = $1 WHERE id = $2`,
+      [pct, id]
+    );
+    res.json({ ok: true, id, taqsimot_pct: pct });
+  } catch (err) {
+    console.error('[dashboard/taqsimot PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
