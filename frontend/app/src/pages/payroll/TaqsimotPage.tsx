@@ -64,7 +64,7 @@ export default function TaqsimotPage() {
   });
 
   const rows  = data?.responsibles ?? [];
-  const total = rows.reduce((s, r) => s + (r.taqsimot_pct ?? 0), 0);
+  const total = rows.reduce((s, r) => s + parseFloat(String(r.taqsimot_pct ?? 0)), 0);
   const totalRounded = Math.round(total * 10) / 10;
 
   async function handleSave(id: number, pct: number) {
@@ -272,7 +272,7 @@ function TaqsimotRow({
 
   useEffect(() => {
     if (editing) {
-      setDraft(String(row.taqsimot_pct ?? ""));
+      setDraft(String(parseFloat(String(row.taqsimot_pct ?? "")) || ""));
       setTimeout(() => inputRef.current?.select(), 0);
     }
   }, [editing, row.taqsimot_pct]);
@@ -294,7 +294,9 @@ function TaqsimotRow({
     if (e.key === "Escape") setEditing(false);
   }
 
-  const pct    = row.taqsimot_pct ?? null;
+  const pct    = row.taqsimot_pct !== null && row.taqsimot_pct !== undefined
+    ? parseFloat(String(row.taqsimot_pct))
+    : null;
   const hasVal = pct !== null && pct > 0;
   const schedule = row.work_position ?? "09:00–18:00";
 
