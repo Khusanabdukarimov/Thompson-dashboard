@@ -449,13 +449,12 @@ router.get('/deal-filter-options', async (req, res) => {
                   FROM responsibles WHERE active = true ORDER BY name`),
       pool.query(`SELECT DISTINCT s.id, s.name FROM stages s
                   INNER JOIN deals d ON d.stage_id = s.id
-                  ${mode === 'amocrm' ? "WHERE d.source_id = 'UC_1WUFJB'" : "WHERE (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')"}
+                  ${mode === 'amocrm' ? "WHERE d.source_id = 'UC_1WUFJB'" : ""}
                   ORDER BY s.name`),
       mode === 'amocrm'
         ? Promise.resolve({ rows: [] })
         : pool.query(`SELECT DISTINCT source_id FROM deals
                     WHERE source_id IS NOT NULL AND source_id != ''
-                      AND source_id NOT ILIKE '%amocrm%'
                     ORDER BY source_id LIMIT 30`),
     ]);
 
