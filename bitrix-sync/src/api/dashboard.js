@@ -5,9 +5,10 @@ const router = Router();
 
 // ── Mode-aware SQL helpers ─────────────────────────────────────────
 
-// mode=amocrm → only amoCRM leads; mode=default (or unset) → all leads (no source restriction)
 function leadModeClause(mode) {
-  return mode === 'amocrm' ? `AND l.source_id ILIKE '%amocrm%'` : '';
+  return mode === 'amocrm'
+    ? `AND l.source_id ILIKE '%amocrm%'`
+    : `AND (l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')`;
 }
 
 function leadDateCond(mode, p1, p2) {
@@ -41,7 +42,9 @@ const SOURCE_NAMES = {
  */
 router.get('/stats', async (req, res) => {
   const { mode } = req.query;
-  const leadsWhere = mode === 'amocrm' ? `WHERE source_id ILIKE '%amocrm%'` : '';
+  const leadsWhere = mode === 'amocrm'
+    ? `WHERE source_id ILIKE '%amocrm%'`
+    : `WHERE (source_id IS NULL OR source_id NOT ILIKE '%amocrm%')`;
   try {
     const [leadsRes, dealsRes, syncRes] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS total FROM leads ${leadsWhere}`),
@@ -169,7 +172,9 @@ router.get('/leads', async (req, res) => {
   } = req.query;
 
   const isAmo = mode === 'amocrm';
-  const conditions = isAmo ? [`l.source_id ILIKE '%amocrm%'`] : [];
+  const conditions = [isAmo
+    ? `l.source_id ILIKE '%amocrm%'`
+    : `(l.source_id IS NULL OR l.source_id NOT ILIKE '%amocrm%')`];
   const params = [];
 
   if (responsible_id) { params.push(parseInt(responsible_id)); conditions.push(`l.responsible_id = $${params.length}`); }
@@ -294,7 +299,7 @@ router.get('/tasks-summary', async (req, res) => {
 
   const leadFilter = mode === 'amocrm'
     ? `AND t.lead_id IS NOT NULL AND t.lead_id IN (SELECT id FROM leads WHERE source_id ILIKE '%amocrm%')`
-    : '';
+    : `AND (t.lead_id IS NULL OR t.lead_id NOT IN (SELECT id FROM leads WHERE source_id ILIKE '%amocrm%'))`;
 
   try {
     const { rows } = await pool.query(
