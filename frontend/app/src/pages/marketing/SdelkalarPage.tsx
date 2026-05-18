@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   RefreshCw, Search, ChevronLeft, ChevronRight,
   TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
-  ChevronDown, Filter, Users,
+  ChevronDown, Filter, Users, BarChart2,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
@@ -353,7 +353,42 @@ export default function SdelkalarPage() {
       <Topbar
         title="Sdelkalar"
         sub={`${applied.from} → ${applied.to}`}
-        actions={<Button onClick={refresh}><RefreshCw className="w-3.5 h-3.5" /> Yangilash</Button>}
+        actions={
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* Mode Switcher */}
+            <div style={{
+              display: "flex", background: "var(--bg3)", border: "1px solid var(--border)",
+              borderRadius: 8, padding: 3, gap: 2
+            }}>
+              <button
+                onClick={() => { const def = { from: daysAgoISO(365), to: todayISO(), responsible_id: "", stage_id: "", source: "" }; setPending(def); setApplied(def); setMode('default'); setPage(1); }}
+                style={{
+                  border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
+                  padding: "5px 12px", cursor: "pointer",
+                  background: mode === 'default' ? "#3b82f6" : "transparent",
+                  color: mode === 'default' ? "#fff" : "var(--text2)",
+                  transition: "all 0.2s"
+                }}
+              >
+                Barcha sdelkalar
+              </button>
+              <button
+                onClick={() => { const def = { from: daysAgoISO(365), to: todayISO(), responsible_id: "", stage_id: "", source: "" }; setPending(def); setApplied(def); setMode('amocrm'); setPage(1); }}
+                style={{
+                  border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
+                  padding: "5px 12px", cursor: "pointer",
+                  background: mode === 'amocrm' ? "#D97706" : "transparent",
+                  color: mode === 'amocrm' ? "#fff" : "var(--text2)",
+                  transition: "all 0.2s"
+                }}
+              >
+                AmoCRM
+              </button>
+            </div>
+
+            <Button onClick={refresh}><RefreshCw className="w-3.5 h-3.5" /> Yangilash</Button>
+          </div>
+        }
       />
 
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", background: "var(--bg)" }}>
@@ -512,12 +547,15 @@ export default function SdelkalarPage() {
         </div>
 
         {/* ── KPI Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 20 }}>
+          <KpiCard label="Jami Sdelkalar" value={fmtNum(kpi?.total ?? 0)}
+            sub="Barcha kelishuvlar" gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)"
+            icon={<BarChart2 size={16} color="#fff" />} />
           <KpiCard label="Yangi Sdelkalar" value={fmtNum(kpi?.yangi ?? 0)}
             sub="Jarayondagi" gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"
             icon={<TrendingUp size={16} color="#fff" />} />
           <KpiCard label="Sotuv bo'ldi" value={fmtNum(kpi?.sotuv_boldi ?? 0)}
-            sub={`${fmtNum(kpi?.total ?? 0)} ta jami`} gradient="linear-gradient(135deg,#065f46,#10b981)"
+            sub="Muvaffaqiyatli" gradient="linear-gradient(135deg,#065f46,#10b981)"
             icon={<CheckCircle size={16} color="#fff" />} />
           <KpiCard label="Jami Sotuv" value={fmtMoney(kpi?.jami_sotuv ?? 0)}
             sub="Won sdelkalar daromadi" gradient="linear-gradient(135deg,#047857,#34d399)"
