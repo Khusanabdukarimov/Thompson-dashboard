@@ -113,4 +113,12 @@ async function fetchOne(method, id) {
   return res.result || null;
 }
 
-module.exports = { fetchAll, fetchOne };
+/**
+ * Call a single Bitrix24 method with arbitrary params (GET-style).
+ */
+async function bitrixCall(method, params = {}) {
+  const url = buildUrl(method, params);
+  return httpGet(url);
+}
+
+module.exports = { fetchAll, fetchOne, bitrixCall };

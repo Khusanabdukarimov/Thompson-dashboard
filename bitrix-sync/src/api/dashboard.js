@@ -963,12 +963,12 @@ router.get('/taqsimot', async (_req, res) => {
 
 /**
  * PUT /api/dashboard/taqsimot/:id
- * Body: { "taqsimot_pct": 25 }
- * Updates responsibles.taqsimot_pct for the given responsible id.
+ * Body: { "taqsimot_pct": 22.5 }
+ * Updates responsibles.taqsimot_pct and returns new total across all active distributors.
  */
 router.put('/taqsimot/:id', async (req, res) => {
   const id  = parseInt(req.params.id, 10);
-  const pct = parseInt(req.body?.taqsimot_pct, 10);
+  const pct = parseFloat(req.body?.taqsimot_pct);
   if (isNaN(id) || isNaN(pct) || pct < 0 || pct > 100) {
     return res.status(400).json({ error: 'Invalid id or taqsimot_pct (0–100)' });
   }
@@ -977,9 +977,55 @@ router.put('/taqsimot/:id', async (req, res) => {
       `UPDATE responsibles SET taqsimot_pct = $1 WHERE id = $2`,
       [pct, id]
     );
-    res.json({ ok: true, id, taqsimot_pct: pct });
+    const { rows } = await pool.query(
+      `SELECT SUM(taqsimot_pct)::numeric AS total
+       FROM responsibles WHERE taqsimot_pct > 0 AND active = TRUE`
+    );
+    const total = parseFloat(rows[0].total || 0);
+    res.json({
+      ok: true,
+      id,
+      taqsimot_pct: pct,
+      total_pct: total,
+      warning: total !== 100 ? `Jami: ${total}% (100% bo'lishi kerak)` : null,
+    });
   } catch (err) {
     console.error('[dashboard/taqsimot PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/taqsimot-stats
+ * Today's distribution accuracy per responsible.
+ */
+router.get('/taqsimot-stats', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        r.id,
+        TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+        r.taqsimot_pct::float                                         AS target_pct,
+        COUNT(l.id)::int                                              AS today_count,
+        ROUND(
+          COUNT(l.id)::numeric /
+          NULLIF(SUM(COUNT(l.id)) OVER(), 0) * 100, 1
+        )::float                                                      AS actual_pct,
+        ROUND(
+          r.taqsimot_pct -
+          (COUNT(l.id)::numeric / NULLIF(SUM(COUNT(l.id)) OVER(), 0) * 100), 1
+        )::float                                                      AS deficit_pct
+      FROM responsibles r
+      LEFT JOIN leads l ON l.responsible_id = r.id
+        AND l.date_create >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Tashkent')
+        AND (l.source_id IS NULL OR l.source_id != 'UC_1WUFJB')
+      WHERE r.taqsimot_pct > 0 AND r.active = TRUE
+      GROUP BY r.id, r.name, r.last_name, r.taqsimot_pct
+      ORDER BY r.taqsimot_pct DESC
+    `);
+    res.json({ stats: rows, date: new Date().toISOString() });
+  } catch (err) {
+    console.error('[dashboard/taqsimot-stats]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

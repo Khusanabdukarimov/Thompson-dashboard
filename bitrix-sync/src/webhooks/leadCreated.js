@@ -1,6 +1,7 @@
 const pool = require('../db/pool');
 const { fetchOne } = require('../services/bitrix');
 const { upsertLead } = require('../services/upsertLead');
+const { distributeLead } = require('../services/distributor');
 
 const LEAD_SELECT = [
   'ID', 'ASSIGNED_BY_ID', 'STATUS_ID', 'OPPORTUNITY', 'SOURCE_ID',
@@ -32,6 +33,16 @@ async function leadCreated(req, res) {
     if (!raw) return;
 
     await upsertLead(raw);
+
+    // Distribute to responsible (skip amoCRM leads and Qo'ng'iroq stage)
+    const isAmoCRM     = raw.SOURCE_ID === 'UC_1WUFJB';
+    const isCallsStage = raw.STATUS_ID === 'CALLS' || raw.STATUS_ID === 'UC_K0PWSA';
+    if (!isAmoCRM && !isCallsStage) {
+      const assignedTo = await distributeLead(entityId);
+      if (assignedTo) {
+        console.log(`[leadCreated] Lead ${entityId} distributed to responsible ${assignedTo}`);
+      }
+    }
 
     // Record initial stage in history
     const lead = await pool.query('SELECT id, stage_id FROM leads WHERE id = $1', [entityId]);
