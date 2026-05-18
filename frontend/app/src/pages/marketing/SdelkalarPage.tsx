@@ -675,7 +675,6 @@ export default function SdelkalarPage() {
                   <tr>
                     <th style={{ ...THc("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
                     <th style={{ ...THc("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
-                    <th style={THc("#9E9E9E", 60)}>Jami</th>
                     {DEAL_STAGE_COLS.map(col => (
                       <th key={col.key} style={THc(col.color)}>{col.label}</th>
                     ))}
@@ -697,9 +696,6 @@ export default function SdelkalarPage() {
                             {u.full_name}
                           </span>
                         </div>
-                      </td>
-                      <td style={{ ...TDa, minWidth:60 }}>
-                        <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{fmtNum(u.total)}</span>
                       </td>
                       {DEAL_STAGE_COLS.map(col => {
                         const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
@@ -725,9 +721,6 @@ export default function SdelkalarPage() {
                     <td style={{ ...TDa, position:"sticky", left:0, background:"var(--bg3)" }} />
                     <td style={{ ...TDa, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
                       JAMI
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(dealRespTotals.total)}</span>
                     </td>
                     {DEAL_STAGE_COLS.map(col => (
                       <td key={col.key} style={TDa}>

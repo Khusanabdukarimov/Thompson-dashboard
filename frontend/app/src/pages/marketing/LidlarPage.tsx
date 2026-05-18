@@ -778,7 +778,6 @@ export default function LidlarPage() {
                   <tr>
                     <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
                     <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
-                    <th style={TH("#9E9E9E", 60)}>Jami</th>
                     {RESPONSIBLE_COLS.map((col) => (
                       <th key={col.key} style={TH(col.color)}>{col.label}</th>
                     ))}
@@ -800,9 +799,6 @@ export default function LidlarPage() {
                             {u.full_name || `User ${u.responsible_id}`}
                           </span>
                         </div>
-                      </td>
-                      <td style={{ ...TD, minWidth:60 }}>
-                        <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{fmtNum(u.total)}</span>
                       </td>
                       {RESPONSIBLE_COLS.map((col) => {
                         const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
@@ -828,9 +824,6 @@ export default function LidlarPage() {
                     <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
                     <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
                       JAMI
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>{fmtNum(responsibles.reduce((s, u) => s + u.total, 0))}</span>
                     </td>
                     {RESPONSIBLE_COLS.map((col) => (
                       <td key={col.key} style={TD}>
