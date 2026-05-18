@@ -21,10 +21,7 @@ const localISO = (d: Date) =>
 const todayISO   = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 
-const getDefaultFilter = (): DashFilter => ({
-  start_date: daysAgoISO(365),
-  end_date: todayISO(),
-});
+const getDefaultFilter = (): DashFilter => ({});
 
 // ── Responsible table column definitions ─────────────────────────
 const RESPONSIBLE_COLS = [
@@ -208,7 +205,7 @@ export default function LidlarPage() {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<'default' | 'amocrm'>('default');
 
-  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v2", getDefaultFilter());
+  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v3", getDefaultFilter());
   const [pending, setPending] = useState<DashFilter>(applied);
 
   useEffect(() => {
