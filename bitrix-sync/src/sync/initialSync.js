@@ -46,7 +46,7 @@ async function syncUsers() {
         u.LAST_NAME || null,
         u.EMAIL || null,
         u.WORK_POSITION || null,
-        u.ACTIVE === 'Y',
+        u.ACTIVE === 'Y' || u.ACTIVE === true,
       ]
     );
   }
