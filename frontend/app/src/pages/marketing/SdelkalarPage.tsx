@@ -193,6 +193,7 @@ const DEAL_STAGE_COLS = [
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
+  const [mode, setMode] = useState<'default' | 'amocrm'>('default');
 
   const [pending, setPending] = useState({
     from: daysAgoISO(365), to: todayISO(),
@@ -206,23 +207,24 @@ export default function SdelkalarPage() {
   const LIMIT = 20;
 
   const filterQ = useQuery({
-    queryKey: ["deal-filter-options"],
-    queryFn: getDealFilterOptions,
+    queryKey: ["deal-filter-options", mode],
+    queryFn: () => getDealFilterOptions({ mode }),
     staleTime: 5 * 60_000,
   });
 
   const kpiQ = useQuery({
-    queryKey: ["deals-kpi", applied],
+    queryKey: ["deals-kpi", applied, mode],
     queryFn: () => getDealKpiStats({
       from: applied.from, to: applied.to,
       responsible_id: applied.responsible_id ? Number(applied.responsible_id) : undefined,
       stage_id:       applied.stage_id       ? Number(applied.stage_id)       : undefined,
       source:         applied.source || undefined,
+      mode,
     }),
   });
 
   const listQ = useQuery({
-    queryKey: ["deals-list", applied, search, status, page],
+    queryKey: ["deals-list", applied, search, status, page, mode],
     queryFn: () => getDealsList({
       from: applied.from, to: applied.to,
       responsible_id: applied.responsible_id ? Number(applied.responsible_id) : undefined,
@@ -231,19 +233,20 @@ export default function SdelkalarPage() {
       search: search || undefined,
       status: status || undefined,
       page, limit: LIMIT,
+      mode,
     }),
     placeholderData: keepPreviousData,
   });
 
   const convQ = useQuery({
-    queryKey: ["deals-conversion", applied.from, applied.to],
-    queryFn: () => getDealsConversion({ from: applied.from || undefined, to: applied.to || undefined }),
+    queryKey: ["deals-conversion", applied.from, applied.to, mode],
+    queryFn: () => getDealsConversion({ from: applied.from || undefined, to: applied.to || undefined, mode }),
     staleTime: 60_000,
   });
 
   const respQ = useQuery({
-    queryKey: ["deals-responsibles", applied.from, applied.to],
-    queryFn: () => getDealsResponsibles({ from: applied.from || undefined, to: applied.to || undefined }),
+    queryKey: ["deals-responsibles", applied.from, applied.to, mode],
+    queryFn: () => getDealsResponsibles({ from: applied.from || undefined, to: applied.to || undefined, mode }),
     staleTime: 60_000,
   });
 
@@ -364,6 +367,16 @@ export default function SdelkalarPage() {
             <span style={{ fontSize:12.5, color:"var(--text3)", flex:1 }}>
               {filterOpen ? "Qidirish va filtrlash..." : `Filtr: ${applied.from} → ${applied.to}${activeFilterCount > 0 ? ` · ${activeFilterCount} ta qo'shimcha` : ""}`}
             </span>
+            {mode === 'amocrm' && (
+              <span style={{
+                background: "rgba(217,119,6,0.15)", color: "#D97706",
+                border: "1px solid rgba(217,119,6,0.4)",
+                borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700,
+                marginRight: 6
+              }}>
+                AmoCRM
+              </span>
+            )}
             {activeFilterCount > 0 && (
               <span style={{ fontSize:10, fontWeight:700, padding:"1px 6px", borderRadius:20,
                 background:"#3b82f6", color:"#fff" }}>{activeFilterCount} filtr</span>
@@ -372,66 +385,113 @@ export default function SdelkalarPage() {
           </div>
 
           {filterOpen && (
-            <div style={{ borderTop:"1px solid var(--border)", padding:"16px 20px" }}>
-              <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
-                {PRESETS.map(p => {
-                  const active = pending.from === p.f && pending.to === p.t;
-                  return (
-                    <button key={p.label} onClick={() => setPending(s => ({ ...s, from: p.f, to: p.t }))}
-                      style={{
-                        padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer",
-                        background: active ? "#3b82f6" : "var(--bg3)",
-                        border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`,
-                        color: active ? "#fff" : "var(--text2)", fontWeight: active ? 600 : 400,
-                      }}>
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
-                <div>
-                  <div style={{ fontSize:11, color:"var(--text3)", marginBottom:4 }}>Dan (boshlanish)</div>
-                  <input type="date" value={pending.from}
-                    onChange={e => setPending(s => ({ ...s, from: e.target.value }))}
-                    style={{ width:"100%", padding:"8px 10px", fontSize:12,
-                      background:"var(--bg3)", border:"1px solid var(--border)",
-                      color:"var(--text)", borderRadius:8 }} />
+            <div style={{ borderTop:"1px solid var(--border)", display: "flex" }}>
+              {/* Left sidebar — presets */}
+              <div style={{
+                width: "26%", borderRight: "1px solid var(--border)",
+                padding: "16px 12px", flexShrink: 0,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                  Saqlangan filtrlar
                 </div>
-                <div>
-                  <div style={{ fontSize:11, color:"var(--text3)", marginBottom:4 }}>Gacha (tugash)</div>
-                  <input type="date" value={pending.to}
-                    onChange={e => setPending(s => ({ ...s, to: e.target.value }))}
-                    style={{ width:"100%", padding:"8px 10px", fontSize:12,
-                      background:"var(--bg3)", border:"1px solid var(--border)",
-                      color:"var(--text)", borderRadius:8 }} />
+                <button
+                  onClick={() => { const def = { from: daysAgoISO(365), to: todayISO(), responsible_id: "", stage_id: "", source: "" }; setPending(def); setApplied(def); setMode('default'); setPage(1); }}
+                  style={{
+                    width: "100%", textAlign: "left",
+                    background: mode === 'default' ? "rgba(33,150,243,0.08)" : "transparent",
+                    border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.3)" : "var(--border)"}`,
+                    borderRadius: 8,
+                    color: mode === 'default' ? "#2196F3" : "var(--text2)",
+                    fontSize: 12, fontWeight: 600,
+                    padding: "8px 12px", cursor: "pointer", marginBottom: 6,
+                  }}
+                >
+                  Barcha sdelkalar
+                </button>
+                <button
+                  onClick={() => { const def = { from: daysAgoISO(365), to: todayISO(), responsible_id: "", stage_id: "", source: "" }; setPending(def); setApplied(def); setMode('amocrm'); setPage(1); }}
+                  style={{
+                    width: "100%", textAlign: "left",
+                    background: mode === 'amocrm' ? "rgba(217,119,6,0.10)" : "transparent",
+                    border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
+                    borderRadius: 8,
+                    color: mode === 'amocrm' ? "#D97706" : "var(--text2)",
+                    fontSize: 12, fontWeight: 600,
+                    padding: "8px 12px", cursor: "pointer", marginBottom: 8,
+                  }}
+                >
+                  AmoCRM
+                </button>
+                <div style={{
+                  border: "1px dashed var(--border)", borderRadius: 8,
+                  padding: "12px 10px", color: "var(--text3)", fontSize: 11, textAlign: "center",
+                }}>
+                  Saqlangan filtr yo'q
                 </div>
               </div>
 
-              <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:16 }}>
-                <SelectFilter label="Mas'ul xodim" value={pending.responsible_id}
-                  onChange={v => setPending(s => ({ ...s, responsible_id: v }))}
-                  options={respOptions} />
-                <SelectFilter label="Bosqich" value={pending.stage_id}
-                  onChange={v => setPending(s => ({ ...s, stage_id: v }))}
-                  options={stageOptions} />
-                <SelectFilter label="Manba" value={pending.source}
-                  onChange={v => setPending(s => ({ ...s, source: v }))}
-                  options={srcOptions} />
-              </div>
+              {/* Right form */}
+              <div style={{ flex: 1, padding: "16px 20px" }}>
+                <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+                  {PRESETS.map(p => {
+                    const active = pending.from === p.f && pending.to === p.t;
+                    return (
+                      <button key={p.label} onClick={() => setPending(s => ({ ...s, from: p.f, to: p.t }))}
+                        style={{
+                          padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer",
+                          background: active ? "#3b82f6" : "var(--bg3)",
+                          border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`,
+                          color: active ? "#fff" : "var(--text2)", fontWeight: active ? 600 : 400,
+                        }}>
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
 
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
-                <button onClick={clear}
-                  style={{ padding:"7px 18px", borderRadius:8, fontSize:12, cursor:"pointer",
-                    background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text2)" }}>
-                  Tozalash
-                </button>
-                <button onClick={() => { apply(); setFilterOpen(false); }}
-                  style={{ padding:"7px 18px", borderRadius:8, fontSize:12, cursor:"pointer",
-                    background:"#3b82f6", border:"1px solid #3b82f6", color:"#fff", fontWeight:600 }}>
-                  Topish
-                </button>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+                  <div>
+                    <div style={{ fontSize:11, color:"var(--text3)", marginBottom:4 }}>Dan (boshlanish)</div>
+                    <input type="date" value={pending.from}
+                      onChange={e => setPending(s => ({ ...s, from: e.target.value }))}
+                      style={{ width:"100%", padding:"8px 10px", fontSize:12,
+                        background:"var(--bg3)", border:"1px solid var(--border)",
+                        color:"var(--text)", borderRadius:8 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, color:"var(--text3)", marginBottom:4 }}>Gacha (tugash)</div>
+                    <input type="date" value={pending.to}
+                      onChange={e => setPending(s => ({ ...s, to: e.target.value }))}
+                      style={{ width:"100%", padding:"8px 10px", fontSize:12,
+                        background:"var(--bg3)", border:"1px solid var(--border)",
+                        color:"var(--text)", borderRadius:8 }} />
+                  </div>
+                </div>
+
+                <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:16 }}>
+                  <SelectFilter label="Mas'ul xodim" value={pending.responsible_id}
+                    onChange={v => setPending(s => ({ ...s, responsible_id: v }))}
+                    options={respOptions} />
+                  <SelectFilter label="Bosqich" value={pending.stage_id}
+                    onChange={v => setPending(s => ({ ...s, stage_id: v }))}
+                    options={stageOptions} />
+                  <SelectFilter label="Manba" value={pending.source}
+                    onChange={v => setPending(s => ({ ...s, source: v }))}
+                    options={srcOptions} />
+                </div>
+
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                  <button onClick={clear}
+                    style={{ padding:"7px 18px", borderRadius:8, fontSize:12, cursor:"pointer",
+                      background:"var(--bg3)", border:"1px solid var(--border)", color:"var(--text2)" }}>
+                    Tozalash
+                  </button>
+                  <button onClick={() => { apply(); setFilterOpen(false); }}
+                    style={{ padding:"7px 18px", borderRadius:8, fontSize:12, cursor:"pointer",
+                      background:"#3b82f6", border:"1px solid #3b82f6", color:"#fff", fontWeight:600 }}>
+                    Topish
+                  </button>
+                </div>
               </div>
             </div>
           )}

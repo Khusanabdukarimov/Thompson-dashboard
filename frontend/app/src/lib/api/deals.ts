@@ -100,11 +100,13 @@ export type DealsListFilter = {
   source?: string;
   page?: number;
   limit?: number;
+  mode?: string;
 };
 
 export function getDealKpiStats(filter: {
   from?: string; to?: string;
   responsible_id?: number; stage_id?: number; source?: string;
+  mode?: string;
 }) {
   return apiGet<DealKpiStats>('/api/dashboard/deals-stats', filter as Record<string, string | number | undefined>, API_URL_CRM);
 }
@@ -113,8 +115,8 @@ export function getDealsList(filter: DealsListFilter) {
   return apiGet<DealsListResponse>('/api/dashboard/deals-list', filter as Record<string, string | number | undefined>, API_URL_CRM);
 }
 
-export function getDealFilterOptions() {
-  return apiGet<DealFilterOptions>('/api/dashboard/deal-filter-options', {}, API_URL_CRM);
+export function getDealFilterOptions(filter?: { mode?: string }) {
+  return apiGet<DealFilterOptions>('/api/dashboard/deal-filter-options', filter || {}, API_URL_CRM);
 }
 
 export type DealsConversionRow = {
@@ -138,10 +140,10 @@ export type DealsResponsiblesRow = {
   bekor_boldi: number;
 };
 
-export function getDealsConversion(filter: { from?: string; to?: string }) {
+export function getDealsConversion(filter: { from?: string; to?: string; mode?: string }) {
   return apiGet<DealsConversionRow[]>('/api/dashboard/deals-conversion', filter as Record<string, string | undefined>, API_URL_CRM);
 }
 
-export function getDealsResponsibles(filter: { from?: string; to?: string }) {
+export function getDealsResponsibles(filter: { from?: string; to?: string; mode?: string }) {
   return apiGet<DealsResponsiblesRow[]>('/api/dashboard/deals-responsibles', filter as Record<string, string | undefined>, API_URL_CRM);
 }
