@@ -214,25 +214,27 @@ def api_stats(
     stage: Optional[str] = None,
     source: Optional[str] = None,
     range: str = "all",
+    mode: str = "default",
 ):
     params: dict = {
         "start_date": start_date, "end_date": end_date,
         "responsible_id": responsible_id, "stage": stage, "source": source,
     }
-    date_where = """
+    mode_clause = "AND l.source_id = 'UC_1WUFJB'" if mode == "amocrm" else ""
+    date_where = f"""
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
         AND (:stage IS NULL OR s.bitrix_id = :stage)
         AND (:source IS NULL OR l.source_id = :source)
-        AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+        {mode_clause}
     """
-    date_join = """
+    date_join = f"""
         (:start_date IS NULL OR l.date_create >= CAST(:start_date AS date))
         AND (:end_date   IS NULL OR l.date_create <  CAST(:end_date AS date) + INTERVAL '1 day')
         AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
         AND (:source IS NULL OR l.source_id = :source)
-        AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+        {mode_clause}
     """
 
     stats_query = text(f"""
@@ -293,12 +295,14 @@ def api_responsibles(
     responsible_id: Optional[int] = None,
     stage: Optional[str] = None,
     source: Optional[str] = None,
+    mode: str = "default",
 ):
     params: dict = {
         "start_date": start_date, "end_date": end_date,
         "responsible_id": responsible_id, "stage": stage, "source": source,
     }
-    query = text("""
+    mode_clause = "AND l.source_id = 'UC_1WUFJB'" if mode == "amocrm" else ""
+    query = text(f"""
         WITH fl AS (
             SELECT l.id, l.responsible_id, l.opportunity, s.bitrix_id AS stage_bid
             FROM leads l
@@ -308,7 +312,7 @@ def api_responsibles(
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage IS NULL OR s.bitrix_id = :stage)
             AND (:source IS NULL OR l.source_id = :source)
-            AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+            {mode_clause}
         )
         SELECT
             r.id                                                                      AS responsible_id,
@@ -345,12 +349,14 @@ def api_conversion(
     responsible_id: Optional[int] = None,
     stage: Optional[str] = None,
     source: Optional[str] = None,
+    mode: str = "default",
 ):
     params: dict = {
         "start_date": start_date, "end_date": end_date,
         "responsible_id": responsible_id, "stage": stage, "source": source,
     }
-    query = text("""
+    mode_clause = "AND l.source_id = 'UC_1WUFJB'" if mode == "amocrm" else ""
+    query = text(f"""
         WITH fl AS (
             SELECT l.id, l.responsible_id, s.bitrix_id AS stage_bid
             FROM leads l
@@ -360,7 +366,7 @@ def api_conversion(
             AND (:responsible_id IS NULL OR l.responsible_id = :responsible_id)
             AND (:stage IS NULL OR s.bitrix_id = :stage)
             AND (:source IS NULL OR l.source_id = :source)
-            AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+            {mode_clause}
         )
         SELECT
             r.id                                                                        AS responsible_id,

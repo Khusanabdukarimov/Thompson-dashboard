@@ -82,6 +82,7 @@ export function getDashboardStats(filter: DashFilter) {
     responsible_id: filter.responsible_id,
     stage: filter.stage,
     source: filter.source,
+    mode: filter.mode,
   }, API_URL_CRM);
 }
 
@@ -92,6 +93,7 @@ export function getResponsiblesStats(filter: DashFilter) {
     responsible_id: filter.responsible_id,
     stage: filter.stage,
     source: filter.source,
+    mode: filter.mode,
   }, API_URL_CRM);
 }
 
@@ -113,6 +115,7 @@ export function getConversionStats(filter: DashFilter) {
     responsible_id: filter.responsible_id,
     stage: filter.stage,
     source: filter.source,
+    mode: filter.mode,
   }, API_URL_CRM);
 }
 
