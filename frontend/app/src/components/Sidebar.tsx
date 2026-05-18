@@ -17,6 +17,7 @@ import {
   Users,
   Award,
   ClipboardCheck,
+  PieChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDarkMode } from "@/hooks/useDarkMode";
@@ -47,10 +48,11 @@ const MAIN_NAV: NavItem[] = [
 
 // Admin-only management links (secondary, shown below separator)
 const ADMIN_NAV: NavItem[] = [
-  { to: "/payroll/employees",  label: "Xodimlar",   icon: Users,         roles: MGMT },
-  { to: "/payroll/attendance", label: "Davomat",    icon: ClipboardCheck, roles: ALL },
-  { to: "/payroll/kpi",        label: "KPI qoidalar", icon: Award,       roles: MGMT },
-  { to: "/payroll/bonus",      label: "Bonuslar",   icon: Award,         roles: MGMT },
+  { to: "/payroll/employees",  label: "Xodimlar",    icon: Users,          roles: MGMT },
+  { to: "/payroll/attendance", label: "Davomat",     icon: ClipboardCheck, roles: ALL  },
+  { to: "/payroll/kpi",        label: "KPI qoidalar",icon: Award,          roles: MGMT },
+  { to: "/payroll/bonus",      label: "Bonuslar",    icon: Award,          roles: MGMT },
+  { to: "/taqsimot",           label: "Taqsimot",    icon: PieChart,       roles: MGMT },
 ];
 
 type Props = {

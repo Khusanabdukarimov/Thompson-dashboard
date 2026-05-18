@@ -36,6 +36,7 @@ const KpiRulesPage     = lazy(() => import("@/pages/payroll/KpiRulesPage"));
 const BonusPage        = lazy(() => import("@/pages/payroll/BonusPage"));
 const RejaPage         = lazy(() => import("@/pages/payroll/RejaPage"));
 const HisobotPage      = lazy(() => import("@/pages/payroll/HisobotPage"));
+const TaqsimotPage     = lazy(() => import("@/pages/payroll/TaqsimotPage"));
 
 // ── Loader ───────────────────────────────────────────────────────
 function PageLoader() {
@@ -168,6 +169,7 @@ export default function App() {
         <Route path="/payroll/hisobot"    element={<S><HisobotPage /></S>} />
         <Route path="/payroll/kpi"        element={<RoleRoute roles={MGMT}><S><KpiRulesPage /></S></RoleRoute>} />
         <Route path="/payroll/bonus"      element={<RoleRoute roles={MGMT}><S><BonusPage /></S></RoleRoute>} />
+        <Route path="/taqsimot"          element={<RoleRoute roles={MGMT}><S><TaqsimotPage /></S></RoleRoute>} />
         <Route path="/payroll/reja"       element={
           <RoleRoute roles={[...MGMT, "closer", "hunter"]}>
             <S><RejaPage /></S>
