@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const fs = require('fs');
+const path = require('path');
 
 const router = Router();
 
@@ -644,6 +646,7 @@ router.get('/deals-responsibles', async (req, res) => {
  * Distinct amoCRM sub-source values (uf_filial = UF_CRM_1778260858916).
  */
 router.get('/amocrm-sources', async (_req, res) => {
+  // Try DB first; on failure, fall back to a local JSON file so UI can work without Postgres.
   try {
     const { rows } = await pool.query(
       `SELECT DISTINCT uf_filial AS source
@@ -652,10 +655,21 @@ router.get('/amocrm-sources', async (_req, res) => {
          AND uf_filial IS NOT NULL AND uf_filial != '' AND uf_filial != 'false'
        ORDER BY source`
     );
-    res.json(rows.map(r => r.source));
+    return res.json(rows.map(r => r.source));
   } catch (err) {
-    console.error('[dashboard/amocrm-sources]', err.message);
-    res.status(500).json({ error: err.message });
+    console.error('[dashboard/amocrm-sources] DB query failed:', err.message || err);
+    // Fallback: look for bitrix-sync/amocrm_sources.json in cwd
+    try {
+      const file = path.resolve(process.cwd(), 'amocrm_sources.json');
+      if (fs.existsSync(file)) {
+        const txt = fs.readFileSync(file, 'utf8');
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return res.json(arr);
+      }
+    } catch (fe) {
+      console.error('[dashboard/amocrm-sources] fallback read failed:', fe.message || fe);
+    }
+    res.status(500).json({ error: 'Failed to load amoCRM sources (DB error and no fallback file)' });
   }
 });
 

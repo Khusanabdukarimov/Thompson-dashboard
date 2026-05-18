@@ -436,6 +436,32 @@ def api_filter_options():
     }
 
 
+@app.get("/api/dashboard/amocrm-sources")
+def api_amocrm_sources():
+    """Return amoCRM sub-source list from a local JSON fallback file when DB is not available.
+
+    This endpoint is intentionally DB-free so the frontend can fetch amoCRM "Manba" options
+    even when PostgreSQL is not configured.
+    """
+    # Possible locations for the fallback file: repo_root/bitrix-sync/amocrm_sources.json
+    try:
+        repo_root = BACKEND_DIR.parent
+        candidates = [repo_root / 'bitrix-sync' / 'amocrm_sources.json', BACKEND_DIR / 'amocrm_sources.json']
+        for p in candidates:
+            try:
+                if p.exists():
+                    txt = p.read_text(encoding='utf8')
+                    arr = json.loads(txt)
+                    if isinstance(arr, list):
+                        return arr
+            except Exception:
+                continue
+    except Exception:
+        pass
+    # Fallback to an empty list if nothing is available.
+    return []
+
+
 @app.get("/api/stats/deals")
 def api_stats_deals(
     start_date: Optional[str] = None,

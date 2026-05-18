@@ -27,6 +27,16 @@ const JUNK_REASON_MAP = {
   '2716': "Qimmatlik qildi",
 };
 
+const AMOCRM_SEGMENT_MAP = {
+  '1786': "Instagram",
+  '1788': "Networking",
+  '1790': "Qayta sotuv (LTV)",
+  '1792': "Sovuq qo'ng'iroq",
+  '1794': "Target",
+  '1796': "Tavsiya orqali (NPS)",
+  '1798': "Veb sayt",
+};
+
 function ufVal(raw) {
   if (raw == null) return null;
   if (Array.isArray(raw)) return raw.length ? String(raw[0]) : null;
@@ -100,8 +110,8 @@ async function upsertLead(r, client) {
       r.UTM_CAMPAIGN || null,
       r.UTM_CONTENT || null,
       r.UTM_TERM || null,
-      ufVal(r.UF_CRM_1775825731211),
-      ufVal(r.UF_CRM_1778260858916),
+      r.SOURCE_ID === 'UC_1WUFJB' ? ufEnum(r.UF_CRM_1778260858916, AMOCRM_SEGMENT_MAP) : ufVal(r.UF_CRM_1775825731211),
+      r.SOURCE_ID === 'UC_1WUFJB' ? ufVal(r.UF_CRM_1778261535982) : ufVal(r.UF_CRM_1777030859057),
       ufVal(r.UF_CRM_1775824803703),
       ufVal(r.UF_CRM_1775825155935),
       ufVal(r.UF_CRM_1770281264686),
