@@ -3,6 +3,27 @@ const pool = require('../db/pool');
 
 const router = Router();
 
+// ── Mode-aware SQL helpers ─────────────────────────────────────────
+
+function leadModeClause(mode) {
+  return mode === 'amocrm'
+    ? `AND l.source_id ILIKE '%amocrm%'`
+    : `AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))`;
+}
+
+function leadDateCond(mode, p1, p2) {
+  const f = mode === 'amocrm'
+    ? `(l.raw_data->>'Дата создания (amoCRM)')::date`
+    : `l.date_create::date`;
+  return `($${p1}::date IS NULL OR ${f} >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR ${f} <= $${p2}::date)`;
+}
+
+function leadSrcCond(mode, pi) {
+  return mode === 'amocrm'
+    ? `($${pi}::text IS NULL OR l.raw_data->>'UF_CRM_1778260858916' = $${pi}::text)`
+    : `($${pi}::text IS NULL OR l.source_id = $${pi}::text)`;
+}
+
 const SOURCE_NAMES = {
   'UC_O9BLGT': 'Facebook',
   'UC_3O8GTF': 'Instagram',
@@ -21,10 +42,13 @@ const SOURCE_NAMES = {
  * Simple counts + last sync state.
  */
 router.get('/stats', async (req, res) => {
+  const { mode } = req.query;
+  const leadsWhere = mode === 'amocrm'
+    ? `WHERE source_id ILIKE '%amocrm%'`
+    : `WHERE (source_id IS NULL OR (source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB'))`;
   try {
     const [leadsRes, dealsRes, syncRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*) AS total FROM leads
-                  WHERE (source_id IS NULL OR (source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB'))`),
+      pool.query(`SELECT COUNT(*) AS total FROM leads ${leadsWhere}`),
       pool.query('SELECT COUNT(*) AS total FROM deals'),
       pool.query('SELECT entity, last_sync, total_rows FROM sync_state ORDER BY entity'),
     ]);
@@ -45,7 +69,7 @@ router.get('/stats', async (req, res) => {
  * Params: from, to, responsible_id, stage, source
  */
 router.get('/responsibles', async (req, res) => {
-  const { from, to, responsible_id, stage, source } = req.query;
+  const { from, to, responsible_id, stage, source, mode } = req.query;
   const params = [
     from || null,
     to || null,
@@ -60,12 +84,11 @@ router.get('/responsibles', async (req, res) => {
          SELECT l.id, l.responsible_id, l.opportunity, s.bitrix_id AS stage_bid
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
-         WHERE ($1::date IS NULL OR l.date_create >= $1::date)
-           AND ($2::date IS NULL OR l.date_create <= $2::date)
+         WHERE ${leadDateCond(mode, 1, 2)}
            AND ($3::int  IS NULL OR l.responsible_id = $3::int)
            AND ($4::text IS NULL OR s.bitrix_id = $4::text)
-           AND ($5::text IS NULL OR l.source_id = $5::text)
-           AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+           AND ${leadSrcCond(mode, 5)}
+           ${leadModeClause(mode)}
        )
        SELECT
          r.id,
@@ -101,7 +124,7 @@ router.get('/responsibles', async (req, res) => {
  * Params: from, to, responsible_id, source
  */
 router.get('/funnel', async (req, res) => {
-  const { from, to, responsible_id, source } = req.query;
+  const { from, to, responsible_id, source, mode } = req.query;
   const params = [
     from || null,
     to || null,
@@ -121,11 +144,10 @@ router.get('/funnel', async (req, res) => {
          COUNT(l.id) AS total
        FROM stages s
        LEFT JOIN leads l ON l.stage_id = s.id
-         AND ($1::date IS NULL OR l.date_create >= $1::date)
-         AND ($2::date IS NULL OR l.date_create <= $2::date)
+         AND ${leadDateCond(mode, 1, 2)}
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-         AND ($4::text IS NULL OR l.source_id = $4::text)
-         AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+         AND ${leadSrcCond(mode, 4)}
+         ${leadModeClause(mode)}
        WHERE s.entity = 'lead'
        GROUP BY s.id, s.name, s.bitrix_id, s.sort_order, s.is_final, s.is_won
        ORDER BY s.sort_order`,
@@ -145,19 +167,34 @@ router.get('/funnel', async (req, res) => {
  */
 router.get('/leads', async (req, res) => {
   const {
-    page = 1, limit = 50,
+    page = 1, limit = 50, mode,
     responsible_id, stage_id, date_from, date_to,
     source_id, utm_source, utm_campaign,
   } = req.query;
 
-  const conditions = [`(l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))`];
+  const isAmo = mode === 'amocrm';
+  const conditions = [isAmo
+    ? `l.source_id ILIKE '%amocrm%'`
+    : `(l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))`];
   const params = [];
 
   if (responsible_id) { params.push(parseInt(responsible_id)); conditions.push(`l.responsible_id = $${params.length}`); }
   if (stage_id)       { params.push(parseInt(stage_id));       conditions.push(`l.stage_id = $${params.length}`); }
-  if (date_from)      { params.push(date_from);                conditions.push(`l.date_create >= $${params.length}`); }
-  if (date_to)        { params.push(date_to);                  conditions.push(`l.date_create <= $${params.length}`); }
-  if (source_id)      { params.push(source_id);                conditions.push(`l.source_id = $${params.length}`); }
+  if (date_from) {
+    params.push(date_from);
+    const f = isAmo ? `(l.raw_data->>'Дата создания (amoCRM)')::date` : `l.date_create`;
+    conditions.push(`${f} >= $${params.length}`);
+  }
+  if (date_to) {
+    params.push(date_to);
+    const f = isAmo ? `(l.raw_data->>'Дата создания (amoCRM)')::date` : `l.date_create`;
+    conditions.push(`${f} <= $${params.length}`);
+  }
+  if (source_id) {
+    params.push(source_id);
+    const f = isAmo ? `l.raw_data->>'UF_CRM_1778260858916'` : `l.source_id`;
+    conditions.push(`${f} = $${params.length}`);
+  }
   if (utm_source)     { params.push(utm_source);               conditions.push(`l.utm_source = $${params.length}`); }
   if (utm_campaign)   { params.push(utm_campaign);             conditions.push(`l.utm_campaign = $${params.length}`); }
 
@@ -237,13 +274,15 @@ router.get('/stages-list', async (_req, res) => {
  * GET /api/dashboard/sources-list
  * Distinct source_id values for filter dropdown.
  */
-router.get('/sources-list', async (_req, res) => {
+router.get('/sources-list', async (req, res) => {
+  const { mode } = req.query;
+  const whereClause = mode === 'amocrm'
+    ? `WHERE source_id ILIKE '%amocrm%'`
+    : `WHERE source_id IS NOT NULL AND source_id != ''
+         AND (source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB')`;
   try {
     const { rows } = await pool.query(
-      `SELECT DISTINCT source_id FROM leads
-       WHERE source_id IS NOT NULL AND source_id != ''
-         AND (source_id NOT ILIKE '%amocrm%' AND source_id != 'UC_1WUFJB')
-       ORDER BY source_id LIMIT 60`
+      `SELECT DISTINCT source_id FROM leads ${whereClause} ORDER BY source_id LIMIT 60`
     );
     res.json(rows.map(r => r.source_id));
   } catch (err) {
@@ -258,8 +297,12 @@ router.get('/sources-list', async (_req, res) => {
  * Params: from, to
  */
 router.get('/tasks-summary', async (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, mode } = req.query;
   const params = [from || null, to || null];
+
+  const leadSubquery = mode === 'amocrm'
+    ? `t.lead_id IS NOT NULL AND t.lead_id IN (SELECT id FROM leads WHERE source_id ILIKE '%amocrm%')`
+    : `(t.lead_id IS NULL OR t.lead_id NOT IN (SELECT id FROM leads WHERE (source_id ILIKE '%amocrm%' OR source_id = 'UC_1WUFJB')))`;
 
   try {
     const { rows } = await pool.query(
@@ -274,9 +317,7 @@ router.get('/tasks-summary', async (req, res) => {
        LEFT JOIN tasks t ON t.executor_id = r.id
          AND ($1::date IS NULL OR t.date_created >= $1::date)
          AND ($2::date IS NULL OR t.date_created <= $2::date)
-         AND (t.lead_id IS NULL OR t.lead_id NOT IN (
-           SELECT id FROM leads WHERE (source_id ILIKE '%amocrm%' OR source_id = 'UC_1WUFJB')
-         ))
+         AND (${leadSubquery})
        WHERE r.active = TRUE
        GROUP BY r.id, r.name, r.last_name
        HAVING COUNT(t.id) > 0
@@ -296,7 +337,7 @@ router.get('/tasks-summary', async (req, res) => {
  * Params: from, to, responsible_id
  */
 router.get('/cancel-reasons', async (req, res) => {
-  const { from, to, responsible_id } = req.query;
+  const { from, to, responsible_id, mode } = req.query;
   const params = [
     from || null,
     to || null,
@@ -309,10 +350,9 @@ router.get('/cancel-reasons', async (req, res) => {
          COUNT(*)::int AS total
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_NAZK5J'
-       WHERE ($1::date IS NULL OR l.date_create >= $1::date)
-         AND ($2::date IS NULL OR l.date_create <= $2::date)
+       WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-         AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+         ${leadModeClause(mode)}
        GROUP BY l.uf_cancel_reason
        ORDER BY total DESC`,
       params
@@ -330,7 +370,7 @@ router.get('/cancel-reasons', async (req, res) => {
  * Params: from, to, responsible_id
  */
 router.get('/junk-reasons', async (req, res) => {
-  const { from, to, responsible_id } = req.query;
+  const { from, to, responsible_id, mode } = req.query;
   const params = [
     from || null,
     to || null,
@@ -343,10 +383,9 @@ router.get('/junk-reasons', async (req, res) => {
          COUNT(*)::int AS total
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_F8K4GI'
-       WHERE ($1::date IS NULL OR l.date_create >= $1::date)
-         AND ($2::date IS NULL OR l.date_create <= $2::date)
+       WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-         AND (l.source_id IS NULL OR (l.source_id NOT ILIKE '%amocrm%' AND l.source_id != 'UC_1WUFJB'))
+         ${leadModeClause(mode)}
        GROUP BY l.uf_junk_reason
        ORDER BY total DESC`,
       params
@@ -609,6 +648,27 @@ router.get('/deals-responsibles', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('[dashboard/deals-responsibles]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/amocrm-sources
+ * Distinct amoCRM sub-source values from raw_data for the Manba filter dropdown.
+ */
+router.get('/amocrm-sources', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT raw_data->>'UF_CRM_1778260858916' AS source
+       FROM leads
+       WHERE source_id ILIKE '%amocrm%'
+         AND raw_data->>'UF_CRM_1778260858916' IS NOT NULL
+         AND raw_data->>'UF_CRM_1778260858916' != ''
+       ORDER BY source`
+    );
+    res.json(rows.map(r => r.source));
+  } catch (err) {
+    console.error('[dashboard/amocrm-sources]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

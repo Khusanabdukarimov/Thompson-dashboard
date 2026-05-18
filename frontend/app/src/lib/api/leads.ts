@@ -66,6 +66,7 @@ export type DashFilter = {
   responsible_id?: number;
   stage?: string;
   source?: string;
+  mode?: 'default' | 'amocrm';
 };
 
 export type FilterOptions = {
@@ -130,10 +131,11 @@ export type TasksSummaryResponse = {
   }[];
 };
 
-export function getTasksSummary(filter: Pick<DashFilter, "start_date" | "end_date">) {
+export function getTasksSummary(filter: Pick<DashFilter, "start_date" | "end_date" | "mode">) {
   return apiGet<TasksSummaryResponse>("/api/dashboard/tasks-summary", {
     from: filter.start_date,
     to: filter.end_date,
+    mode: filter.mode,
   }, API_URL_CRM);
 }
 
@@ -141,20 +143,26 @@ export type ReasonsResponse = {
   items: { reason: string; total: number }[];
 };
 
-export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
+export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
   return apiGet<ReasonsResponse>("/api/dashboard/cancel-reasons", {
     from: filter.start_date,
     to: filter.end_date,
     responsible_id: filter.responsible_id,
+    mode: filter.mode,
   }, API_URL_CRM);
 }
 
-export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
+export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
   return apiGet<ReasonsResponse>("/api/dashboard/junk-reasons", {
     from: filter.start_date,
     to: filter.end_date,
     responsible_id: filter.responsible_id,
+    mode: filter.mode,
   }, API_URL_CRM);
+}
+
+export function getAmocrmSources() {
+  return apiGet<string[]>("/api/dashboard/amocrm-sources", {}, API_URL_CRM);
 }
 
 export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {

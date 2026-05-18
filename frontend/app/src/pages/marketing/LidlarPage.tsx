@@ -9,6 +9,7 @@ import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
+  getAmocrmSources,
   type DashFilter,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
@@ -205,6 +206,7 @@ export default function LidlarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
+  const [mode, setMode] = useState<'default' | 'amocrm'>('default');
 
   const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v2", getDefaultFilter());
   const [pending, setPending] = useState<DashFilter>(applied);
@@ -226,6 +228,13 @@ export default function LidlarPage() {
   });
   const filterOpts = filterOptsQ.data;
 
+  const amocrmSrcQ = useQuery({
+    queryKey: ["amocrm-sources"],
+    queryFn: getAmocrmSources,
+    staleTime: 10 * 60 * 1000,
+    enabled: mode === 'amocrm',
+  });
+
   const def = getDefaultFilter();
   const activeCount = [
     applied.responsible_id != null,
@@ -234,12 +243,14 @@ export default function LidlarPage() {
     applied.start_date !== def.start_date || applied.end_date !== def.end_date,
   ].filter(Boolean).length;
 
-  const statsQ      = useQuery({ queryKey: ["stats/dashboard",    applied], queryFn: () => getDashboardStats(applied) });
-  const respQ       = useQuery({ queryKey: ["stats/responsibles", applied], queryFn: () => getResponsiblesStats(applied) });
-  const conversionQ = useQuery({ queryKey: ["stats/conversion",   applied], queryFn: () => getConversionStats(applied) });
-  const tasksQ      = useQuery({ queryKey: ["stats/tasks",        applied], queryFn: () => getTasksSummary(applied) });
-  const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", applied], queryFn: () => getCancelReasons(applied) });
-  const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   applied], queryFn: () => getJunkReasons(applied) });
+  const appliedWithMode = { ...applied, mode };
+
+  const statsQ      = useQuery({ queryKey: ["stats/dashboard",    appliedWithMode], queryFn: () => getDashboardStats(appliedWithMode) });
+  const respQ       = useQuery({ queryKey: ["stats/responsibles", appliedWithMode], queryFn: () => getResponsiblesStats(appliedWithMode) });
+  const conversionQ = useQuery({ queryKey: ["stats/conversion",   appliedWithMode], queryFn: () => getConversionStats(appliedWithMode) });
+  const tasksQ      = useQuery({ queryKey: ["stats/tasks",        appliedWithMode], queryFn: () => getTasksSummary(appliedWithMode) });
+  const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
+  const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -321,7 +332,7 @@ export default function LidlarPage() {
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
               background: "var(--bg2)",
-              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
+              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 || mode === 'amocrm' ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
               borderRadius: filterOpen ? "10px 10px 0 0" : 10,
               padding: "10px 16px", color: "#fff", fontSize: 13, fontWeight: 500,
               cursor: "pointer", textAlign: "left",
@@ -329,6 +340,15 @@ export default function LidlarPage() {
           >
             <Search size={16} style={{ color: "#9E9E9E", flexShrink: 0 }} />
             <span style={{ color: "#666", flex: 1 }}>Qidirish va filtrlash…</span>
+            {mode === 'amocrm' && (
+              <span style={{
+                background: "rgba(217,119,6,0.15)", color: "#D97706",
+                border: "1px solid rgba(217,119,6,0.4)",
+                borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700,
+              }}>
+                AmoCRM
+              </span>
+            )}
             {activeCount > 0 && (
               <span style={{
                 background: "#2196F3", color: "#fff", borderRadius: 10,
@@ -361,16 +381,32 @@ export default function LidlarPage() {
                     Saqlangan filtrlar
                   </div>
                   <button
-                    onClick={() => setPending(getDefaultFilter())}
+                    onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setMode('default'); }}
                     style={{
                       width: "100%", textAlign: "left",
-                      background: "rgba(33,150,243,0.08)",
-                      border: "1px solid rgba(33,150,243,0.3)",
-                      borderRadius: 8, color: "#2196F3", fontSize: 12, fontWeight: 600,
-                      padding: "8px 12px", cursor: "pointer", marginBottom: 8,
+                      background: mode === 'default' ? "rgba(33,150,243,0.08)" : "transparent",
+                      border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.3)" : "var(--border)"}`,
+                      borderRadius: 8,
+                      color: mode === 'default' ? "#2196F3" : "var(--text2)",
+                      fontSize: 12, fontWeight: 600,
+                      padding: "8px 12px", cursor: "pointer", marginBottom: 6,
                     }}
                   >
                     Barcha lidlar
+                  </button>
+                  <button
+                    onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setMode('amocrm'); }}
+                    style={{
+                      width: "100%", textAlign: "left",
+                      background: mode === 'amocrm' ? "rgba(217,119,6,0.10)" : "transparent",
+                      border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
+                      borderRadius: 8,
+                      color: mode === 'amocrm' ? "#D97706" : "var(--text2)",
+                      fontSize: 12, fontWeight: 600,
+                      padding: "8px 12px", cursor: "pointer", marginBottom: 8,
+                    }}
+                  >
+                    AmoCRM
                   </button>
                   <div style={{
                     border: "1px dashed var(--border)", borderRadius: 8,
@@ -424,7 +460,7 @@ export default function LidlarPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                     <div>
                       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
-                        <Calendar size={12} />Dan (boshlanish)
+                        <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
                       </label>
                       <input
                         type="date"
@@ -439,7 +475,7 @@ export default function LidlarPage() {
                     </div>
                     <div>
                       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
-                        <Calendar size={12} />Gacha (tugash)
+                        <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
                       </label>
                       <input
                         type="date"
@@ -511,9 +547,14 @@ export default function LidlarPage() {
                         }}
                       >
                         <option value="">Barchasi</option>
-                        {filterOpts?.sources.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
+                        {mode === 'amocrm'
+                          ? (amocrmSrcQ.data ?? []).map((s) => (
+                              <option key={s} value={s}>{s}</option>
+                            ))
+                          : filterOpts?.sources.map((s) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))
+                        }
                       </select>
                     </div>
                   </div>
