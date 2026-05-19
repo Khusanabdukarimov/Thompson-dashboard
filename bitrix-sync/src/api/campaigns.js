@@ -418,22 +418,23 @@ router.get('/forms', async (req, res) => {
   }
 });
 
-// GET /api/campaigns/leads?form_id=123
+// GET /api/campaigns/leads?form_id=123&campaign_id=456
 router.get('/leads', async (req, res) => {
-  const { form_id } = req.query;
+  const { form_id, campaign_id } = req.query;
   if (!form_id) return res.status(400).json({ error: 'form_id is required' });
 
   try {
     const { rows } = await pool.query(`
-      SELECT 
-        id, full_name, phone, email, 
+      SELECT
+        id, full_name, phone, email,
         ad_name, adset_name, campaign_name,
         created_time, field_data, platform, is_organic
       FROM facebook_leads
       WHERE form_id = $1
+        AND ($2::text IS NULL OR campaign_id = $2)
       ORDER BY created_time DESC
       LIMIT 1000
-    `, [form_id]);
+    `, [form_id, campaign_id || null]);
 
     const leads = rows.map(r => {
       // Use platform from DB, normalize instagram to ig

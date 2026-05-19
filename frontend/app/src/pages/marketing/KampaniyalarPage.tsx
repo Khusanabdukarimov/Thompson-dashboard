@@ -51,10 +51,10 @@ const now = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
 const DEFAULT_YEAR = now.getFullYear();
 
-function LeadsSubTable({ formId }: { formId: string }) {
+function LeadsSubTable({ formId, campaignId }: { formId: string; campaignId: string }) {
   const q = useQuery({
-    queryKey: ["form-leads", formId],
-    queryFn: () => getFormLeads(formId),
+    queryKey: ["form-leads", formId, campaignId],
+    queryFn: () => getFormLeads(formId, campaignId),
     staleTime: 5 * 60 * 1000
   });
 
@@ -97,7 +97,7 @@ function LeadsSubTable({ formId }: { formId: string }) {
   );
 }
 
-function FormRow({ f }: { f: any }) {
+function FormRow({ f, campaignId }: { f: any; campaignId: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
@@ -128,7 +128,7 @@ function FormRow({ f }: { f: any }) {
       {expanded && (
         <tr>
           <td colSpan={4} className="p-0">
-            <LeadsSubTable formId={f.form_id} />
+            <LeadsSubTable formId={f.form_id} campaignId={campaignId} />
           </td>
         </tr>
       )}
@@ -698,7 +698,7 @@ export default function KampaniyalarPage() {
                   </thead>
                   <tbody>
                     {camp.forms.map((f) => (
-                      <FormRow key={f.form_id} f={f} />
+                      <FormRow key={f.form_id} f={f} campaignId={camp.campaign_id} />
                     ))}
                   </tbody>
                 </table>
