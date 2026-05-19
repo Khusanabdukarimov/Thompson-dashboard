@@ -689,11 +689,17 @@ router.get('/deals-responsibles', async (req, res) => {
          r.id AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
          COUNT(fd.id)::int AS total,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('NEW','C1:NEW','C1:CONSULTATION_DONE'))::int         AS konsultatsiya,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('EXECUTING','C1:EXECUTING','C1:PREPARATION','C1:FINAL_INVOICE'))::int AS jarayonda,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_W35V62','C1:AGREEMENT'))::int                   AS kelishuv,
-         COUNT(fd.id) FILTER (WHERE fd.is_won)::int                                                       AS sotuv_boldi,
-         COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                   AS bekor_boldi
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('NEW','C1:NEW','C1:CONSULTATION_DONE'))::int              AS konsultatsiya,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:IN_PROCESS'))::int                                    AS jarayonda,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:PREPARATION'))::int                                   AS taklif,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('EXECUTING','C1:EXECUTING','C1:PRESENTATION'))::int       AS taqdimot,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:CLIENT_APPROVED'))::int                               AS manzur,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:CONTRACT_SENT'))::int                                 AS shartnoma,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_W35V62','C1:AGREEMENT'))::int                         AS kelishuv,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:FINAL_INVOICE','C1:PARTIAL_PAYMENT'))::int            AS tolov,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:WORK_STARTED'))::int                                  AS ish_boshlandi,
+         COUNT(fd.id) FILTER (WHERE fd.is_won)::int                                                             AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                        AS bekor_boldi
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
        GROUP BY r.id, r.name, r.last_name

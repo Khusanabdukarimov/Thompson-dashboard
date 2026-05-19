@@ -135,7 +135,13 @@ export type DealsResponsiblesRow = {
   total: number;
   konsultatsiya: number;
   jarayonda: number;
+  taklif: number;
+  taqdimot: number;
+  manzur: number;
+  shartnoma: number;
   kelishuv: number;
+  tolov: number;
+  ish_boshlandi: number;
   sotuv_boldi: number;
   bekor_boldi: number;
 };

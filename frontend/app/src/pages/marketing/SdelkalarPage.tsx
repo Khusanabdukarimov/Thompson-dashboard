@@ -187,11 +187,17 @@ function SelectFilter({ label, value, onChange, options }: {
 
 // ── Deal stage columns for "mas'ullar kesimida" table ─────────────
 const DEAL_STAGE_COLS = [
-  { key: "konsultatsiya", label: "Konsultatsiya", color: "#2196F3" },
-  { key: "jarayonda",     label: "Jarayonda",     color: "#FF9800" },
-  { key: "kelishuv",      label: "Kelishuv",      color: "#4CAF50" },
-  { key: "sotuv_boldi",   label: "Sotuv bo'ldi",  color: "#00E676" },
-  { key: "bekor_boldi",   label: "Bekor bo'ldi",  color: "#F44336" },
+  { key: "konsultatsiya", label: "Konsultatsiyadan o'tdi", color: "#2196F3" },
+  { key: "jarayonda",     label: "Jarayonda",              color: "#FF9800" },
+  { key: "taklif",        label: "Taklif tayyorlash",      color: "#00BCD4" },
+  { key: "taqdimot",      label: "Taqdimot qilindi",       color: "#9C27B0" },
+  { key: "manzur",        label: "Mijozga manzur bo'ldi",  color: "#E91E63" },
+  { key: "shartnoma",     label: "Shartnoma yuborildi",    color: "#009688" },
+  { key: "kelishuv",      label: "Kelishuv bo'ldi",        color: "#4CAF50" },
+  { key: "tolov",         label: "To'lov qisman",          color: "#FFC107" },
+  { key: "ish_boshlandi", label: "Ish boshlandi",          color: "#3F51B5" },
+  { key: "sotuv_boldi",   label: "Sotuv bo'ldi",           color: "#00E676" },
+  { key: "bekor_boldi",   label: "Bekor bo'ldi",           color: "#F44336" },
 ] as const;
 
 // ── Page ─────────────────────────────────────────────────────────
