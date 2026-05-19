@@ -322,7 +322,6 @@ router.get('/forms', async (req, res) => {
 
     // ── 2. Build campaign map and ad→form mapping ──────────────
     const campaignMap = {};   // campId → { campaign_id, name, forms: { formId → adsetInfo } }
-    const adFormMap   = {};   // adId   → { campaign_id, form_id }
     const formIdsToFetch = new Set();
 
     for (const ad of ads) {
@@ -343,7 +342,6 @@ router.get('/forms', async (req, res) => {
         campaignMap[cId] = { campaign_id: cId, campaign_name: camp.name || '', objective: camp.objective || '', forms: {} };
       }
       campaignMap[cId].forms[formId] = { form_id: formId, adset_id: adset.id || '', adset_name: adset.name || '' };
-      adFormMap[ad.id] = { campaign_id: cId, form_id: formId };
       formIdsToFetch.add(formId);
     }
 
@@ -358,27 +356,21 @@ router.get('/forms', async (req, res) => {
       Object.assign(formDetails, data);
     }
 
-    // ── 4. Fetch per-ad insights for the requested month ───────
+    // ── 4. Query DB for per-form lead counts in the requested month ──
     const days  = daysInMonth(yr, monthNum);
     const since = `${yr}-${pad(monthNum)}-01`;
     const until = `${yr}-${pad(monthNum)}-${pad(days)}`;
 
-    const insightRows = await paginate(`${BASE}/${accountId()}/insights`, {
-      access_token: token(),
-      fields:       'ad_id,actions',
-      level:        'ad',
-      time_range:   JSON.stringify({ since, until }),
-      limit:        500,
-    });
-
-    // Build (campaign_id|form_id) → lead_count from per-ad insights
-    const campaignFormLeads = {};
-    for (const row of insightRows) {
-      const mapping = adFormMap[row.ad_id];
-      if (!mapping) continue;
-      const leads = actionVal(row.actions, LEAD_TYPES);
-      const key   = `${mapping.campaign_id}|${mapping.form_id}`;
-      campaignFormLeads[key] = (campaignFormLeads[key] || 0) + leads;
+    const { rows: dbCounts } = await pool.query(
+      `SELECT form_id, COUNT(*)::int AS count
+       FROM facebook_leads
+       WHERE created_time >= $1::date AND created_time <= $2::date
+       GROUP BY form_id`,
+      [since, until],
+    );
+    const dbFormLeads = {};
+    for (const row of dbCounts) {
+      dbFormLeads[row.form_id] = row.count;
     }
 
     // ── 5. Build result ────────────────────────────────────────
@@ -389,8 +381,7 @@ router.get('/forms', async (req, res) => {
         const fd = formDetails[fid] || {};
         if (fd.status !== 'ACTIVE') continue;
 
-        const leadsKey   = `${camp.campaign_id}|${fid}`;
-        const leadsCount = campaignFormLeads[leadsKey] || 0;
+        const leadsCount = dbFormLeads[fid] || 0;
 
         formsList.push({
           form_id:      fid,
