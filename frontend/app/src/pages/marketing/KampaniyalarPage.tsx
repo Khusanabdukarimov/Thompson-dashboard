@@ -151,8 +151,8 @@ export default function KampaniyalarPage() {
   });
 
   const qForms = useQuery({
-    queryKey: ["meta/campaign-forms"],
-    queryFn: () => getCampaignForms(),
+    queryKey: ["meta/campaign-forms", month, year],
+    queryFn: () => getCampaignForms(month, year),
     staleTime: 5 * 60 * 1000,
   });
 

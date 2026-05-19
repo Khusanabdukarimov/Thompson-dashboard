@@ -126,8 +126,11 @@ export type CampaignFormsResponse = {
   campaigns: CampaignForms[];
 };
 
-export function getCampaignForms(ad_account_id?: string) {
-  return apiGet<CampaignFormsResponse>('/api/campaigns/forms', ad_account_id ? { ad_account_id } : {});
+export function getCampaignForms(month?: string, year?: number) {
+  const params: Record<string, string | number | undefined> = {};
+  if (month) params.month = month;
+  if (year)  params.year  = year;
+  return apiGet<CampaignFormsResponse>('/api/campaigns/forms', params);
 }
 
 export interface FormLead {
