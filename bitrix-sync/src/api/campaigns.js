@@ -356,21 +356,22 @@ router.get('/forms', async (req, res) => {
       Object.assign(formDetails, data);
     }
 
-    // ── 4. Query DB for per-form lead counts in the requested month ──
+    // ── 4. Query DB for per-campaign per-form lead counts in the requested month ──
     const days  = daysInMonth(yr, monthNum);
     const since = `${yr}-${pad(monthNum)}-01`;
     const until = `${yr}-${pad(monthNum)}-${pad(days)}`;
 
     const { rows: dbCounts } = await pool.query(
-      `SELECT form_id, COUNT(*)::int AS count
+      `SELECT campaign_id, form_id, COUNT(*)::int AS count
        FROM facebook_leads
        WHERE created_time >= $1::date AND created_time <= $2::date
-       GROUP BY form_id`,
+       GROUP BY campaign_id, form_id`,
       [since, until],
     );
+    // key: "campaign_id|form_id"
     const dbFormLeads = {};
     for (const row of dbCounts) {
-      dbFormLeads[row.form_id] = row.count;
+      dbFormLeads[`${row.campaign_id}|${row.form_id}`] = row.count;
     }
 
     // ── 5. Build result ────────────────────────────────────────
@@ -381,7 +382,7 @@ router.get('/forms', async (req, res) => {
         const fd = formDetails[fid] || {};
         if (fd.status !== 'ACTIVE') continue;
 
-        const leadsCount = dbFormLeads[fid] || 0;
+        const leadsCount = dbFormLeads[`${camp.campaign_id}|${fid}`] || 0;
 
         formsList.push({
           form_id:      fid,
