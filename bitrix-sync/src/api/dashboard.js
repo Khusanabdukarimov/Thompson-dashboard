@@ -678,7 +678,7 @@ router.get('/deals-responsibles', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `WITH fd AS (
-         SELECT d.id, d.responsible_id, s.bitrix_id AS stage_bid
+         SELECT d.id, d.responsible_id, s.bitrix_id AS stage_bid, s.is_won, s.is_final
          FROM deals d
          JOIN stages s ON s.id = d.stage_id
          WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
@@ -689,11 +689,11 @@ router.get('/deals-responsibles', async (req, res) => {
          r.id AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
          COUNT(fd.id)::int AS total,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:PRESENTATION')::int AS taqdimot,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:CONSULTATION_DONE')::int AS konsultatsiya,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:AGREEMENT')::int AS kelishuv,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:WON')::int AS sotuv_boldi,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = 'C1:LOSE')::int AS bekor_boldi
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('NEW','C1:NEW','C1:CONSULTATION_DONE'))::int         AS konsultatsiya,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('EXECUTING','C1:EXECUTING','C1:PREPARATION','C1:FINAL_INVOICE'))::int AS jarayonda,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_W35V62','C1:AGREEMENT'))::int                   AS kelishuv,
+         COUNT(fd.id) FILTER (WHERE fd.is_won)::int                                                       AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                   AS bekor_boldi
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
        GROUP BY r.id, r.name, r.last_name

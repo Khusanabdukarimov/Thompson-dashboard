@@ -187,11 +187,11 @@ function SelectFilter({ label, value, onChange, options }: {
 
 // ── Deal stage columns for "mas'ullar kesimida" table ─────────────
 const DEAL_STAGE_COLS = [
-  { key: "taqdimot", label: "Taqdimot", color: "#9C27B0" },
   { key: "konsultatsiya", label: "Konsultatsiya", color: "#2196F3" },
-  { key: "kelishuv", label: "Kelishuv", color: "#FF9800" },
-  { key: "sotuv_boldi", label: "Sotuv bo'ldi", color: "#4CAF50" },
-  { key: "bekor_boldi", label: "Bekor bo'ldi", color: "#F44336" },
+  { key: "jarayonda",     label: "Jarayonda",     color: "#FF9800" },
+  { key: "kelishuv",      label: "Kelishuv",      color: "#4CAF50" },
+  { key: "sotuv_boldi",   label: "Sotuv bo'ldi",  color: "#00E676" },
+  { key: "bekor_boldi",   label: "Bekor bo'ldi",  color: "#F44336" },
 ] as const;
 
 // ── Page ─────────────────────────────────────────────────────────

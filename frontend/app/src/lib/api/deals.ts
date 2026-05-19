@@ -133,8 +133,8 @@ export type DealsResponsiblesRow = {
   responsible_id: number;
   full_name: string;
   total: number;
-  taqdimot: number;
   konsultatsiya: number;
+  jarayonda: number;
   kelishuv: number;
   sotuv_boldi: number;
   bekor_boldi: number;
