@@ -9,8 +9,8 @@ import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
-  getAmocrmSources, getUtmStats,
-  type DashFilter, type UtmStatRow,
+  getAmocrmSources, getUtmStats, getUtmCampaignStats,
+  type DashFilter, type UtmStatRow, type UtmCampaignRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -99,6 +99,70 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
       </svg>
       <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700, zIndex: 1 }}>{label}</span>
     </div>
+  );
+}
+
+// ── UTM Campaign sub-table ────────────────────────────────────────
+const UTM_COLS_DEF = [
+  { key: "umumiy_lidlar"            as const, color: "#2196F3"  },
+  { key: "jarayonda"                as const, color: "#FF9800"  },
+  { key: "sifatli_lid"              as const, color: "#9C27B0"  },
+  { key: "konsultatsiya_belgilandi" as const, color: "#2196F3"  },
+  { key: "konsultatsiya_otkazildi"  as const, color: "#4CAF50"  },
+  { key: "sifatsiz"                 as const, color: "#F44336"  },
+  { key: "bekor_boldi"              as const, color: "#FFC107"  },
+];
+
+function UtmCampaignSubTable({
+  utmSource, filter,
+}: {
+  utmSource: string;
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">;
+}) {
+  const q = useQuery({
+    queryKey: ["stats/utm-campaign", utmSource, filter],
+    queryFn: () => getUtmCampaignStats(utmSource, filter),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  if (q.isLoading) return (
+    <tr><td colSpan={10} style={{ padding: "12px 24px", color: "#666", fontSize: 12, background: "var(--bg)" }}>Yuklanmoqda…</td></tr>
+  );
+
+  const rows: UtmCampaignRow[] = q.data ?? [];
+  const maxes: Record<string, number> = {};
+  for (const c of UTM_COLS_DEF)
+    maxes[c.key] = Math.max(1, ...rows.map(r => r[c.key] as number));
+
+  return (
+    <>
+      {rows.map((r) => {
+        const konv = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+        return (
+          <tr key={r.utm_campaign} style={{ background: "var(--bg)" }}>
+            <td style={{ ...TD, paddingLeft: 32, color: "#9E9E9E", fontSize: 12, fontStyle: "italic", whiteSpace: "nowrap" }}>
+              ↳ {r.utm_campaign}
+            </td>
+            {UTM_COLS_DEF.map(c => {
+              const val = r[c.key] as number;
+              return (
+                <td key={c.key} style={{ ...TD, paddingTop: 6, paddingBottom: 6 }}>
+                  {val > 0 ? (
+                    <>
+                      <span style={{ fontSize: 12, color: "#ccc" }}>{fmtNum(val)}</span>
+                      <MiniBar value={val} max={maxes[c.key]} color={c.color} height={2} />
+                    </>
+                  ) : <span style={{ fontSize: 12, color: "#333" }}>—</span>}
+                </td>
+              );
+            })}
+            <td style={{ ...TD, textAlign: "center", paddingTop: 6, paddingBottom: 6 }}>
+              <ConversionDonut pct={konv} size={32} />
+            </td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
@@ -249,6 +313,7 @@ export default function LidlarPage() {
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const utmQ        = useQuery({ queryKey: ["stats/utm-stats",       appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const [expandedUtm, setExpandedUtm] = useState<string | null>(null);
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -866,13 +931,19 @@ export default function LidlarPage() {
                     <tbody>
                       {utmRows.map((r, i) => {
                         const konv = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+                        const isExpanded = expandedUtm === r.utm_source;
                         return (
+                          <>
                           <tr key={r.utm_source}
-                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                              style={{ background: isExpanded ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                              onClick={() => setExpandedUtm(isExpanded ? null : r.utm_source)}
                               onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                              onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                             <td style={{ ...TD, fontWeight: 600, color: "#fff", fontSize: 13, whiteSpace: "nowrap" }}>
-                              {r.utm_source}
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <ChevronDown size={13} style={{ color: "#555", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s", flexShrink: 0 }} />
+                                {r.utm_source}
+                              </span>
                             </td>
                             {UTM_COLS.map(c => {
                               const val = r[c.key] as number;
@@ -891,6 +962,10 @@ export default function LidlarPage() {
                               <ConversionDonut pct={konv} size={38} />
                             </td>
                           </tr>
+                          {isExpanded && (
+                            <UtmCampaignSubTable utmSource={r.utm_source} filter={appliedWithMode} />
+                          )}
+                          </>
                         );
                       })}
 

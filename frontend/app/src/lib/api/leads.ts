@@ -187,6 +187,20 @@ export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" |
   }, API_URL_CRM);
 }
 
+export type UtmCampaignRow = UtmStatRow & { utm_campaign: string };
+
+export function getUtmCampaignStats(
+  utmSource: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
+) {
+  return apiGet<UtmCampaignRow[]>("/api/dashboard/utm-campaign-stats", {
+    utm_source: utmSource,
+    from: filter.start_date,
+    to:   filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
 export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,

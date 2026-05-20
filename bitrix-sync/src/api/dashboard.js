@@ -1036,6 +1036,46 @@ router.get('/taqsimot-stats', async (_req, res) => {
   }
 });
 
+router.get('/utm-campaign-stats', async (req, res) => {
+  const { from, to, mode, utm_source } = req.query;
+  if (!utm_source) return res.status(400).json({ error: 'utm_source required' });
+  const srcFilter = utm_source === 'Nomalum'
+    ? `AND (l.utm_source IS NULL OR l.utm_source = '')`
+    : `AND l.utm_source = $3`;
+  const params = utm_source === 'Nomalum'
+    ? [from || null, to || null]
+    : [from || null, to || null, utm_source];
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum') AS utm_campaign,
+         COUNT(*)::int                                                              AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
+           'THINKING','NOT_TRANSFERRED'
+         ))::int                                                                    AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         ${srcFilter}
+         ${leadModeClause(mode)}
+       GROUP BY COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum')
+       ORDER BY umumiy_lidlar DESC`,
+      params,
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/utm-campaign-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/utm-stats', async (req, res) => {
   const { from, to, mode } = req.query;
   try {
