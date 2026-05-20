@@ -1141,10 +1141,13 @@ router.get('/utm-stats', async (req, res) => {
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR EXISTS (
-           SELECT 1 FROM lead_phones lp
-           JOIN facebook_leads fl ON fl.phone = lp.phone
-           JOIN crm_forms cf ON cf.fb_form_id = fl.form_id
-           WHERE lp.lead_id = l.id AND cf.form_id = $3
+           SELECT 1 FROM crm_forms cf2
+           WHERE cf2.form_id = $3 AND cf2.fb_form_id IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM lead_phones lp
+               JOIN facebook_leads fl ON fl.phone = lp.phone
+               WHERE lp.lead_id = l.id AND fl.form_id = cf2.fb_form_id
+             )
          ))
          ${leadModeClause(mode)}
        GROUP BY TRIM(l.utm_source)
