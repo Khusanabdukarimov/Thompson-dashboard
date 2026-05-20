@@ -9,8 +9,8 @@ import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
-  getAmocrmSources,
-  type DashFilter,
+  getAmocrmSources, getUtmStats,
+  type DashFilter, type UtmStatRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -248,6 +248,7 @@ export default function LidlarPage() {
   const tasksQ      = useQuery({ queryKey: ["stats/tasks",        appliedWithMode], queryFn: () => getTasksSummary(appliedWithMode) });
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
+  const utmQ        = useQuery({ queryKey: ["stats/utm-stats",       appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -313,7 +314,7 @@ export default function LidlarPage() {
       <Topbar
         title="Lidlar analitika"
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); }}>
+          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); utmQ.refetch(); }}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
@@ -782,6 +783,139 @@ export default function LidlarPage() {
             </div>
           )}
         </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            UTM bo'yicha table
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const utmRows: UtmStatRow[] = utmQ.data ?? [];
+          const utmMax = {
+            umumiy:    Math.max(1, ...utmRows.map(r => r.umumiy_lidlar)),
+            jarayonda: Math.max(1, ...utmRows.map(r => r.jarayonda)),
+            sifatli:   Math.max(1, ...utmRows.map(r => r.sifatli_lid)),
+            kb:        Math.max(1, ...utmRows.map(r => r.konsultatsiya_belgilandi)),
+            ko:        Math.max(1, ...utmRows.map(r => r.konsultatsiya_otkazildi)),
+            sifatsiz:  Math.max(1, ...utmRows.map(r => r.sifatsiz)),
+            bekor:     Math.max(1, ...utmRows.map(r => r.bekor_boldi)),
+          };
+          const utmTotals = utmRows.reduce(
+            (acc, r) => ({
+              umumiy:    acc.umumiy    + r.umumiy_lidlar,
+              jarayonda: acc.jarayonda + r.jarayonda,
+              sifatli:   acc.sifatli   + r.sifatli_lid,
+              kb:        acc.kb        + r.konsultatsiya_belgilandi,
+              ko:        acc.ko        + r.konsultatsiya_otkazildi,
+              sifatsiz:  acc.sifatsiz  + r.sifatsiz,
+              bekor:     acc.bekor     + r.bekor_boldi,
+            }),
+            { umumiy: 0, jarayonda: 0, sifatli: 0, kb: 0, ko: 0, sifatsiz: 0, bekor: 0 },
+          );
+
+          const UTM_COLS = [
+            { key: "umumiy_lidlar"           as const, label: "UMUMIY LIDLAR",             color: "#2196F3"  },
+            { key: "jarayonda"               as const, label: "JARAYONDA",                 color: "#FF9800"  },
+            { key: "sifatli_lid"             as const, label: "SIFATLI LID",               color: "#9C27B0"  },
+            { key: "konsultatsiya_belgilandi" as const, label: "KONSULTATSIYA BELGILANDI",  color: "#2196F3"  },
+            { key: "konsultatsiya_otkazildi" as const, label: "KONSULTATSIYA O'TKAZILDI",  color: "#4CAF50"  },
+            { key: "sifatsiz"                as const, label: "SIFATSIZ",                  color: "#F44336"  },
+            { key: "bekor_boldi"             as const, label: "BEKOR BO'LDI",              color: "#FFC107"  },
+          ] as const;
+
+          const maxByKey: Record<string, number> = {
+            umumiy_lidlar:            utmMax.umumiy,
+            jarayonda:                utmMax.jarayonda,
+            sifatli_lid:              utmMax.sifatli,
+            konsultatsiya_belgilandi: utmMax.kb,
+            konsultatsiya_otkazildi:  utmMax.ko,
+            sifatsiz:                 utmMax.sifatsiz,
+            bekor_boldi:              utmMax.bekor,
+          };
+          const totByKey: Record<string, number> = {
+            umumiy_lidlar:            utmTotals.umumiy,
+            jarayonda:                utmTotals.jarayonda,
+            sifatli_lid:              utmTotals.sifatli,
+            konsultatsiya_belgilandi: utmTotals.kb,
+            konsultatsiya_otkazildi:  utmTotals.ko,
+            sifatsiz:                 utmTotals.sifatsiz,
+            bekor_boldi:              utmTotals.bekor,
+          };
+
+          return (
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>UTM bo'yicha</span>
+                <span style={{ fontSize: 12, color: "#555" }}>{utmRows.length} ta manba</span>
+              </div>
+
+              {utmQ.isLoading ? (
+                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : utmRows.length === 0 ? (
+                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                    <thead>
+                      <tr>
+                        <th style={TH("#9E9E9E", 160)}>UTM - SOURCE</th>
+                        {UTM_COLS.map(c => (
+                          <th key={c.key} style={TH(c.color)}>{c.label}</th>
+                        ))}
+                        <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {utmRows.map((r, i) => {
+                        const konv = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+                        return (
+                          <tr key={r.utm_source}
+                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                              onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                            <td style={{ ...TD, fontWeight: 600, color: "#fff", fontSize: 13, whiteSpace: "nowrap" }}>
+                              {r.utm_source}
+                            </td>
+                            {UTM_COLS.map(c => {
+                              const val = r[c.key] as number;
+                              return (
+                                <td key={c.key} style={TD}>
+                                  {val > 0 ? (
+                                    <>
+                                      <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(val)}</span>
+                                      <MiniBar value={val} max={maxByKey[c.key]} color={c.color} />
+                                    </>
+                                  ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                                </td>
+                              );
+                            })}
+                            <td style={{ ...TD, textAlign: "center" }}>
+                              <ConversionDonut pct={konv} size={38} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* JAMI row */}
+                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                          JAMI
+                        </td>
+                        {UTM_COLS.map(c => (
+                          <td key={c.key} style={TD}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{fmtNum(totByKey[c.key])}</span>
+                            <MiniBar value={1} max={1} color={c.color} />
+                          </td>
+                        ))}
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <ConversionDonut pct={utmTotals.umumiy > 0 ? (utmTotals.ko / utmTotals.umumiy) * 100 : 0} size={38} />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════
             Lid mas'ullar kesimida table

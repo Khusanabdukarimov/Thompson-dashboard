@@ -168,6 +168,25 @@ export function getAmocrmSources() {
   return apiGet<string[]>("/api/dashboard/amocrm-sources", {}, API_URL_CRM);
 }
 
+export type UtmStatRow = {
+  utm_source: string;
+  umumiy_lidlar: number;
+  jarayonda: number;
+  sifatli_lid: number;
+  konsultatsiya_belgilandi: number;
+  konsultatsiya_otkazildi: number;
+  sifatsiz: number;
+  bekor_boldi: number;
+};
+
+export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "mode">) {
+  return apiGet<UtmStatRow[]>("/api/dashboard/utm-stats", {
+    from: filter.start_date,
+    to:   filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
 export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,

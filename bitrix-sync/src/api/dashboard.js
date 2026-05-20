@@ -1036,4 +1036,36 @@ router.get('/taqsimot-stats', async (_req, res) => {
   }
 });
 
+router.get('/utm-stats', async (req, res) => {
+  const { from, to, mode } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(l.utm_source, ''), 'Nomalum') AS utm_source,
+         COUNT(*)::int                                                              AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
+           'THINKING','NOT_TRANSFERRED'
+         ))::int                                                                    AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         ${leadModeClause(mode)}
+       GROUP BY COALESCE(NULLIF(l.utm_source, ''), 'Nomalum')
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/utm-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
