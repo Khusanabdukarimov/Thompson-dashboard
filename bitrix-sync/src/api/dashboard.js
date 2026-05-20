@@ -1083,7 +1083,7 @@ router.get('/utm-responsible-stats', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(r.full_name, 'Nomalum') AS full_name,
+         COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Nomalum') AS full_name,
          l.responsible_id,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
