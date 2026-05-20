@@ -1143,7 +1143,8 @@ router.get('/utm-stats', async (req, res) => {
          AND ($3::text IS NULL OR EXISTS (
            SELECT 1 FROM lead_phones lp
            JOIN facebook_leads fl ON fl.phone = lp.phone
-           WHERE lp.lead_id = l.id AND fl.form_id = $3
+           JOIN crm_forms cf ON cf.fb_form_id = fl.form_id
+           WHERE lp.lead_id = l.id AND cf.form_id = $3
          ))
          ${leadModeClause(mode)}
        GROUP BY TRIM(l.utm_source)
@@ -1171,8 +1172,12 @@ router.post('/sync-crm-forms', async (_req, res) => {
         form_name   TEXT,
         active      BOOLEAN DEFAULT TRUE,
         lead_count  INT,
+        fb_form_id  TEXT,
         synced_at   TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+    await pool.query(`
+      ALTER TABLE crm_forms ADD COLUMN IF NOT EXISTS fb_form_id TEXT
     `);
     const resp = await fetch(`${BITRIX_URL}crm.webform.list`);
     const json = await resp.json();
@@ -1188,14 +1193,27 @@ router.post('/sync-crm-forms', async (_req, res) => {
         [String(f.ID), f.NAME, f.ACTIVE === 'Y']
       );
     }
-    // Update lead_count from facebook_leads (for FB-connected forms) or leave NULL
+    // Try to link Bitrix24 form to Facebook form_id by matching form name → campaign_name/adset_name
+    await pool.query(`
+      UPDATE crm_forms cf SET fb_form_id = sub.form_id
+      FROM (
+        SELECT form_id,
+               MAX(COALESCE(NULLIF(campaign_name,''), adset_name)) AS display_name,
+               COUNT(*)::int AS cnt
+        FROM facebook_leads WHERE form_id IS NOT NULL
+        GROUP BY form_id
+      ) sub
+      WHERE sub.display_name ILIKE '%' || cf.form_name || '%'
+         OR cf.form_name ILIKE '%' || sub.display_name || '%'
+    `);
+    // Update lead_count from linked facebook_leads
     await pool.query(`
       UPDATE crm_forms cf SET lead_count = sub.cnt
       FROM (
         SELECT form_id, COUNT(*)::int AS cnt FROM facebook_leads
         WHERE form_id IS NOT NULL GROUP BY form_id
       ) sub
-      WHERE cf.form_id = sub.form_id
+      WHERE cf.fb_form_id = sub.form_id
     `);
     res.json({ ok: true, synced: forms.length });
   } catch (err) {
