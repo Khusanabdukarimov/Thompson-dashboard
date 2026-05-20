@@ -936,21 +936,17 @@ router.get('/lead-filter-options', async (_req, res) => {
          ORDER BY source_id LIMIT 60`
       ),
       pool.query(
-        `SELECT form_id,
-                COALESCE(MAX(NULLIF(adset_name,'')), MAX(NULLIF(campaign_name,'')), form_id) AS form_name,
-                COUNT(*)::int AS lead_count
-         FROM facebook_leads
-         WHERE form_id IS NOT NULL AND form_id != ''
-         GROUP BY form_id
-         ORDER BY lead_count DESC
-         LIMIT 60`
-      ),
+        `SELECT form_id AS id, form_name AS name, lead_count
+         FROM crm_forms
+         WHERE active = TRUE
+         ORDER BY lead_count DESC NULLS LAST, name`
+      ).catch(() => ({ rows: [] })),
     ]);
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
       sources: srcRes.rows.map(r => ({ id: r.source_id, name: SOURCE_NAMES[r.source_id] || r.source_id })),
-      forms: formRes.rows.map(r => ({ id: r.form_id, name: r.form_name, count: r.lead_count })),
+      forms: formRes.rows.map(r => ({ id: r.id, name: r.name, count: r.lead_count })),
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);
@@ -1064,12 +1060,12 @@ router.get('/utm-campaign-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
          COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi,
-         COUNT(DISTINCT l.assigned_by_id)::int                                     AS responsible_count
+         COUNT(DISTINCT l.responsible_id)::int                                     AS responsible_count
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::text IS NULL OR l.utm_source = $3)
+         AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1088,7 +1084,7 @@ router.get('/utm-responsible-stats', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT
          COALESCE(r.full_name, 'Nomalum') AS full_name,
-         l.assigned_by_id                 AS responsible_id,
+         l.responsible_id,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
            'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
@@ -1101,17 +1097,17 @@ router.get('/utm-responsible-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
-       LEFT JOIN responsibles r ON r.id = l.assigned_by_id
+       LEFT JOIN responsibles r ON r.id = l.responsible_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::text IS NULL OR l.utm_source = $3)
+         AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
          AND (
            $4::text IS NULL
            OR ($4 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
            OR ($4 != 'Nomalum' AND l.utm_campaign = $4)
          )
          ${leadModeClause(mode)}
-       GROUP BY l.assigned_by_id, r.full_name
+       GROUP BY l.responsible_id, r.full_name
        ORDER BY umumiy_lidlar DESC`,
       [from || null, to || null, utm_source || null, utm_campaign || null],
     );
@@ -1157,6 +1153,53 @@ router.get('/utm-stats', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('[dashboard/utm-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/sync-crm-forms
+ * Fetches CRM forms from Bitrix24 and upserts into crm_forms table.
+ */
+router.post('/sync-crm-forms', async (_req, res) => {
+  const BITRIX_URL = process.env.BITRIX_WEBHOOK_URL;
+  if (!BITRIX_URL) return res.status(500).json({ error: 'BITRIX_WEBHOOK_URL not set' });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS crm_forms (
+        form_id     TEXT PRIMARY KEY,
+        form_name   TEXT,
+        active      BOOLEAN DEFAULT TRUE,
+        lead_count  INT,
+        synced_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    const resp = await fetch(`${BITRIX_URL}crm.webform.list`);
+    const json = await resp.json();
+    const forms = json.result || [];
+    for (const f of forms) {
+      await pool.query(
+        `INSERT INTO crm_forms (form_id, form_name, active, synced_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (form_id) DO UPDATE SET
+           form_name = EXCLUDED.form_name,
+           active    = EXCLUDED.active,
+           synced_at = NOW()`,
+        [String(f.ID), f.NAME, f.ACTIVE === 'Y']
+      );
+    }
+    // Update lead_count from facebook_leads (for FB-connected forms) or leave NULL
+    await pool.query(`
+      UPDATE crm_forms cf SET lead_count = sub.cnt
+      FROM (
+        SELECT form_id, COUNT(*)::int AS cnt FROM facebook_leads
+        WHERE form_id IS NOT NULL GROUP BY form_id
+      ) sub
+      WHERE cf.form_id = sub.form_id
+    `);
+    res.json({ ok: true, synced: forms.length });
+  } catch (err) {
+    console.error('[dashboard/sync-crm-forms]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
