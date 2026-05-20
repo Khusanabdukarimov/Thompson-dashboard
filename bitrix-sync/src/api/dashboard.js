@@ -1127,7 +1127,7 @@ router.get('/utm-stats', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         l.utm_source,
+         TRIM(l.utm_source) AS utm_source,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
            'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
@@ -1141,7 +1141,7 @@ router.get('/utm-stats', async (req, res) => {
          COUNT(DISTINCT NULLIF(l.utm_campaign, ''))::int                           AS campaign_count
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
-       WHERE l.utm_source IS NOT NULL AND l.utm_source != ''
+       WHERE l.utm_source IS NOT NULL AND TRIM(l.utm_source) != ''
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR EXISTS (
@@ -1150,7 +1150,7 @@ router.get('/utm-stats', async (req, res) => {
            WHERE lp.lead_id = l.id AND fl.form_id = $3
          ))
          ${leadModeClause(mode)}
-       GROUP BY l.utm_source
+       GROUP BY TRIM(l.utm_source)
        ORDER BY umumiy_lidlar DESC`,
       [from || null, to || null, form_id || null],
     );
