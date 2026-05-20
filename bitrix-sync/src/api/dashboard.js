@@ -937,7 +937,7 @@ router.get('/lead-filter-options', async (_req, res) => {
       ),
       pool.query(
         `SELECT form_id,
-                MAX(COALESCE(NULLIF(form_name,''), form_id)) AS form_name,
+                COALESCE(MAX(NULLIF(adset_name,'')), MAX(NULLIF(campaign_name,'')), form_id) AS form_name,
                 COUNT(*)::int AS lead_count
          FROM facebook_leads
          WHERE form_id IS NOT NULL AND form_id != ''
