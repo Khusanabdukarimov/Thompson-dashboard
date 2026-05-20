@@ -1269,4 +1269,102 @@ router.post('/sync-crm-forms', async (_req, res) => {
   }
 });
 
+/**
+ * POST /api/dashboard/sync-calls
+ * Fetches call records from Bitrix24 voximplant.statistic.get and upserts into calls table.
+ */
+router.post('/sync-calls', async (req, res) => {
+  const { from, to } = req.body || req.query;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS calls (
+        id              TEXT PRIMARY KEY,
+        responsible_id  INT,
+        call_start      TIMESTAMPTZ,
+        duration        INT,
+        call_type       INT,
+        status_code     INT,
+        failed_code     INT,
+        phone_number    TEXT,
+        synced_at       TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    const { fetchAll } = require('../services/bitrix');
+    const filter = {};
+    if (from) filter['>=CALL_START_DATE'] = from;
+    if (to)   filter['<=CALL_START_DATE'] = to;
+
+    const records = await fetchAll('voximplant.statistic.get', filter, [
+      'ID','PORTAL_USER_ID','CALL_START_DATE','CALL_DURATION',
+      'CALL_TYPE','CALL_STATUS_CODE','CALL_FAILED_CODE','PHONE_NUMBER',
+    ]);
+
+    let upserted = 0;
+    for (const r of records) {
+      await pool.query(
+        `INSERT INTO calls (id, responsible_id, call_start, duration, call_type, status_code, failed_code, phone_number, synced_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           responsible_id = EXCLUDED.responsible_id,
+           call_start     = EXCLUDED.call_start,
+           duration       = EXCLUDED.duration,
+           call_type      = EXCLUDED.call_type,
+           status_code    = EXCLUDED.status_code,
+           failed_code    = EXCLUDED.failed_code,
+           phone_number   = EXCLUDED.phone_number,
+           synced_at      = NOW()`,
+        [
+          String(r.ID),
+          r.PORTAL_USER_ID ? parseInt(r.PORTAL_USER_ID) : null,
+          r.CALL_START_DATE || null,
+          r.CALL_DURATION   ? parseInt(r.CALL_DURATION)   : 0,
+          r.CALL_TYPE       ? parseInt(r.CALL_TYPE)       : null,
+          r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null,
+          r.CALL_FAILED_CODE != null ? parseInt(r.CALL_FAILED_CODE) : null,
+          r.PHONE_NUMBER || null,
+        ]
+      );
+      upserted++;
+    }
+    res.json({ ok: true, synced: upserted });
+  } catch (err) {
+    console.error('[dashboard/sync-calls]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/call-stats
+ * Returns per-responsible call duration stats.
+ */
+router.get('/call-stats', async (req, res) => {
+  const { from, to, responsible_id } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         c.responsible_id,
+         COALESCE(r.full_name, 'Noma''lum') AS full_name,
+         COUNT(*)::int                       AS total_calls,
+         SUM(c.duration)::int                AS total_duration,
+         ROUND(AVG(c.duration))::int         AS avg_duration,
+         COUNT(*) FILTER (WHERE c.status_code = 200 AND c.failed_code = 0)::int AS success_calls,
+         COUNT(*) FILTER (WHERE NOT (c.status_code = 200 AND c.failed_code = 0))::int AS failed_calls
+       FROM calls c
+       LEFT JOIN responsibles r ON r.bitrix_id = c.responsible_id
+       WHERE ($1::date IS NULL OR c.call_start::date >= $1::date)
+         AND ($2::date IS NULL OR c.call_start::date <= $2::date)
+         AND ($3::int  IS NULL OR c.responsible_id   = $3::int)
+       GROUP BY c.responsible_id, r.full_name
+       ORDER BY total_duration DESC`,
+      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (err.code === '42P01') return res.json([]);
+    console.error('[dashboard/call-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

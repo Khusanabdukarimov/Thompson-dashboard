@@ -252,6 +252,34 @@ export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date
   }, API_URL_CRM);
 }
 
+export type CallStatsRow = {
+  responsible_id: number;
+  full_name: string;
+  total_calls: number;
+  total_duration: number;
+  avg_duration: number;
+  success_calls: number;
+  failed_calls: number;
+};
+
+export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
+  return apiGet<CallStatsRow[]>("/api/dashboard/call-stats", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_id,
+  }, API_URL_CRM);
+}
+
+export async function syncCalls(from?: string, to?: string): Promise<{ ok: boolean; synced: number }> {
+  const res = await authedFetch("/api/dashboard/sync-calls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to }),
+  }, API_URL_CRM);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,
