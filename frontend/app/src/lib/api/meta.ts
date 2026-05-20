@@ -147,9 +147,11 @@ export interface FormLead {
   field_data: Record<string, string>;
 }
 
-export function getFormLeads(formId: string, campaignId?: string) {
+export function getFormLeads(formId: string, campaignId?: string, from?: string, to?: string) {
   return apiGet<{ count: number; leads: FormLead[] }>('/api/campaigns/leads', {
     form_id: formId,
     ...(campaignId ? { campaign_id: campaignId } : {}),
+    ...(from ? { from } : {}),
+    ...(to   ? { to }   : {}),
   });
 }

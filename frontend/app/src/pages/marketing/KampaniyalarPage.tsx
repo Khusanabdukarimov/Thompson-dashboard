@@ -51,10 +51,10 @@ const now = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
 const DEFAULT_YEAR = now.getFullYear();
 
-function LeadsSubTable({ formId, campaignId }: { formId: string; campaignId: string }) {
+function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campaignId: string; from: string; to: string }) {
   const q = useQuery({
-    queryKey: ["form-leads", formId, campaignId],
-    queryFn: () => getFormLeads(formId, campaignId),
+    queryKey: ["form-leads", formId, campaignId, from, to],
+    queryFn: () => getFormLeads(formId, campaignId, from, to),
     staleTime: 5 * 60 * 1000
   });
 
@@ -97,7 +97,7 @@ function LeadsSubTable({ formId, campaignId }: { formId: string; campaignId: str
   );
 }
 
-function FormRow({ f, campaignId }: { f: any; campaignId: string }) {
+function FormRow({ f, campaignId, from, to }: { f: any; campaignId: string; from: string; to: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
@@ -128,7 +128,7 @@ function FormRow({ f, campaignId }: { f: any; campaignId: string }) {
       {expanded && (
         <tr>
           <td colSpan={4} className="p-0">
-            <LeadsSubTable formId={f.form_id} campaignId={campaignId} />
+            <LeadsSubTable formId={f.form_id} campaignId={campaignId} from={from} to={to} />
           </td>
         </tr>
       )}
@@ -155,6 +155,11 @@ export default function KampaniyalarPage() {
     queryFn: () => getCampaignForms(month, year),
     staleTime: 5 * 60 * 1000,
   });
+
+  const monthNum = MONTH_KEYS.indexOf(month) + 1;
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  const formsSince = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+  const formsUntil = `${year}-${String(monthNum).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -725,7 +730,7 @@ export default function KampaniyalarPage() {
                   </thead>
                   <tbody>
                     {camp.forms.map((f) => (
-                      <FormRow key={f.form_id} f={f} campaignId={camp.campaign_id} />
+                      <FormRow key={f.form_id} f={f} campaignId={camp.campaign_id} from={formsSince} to={formsUntil} />
                     ))}
                   </tbody>
                 </table>

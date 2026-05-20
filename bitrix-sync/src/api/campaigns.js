@@ -430,8 +430,8 @@ async function upsertLead(lead, formId, pageId) {
       lead.adset_id || null, lead.adset_name || null,
       lead.campaign_id || null, lead.campaign_name || null,
       pageId || null,
-      fields.full_name || fields.name || null,
-      fields.phone_number || fields.phone || null,
+      fields.full_name || fields.name || fields['ismingiz:'] || fields['ismingiz?'] || fields['ismingiz'] || null,
+      fields.phone_number || fields.phone || fields['telefon_raqamingiz:'] || fields['telefon_raqamingiz'] || null,
       fields.email || null,
       JSON.stringify(fields),
       lead.created_time ? new Date(lead.created_time) : new Date(),
@@ -513,9 +513,9 @@ router.get('/sync-leads', (_req, res) => {
   res.json({ running: syncRunning });
 });
 
-// GET /api/campaigns/leads?form_id=123&campaign_id=456
+// GET /api/campaigns/leads?form_id=123&campaign_id=456&from=2026-05-01&to=2026-05-31
 router.get('/leads', async (req, res) => {
-  const { form_id, campaign_id } = req.query;
+  const { form_id, campaign_id, from, to } = req.query;
   if (!form_id) return res.status(400).json({ error: 'form_id is required' });
 
   try {
@@ -527,9 +527,11 @@ router.get('/leads', async (req, res) => {
       FROM facebook_leads
       WHERE form_id = $1
         AND ($2::text IS NULL OR campaign_id = $2)
+        AND ($3::date IS NULL OR created_time >= $3::date)
+        AND ($4::date IS NULL OR created_time <= $4::date)
       ORDER BY created_time DESC
       LIMIT 1000
-    `, [form_id, campaign_id || null]);
+    `, [form_id, campaign_id || null, from || null, to || null]);
 
     const leads = rows.map(r => {
       // Use platform from DB, normalize instagram to ig
@@ -539,10 +541,18 @@ router.get('/leads', async (req, res) => {
       // Medium logic: organic vs paid
       const utm_medium = r.is_organic ? 'organic' : 'paid';
       
+      const fd = r.field_data || {};
+      const resolvedName = r.full_name
+        || fd['ismingiz:'] || fd['ismingiz?'] || fd['ismingiz']
+        || fd.full_name || fd.name || null;
+      const resolvedPhone = r.phone
+        || fd['telefon_raqamingiz:'] || fd['telefon_raqamingiz']
+        || fd.phone_number || fd.phone || null;
+
       return {
         id: r.id,
-        name: r.full_name || 'No Name',
-        phone: r.phone || '',
+        name: resolvedName || 'No Name',
+        phone: resolvedPhone || '',
         email: r.email || '',
         created_at: r.created_time,
         // Synthesized UTMs matching user logic
