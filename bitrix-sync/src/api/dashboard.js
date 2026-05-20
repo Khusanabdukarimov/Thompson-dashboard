@@ -1382,6 +1382,7 @@ router.get('/call-stats', async (req, res) => {
        WHERE ($1::date IS NULL OR c.call_start::date >= $1::date)
          AND ($2::date IS NULL OR c.call_start::date <= $2::date)
          AND ($3::int  IS NULL OR c.responsible_id   = $3::int)
+         AND c.responsible_id IS NOT NULL
        GROUP BY c.responsible_id, r.name, r.last_name
        ORDER BY total_duration DESC`,
       [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
