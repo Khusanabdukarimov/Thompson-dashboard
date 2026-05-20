@@ -1107,7 +1107,7 @@ router.get('/utm-responsible-stats', async (req, res) => {
            OR ($4 != 'Nomalum' AND l.utm_campaign = $4)
          )
          ${leadModeClause(mode)}
-       GROUP BY l.responsible_id, r.full_name
+       GROUP BY l.responsible_id, r.name, r.last_name
        ORDER BY umumiy_lidlar DESC`,
       [from || null, to || null, utm_source || null, utm_campaign || null],
     );
