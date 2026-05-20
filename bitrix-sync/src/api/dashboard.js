@@ -1271,7 +1271,8 @@ router.post('/sync-crm-forms', async (_req, res) => {
 
 /**
  * POST /api/dashboard/sync-calls
- * Fetches call records from Bitrix24 voximplant.statistic.get and upserts into calls table.
+ * Fetches call activities from Bitrix24 crm.activity.list (TYPE_ID=2) and upserts into calls table.
+ * Uses crm.activity.list because voximplant.statistic.get requires a higher-privilege token.
  */
 router.post('/sync-calls', async (req, res) => {
   const { from, to } = req.body || req.query;
@@ -1281,48 +1282,60 @@ router.post('/sync-calls', async (req, res) => {
         id              TEXT PRIMARY KEY,
         responsible_id  INT,
         call_start      TIMESTAMPTZ,
+        call_end        TIMESTAMPTZ,
         duration        INT,
-        call_type       INT,
-        status_code     INT,
-        failed_code     INT,
-        phone_number    TEXT,
+        direction       INT,
+        completed       BOOLEAN,
+        owner_id        INT,
+        owner_type_id   INT,
         synced_at       TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS call_end TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS direction INT`);
+    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS completed BOOLEAN`);
+    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS owner_id INT`);
+    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS owner_type_id INT`);
 
     const { fetchAll } = require('../services/bitrix');
-    const filter = {};
-    if (from) filter['>=CALL_START_DATE'] = from;
-    if (to)   filter['<=CALL_START_DATE'] = to;
+    const filter = { TYPE_ID: 2 };
+    if (from) filter['>=START_TIME'] = from;
+    if (to)   filter['<=START_TIME'] = to;
 
-    const records = await fetchAll('voximplant.statistic.get', filter, [
-      'ID','PORTAL_USER_ID','CALL_START_DATE','CALL_DURATION',
-      'CALL_TYPE','CALL_STATUS_CODE','CALL_FAILED_CODE','PHONE_NUMBER',
+    const records = await fetchAll('crm.activity.list', filter, [
+      'ID','RESPONSIBLE_ID','START_TIME','END_TIME','COMPLETED','STATUS',
+      'DIRECTION','OWNER_ID','OWNER_TYPE_ID',
     ]);
 
     let upserted = 0;
     for (const r of records) {
+      const startMs = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
+      const endMs   = r.END_TIME   ? new Date(r.END_TIME).getTime()   : null;
+      const duration = (startMs && endMs && endMs > startMs) ? Math.round((endMs - startMs) / 1000) : 0;
+
       await pool.query(
-        `INSERT INTO calls (id, responsible_id, call_start, duration, call_type, status_code, failed_code, phone_number, synced_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+        `INSERT INTO calls (id, responsible_id, call_start, call_end, duration, direction, completed, owner_id, owner_type_id, synced_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
          ON CONFLICT (id) DO UPDATE SET
            responsible_id = EXCLUDED.responsible_id,
            call_start     = EXCLUDED.call_start,
+           call_end       = EXCLUDED.call_end,
            duration       = EXCLUDED.duration,
-           call_type      = EXCLUDED.call_type,
-           status_code    = EXCLUDED.status_code,
-           failed_code    = EXCLUDED.failed_code,
-           phone_number   = EXCLUDED.phone_number,
+           direction      = EXCLUDED.direction,
+           completed      = EXCLUDED.completed,
+           owner_id       = EXCLUDED.owner_id,
+           owner_type_id  = EXCLUDED.owner_type_id,
            synced_at      = NOW()`,
         [
           String(r.ID),
-          r.PORTAL_USER_ID ? parseInt(r.PORTAL_USER_ID) : null,
-          r.CALL_START_DATE || null,
-          r.CALL_DURATION   ? parseInt(r.CALL_DURATION)   : 0,
-          r.CALL_TYPE       ? parseInt(r.CALL_TYPE)       : null,
-          r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null,
-          r.CALL_FAILED_CODE != null ? parseInt(r.CALL_FAILED_CODE) : null,
-          r.PHONE_NUMBER || null,
+          r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null,
+          r.START_TIME || null,
+          r.END_TIME   || null,
+          duration,
+          r.DIRECTION  ? parseInt(r.DIRECTION)  : null,
+          r.COMPLETED === 'Y',
+          r.OWNER_ID   ? parseInt(r.OWNER_ID)   : null,
+          r.OWNER_TYPE_ID ? parseInt(r.OWNER_TYPE_ID) : null,
         ]
       );
       upserted++;
@@ -1337,6 +1350,7 @@ router.post('/sync-calls', async (req, res) => {
 /**
  * GET /api/dashboard/call-stats
  * Returns per-responsible call duration stats.
+ * Success = duration >= 10 seconds (call was actually answered).
  */
 router.get('/call-stats', async (req, res) => {
   const { from, to, responsible_id } = req.query;
@@ -1348,8 +1362,8 @@ router.get('/call-stats', async (req, res) => {
          COUNT(*)::int                       AS total_calls,
          SUM(c.duration)::int                AS total_duration,
          ROUND(AVG(c.duration))::int         AS avg_duration,
-         COUNT(*) FILTER (WHERE c.status_code = 200 AND c.failed_code = 0)::int AS success_calls,
-         COUNT(*) FILTER (WHERE NOT (c.status_code = 200 AND c.failed_code = 0))::int AS failed_calls
+         COUNT(*) FILTER (WHERE c.duration >= 10)::int AS success_calls,
+         COUNT(*) FILTER (WHERE c.duration < 10)::int  AS failed_calls
        FROM calls c
        LEFT JOIN responsibles r ON r.bitrix_id = c.responsible_id
        WHERE ($1::date IS NULL OR c.call_start::date >= $1::date)
