@@ -920,7 +920,7 @@ router.get('/lead-conversion', async (req, res) => {
  */
 router.get('/lead-filter-options', async (_req, res) => {
   try {
-    const [respRes, stageRes, srcRes] = await Promise.all([
+    const [respRes, stageRes, srcRes, formRes] = await Promise.all([
       pool.query(
         `SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
          FROM responsibles WHERE active = TRUE ORDER BY name`
@@ -935,11 +935,22 @@ router.get('/lead-filter-options', async (_req, res) => {
          WHERE source_id IS NOT NULL AND source_id != '' AND source_id != 'UC_1WUFJB'
          ORDER BY source_id LIMIT 60`
       ),
+      pool.query(
+        `SELECT form_id,
+                MAX(COALESCE(NULLIF(form_name,''), form_id)) AS form_name,
+                COUNT(*)::int AS lead_count
+         FROM facebook_leads
+         WHERE form_id IS NOT NULL AND form_id != ''
+         GROUP BY form_id
+         ORDER BY lead_count DESC
+         LIMIT 60`
+      ),
     ]);
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
       sources: srcRes.rows.map(r => ({ id: r.source_id, name: SOURCE_NAMES[r.source_id] || r.source_id })),
+      forms: formRes.rows.map(r => ({ id: r.form_id, name: r.form_name, count: r.lead_count })),
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);
@@ -1039,12 +1050,6 @@ router.get('/taqsimot-stats', async (_req, res) => {
 router.get('/utm-campaign-stats', async (req, res) => {
   const { from, to, mode, utm_source } = req.query;
   if (!utm_source) return res.status(400).json({ error: 'utm_source required' });
-  const srcFilter = utm_source === 'Nomalum'
-    ? `AND (l.utm_source IS NULL OR l.utm_source = '')`
-    : `AND l.utm_source = $3`;
-  const params = utm_source === 'Nomalum'
-    ? [from || null, to || null]
-    : [from || null, to || null, utm_source];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -1058,16 +1063,17 @@ router.get('/utm-campaign-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi,
+         COUNT(DISTINCT l.assigned_by_id)::int                                     AS responsible_count
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         ${srcFilter}
+         AND ($3::text IS NULL OR l.utm_source = $3)
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
-      params,
+      [from || null, to || null, utm_source || null],
     );
     res.json(rows);
   } catch (err) {
@@ -1076,12 +1082,13 @@ router.get('/utm-campaign-stats', async (req, res) => {
   }
 });
 
-router.get('/utm-stats', async (req, res) => {
-  const { from, to, mode } = req.query;
+router.get('/utm-responsible-stats', async (req, res) => {
+  const { from, to, mode, utm_source, utm_campaign } = req.query;
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(NULLIF(l.utm_source, ''), 'Nomalum') AS utm_source,
+         COALESCE(r.full_name, 'Nomalum') AS full_name,
+         l.assigned_by_id                 AS responsible_id,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
            'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
@@ -1094,12 +1101,57 @@ router.get('/utm-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
+       LEFT JOIN responsibles r ON r.id = l.assigned_by_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::text IS NULL OR l.utm_source = $3)
+         AND (
+           $4::text IS NULL
+           OR ($4 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
+           OR ($4 != 'Nomalum' AND l.utm_campaign = $4)
+         )
          ${leadModeClause(mode)}
-       GROUP BY COALESCE(NULLIF(l.utm_source, ''), 'Nomalum')
+       GROUP BY l.assigned_by_id, r.full_name
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null],
+      [from || null, to || null, utm_source || null, utm_campaign || null],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/utm-responsible-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/utm-stats', async (req, res) => {
+  const { from, to, mode, form_id } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         l.utm_source,
+         COUNT(*)::int                                                              AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
+           'THINKING','NOT_TRANSFERRED'
+         ))::int                                                                    AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi,
+         COUNT(DISTINCT NULLIF(l.utm_campaign, ''))::int                           AS campaign_count
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE l.utm_source IS NOT NULL AND l.utm_source != ''
+         AND ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::text IS NULL OR EXISTS (
+           SELECT 1 FROM facebook_leads fl
+           WHERE fl.phone = l.phone AND fl.form_id = $3
+         ))
+         ${leadModeClause(mode)}
+       GROUP BY l.utm_source
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, form_id || null],
     );
     res.json(rows);
   } catch (err) {

@@ -9,8 +9,8 @@ import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
-  getAmocrmSources, getUtmStats, getUtmCampaignStats,
-  type DashFilter, type UtmStatRow, type UtmCampaignRow,
+  getAmocrmSources, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats,
+  type DashFilter, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -119,12 +119,16 @@ function UtmTable<T extends Record<string, string | number>>({
   nameLabel,
   onRowClick,
   loading,
+  countKey,
+  countLabel,
 }: {
   rows: T[];
   nameKey: keyof T;
   nameLabel: string;
   onRowClick?: (row: T) => void;
   loading: boolean;
+  countKey?: keyof T;
+  countLabel?: string;
 }) {
   const maxes: Record<string, number> = {};
   for (const c of UTM_COLS_DEF)
@@ -146,7 +150,7 @@ function UtmTable<T extends Record<string, string | number>>({
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
           <thead>
             <tr>
-              <th style={TH("#9E9E9E", 180)}>{nameLabel}</th>
+              <th style={TH("#9E9E9E", 200)}>{nameLabel}</th>
               {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
               <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
             </tr>
@@ -157,14 +161,26 @@ function UtmTable<T extends Record<string, string | number>>({
               const otkazildi = Number(r.konsultatsiya_otkazildi) || 0;
               const konv = total > 0 ? (otkazildi / total) * 100 : 0;
               const name = String(r[nameKey]);
+              const cnt = countKey ? Number(r[countKey]) || 0 : 0;
               return (
-                <tr key={name}
+                <tr key={name + i}
                     style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", cursor: onRowClick ? "pointer" : "default" }}
                     onClick={() => onRowClick?.(r)}
                     onMouseEnter={e => { if (onRowClick) e.currentTarget.style.background = "var(--bg3)"; }}
                     onMouseLeave={e => { if (onRowClick) e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
                   <td style={{ ...TD, fontWeight: 600, color: onRowClick ? "#2196F3" : "#fff", fontSize: 13, whiteSpace: "nowrap", textDecoration: onRowClick ? "underline" : "none" }}>
-                    {name}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      {name}
+                      {countKey && cnt > 0 && (
+                        <span style={{
+                          fontSize: 10, color: "#888", fontWeight: 500,
+                          background: "var(--bg3)", border: "1px solid var(--border)",
+                          padding: "1px 7px", borderRadius: 10, flexShrink: 0,
+                        }}>
+                          {cnt} {countLabel}
+                        </span>
+                      )}
+                    </span>
                   </td>
                   {UTM_COLS_DEF.map(c => {
                     const val = Number(r[c.key]) || 0;
@@ -340,6 +356,7 @@ export default function LidlarPage() {
     applied.responsible_id != null,
     applied.stage != null,
     applied.source != null,
+    applied.form_id != null,
     applied.start_date !== def.start_date || applied.end_date !== def.end_date,
   ].filter(Boolean).length;
 
@@ -351,12 +368,18 @@ export default function LidlarPage() {
   const tasksQ      = useQuery({ queryKey: ["stats/tasks",        appliedWithMode], queryFn: () => getTasksSummary(appliedWithMode) });
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
-  const utmQ        = useQuery({ queryKey: ["stats/utm-stats",       appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
-  const [selectedUtmSource, setSelectedUtmSource] = useState<string | null>(null);
-  const utmCampQ    = useQuery({
+  const utmQ        = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const [selectedUtmSource,   setSelectedUtmSource]   = useState<string | null>(null);
+  const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string | null>(null);
+  const utmCampQ = useQuery({
     queryKey: ["stats/utm-campaign", selectedUtmSource, appliedWithMode],
     queryFn:  () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
     enabled:  selectedUtmSource !== null,
+  });
+  const utmRespQ = useQuery({
+    queryKey: ["stats/utm-responsible", selectedUtmSource, selectedUtmCampaign, appliedWithMode],
+    queryFn:  () => getUtmResponsibleStats(selectedUtmSource!, selectedUtmCampaign!, appliedWithMode),
+    enabled:  selectedUtmSource !== null && selectedUtmCampaign !== null,
   });
 
   const header       = statsQ.data?.header;
@@ -598,7 +621,7 @@ export default function LidlarPage() {
                   </div>
 
                   {/* Dropdown filters row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                     <div>
                       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
                         <Users size={12} />Mas'ul xodim
@@ -662,6 +685,32 @@ export default function LidlarPage() {
                               ))
                           : filterOpts?.sources.map((s) => (
                               <option key={s.id} value={s.id}>{s.name}</option>
+                            ))
+                        }
+                      </select>
+                    </div>
+                  </div>
+                  {/* Facebook Forms filter row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                        <TrendingUp size={12} />Facebook Forma (UTM bo'yicha)
+                      </label>
+                      <select
+                        value={pending.form_id ?? ""}
+                        onChange={(e) => setPending((p) => ({ ...p, form_id: e.target.value || undefined }))}
+                        style={{
+                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
+                          borderRadius: 8, color: pending.form_id ? "#fff" : "#555",
+                          fontSize: 12, padding: "8px 10px", outline: "none",
+                          appearance: "none", cursor: "pointer",
+                        }}
+                      >
+                        <option value="">Barcha formalar</option>
+                        {filterOptsQ.isLoading
+                          ? <option disabled>Yuklanmoqda…</option>
+                          : (filterOpts?.forms ?? []).map((f) => (
+                              <option key={f.id} value={f.id}>{f.name} ({f.count} lid)</option>
                             ))
                         }
                       </select>
@@ -894,65 +943,100 @@ export default function LidlarPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            UTM bo'yicha table (drill-down navigation)
+            UTM bo'yicha (3-level drill-down)
         ══════════════════════════════════════════════════════════ */}
         {(() => {
-          const utmRows: UtmStatRow[]     = utmQ.data      ?? [];
-          const campRows: UtmCampaignRow[] = utmCampQ.data ?? [];
-          const isSourceView = selectedUtmSource === null;
+          const utmRows:  UtmStatRow[]       = utmQ.data      ?? [];
+          const campRows: UtmCampaignRow[]   = utmCampQ.data  ?? [];
+          const respRows: UtmResponsibleRow[] = utmRespQ.data ?? [];
+
+          const level = selectedUtmCampaign !== null ? 3
+                      : selectedUtmSource   !== null ? 2 : 1;
+
+          const backClick = () => {
+            if (level === 3) { setSelectedUtmCampaign(null); }
+            else             { setSelectedUtmSource(null); setSelectedUtmCampaign(null); }
+          };
 
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              {/* Header with breadcrumb */}
+              {/* Breadcrumb header */}
               <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                {!isSourceView && (
+                {level > 1 && (
                   <button
-                    onClick={() => setSelectedUtmSource(null)}
+                    onClick={backClick}
                     style={{
                       background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
                       color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px",
-                      cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+                      cursor: "pointer", flexShrink: 0,
                     }}
                   >
                     ← Orqaga
                   </button>
                 )}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
                   <span
-                    style={{ fontSize: 16, fontWeight: 700, color: isSourceView ? "#fff" : "#555", cursor: !isSourceView ? "pointer" : "default", whiteSpace: "nowrap" }}
-                    onClick={() => !isSourceView && setSelectedUtmSource(null)}
+                    style={{ fontSize: 15, fontWeight: 700, color: level === 1 ? "#fff" : "#555", cursor: level > 1 ? "pointer" : "default", whiteSpace: "nowrap" }}
+                    onClick={() => level > 1 && (setSelectedUtmSource(null), setSelectedUtmCampaign(null))}
                   >
                     UTM bo'yicha
                   </span>
-                  {!isSourceView && (
+                  {level >= 2 && (
                     <>
-                      <span style={{ color: "#444", flexShrink: 0 }}>/</span>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "#444" }}>/</span>
+                      <span
+                        style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "#fff" : "#555", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
+                        onClick={() => level === 3 && setSelectedUtmCampaign(null)}
+                      >
                         {selectedUtmSource}
+                      </span>
+                    </>
+                  )}
+                  {level === 3 && (
+                    <>
+                      <span style={{ color: "#444" }}>/</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {selectedUtmCampaign}
                       </span>
                     </>
                   )}
                 </div>
                 <span style={{ fontSize: 12, color: "#555", flexShrink: 0 }}>
-                  {isSourceView ? `${utmRows.length} ta manba` : `${campRows.length} ta kampaniya`}
+                  {level === 1 && `${utmRows.length} ta manba`}
+                  {level === 2 && `${campRows.length} ta kampaniya`}
+                  {level === 3 && `${respRows.length} ta mas'ul`}
                 </span>
               </div>
 
-              {/* Body — swap between source view and campaign drill-down */}
-              {isSourceView ? (
+              {/* Body */}
+              {level === 1 && (
                 <UtmTable<UtmStatRow>
                   rows={utmRows}
                   nameKey="utm_source"
                   nameLabel="UTM - SOURCE"
-                  onRowClick={(r) => setSelectedUtmSource(r.utm_source)}
+                  onRowClick={(r) => { setSelectedUtmSource(r.utm_source); setSelectedUtmCampaign(null); }}
                   loading={utmQ.isLoading}
+                  countKey="campaign_count"
+                  countLabel="kampaniya"
                 />
-              ) : (
+              )}
+              {level === 2 && (
                 <UtmTable<UtmCampaignRow>
                   rows={campRows}
                   nameKey="utm_campaign"
                   nameLabel="UTM - CAMPAIGN"
+                  onRowClick={(r) => setSelectedUtmCampaign(r.utm_campaign)}
                   loading={utmCampQ.isLoading}
+                  countKey="responsible_count"
+                  countLabel="mas'ul"
+                />
+              )}
+              {level === 3 && (
+                <UtmTable<UtmResponsibleRow>
+                  rows={respRows}
+                  nameKey="full_name"
+                  nameLabel="MAS'UL"
+                  loading={utmRespQ.isLoading}
                 />
               )}
             </div>

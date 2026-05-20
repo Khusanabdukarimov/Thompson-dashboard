@@ -66,6 +66,7 @@ export type DashFilter = {
   responsible_id?: number;
   stage?: string;
   source?: string;
+  form_id?: string;
   mode?: 'default' | 'amocrm';
 };
 
@@ -73,6 +74,7 @@ export type FilterOptions = {
   responsibles: { id: number; full_name: string }[];
   stages: { bitrix_id: string; name: string }[];
   sources: { id: string; name: string }[];
+  forms: { id: string; name: string; count: number }[];
 };
 
 export function getDashboardStats(filter: DashFilter) {
@@ -177,17 +179,19 @@ export type UtmStatRow = {
   konsultatsiya_otkazildi: number;
   sifatsiz: number;
   bekor_boldi: number;
+  campaign_count: number;
 };
 
-export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "mode">) {
+export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "mode" | "form_id">) {
   return apiGet<UtmStatRow[]>("/api/dashboard/utm-stats", {
     from: filter.start_date,
     to:   filter.end_date,
     mode: filter.mode,
+    form_id: filter.form_id,
   }, API_URL_CRM);
 }
 
-export type UtmCampaignRow = UtmStatRow & { utm_campaign: string };
+export type UtmCampaignRow = UtmStatRow & { utm_campaign: string; responsible_count: number };
 
 export function getUtmCampaignStats(
   utmSource: string,
@@ -195,6 +199,32 @@ export function getUtmCampaignStats(
 ) {
   return apiGet<UtmCampaignRow[]>("/api/dashboard/utm-campaign-stats", {
     utm_source: utmSource,
+    from: filter.start_date,
+    to:   filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
+export type UtmResponsibleRow = {
+  full_name: string;
+  responsible_id: number;
+  umumiy_lidlar: number;
+  jarayonda: number;
+  sifatli_lid: number;
+  konsultatsiya_belgilandi: number;
+  konsultatsiya_otkazildi: number;
+  sifatsiz: number;
+  bekor_boldi: number;
+};
+
+export function getUtmResponsibleStats(
+  utmSource: string,
+  utmCampaign: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
+) {
+  return apiGet<UtmResponsibleRow[]>("/api/dashboard/utm-responsible-stats", {
+    utm_source:   utmSource,
+    utm_campaign: utmCampaign,
     from: filter.start_date,
     to:   filter.end_date,
     mode: filter.mode,
