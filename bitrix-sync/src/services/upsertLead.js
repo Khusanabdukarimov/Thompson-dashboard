@@ -72,9 +72,10 @@ async function upsertLead(r, client) {
        uf_segment, uf_filial, uf_service, uf_activity, uf_with_whom,
        uf_cancel_reason, uf_junk_reason,
        name, last_name, title,
+       web_form_id,
        date_create, date_modify, synced_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW()
      )
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
@@ -96,6 +97,7 @@ async function upsertLead(r, client) {
        name             = EXCLUDED.name,
        last_name        = EXCLUDED.last_name,
        title            = EXCLUDED.title,
+       web_form_id      = EXCLUDED.web_form_id,
        date_modify      = EXCLUDED.date_modify,
        synced_at        = NOW()
      RETURNING id`,
@@ -120,6 +122,7 @@ async function upsertLead(r, client) {
       r.NAME || null,
       r.LAST_NAME || null,
       r.TITLE || null,
+      r.WEB_FORM_ID ? String(r.WEB_FORM_ID) : null,
       parseDate(r.DATE_CREATE),
       parseDate(r.DATE_MODIFY),
     ]

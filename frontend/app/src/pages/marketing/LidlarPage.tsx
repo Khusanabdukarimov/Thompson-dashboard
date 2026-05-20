@@ -10,7 +10,9 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats,
+  getSourceStats,
   type DashFilter, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow,
+  type SourceStatsRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -368,6 +370,7 @@ export default function LidlarPage() {
   const tasksQ      = useQuery({ queryKey: ["stats/tasks",        appliedWithMode], queryFn: () => getTasksSummary(appliedWithMode) });
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
+  const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmQ        = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const [selectedUtmSource,   setSelectedUtmSource]   = useState<string | null>(null);
   const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string | null>(null);
@@ -446,7 +449,7 @@ export default function LidlarPage() {
       <Topbar
         title="Lidlar analitika"
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); utmQ.refetch(); }}>
+          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); utmQ.refetch(); }}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
@@ -941,6 +944,130 @@ export default function LidlarPage() {
             </div>
           )}
         </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Manba bo'yicha table
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const srcRows: SourceStatsRow[] = sourceQ.data ?? [];
+          const srcMaxes = {
+            umumiy:   Math.max(1, ...srcRows.map(r => r.umumiy_lidlar)),
+            sifatli:  Math.max(1, ...srcRows.map(r => r.sifatli_lid)),
+            konsB:    Math.max(1, ...srcRows.map(r => r.konsultatsiya_belgilandi)),
+            konsO:    Math.max(1, ...srcRows.map(r => r.konsultatsiya_otkazildi)),
+            sifatsiz: Math.max(1, ...srcRows.map(r => r.sifatsiz)),
+            bekor:    Math.max(1, ...srcRows.map(r => r.bekor_boldi)),
+          };
+          const srcTotals = srcRows.reduce(
+            (acc, r) => ({
+              umumiy:   acc.umumiy   + r.umumiy_lidlar,
+              sifatli:  acc.sifatli  + r.sifatli_lid,
+              konsB:    acc.konsB    + r.konsultatsiya_belgilandi,
+              konsO:    acc.konsO    + r.konsultatsiya_otkazildi,
+              sifatsiz: acc.sifatsiz + r.sifatsiz,
+              bekor:    acc.bekor    + r.bekor_boldi,
+            }),
+            { umumiy: 0, sifatli: 0, konsB: 0, konsO: 0, sifatsiz: 0, bekor: 0 }
+          );
+          return (
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Manba bo'yicha</span>
+                <span style={{ fontSize: 12, color: "#555" }}>{srcRows.length} ta manba</span>
+              </div>
+              {sourceQ.isLoading ? (
+                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : srcRows.length === 0 ? (
+                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                    <thead>
+                      <tr>
+                        <th style={TH("#9E9E9E", 180)}>MANBA</th>
+                        <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
+                        <th style={TH("#00BCD4")}>SIFATLI LID</th>
+                        <th style={TH("#9C27B0")}>KONS. BELGILANDI</th>
+                        <th style={TH("#4CAF50")}>KONS. O'TKAZILDI</th>
+                        <th style={TH("#F44336")}>SIFATSIZ</th>
+                        <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
+                        <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                        <th style={{ ...TH("#00BCD4", 80), textAlign: "center" }}>SIFATLI KON.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {srcRows.map((r, i) => {
+                        const konv      = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+                        const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
+                        return (
+                          <tr key={r.source_id}
+                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                              onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                            <td style={{ ...TD, fontWeight: 600, color: "#fff", fontSize: 13, whiteSpace: "nowrap" }}>
+                              {r.source_name}
+                            </td>
+                            <td style={TD}>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.umumiy_lidlar)}</span>
+                              <MiniBar value={r.umumiy_lidlar} max={srcMaxes.umumiy} color="#2196F3" />
+                            </td>
+                            <td style={TD}>
+                              {r.sifatli_lid > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={srcMaxes.sifatli} color="#00BCD4" /></>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.konsultatsiya_belgilandi > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={srcMaxes.konsB} color="#9C27B0" /></>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.konsultatsiya_otkazildi > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={srcMaxes.konsO} color="#4CAF50" /></>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.sifatsiz > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={srcMaxes.sifatsiz} color="#F44336" /></>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.bekor_boldi > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={srcMaxes.bekor} color="#FFC107" /></>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={{ ...TD, textAlign: "center" }}>
+                              <ConversionDonut pct={konv} size={38} />
+                            </td>
+                            <td style={{ ...TD, textAlign: "center" }}>
+                              <ConversionDonut pct={sifatliKonv} size={38} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* JAMI row */}
+                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.umumiy)}</span><MiniBar value={1} max={1} color="#2196F3" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.sifatli)}</span><MiniBar value={1} max={1} color="#00BCD4" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.konsB)}</span><MiniBar value={1} max={1} color="#9C27B0" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.konsO)}</span><MiniBar value={1} max={1} color="#4CAF50" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.sifatsiz)}</span><MiniBar value={1} max={1} color="#F44336" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.bekor)}</span><MiniBar value={1} max={1} color="#FFC107" /></td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <ConversionDonut pct={srcTotals.umumiy > 0 ? (srcTotals.konsO / srcTotals.umumiy) * 100 : 0} size={38} />
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <ConversionDonut pct={srcTotals.umumiy > 0 ? (srcTotals.sifatli / srcTotals.umumiy) * 100 : 0} size={38} />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════
             UTM bo'yicha (3-level drill-down)

@@ -231,6 +231,27 @@ export function getUtmResponsibleStats(
   }, API_URL_CRM);
 }
 
+export type SourceStatsRow = {
+  source_id: string;
+  source_name: string;
+  umumiy_lidlar: number;
+  jarayonda: number;
+  sifatli_lid: number;
+  konsultatsiya_belgilandi: number;
+  konsultatsiya_otkazildi: number;
+  sifatsiz: number;
+  bekor_boldi: number;
+};
+
+export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
+  return apiGet<SourceStatsRow[]>("/api/dashboard/source-stats", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_id,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
 export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,

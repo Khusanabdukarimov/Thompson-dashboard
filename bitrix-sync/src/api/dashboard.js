@@ -1162,6 +1162,47 @@ router.get('/utm-stats', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/source-stats
+ * Leads grouped by source with funnel breakdown.
+ * Params: from, to, responsible_id, mode
+ */
+router.get('/source-stats', async (req, res) => {
+  const { from, to, responsible_id, mode } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(l.source_id, 'Nomalum') AS source_id,
+         COUNT(*)::int                                                              AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
+           'THINKING','NOT_TRANSFERRED'
+         ))::int                                                                    AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         ${leadModeClause(mode)}
+       GROUP BY COALESCE(l.source_id, 'Nomalum')
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+    );
+    res.json(rows.map(r => ({
+      ...r,
+      source_name: SOURCE_NAMES[r.source_id] || r.source_id,
+    })));
+  } catch (err) {
+    console.error('[dashboard/source-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/dashboard/sync-crm-forms
  * Fetches CRM forms from Bitrix24 and upserts into crm_forms table.
  */
