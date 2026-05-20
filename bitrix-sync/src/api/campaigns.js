@@ -423,78 +423,96 @@ router.get('/forms', async (req, res) => {
 
 let syncRunning = false;
 
+async function upsertLead(lead, formId, pageId) {
+  const fields = extractFields(lead.field_data || []);
+  await pool.query(
+    `INSERT INTO facebook_leads (
+       id, form_id, ad_id, ad_name, adset_id, adset_name,
+       campaign_id, campaign_name, page_id,
+       full_name, phone, email, field_data, created_time, platform, is_organic
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     ON CONFLICT (id) DO UPDATE SET
+       ad_id = EXCLUDED.ad_id, ad_name = EXCLUDED.ad_name,
+       adset_id = EXCLUDED.adset_id, adset_name = EXCLUDED.adset_name,
+       campaign_id = EXCLUDED.campaign_id, campaign_name = EXCLUDED.campaign_name,
+       full_name = EXCLUDED.full_name, phone = EXCLUDED.phone,
+       email = EXCLUDED.email, field_data = EXCLUDED.field_data,
+       platform = EXCLUDED.platform, is_organic = EXCLUDED.is_organic`,
+    [
+      lead.id, formId,
+      lead.ad_id || null, lead.ad_name || null,
+      lead.adset_id || null, lead.adset_name || null,
+      lead.campaign_id || null, lead.campaign_name || null,
+      pageId || null,
+      fields.full_name || fields.name || null,
+      fields.phone_number || fields.phone || null,
+      fields.email || null,
+      JSON.stringify(fields),
+      lead.created_time ? new Date(lead.created_time) : new Date(),
+      lead.platform || 'facebook',
+      !!lead.is_organic,
+    ],
+  );
+}
+
 async function syncAllLeads() {
   if (syncRunning) return { skipped: true, reason: 'Already running' };
   syncRunning = true;
   const pageId = process.env.FB_PAGE_ID;
-  if (!pageId || !token()) { syncRunning = false; return { error: 'FB_PAGE_ID or token missing' }; }
 
   console.log('[sync-leads] Starting full sync...');
   let totalUpserted = 0;
-  let formsSynced = 0;
+  const formIds = new Set();
 
   try {
-    const forms = await paginate(`${BASE}/${pageId}/leadgen_forms`, {
-      access_token: token(),
-      fields: 'id,name,status,leads_count',
-      limit: 100,
-    });
+    // 1. Collect form IDs from DB (already-known forms)
+    const { rows: dbForms } = await pool.query('SELECT DISTINCT form_id FROM facebook_leads WHERE form_id IS NOT NULL');
+    for (const r of dbForms) formIds.add(r.form_id);
 
-    console.log(`[sync-leads] Found ${forms.length} forms for page ${pageId}`);
+    // 2. Collect form IDs from Meta Ads API (active lead-gen ads)
+    try {
+      const ads = await paginate(`${BASE}/${accountId()}/ads`, {
+        access_token: token(),
+        fields: 'creative{object_story_spec}',
+        limit: 200,
+        filtering: JSON.stringify([{ field: 'campaign.objective', operator: 'IN', value: ['OUTCOME_LEADS', 'LEAD_GENERATION'] }]),
+      });
+      for (const ad of ads) {
+        const spec = ad.creative?.object_story_spec || {};
+        for (const section of ['video_data', 'link_data']) {
+          const fid = spec[section]?.call_to_action?.value?.lead_gen_form_id;
+          if (fid) formIds.add(fid);
+        }
+      }
+    } catch (err) {
+      console.warn('[sync-leads] Could not fetch ads for form IDs:', err.message);
+    }
 
-    for (const form of forms) {
+    console.log(`[sync-leads] Syncing ${formIds.size} forms...`);
+
+    // 3. For each form, fetch all leads from Meta and upsert
+    for (const formId of formIds) {
       try {
-        const leads = await paginate(`${BASE}/${form.id}/leads`, {
+        const leads = await paginate(`${BASE}/${formId}/leads`, {
           access_token: token(),
           fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data,platform,is_organic',
           limit: 100,
         });
-
         for (const lead of leads) {
-          const fields = extractFields(lead.field_data || []);
-          await pool.query(
-            `INSERT INTO facebook_leads (
-               id, form_id, ad_id, ad_name, adset_id, adset_name,
-               campaign_id, campaign_name, page_id,
-               full_name, phone, email, field_data, created_time, platform, is_organic
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-             ON CONFLICT (id) DO UPDATE SET
-               ad_id = EXCLUDED.ad_id, ad_name = EXCLUDED.ad_name,
-               adset_id = EXCLUDED.adset_id, adset_name = EXCLUDED.adset_name,
-               campaign_id = EXCLUDED.campaign_id, campaign_name = EXCLUDED.campaign_name,
-               full_name = EXCLUDED.full_name, phone = EXCLUDED.phone,
-               email = EXCLUDED.email, field_data = EXCLUDED.field_data,
-               platform = EXCLUDED.platform, is_organic = EXCLUDED.is_organic`,
-            [
-              lead.id, form.id,
-              lead.ad_id || null, lead.ad_name || null,
-              lead.adset_id || null, lead.adset_name || null,
-              lead.campaign_id || null, lead.campaign_name || null,
-              pageId,
-              fields.full_name || fields.name || null,
-              fields.phone_number || fields.phone || null,
-              fields.email || null,
-              JSON.stringify(fields),
-              lead.created_time ? new Date(lead.created_time) : new Date(),
-              lead.platform || 'facebook',
-              !!lead.is_organic,
-            ],
-          );
+          await upsertLead(lead, formId, pageId);
           totalUpserted++;
         }
-
-        console.log(`[sync-leads] "${form.name}" (${form.id}): ${leads.length} leads synced`);
-        formsSynced++;
+        console.log(`[sync-leads] Form ${formId}: ${leads.length} leads upserted`);
       } catch (err) {
-        console.error(`[sync-leads] Form ${form.id} error:`, err.message);
+        console.error(`[sync-leads] Form ${formId} error:`, err.message);
       }
     }
   } finally {
     syncRunning = false;
   }
 
-  console.log(`[sync-leads] Done. Forms: ${formsSynced}, leads upserted: ${totalUpserted}`);
-  return { formsSynced, totalUpserted };
+  console.log(`[sync-leads] Done. Forms: ${formIds.size}, leads upserted: ${totalUpserted}`);
+  return { formsSynced: formIds.size, totalUpserted };
 }
 
 // POST /api/campaigns/sync-leads  — trigger a full Meta → DB lead sync
