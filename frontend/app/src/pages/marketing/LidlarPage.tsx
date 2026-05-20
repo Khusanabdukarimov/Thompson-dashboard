@@ -102,67 +102,106 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
   );
 }
 
-// ── UTM Campaign sub-table ────────────────────────────────────────
+// ── UTM shared column definitions ────────────────────────────────
 const UTM_COLS_DEF = [
-  { key: "umumiy_lidlar"            as const, color: "#2196F3"  },
-  { key: "jarayonda"                as const, color: "#FF9800"  },
-  { key: "sifatli_lid"              as const, color: "#9C27B0"  },
-  { key: "konsultatsiya_belgilandi" as const, color: "#2196F3"  },
-  { key: "konsultatsiya_otkazildi"  as const, color: "#4CAF50"  },
-  { key: "sifatsiz"                 as const, color: "#F44336"  },
-  { key: "bekor_boldi"              as const, color: "#FFC107"  },
-];
+  { key: "umumiy_lidlar"            as const, label: "UMUMIY LIDLAR",             color: "#2196F3" },
+  { key: "jarayonda"                as const, label: "JARAYONDA",                 color: "#FF9800" },
+  { key: "sifatli_lid"              as const, label: "SIFATLI LID",               color: "#9C27B0" },
+  { key: "konsultatsiya_belgilandi" as const, label: "KONSULTATSIYA BELGILANDI",  color: "#2196F3" },
+  { key: "konsultatsiya_otkazildi"  as const, label: "KONSULTATSIYA O'TKAZILDI",  color: "#4CAF50" },
+  { key: "sifatsiz"                 as const, label: "SIFATSIZ",                  color: "#F44336" },
+  { key: "bekor_boldi"              as const, label: "BEKOR BO'LDI",              color: "#FFC107" },
+] as const;
 
-function UtmCampaignSubTable({
-  utmSource, filter,
+function UtmTable<T extends Record<string, string | number>>({
+  rows,
+  nameKey,
+  nameLabel,
+  onRowClick,
+  loading,
 }: {
-  utmSource: string;
-  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">;
+  rows: T[];
+  nameKey: keyof T;
+  nameLabel: string;
+  onRowClick?: (row: T) => void;
+  loading: boolean;
 }) {
-  const q = useQuery({
-    queryKey: ["stats/utm-campaign", utmSource, filter],
-    queryFn: () => getUtmCampaignStats(utmSource, filter),
-    staleTime: 2 * 60 * 1000,
-  });
-
-  if (q.isLoading) return (
-    <tr><td colSpan={10} style={{ padding: "12px 24px", color: "#666", fontSize: 12, background: "var(--bg)" }}>Yuklanmoqda…</td></tr>
-  );
-
-  const rows: UtmCampaignRow[] = q.data ?? [];
   const maxes: Record<string, number> = {};
   for (const c of UTM_COLS_DEF)
-    maxes[c.key] = Math.max(1, ...rows.map(r => r[c.key] as number));
+    maxes[c.key] = Math.max(1, ...rows.map(r => Number(r[c.key]) || 0));
+
+  const totals = rows.reduce((acc, r) => {
+    for (const c of UTM_COLS_DEF)
+      acc[c.key] = (acc[c.key] || 0) + (Number(r[c.key]) || 0);
+    return acc;
+  }, {} as Record<string, number>);
 
   return (
-    <>
-      {rows.map((r) => {
-        const konv = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
-        return (
-          <tr key={r.utm_campaign} style={{ background: "var(--bg)" }}>
-            <td style={{ ...TD, paddingLeft: 32, color: "#9E9E9E", fontSize: 12, fontStyle: "italic", whiteSpace: "nowrap" }}>
-              ↳ {r.utm_campaign}
-            </td>
-            {UTM_COLS_DEF.map(c => {
-              const val = r[c.key] as number;
+    <div style={{ overflowX: "auto" }}>
+      {loading ? (
+        <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+          <thead>
+            <tr>
+              <th style={TH("#9E9E9E", 180)}>{nameLabel}</th>
+              {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
+              <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const total = Number(r.umumiy_lidlar) || 0;
+              const otkazildi = Number(r.konsultatsiya_otkazildi) || 0;
+              const konv = total > 0 ? (otkazildi / total) * 100 : 0;
+              const name = String(r[nameKey]);
               return (
-                <td key={c.key} style={{ ...TD, paddingTop: 6, paddingBottom: 6 }}>
-                  {val > 0 ? (
-                    <>
-                      <span style={{ fontSize: 12, color: "#ccc" }}>{fmtNum(val)}</span>
-                      <MiniBar value={val} max={maxes[c.key]} color={c.color} height={2} />
-                    </>
-                  ) : <span style={{ fontSize: 12, color: "#333" }}>—</span>}
-                </td>
+                <tr key={name}
+                    style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", cursor: onRowClick ? "pointer" : "default" }}
+                    onClick={() => onRowClick?.(r)}
+                    onMouseEnter={e => { if (onRowClick) e.currentTarget.style.background = "var(--bg3)"; }}
+                    onMouseLeave={e => { if (onRowClick) e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
+                  <td style={{ ...TD, fontWeight: 600, color: onRowClick ? "#2196F3" : "#fff", fontSize: 13, whiteSpace: "nowrap", textDecoration: onRowClick ? "underline" : "none" }}>
+                    {name}
+                  </td>
+                  {UTM_COLS_DEF.map(c => {
+                    const val = Number(r[c.key]) || 0;
+                    return (
+                      <td key={c.key} style={TD}>
+                        {val > 0 ? (
+                          <>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(val)}</span>
+                            <MiniBar value={val} max={maxes[c.key]} color={c.color} />
+                          </>
+                        ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                      </td>
+                    );
+                  })}
+                  <td style={{ ...TD, textAlign: "center" }}>
+                    <ConversionDonut pct={konv} size={38} />
+                  </td>
+                </tr>
               );
             })}
-            <td style={{ ...TD, textAlign: "center", paddingTop: 6, paddingBottom: 6 }}>
-              <ConversionDonut pct={konv} size={32} />
-            </td>
-          </tr>
-        );
-      })}
-    </>
+            {/* JAMI */}
+            <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+              <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+              {UTM_COLS_DEF.map(c => (
+                <td key={c.key} style={TD}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{fmtNum(totals[c.key] || 0)}</span>
+                  <MiniBar value={1} max={1} color={c.color} />
+                </td>
+              ))}
+              <td style={{ ...TD, textAlign: "center" }}>
+                <ConversionDonut pct={(totals.umumiy_lidlar || 0) > 0 ? ((totals.konsultatsiya_otkazildi || 0) / (totals.umumiy_lidlar || 0)) * 100 : 0} size={38} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 
@@ -313,7 +352,12 @@ export default function LidlarPage() {
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const utmQ        = useQuery({ queryKey: ["stats/utm-stats",       appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
-  const [expandedUtm, setExpandedUtm] = useState<string | null>(null);
+  const [selectedUtmSource, setSelectedUtmSource] = useState<string | null>(null);
+  const utmCampQ    = useQuery({
+    queryKey: ["stats/utm-campaign", selectedUtmSource, appliedWithMode],
+    queryFn:  () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
+    enabled:  selectedUtmSource !== null,
+  });
 
   const header       = statsQ.data?.header;
   const responsibles = respQ.data?.responsibles ?? [];
@@ -850,143 +894,66 @@ export default function LidlarPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            UTM bo'yicha table
+            UTM bo'yicha table (drill-down navigation)
         ══════════════════════════════════════════════════════════ */}
         {(() => {
-          const utmRows: UtmStatRow[] = utmQ.data ?? [];
-          const utmMax = {
-            umumiy:    Math.max(1, ...utmRows.map(r => r.umumiy_lidlar)),
-            jarayonda: Math.max(1, ...utmRows.map(r => r.jarayonda)),
-            sifatli:   Math.max(1, ...utmRows.map(r => r.sifatli_lid)),
-            kb:        Math.max(1, ...utmRows.map(r => r.konsultatsiya_belgilandi)),
-            ko:        Math.max(1, ...utmRows.map(r => r.konsultatsiya_otkazildi)),
-            sifatsiz:  Math.max(1, ...utmRows.map(r => r.sifatsiz)),
-            bekor:     Math.max(1, ...utmRows.map(r => r.bekor_boldi)),
-          };
-          const utmTotals = utmRows.reduce(
-            (acc, r) => ({
-              umumiy:    acc.umumiy    + r.umumiy_lidlar,
-              jarayonda: acc.jarayonda + r.jarayonda,
-              sifatli:   acc.sifatli   + r.sifatli_lid,
-              kb:        acc.kb        + r.konsultatsiya_belgilandi,
-              ko:        acc.ko        + r.konsultatsiya_otkazildi,
-              sifatsiz:  acc.sifatsiz  + r.sifatsiz,
-              bekor:     acc.bekor     + r.bekor_boldi,
-            }),
-            { umumiy: 0, jarayonda: 0, sifatli: 0, kb: 0, ko: 0, sifatsiz: 0, bekor: 0 },
-          );
-
-          const UTM_COLS = [
-            { key: "umumiy_lidlar"           as const, label: "UMUMIY LIDLAR",             color: "#2196F3"  },
-            { key: "jarayonda"               as const, label: "JARAYONDA",                 color: "#FF9800"  },
-            { key: "sifatli_lid"             as const, label: "SIFATLI LID",               color: "#9C27B0"  },
-            { key: "konsultatsiya_belgilandi" as const, label: "KONSULTATSIYA BELGILANDI",  color: "#2196F3"  },
-            { key: "konsultatsiya_otkazildi" as const, label: "KONSULTATSIYA O'TKAZILDI",  color: "#4CAF50"  },
-            { key: "sifatsiz"                as const, label: "SIFATSIZ",                  color: "#F44336"  },
-            { key: "bekor_boldi"             as const, label: "BEKOR BO'LDI",              color: "#FFC107"  },
-          ] as const;
-
-          const maxByKey: Record<string, number> = {
-            umumiy_lidlar:            utmMax.umumiy,
-            jarayonda:                utmMax.jarayonda,
-            sifatli_lid:              utmMax.sifatli,
-            konsultatsiya_belgilandi: utmMax.kb,
-            konsultatsiya_otkazildi:  utmMax.ko,
-            sifatsiz:                 utmMax.sifatsiz,
-            bekor_boldi:              utmMax.bekor,
-          };
-          const totByKey: Record<string, number> = {
-            umumiy_lidlar:            utmTotals.umumiy,
-            jarayonda:                utmTotals.jarayonda,
-            sifatli_lid:              utmTotals.sifatli,
-            konsultatsiya_belgilandi: utmTotals.kb,
-            konsultatsiya_otkazildi:  utmTotals.ko,
-            sifatsiz:                 utmTotals.sifatsiz,
-            bekor_boldi:              utmTotals.bekor,
-          };
+          const utmRows: UtmStatRow[]     = utmQ.data      ?? [];
+          const campRows: UtmCampaignRow[] = utmCampQ.data ?? [];
+          const isSourceView = selectedUtmSource === null;
 
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>UTM bo'yicha</span>
-                <span style={{ fontSize: 12, color: "#555" }}>{utmRows.length} ta manba</span>
+              {/* Header with breadcrumb */}
+              <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                {!isSourceView && (
+                  <button
+                    onClick={() => setSelectedUtmSource(null)}
+                    style={{
+                      background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
+                      color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px",
+                      cursor: "pointer", display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+                    }}
+                  >
+                    ← Orqaga
+                  </button>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                  <span
+                    style={{ fontSize: 16, fontWeight: 700, color: isSourceView ? "#fff" : "#555", cursor: !isSourceView ? "pointer" : "default", whiteSpace: "nowrap" }}
+                    onClick={() => !isSourceView && setSelectedUtmSource(null)}
+                  >
+                    UTM bo'yicha
+                  </span>
+                  {!isSourceView && (
+                    <>
+                      <span style={{ color: "#444", flexShrink: 0 }}>/</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {selectedUtmSource}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <span style={{ fontSize: 12, color: "#555", flexShrink: 0 }}>
+                  {isSourceView ? `${utmRows.length} ta manba` : `${campRows.length} ta kampaniya`}
+                </span>
               </div>
 
-              {utmQ.isLoading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : utmRows.length === 0 ? (
-                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+              {/* Body — swap between source view and campaign drill-down */}
+              {isSourceView ? (
+                <UtmTable<UtmStatRow>
+                  rows={utmRows}
+                  nameKey="utm_source"
+                  nameLabel="UTM - SOURCE"
+                  onRowClick={(r) => setSelectedUtmSource(r.utm_source)}
+                  loading={utmQ.isLoading}
+                />
               ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                    <thead>
-                      <tr>
-                        <th style={TH("#9E9E9E", 160)}>UTM - SOURCE</th>
-                        {UTM_COLS.map(c => (
-                          <th key={c.key} style={TH(c.color)}>{c.label}</th>
-                        ))}
-                        <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {utmRows.map((r, i) => {
-                        const konv = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
-                        const isExpanded = expandedUtm === r.utm_source;
-                        return (
-                          <>
-                          <tr key={r.utm_source}
-                              style={{ background: isExpanded ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                              onClick={() => setExpandedUtm(isExpanded ? null : r.utm_source)}
-                              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                              onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                            <td style={{ ...TD, fontWeight: 600, color: "#fff", fontSize: 13, whiteSpace: "nowrap" }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <ChevronDown size={13} style={{ color: "#555", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s", flexShrink: 0 }} />
-                                {r.utm_source}
-                              </span>
-                            </td>
-                            {UTM_COLS.map(c => {
-                              const val = r[c.key] as number;
-                              return (
-                                <td key={c.key} style={TD}>
-                                  {val > 0 ? (
-                                    <>
-                                      <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(val)}</span>
-                                      <MiniBar value={val} max={maxByKey[c.key]} color={c.color} />
-                                    </>
-                                  ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
-                                </td>
-                              );
-                            })}
-                            <td style={{ ...TD, textAlign: "center" }}>
-                              <ConversionDonut pct={konv} size={38} />
-                            </td>
-                          </tr>
-                          {isExpanded && (
-                            <UtmCampaignSubTable utmSource={r.utm_source} filter={appliedWithMode} />
-                          )}
-                          </>
-                        );
-                      })}
-
-                      {/* JAMI row */}
-                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                          JAMI
-                        </td>
-                        {UTM_COLS.map(c => (
-                          <td key={c.key} style={TD}>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{fmtNum(totByKey[c.key])}</span>
-                            <MiniBar value={1} max={1} color={c.color} />
-                          </td>
-                        ))}
-                        <td style={{ ...TD, textAlign: "center" }}>
-                          <ConversionDonut pct={utmTotals.umumiy > 0 ? (utmTotals.ko / utmTotals.umumiy) * 100 : 0} size={38} />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                <UtmTable<UtmCampaignRow>
+                  rows={campRows}
+                  nameKey="utm_campaign"
+                  nameLabel="UTM - CAMPAIGN"
+                  loading={utmCampQ.isLoading}
+                />
               )}
             </div>
           );
