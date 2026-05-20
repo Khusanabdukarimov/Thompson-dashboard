@@ -1145,8 +1145,9 @@ router.get('/utm-stats', async (req, res) => {
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR EXISTS (
-           SELECT 1 FROM facebook_leads fl
-           WHERE fl.phone = l.phone AND fl.form_id = $3
+           SELECT 1 FROM lead_phones lp
+           JOIN facebook_leads fl ON fl.phone = lp.phone
+           WHERE lp.lead_id = l.id AND fl.form_id = $3
          ))
          ${leadModeClause(mode)}
        GROUP BY l.utm_source
