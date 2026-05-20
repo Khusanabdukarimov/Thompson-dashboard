@@ -1328,20 +1328,26 @@ async function syncCallsFromBitrix(from, to) {
   return upserted;
 }
 
-// Auto-sync every 5 minutes: last 2 days rolling window
+// Tashkent is UTC+5
+function tashkentDateISO(offsetDays = 0) {
+  const d = new Date(Date.now() + 5 * 3600 * 1000 + offsetDays * 86400 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+// Auto-sync every 5 minutes: last 2 days rolling window (Tashkent time)
 function startCallsAutoSync() {
   const run = async () => {
     try {
-      const to   = new Date().toISOString().slice(0, 10);
-      const from = new Date(Date.now() - 2 * 86400 * 1000).toISOString().slice(0, 10);
+      const to   = tashkentDateISO(0);
+      const from = tashkentDateISO(-2);
       const n = await syncCallsFromBitrix(from, to);
-      console.log(`[calls-autosync] synced ${n} calls`);
+      console.log(`[calls-autosync] synced ${n} calls (${from} → ${to} Tashkent)`);
     } catch (err) {
       console.error('[calls-autosync] error:', err.message);
     }
   };
-  run(); // run immediately on startup
-  setInterval(run, 5 * 60 * 1000); // then every 5 minutes
+  run();
+  setInterval(run, 5 * 60 * 1000);
 }
 
 module.exports.startCallsAutoSync = startCallsAutoSync;
@@ -1379,9 +1385,9 @@ router.get('/call-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE c.duration < 10)::int                      AS failed_calls
        FROM calls c
        LEFT JOIN responsibles r ON r.id = c.responsible_id
-       WHERE ($1::date IS NULL OR c.call_start::date >= $1::date)
-         AND ($2::date IS NULL OR c.call_start::date <= $2::date)
-         AND ($3::int  IS NULL OR c.responsible_id   = $3::int)
+       WHERE ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+         AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+         AND ($3::int  IS NULL OR c.responsible_id = $3::int)
          AND c.responsible_id IS NOT NULL
        GROUP BY c.responsible_id, r.name, r.last_name
        ORDER BY total_duration DESC`,
