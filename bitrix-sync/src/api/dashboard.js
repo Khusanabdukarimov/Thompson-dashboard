@@ -1358,14 +1358,14 @@ router.get('/call-stats', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT
          c.responsible_id,
-         COALESCE(r.full_name, 'Noma''lum') AS full_name,
+         COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
          COUNT(*)::int                       AS total_calls,
          SUM(c.duration)::int                AS total_duration,
          ROUND(AVG(c.duration))::int         AS avg_duration,
          COUNT(*) FILTER (WHERE c.duration >= 10)::int AS success_calls,
          COUNT(*) FILTER (WHERE c.duration < 10)::int  AS failed_calls
        FROM calls c
-       LEFT JOIN responsibles r ON r.bitrix_id = c.responsible_id
+       LEFT JOIN responsibles r ON r.id = c.responsible_id
        WHERE ($1::date IS NULL OR c.call_start::date >= $1::date)
          AND ($2::date IS NULL OR c.call_start::date <= $2::date)
          AND ($3::int  IS NULL OR c.responsible_id   = $3::int)
