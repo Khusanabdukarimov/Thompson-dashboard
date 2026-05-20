@@ -12,7 +12,8 @@ const { verifyWebhook: fbVerify, receiveWebhook: fbReceive } = require('./webhoo
 const taskCreated  = require('./webhooks/taskCreated');
 const taskUpdated  = require('./webhooks/taskUpdated');
 const taskDeleted  = require('./webhooks/taskDeleted');
-const dashboardRouter  = require('./api/dashboard');
+const dashboardRouter                    = require('./api/dashboard');
+const { startCallsAutoSync }             = require('./api/dashboard');
 const campaignsRouter  = require('./api/campaigns');
 
 const app = express();
@@ -56,6 +57,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.listen(PORT, () => {
+  startCallsAutoSync();
   console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);

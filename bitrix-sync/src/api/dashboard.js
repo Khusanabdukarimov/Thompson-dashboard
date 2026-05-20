@@ -1269,122 +1269,91 @@ router.post('/sync-crm-forms', async (_req, res) => {
   }
 });
 
-// ── OnlinePBX helpers ─────────────────────────────────────────────
-const ONLINEPBX_DOMAIN  = 'pbx36933.onpbx.ru';
-const ONLINEPBX_API_KEY = 'RXI1YkY1Q29lVENUcnRpUE04NW5YektYcFRuRmZNUUo';
-const ONLINEPBX_BASE    = 'https://api2.onlinepbx.ru';
-
-async function pbxAuth() {
-  const res = await fetch(`${ONLINEPBX_BASE}/${ONLINEPBX_DOMAIN}/auth.json`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `auth_key=${ONLINEPBX_API_KEY}`,
-  });
-  const json = await res.json();
-  if (json.status !== '1') throw new Error('OnlinePBX auth failed: ' + json.comment);
-  return `${json.data.key_id}:${json.data.key}`;
+// ── Call sync helpers (Bitrix24 crm.activity.list) ────────────────
+async function ensureCallsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS calls (
+      id             TEXT PRIMARY KEY,
+      responsible_id INT,
+      call_start     TIMESTAMPTZ,
+      call_end       TIMESTAMPTZ,
+      duration       INT,
+      direction      INT,
+      completed      BOOLEAN,
+      synced_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 }
 
-async function pbxPost(authHeader, endpoint, body = '') {
-  const res = await fetch(`${ONLINEPBX_BASE}/${ONLINEPBX_DOMAIN}/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'x-pbx-authentication': authHeader,
-    },
-    body,
-  });
-  return res.json();
-}
+async function syncCallsFromBitrix(from, to) {
+  await ensureCallsTable();
+  const { fetchAll } = require('../services/bitrix');
+  const filter = { TYPE_ID: 2 };
+  if (from) filter['>=START_TIME'] = from;
+  if (to)   filter['<=START_TIME'] = to;
 
-function pbxExtractUser(call) {
-  if (call.accountcode === 'outbound') {
-    const ext = String(call.caller_id_number || '');
-    return ext;
+  const records = await fetchAll('crm.activity.list', filter, [
+    'ID','RESPONSIBLE_ID','START_TIME','END_TIME','COMPLETED','DIRECTION',
+  ]);
+
+  let upserted = 0;
+  for (const r of records) {
+    const startMs  = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
+    const endMs    = r.END_TIME   ? new Date(r.END_TIME).getTime()   : null;
+    const duration = (startMs && endMs && endMs > startMs)
+      ? Math.round((endMs - startMs) / 1000) : 0;
+    await pool.query(
+      `INSERT INTO calls (id, responsible_id, call_start, call_end, duration, direction, completed, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         responsible_id = EXCLUDED.responsible_id,
+         call_start     = EXCLUDED.call_start,
+         call_end       = EXCLUDED.call_end,
+         duration       = EXCLUDED.duration,
+         direction      = EXCLUDED.direction,
+         completed      = EXCLUDED.completed,
+         synced_at      = NOW()`,
+      [
+        String(r.ID),
+        r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null,
+        r.START_TIME || null,
+        r.END_TIME   || null,
+        duration,
+        r.DIRECTION  ? parseInt(r.DIRECTION) : null,
+        r.COMPLETED === 'Y',
+      ]
+    );
+    upserted++;
   }
-  const answered = (call.events || []).filter(e => e.type === 'user' && e.answered_stamp);
-  if (answered.length > 0) return String(answered[answered.length - 1].number);
-  const anyUser = (call.events || []).filter(e => e.type === 'user');
-  if (anyUser.length > 0) return String(anyUser[0].number);
-  return null;
+  return upserted;
 }
+
+// Auto-sync every 5 minutes: last 2 days rolling window
+function startCallsAutoSync() {
+  const run = async () => {
+    try {
+      const to   = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - 2 * 86400 * 1000).toISOString().slice(0, 10);
+      const n = await syncCallsFromBitrix(from, to);
+      console.log(`[calls-autosync] synced ${n} calls`);
+    } catch (err) {
+      console.error('[calls-autosync] error:', err.message);
+    }
+  };
+  run(); // run immediately on startup
+  setInterval(run, 5 * 60 * 1000); // then every 5 minutes
+}
+
+module.exports.startCallsAutoSync = startCallsAutoSync;
 
 /**
  * POST /api/dashboard/sync-calls
- * Fetches call history from OnlinePBX and upserts into calls table.
+ * Manual sync with optional date range.
  */
 router.post('/sync-calls', async (req, res) => {
   const { from, to } = req.body || req.query;
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS calls (
-        id               TEXT PRIMARY KEY,
-        extension        TEXT,
-        user_name        TEXT,
-        call_start       TIMESTAMPTZ,
-        duration         INT,
-        user_talk_time   INT,
-        accountcode      TEXT,
-        caller_number    TEXT,
-        destination_number TEXT,
-        synced_at        TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    // migrate old schema columns if they exist
-    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS extension TEXT`);
-    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS user_name TEXT`);
-    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS user_talk_time INT`);
-    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS accountcode TEXT`);
-    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS caller_number TEXT`);
-    await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS destination_number TEXT`);
-
-    const auth = await pbxAuth();
-
-    // fetch users to build extension → name map
-    const usersResp = await pbxPost(auth, 'user/get.json');
-    const userMap = {};
-    for (const u of (usersResp.data || [])) userMap[String(u.num)] = u.name;
-
-    // build date filter body
-    let filterBody = '';
-    if (from) filterBody += `start_stamp_from=${Math.floor(new Date(from).getTime() / 1000)}&`;
-    if (to)   filterBody += `start_stamp_to=${Math.floor(new Date(to + 'T23:59:59').getTime() / 1000)}&`;
-    if (!filterBody) filterBody = `start_stamp_from=${Math.floor(Date.now() / 1000) - 86400 * 30}&`;
-
-    const histResp = await pbxPost(auth, 'mongo_history/search.json', filterBody);
-    const calls = histResp.data || [];
-
-    let upserted = 0;
-    for (const c of calls) {
-      const ext      = pbxExtractUser(c);
-      const userName = ext ? (userMap[ext] || ext) : null;
-      await pool.query(
-        `INSERT INTO calls (id, extension, user_name, call_start, duration, user_talk_time, accountcode, caller_number, destination_number, synced_at)
-         VALUES ($1,$2,$3,to_timestamp($4),$5,$6,$7,$8,$9,NOW())
-         ON CONFLICT (id) DO UPDATE SET
-           extension          = EXCLUDED.extension,
-           user_name          = EXCLUDED.user_name,
-           call_start         = EXCLUDED.call_start,
-           duration           = EXCLUDED.duration,
-           user_talk_time     = EXCLUDED.user_talk_time,
-           accountcode        = EXCLUDED.accountcode,
-           caller_number      = EXCLUDED.caller_number,
-           destination_number = EXCLUDED.destination_number,
-           synced_at          = NOW()`,
-        [
-          String(c.uuid),
-          ext,
-          userName,
-          c.start_stamp || null,
-          c.duration         || 0,
-          c.user_talk_time   || 0,
-          c.accountcode      || null,
-          String(c.caller_id_number  || ''),
-          String(c.destination_number || ''),
-        ]
-      );
-      upserted++;
-    }
+    const upserted = await syncCallsFromBitrix(from, to);
     res.json({ ok: true, synced: upserted });
   } catch (err) {
     console.error('[dashboard/sync-calls]', err.message);
@@ -1394,39 +1363,28 @@ router.post('/sync-calls', async (req, res) => {
 
 /**
  * GET /api/dashboard/call-stats
- * Returns per-user call stats from OnlinePBX data.
- * Success = user_talk_time > 0 (call was actually answered).
+ * Per-responsible call stats. Success = duration >= 10s.
  */
 router.get('/call-stats', async (req, res) => {
   const { from, to, responsible_id } = req.query;
   try {
-    // responsible_id filter maps to extension via responsibles table
-    let extFilter = null;
-    if (responsible_id) {
-      const rRow = await pool.query(
-        `SELECT TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name FROM responsibles WHERE id = $1`,
-        [parseInt(responsible_id)]
-      );
-      if (rRow.rows.length > 0) extFilter = rRow.rows[0].full_name;
-    }
-
     const { rows } = await pool.query(
       `SELECT
-         extension,
-         user_name                                                AS full_name,
-         COUNT(*)::int                                            AS total_calls,
-         COALESCE(SUM(user_talk_time),0)::int                    AS total_duration,
-         COALESCE(ROUND(AVG(user_talk_time) FILTER (WHERE user_talk_time > 0)),0)::int AS avg_duration,
-         COUNT(*) FILTER (WHERE user_talk_time > 0)::int         AS success_calls,
-         COUNT(*) FILTER (WHERE user_talk_time = 0)::int         AS failed_calls
-       FROM calls
-       WHERE ($1::date IS NULL OR call_start::date >= $1::date)
-         AND ($2::date IS NULL OR call_start::date <= $2::date)
-         AND ($3::text IS NULL OR user_name ILIKE $3)
-         AND extension IS NOT NULL
-       GROUP BY extension, user_name
+         c.responsible_id,
+         COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
+         COUNT(*)::int                                                      AS total_calls,
+         COALESCE(SUM(c.duration), 0)::int                                 AS total_duration,
+         COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10)), 0)::int AS avg_duration,
+         COUNT(*) FILTER (WHERE c.duration >= 10)::int                     AS success_calls,
+         COUNT(*) FILTER (WHERE c.duration < 10)::int                      AS failed_calls
+       FROM calls c
+       LEFT JOIN responsibles r ON r.id = c.responsible_id
+       WHERE ($1::date IS NULL OR c.call_start::date >= $1::date)
+         AND ($2::date IS NULL OR c.call_start::date <= $2::date)
+         AND ($3::int  IS NULL OR c.responsible_id   = $3::int)
+       GROUP BY c.responsible_id, r.name, r.last_name
        ORDER BY total_duration DESC`,
-      [from || null, to || null, extFilter ? `%${extFilter}%` : null]
+      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
     );
     res.json(rows);
   } catch (err) {
@@ -1437,3 +1395,4 @@ router.get('/call-stats', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.startCallsAutoSync = startCallsAutoSync;
