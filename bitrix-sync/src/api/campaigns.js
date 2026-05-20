@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const axios = require('axios');
 const pool = require('../db/pool');
+const { extractFields } = require('../services/facebook');
 
 const router = Router();
 
@@ -416,6 +417,96 @@ router.get('/forms', async (req, res) => {
     console.error('[campaigns/forms]', err.response?.data || err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Lead sync from Meta Leadgen API ───────────────────────────
+
+let syncRunning = false;
+
+async function syncAllLeads() {
+  if (syncRunning) return { skipped: true, reason: 'Already running' };
+  syncRunning = true;
+  const pageId = process.env.FB_PAGE_ID;
+  if (!pageId || !token()) { syncRunning = false; return { error: 'FB_PAGE_ID or token missing' }; }
+
+  console.log('[sync-leads] Starting full sync...');
+  let totalUpserted = 0;
+  let formsSynced = 0;
+
+  try {
+    const forms = await paginate(`${BASE}/${pageId}/leadgen_forms`, {
+      access_token: token(),
+      fields: 'id,name,status,leads_count',
+      limit: 100,
+    });
+
+    console.log(`[sync-leads] Found ${forms.length} forms for page ${pageId}`);
+
+    for (const form of forms) {
+      try {
+        const leads = await paginate(`${BASE}/${form.id}/leads`, {
+          access_token: token(),
+          fields: 'id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,field_data,platform,is_organic',
+          limit: 100,
+        });
+
+        for (const lead of leads) {
+          const fields = extractFields(lead.field_data || []);
+          await pool.query(
+            `INSERT INTO facebook_leads (
+               id, form_id, ad_id, ad_name, adset_id, adset_name,
+               campaign_id, campaign_name, page_id,
+               full_name, phone, email, field_data, created_time, platform, is_organic
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+             ON CONFLICT (id) DO UPDATE SET
+               ad_id = EXCLUDED.ad_id, ad_name = EXCLUDED.ad_name,
+               adset_id = EXCLUDED.adset_id, adset_name = EXCLUDED.adset_name,
+               campaign_id = EXCLUDED.campaign_id, campaign_name = EXCLUDED.campaign_name,
+               full_name = EXCLUDED.full_name, phone = EXCLUDED.phone,
+               email = EXCLUDED.email, field_data = EXCLUDED.field_data,
+               platform = EXCLUDED.platform, is_organic = EXCLUDED.is_organic`,
+            [
+              lead.id, form.id,
+              lead.ad_id || null, lead.ad_name || null,
+              lead.adset_id || null, lead.adset_name || null,
+              lead.campaign_id || null, lead.campaign_name || null,
+              pageId,
+              fields.full_name || fields.name || null,
+              fields.phone_number || fields.phone || null,
+              fields.email || null,
+              JSON.stringify(fields),
+              lead.created_time ? new Date(lead.created_time) : new Date(),
+              lead.platform || 'facebook',
+              !!lead.is_organic,
+            ],
+          );
+          totalUpserted++;
+        }
+
+        console.log(`[sync-leads] "${form.name}" (${form.id}): ${leads.length} leads synced`);
+        formsSynced++;
+      } catch (err) {
+        console.error(`[sync-leads] Form ${form.id} error:`, err.message);
+      }
+    }
+  } finally {
+    syncRunning = false;
+  }
+
+  console.log(`[sync-leads] Done. Forms: ${formsSynced}, leads upserted: ${totalUpserted}`);
+  return { formsSynced, totalUpserted };
+}
+
+// POST /api/campaigns/sync-leads  — trigger a full Meta → DB lead sync
+router.post('/sync-leads', async (_req, res) => {
+  if (syncRunning) return res.json({ ok: false, message: 'Sync already running' });
+  res.json({ ok: true, message: 'Sync started' });
+  syncAllLeads().catch(err => console.error('[sync-leads] Fatal:', err.message));
+});
+
+// GET /api/campaigns/sync-leads  — check sync status
+router.get('/sync-leads', (_req, res) => {
+  res.json({ running: syncRunning });
 });
 
 // GET /api/campaigns/leads?form_id=123&campaign_id=456

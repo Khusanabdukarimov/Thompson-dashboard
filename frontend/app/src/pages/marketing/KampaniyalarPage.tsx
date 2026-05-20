@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
@@ -155,6 +155,24 @@ export default function KampaniyalarPage() {
     queryFn: () => getCampaignForms(month, year),
     staleTime: 5 * 60 * 1000,
   });
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const triggerSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch('/api/campaigns/sync-leads', { method: 'POST' });
+      const json = await res.json();
+      setSyncMsg(json.message || 'Sinxronlash boshlandi');
+      setTimeout(() => qForms.refetch(), 15000);
+    } catch {
+      setSyncMsg('Xato yuz berdi');
+    } finally {
+      setSyncing(false);
+    }
+  }, [qForms]);
 
   const [activePreset, setActivePreset] = useLocalStorage<string | null>(
     "kampaniyalar.preset",
@@ -662,6 +680,15 @@ export default function KampaniyalarPage() {
           <span className="text-[11px] text-text3">
             · {qForms.data?.count ?? 0} ta kampaniya
           </span>
+          <button
+            onClick={triggerSync}
+            disabled={syncing}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] bg-bg3 border border-border text-text2 hover:text-text1 hover:border-blue/40 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sinxronlanmoqda...' : 'Lidlarni sinxronlash'}
+          </button>
+          {syncMsg && <span className="text-[11px] text-green">{syncMsg}</span>}
         </div>
         {qForms.isLoading ? (
           <div className="text-[12px] text-text3 py-4">Yuklanmoqda...</div>
