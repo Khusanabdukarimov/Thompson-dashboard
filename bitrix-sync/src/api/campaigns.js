@@ -302,7 +302,6 @@ function pad(n) { return String(n).padStart(2, '0'); }
 router.get('/forms', async (req, res) => {
   const month    = (req.query.month || '').toLowerCase();
   const year     = parseInt(req.query.year || new Date().getFullYear(), 10);
-  // Default to current month when not provided
   const now      = new Date();
   const monthNum = MONTH_NUMS[month] || (now.getMonth() + 1);
   const yr       = isNaN(year) ? now.getFullYear() : year;
@@ -311,88 +310,73 @@ router.get('/forms', async (req, res) => {
     const cached = await getCache('campaigns/forms', monthNum, yr);
     if (cached) return res.json(cached);
 
-    if (!token()) throw new Error('META_ACCESS_TOKEN or FB_ACCESS_TOKEN is not set');
-
-    // ── 1. Fetch all lead-gen ads ──────────────────────────────
-    const ads = await paginate(`${BASE}/${accountId()}/ads`, {
-      access_token: token(),
-      fields: 'id,name,campaign{id,name,objective},adset{id,name},creative{id,object_story_spec}',
-      limit: 200,
-      filtering: JSON.stringify([{field:"campaign.objective",operator:"IN",value:["OUTCOME_LEADS","LEAD_GENERATION"]}]),
-    });
-
-    // ── 2. Build campaign map and ad→form mapping ──────────────
-    const campaignMap = {};   // campId → { campaign_id, name, forms: { formId → adsetInfo } }
-    const formIdsToFetch = new Set();
-
-    for (const ad of ads) {
-      const spec   = ad.creative?.object_story_spec || {};
-      let formId   = null;
-      for (const section of ['video_data', 'link_data']) {
-        formId = spec[section]?.call_to_action?.value?.lead_gen_form_id || null;
-        if (formId) break;
-      }
-      if (!formId) continue;
-
-      const camp  = ad.campaign || {};
-      const adset = ad.adset   || {};
-      const cId   = camp.id;
-      if (!cId) continue;
-
-      if (!campaignMap[cId]) {
-        campaignMap[cId] = { campaign_id: cId, campaign_name: camp.name || '', objective: camp.objective || '', forms: {} };
-      }
-      campaignMap[cId].forms[formId] = { form_id: formId, adset_id: adset.id || '', adset_name: adset.name || '' };
-      formIdsToFetch.add(formId);
-    }
-
-    // ── 3. Fetch form details (name, status) ───────────────────
-    const allFormIds = [...formIdsToFetch];
-    const formDetails = {};
-    for (let i = 0; i < allFormIds.length; i += 50) {
-      const chunk = allFormIds.slice(i, i + 50);
-      const { data } = await axios.get(BASE, {
-        params: { access_token: token(), ids: chunk.join(','), fields: 'id,name,status,created_time' },
-      });
-      Object.assign(formDetails, data);
-    }
-
-    // ── 4. Query DB for per-campaign per-form lead counts in the requested month ──
     const days  = daysInMonth(yr, monthNum);
     const since = `${yr}-${pad(monthNum)}-01`;
     const until = `${yr}-${pad(monthNum)}-${pad(days)}`;
 
-    const { rows: dbCounts } = await pool.query(
-      `SELECT campaign_id, form_id, COUNT(*)::int AS count
+    // ── 1. Build campaign→form structure from DB (always works) ──
+    const { rows: dbRows } = await pool.query(
+      `SELECT campaign_id, campaign_name,
+              form_id,
+              adset_id, adset_name,
+              COUNT(*) FILTER (WHERE created_time >= $1::date AND created_time <= $2::date)::int AS month_leads,
+              COUNT(*)::int AS total_leads
        FROM facebook_leads
-       WHERE created_time >= $1::date AND created_time <= $2::date
-       GROUP BY campaign_id, form_id`,
+       WHERE campaign_id IS NOT NULL AND form_id IS NOT NULL
+       GROUP BY campaign_id, campaign_name, form_id, adset_id, adset_name`,
       [since, until],
     );
-    // key: "campaign_id|form_id"
-    const dbFormLeads = {};
-    for (const row of dbCounts) {
-      dbFormLeads[`${row.campaign_id}|${row.form_id}`] = row.count;
+
+    const campaignMap = {};
+    for (const r of dbRows) {
+      if (!campaignMap[r.campaign_id]) {
+        campaignMap[r.campaign_id] = {
+          campaign_id: r.campaign_id,
+          campaign_name: r.campaign_name || r.campaign_id,
+          objective: 'OUTCOME_LEADS',
+          forms: {},
+        };
+      }
+      // Keep latest adset info (last writer wins; all rows for same campaign/form are same adset)
+      campaignMap[r.campaign_id].forms[r.form_id] = {
+        form_id:     r.form_id,
+        adset_id:    r.adset_id || '',
+        adset_name:  r.adset_name || '',
+        month_leads: r.month_leads,
+      };
     }
 
-    // ── 5. Build result ────────────────────────────────────────
+    // ── 2. Enrich with Meta API form names/status (optional, skip if rate-limited) ──
+    const formDetails = {};
+    const allFormIds = [...new Set(dbRows.map(r => r.form_id))];
+    try {
+      for (let i = 0; i < allFormIds.length; i += 50) {
+        const chunk = allFormIds.slice(i, i + 50);
+        const { data } = await axios.get(BASE, {
+          params: { access_token: token(), ids: chunk.join(','), fields: 'id,name,status,created_time' },
+          timeout: 10000,
+        });
+        Object.assign(formDetails, data);
+      }
+    } catch (metaErr) {
+      const code = metaErr.response?.data?.error?.code;
+      console.warn(`[campaigns/forms] Meta API unavailable (code ${code}), using DB data only`);
+    }
+
+    // ── 3. Build result ────────────────────────────────────────
     const result = [];
     for (const camp of Object.values(campaignMap)) {
       const formsList = [];
-      for (const [fid, adsetInfo] of Object.entries(camp.forms)) {
+      for (const [fid, info] of Object.entries(camp.forms)) {
         const fd = formDetails[fid] || {};
-        if (fd.status !== 'ACTIVE') continue;
-
-        const leadsCount = dbFormLeads[`${camp.campaign_id}|${fid}`] || 0;
-
         formsList.push({
           form_id:      fid,
           form_name:    fd.name || fid,
-          status:       fd.status || '',
-          leads_count:  leadsCount,   // per-campaign, per-month count from insights
+          status:       fd.status || 'ACTIVE',
+          leads_count:  info.month_leads,
           created_time: fd.created_time || '',
-          adset_id:     adsetInfo.adset_id,
-          adset_name:   adsetInfo.adset_name,
+          adset_id:     info.adset_id,
+          adset_name:   info.adset_name,
         });
       }
       if (formsList.length === 0) continue;
@@ -411,7 +395,9 @@ router.get('/forms', async (req, res) => {
     });
 
     const payload = { count: result.length, campaigns: result };
-    await setCache('campaigns/forms', monthNum, yr, payload);
+    // Only cache for 1 hour if Meta enrichment succeeded; cache 5 min otherwise
+    const hasMeta = Object.keys(formDetails).length > 0;
+    if (hasMeta) await setCache('campaigns/forms', monthNum, yr, payload);
     return res.json(payload);
   } catch (err) {
     console.error('[campaigns/forms]', err.response?.data || err.message);
