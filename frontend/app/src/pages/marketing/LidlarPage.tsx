@@ -946,6 +946,251 @@ export default function LidlarPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════
+            Lid mas'ullar kesimida table
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid mas'ullar kesimida</span>
+              <span style={{ fontSize:12, color:"#555" }}>{byUserFiltered.length} ta xodim</span>
+            </div>
+            {/* Search */}
+            <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+              <Search size={14} style={{ position:"absolute", left:10, color:"#555", pointerEvents:"none" }} />
+              <input
+                type="text"
+                placeholder="Qidirish…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{
+                  paddingLeft:30, paddingRight:12, paddingTop:7, paddingBottom:7,
+                  background:"var(--bg)", border:"1px solid var(--border)", borderRadius:8,
+                  color:"#fff", fontSize:12, outline:"none", width:180,
+                }}
+              />
+            </div>
+          </div>
+
+          {respQ.isLoading && !responsibles.length ? (
+            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
+          ) : (
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
+                    <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
+                    {RESPONSIBLE_COLS.map((col) => (
+                      <th key={col.key} style={TH(col.color)}>{col.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {byUserFiltered.map((u, i) => (
+                    <tr key={u.responsible_id}
+                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
+                        {String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
+                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                            {u.full_name || `User ${u.responsible_id}`}
+                          </span>
+                        </div>
+                      </td>
+                      {RESPONSIBLE_COLS.map((col) => {
+                        const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
+                        const max = colMaxes[col.key] ?? 1;
+                        return (
+                          <td key={col.key} style={{ ...TD, minWidth:90 }}>
+                            {cnt > 0 ? (
+                              <>
+                                <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
+                                <MiniBar value={cnt} max={max} color={col.color} height={3} />
+                              </>
+                            ) : (
+                              <span style={{ fontSize:13, color:"#333" }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+
+                  {/* JAMI row */}
+                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
+                    <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
+                      JAMI
+                    </td>
+                    {RESPONSIBLE_COLS.map((col) => (
+                      <td key={col.key} style={TD}>
+                        <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
+                        <MiniBar value={1} max={1} color={col.color} height={3} />
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Vazifalar kesimida table
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const taskRows = (tasksQ.data?.tasks ?? []).map((r) => ({
+            ...r,
+            total:       parseInt(String(r.total),       10) || 0,
+            in_progress: parseInt(String(r.in_progress), 10) || 0,
+            completed:   parseInt(String(r.completed),   10) || 0,
+            overdue:     parseInt(String(r.overdue),     10) || 0,
+          }));
+          const taskMax = {
+            total:       Math.max(1, ...taskRows.map((r) => r.total)),
+            in_progress: Math.max(1, ...taskRows.map((r) => r.in_progress)),
+            completed:   Math.max(1, ...taskRows.map((r) => r.completed)),
+            overdue:     Math.max(1, ...taskRows.map((r) => r.overdue)),
+          };
+          const taskTotals = taskRows.reduce(
+            (acc, r) => ({
+              total:       acc.total       + r.total,
+              in_progress: acc.in_progress + r.in_progress,
+              completed:   acc.completed   + r.completed,
+              overdue:     acc.overdue     + r.overdue,
+            }),
+            { total: 0, in_progress: 0, completed: 0, overdue: 0 }
+          );
+          return (
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
+              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Vazifalar kesimida</span>
+                <span style={{ fontSize: 12, color: "#555" }}>{taskRows.length} ta xodim</span>
+              </div>
+
+              {tasksQ.isLoading ? (
+                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : taskRows.length === 0 ? (
+                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Vazifalar topilmadi</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                    <colgroup>
+                      <col style={{ width: 44 }} />
+                      <col style={{ width: 200 }} />
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                      <col style={{ width: 90 }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th style={TH("#555", 44)}>#</th>
+                        <th style={TH("#9E9E9E", 200)}>Mas'ul</th>
+                        <th style={TH("#9E9E9E")}>Jami Vazifalar</th>
+                        <th style={TH("#FF9800")}>Jarayondagi</th>
+                        <th style={TH("#4CAF50")}>Tugatilgan</th>
+                        <th style={TH("#F44336")}>Muddati O'tgan</th>
+                        <th style={{ ...TH("#2196F3", 90), textAlign: "center" }}>Bajarilish</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taskRows.map((r, i) => {
+                        const pct = r.total > 0 ? (r.completed / r.total) * 100 : 0;
+                        return (
+                          <tr key={r.responsible_id}
+                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                            <td style={{ ...TD, color: "#555", fontSize: 13, fontWeight: 600, width: 44 }}>
+                              {String(i + 1).padStart(2, "0")}
+                            </td>
+                            <td style={{ ...TD, width: 200 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <AvatarCircle name={r.full_name || "?"} size={34} />
+                                <span style={{ fontSize: 13, color: "#fff", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {r.full_name}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={TD}>
+                              <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.total)}</span>
+                              <MiniBar value={r.total} max={taskMax.total} color="#9E9E9E" />
+                            </td>
+                            <td style={TD}>
+                              {r.in_progress > 0 ? (
+                                <>
+                                  <span style={{ fontSize: 14, color: "#fff" }}>{fmtNum(r.in_progress)}</span>
+                                  <MiniBar value={r.in_progress} max={taskMax.in_progress} color="#FF9800" />
+                                </>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.completed > 0 ? (
+                                <>
+                                  <span style={{ fontSize: 14, color: "#fff" }}>{fmtNum(r.completed)}</span>
+                                  <MiniBar value={r.completed} max={taskMax.completed} color="#4CAF50" />
+                                </>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.overdue > 0 ? (
+                                <>
+                                  <span style={{ fontSize: 14, color: "#F44336" }}>{fmtNum(r.overdue)}</span>
+                                  <MiniBar value={r.overdue} max={taskMax.overdue} color="#F44336" />
+                                </>
+                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                            </td>
+                            <td style={{ ...TD, textAlign: "center" }}>
+                              <ConversionDonut pct={pct} size={38} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* JAMI row */}
+                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                        <td style={{ ...TD, color: "#666" }} />
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                          JAMI
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.total)}</span>
+                          <MiniBar value={1} max={1} color="#9E9E9E" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.in_progress)}</span>
+                          <MiniBar value={1} max={1} color="#FF9800" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.completed)}</span>
+                          <MiniBar value={1} max={1} color="#4CAF50" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: taskTotals.overdue > 0 ? "#F44336" : "#fff" }}>
+                            {fmtNum(taskTotals.overdue)}
+                          </span>
+                          <MiniBar value={1} max={1} color="#F44336" />
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <ConversionDonut pct={taskTotals.total > 0 ? (taskTotals.completed / taskTotals.total) * 100 : 0} size={38} />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════
             Manba bo'yicha table
         ══════════════════════════════════════════════════════════ */}
         {(() => {
@@ -1165,252 +1410,6 @@ export default function LidlarPage() {
                   nameLabel="MAS'UL"
                   loading={utmRespQ.isLoading}
                 />
-              )}
-            </div>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════════════════
-            Lid mas'ullar kesimida table
-        ══════════════════════════════════════════════════════════ */}
-        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
-          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid mas'ullar kesimida</span>
-              <span style={{ fontSize:12, color:"#555" }}>{byUserFiltered.length} ta xodim</span>
-            </div>
-            {/* Search */}
-            <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
-              <Search size={14} style={{ position:"absolute", left:10, color:"#555", pointerEvents:"none" }} />
-              <input
-                type="text"
-                placeholder="Qidirish…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  paddingLeft:30, paddingRight:12, paddingTop:7, paddingBottom:7,
-                  background:"var(--bg)", border:"1px solid var(--border)", borderRadius:8,
-                  color:"#fff", fontSize:12, outline:"none", width:180,
-                }}
-              />
-            </div>
-          </div>
-
-          {respQ.isLoading && !responsibles.length ? (
-            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
-          ) : (
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
-                    <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
-                    {RESPONSIBLE_COLS.map((col) => (
-                      <th key={col.key} style={TH(col.color)}>{col.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {byUserFiltered.map((u, i) => (
-                    <tr key={u.responsible_id}
-                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
-                        {String(i + 1).padStart(2, "0")}
-                      </td>
-                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
-                            {u.full_name || `User ${u.responsible_id}`}
-                          </span>
-                        </div>
-                      </td>
-                      {RESPONSIBLE_COLS.map((col) => {
-                        const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
-                        const max = colMaxes[col.key] ?? 1;
-                        return (
-                          <td key={col.key} style={{ ...TD, minWidth:90 }}>
-                            {cnt > 0 ? (
-                              <>
-                                <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
-                                <MiniBar value={cnt} max={max} color={col.color} height={3} />
-                              </>
-                            ) : (
-                              <span style={{ fontSize:13, color:"#333" }}>—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-
-                  {/* JAMI row */}
-                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
-                    <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
-                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
-                      JAMI
-                    </td>
-                    {RESPONSIBLE_COLS.map((col) => (
-                      <td key={col.key} style={TD}>
-                        <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
-                        <MiniBar value={1} max={1} color={col.color} height={3} />
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
-            Vazifalar kesimida table
-        ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          // pg returns COUNT() as strings — parse to int before any arithmetic
-          const taskRows = (tasksQ.data?.tasks ?? []).map((r) => ({
-            ...r,
-            total:       parseInt(String(r.total),       10) || 0,
-            in_progress: parseInt(String(r.in_progress), 10) || 0,
-            completed:   parseInt(String(r.completed),   10) || 0,
-            overdue:     parseInt(String(r.overdue),     10) || 0,
-          }));
-          const taskMax = {
-            total:       Math.max(1, ...taskRows.map((r) => r.total)),
-            in_progress: Math.max(1, ...taskRows.map((r) => r.in_progress)),
-            completed:   Math.max(1, ...taskRows.map((r) => r.completed)),
-            overdue:     Math.max(1, ...taskRows.map((r) => r.overdue)),
-          };
-          const taskTotals = taskRows.reduce(
-            (acc, r) => ({
-              total:       acc.total       + r.total,
-              in_progress: acc.in_progress + r.in_progress,
-              completed:   acc.completed   + r.completed,
-              overdue:     acc.overdue     + r.overdue,
-            }),
-            { total: 0, in_progress: 0, completed: 0, overdue: 0 }
-          );
-          return (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
-              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Vazifalar kesimida</span>
-                <span style={{ fontSize: 12, color: "#555" }}>{taskRows.length} ta xodim</span>
-              </div>
-
-              {tasksQ.isLoading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : taskRows.length === 0 ? (
-                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Vazifalar topilmadi</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                    <colgroup>
-                      <col style={{ width: 44 }} />
-                      <col style={{ width: 200 }} />
-                      <col />
-                      <col />
-                      <col />
-                      <col />
-                      <col style={{ width: 90 }} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th style={TH("#555", 44)}>#</th>
-                        <th style={TH("#9E9E9E", 200)}>Mas'ul</th>
-                        <th style={TH("#9E9E9E")}>Jami Vazifalar</th>
-                        <th style={TH("#FF9800")}>Jarayondagi</th>
-                        <th style={TH("#4CAF50")}>Tugatilgan</th>
-                        <th style={TH("#F44336")}>Muddati O'tgan</th>
-                        <th style={{ ...TH("#2196F3", 90), textAlign: "center" }}>Bajarilish</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {taskRows.map((r, i) => {
-                        const pct = r.total > 0 ? (r.completed / r.total) * 100 : 0;
-                        return (
-                          <tr key={r.responsible_id}
-                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                            <td style={{ ...TD, color: "#555", fontSize: 13, fontWeight: 600, width: 44 }}>
-                              {String(i + 1).padStart(2, "0")}
-                            </td>
-                            <td style={{ ...TD, width: 200 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <AvatarCircle name={r.full_name || "?"} size={34} />
-                                <span style={{ fontSize: 13, color: "#fff", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {r.full_name}
-                                </span>
-                              </div>
-                            </td>
-                            <td style={TD}>
-                              <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.total)}</span>
-                              <MiniBar value={r.total} max={taskMax.total} color="#9E9E9E" />
-                            </td>
-                            <td style={TD}>
-                              {r.in_progress > 0 ? (
-                                <>
-                                  <span style={{ fontSize: 14, color: "#fff" }}>{fmtNum(r.in_progress)}</span>
-                                  <MiniBar value={r.in_progress} max={taskMax.in_progress} color="#FF9800" />
-                                </>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.completed > 0 ? (
-                                <>
-                                  <span style={{ fontSize: 14, color: "#fff" }}>{fmtNum(r.completed)}</span>
-                                  <MiniBar value={r.completed} max={taskMax.completed} color="#4CAF50" />
-                                </>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.overdue > 0 ? (
-                                <>
-                                  <span style={{ fontSize: 14, color: "#F44336" }}>{fmtNum(r.overdue)}</span>
-                                  <MiniBar value={r.overdue} max={taskMax.overdue} color="#F44336" />
-                                </>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
-                            </td>
-                            <td style={{ ...TD, textAlign: "center" }}>
-                              <ConversionDonut pct={pct} size={38} />
-                            </td>
-                          </tr>
-                        );
-                      })}
-
-                      {/* JAMI row */}
-                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                        <td style={{ ...TD, color: "#666" }} />
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                          JAMI
-                        </td>
-                        <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.total)}</span>
-                          <MiniBar value={1} max={1} color="#9E9E9E" />
-                        </td>
-                        <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.in_progress)}</span>
-                          <MiniBar value={1} max={1} color="#FF9800" />
-                        </td>
-                        <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.completed)}</span>
-                          <MiniBar value={1} max={1} color="#4CAF50" />
-                        </td>
-                        <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: taskTotals.overdue > 0 ? "#F44336" : "#fff" }}>
-                            {fmtNum(taskTotals.overdue)}
-                          </span>
-                          <MiniBar value={1} max={1} color="#F44336" />
-                        </td>
-                        <td style={{ ...TD, textAlign: "center" }}>
-                          <ConversionDonut pct={taskTotals.total > 0 ? (taskTotals.completed / taskTotals.total) * 100 : 0} size={38} />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
               )}
             </div>
           );

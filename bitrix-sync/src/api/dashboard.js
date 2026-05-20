@@ -47,6 +47,7 @@ const SOURCE_NAMES = {
   'UC_8BLFVY': "Ko'chadan",
   'UC_3F6D2K': 'Vakansiya',
   'UC_1WUFJB': 'amoCRM',
+  'UC_89FPH6': 'Tavsiya',
 };
 
 /**
@@ -1140,15 +1141,17 @@ router.get('/utm-stats', async (req, res) => {
        WHERE l.utm_source IS NOT NULL AND TRIM(l.utm_source) != ''
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::text IS NULL OR EXISTS (
-           SELECT 1 FROM crm_forms cf2
-           WHERE cf2.form_id = $3 AND cf2.fb_form_id IS NOT NULL
-             AND EXISTS (
-               SELECT 1 FROM lead_phones lp
-               JOIN facebook_leads fl ON fl.phone = lp.phone
-               WHERE lp.lead_id = l.id AND fl.form_id = cf2.fb_form_id
-             )
-         ))
+         AND ($3::text IS NULL
+              OR NOT EXISTS (SELECT 1 FROM crm_forms WHERE form_id = $3 AND fb_form_id IS NOT NULL)
+              OR EXISTS (
+                SELECT 1 FROM crm_forms cf2
+                WHERE cf2.form_id = $3 AND cf2.fb_form_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM lead_phones lp
+                    JOIN facebook_leads fl ON fl.phone = lp.phone
+                    WHERE lp.lead_id = l.id AND fl.form_id = cf2.fb_form_id
+                  )
+              ))
          ${leadModeClause(mode)}
        GROUP BY TRIM(l.utm_source)
        ORDER BY umumiy_lidlar DESC`,
