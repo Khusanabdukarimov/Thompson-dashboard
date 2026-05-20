@@ -1416,7 +1416,7 @@ router.get('/call-stats', async (req, res) => {
          user_name                                                AS full_name,
          COUNT(*)::int                                            AS total_calls,
          COALESCE(SUM(user_talk_time),0)::int                    AS total_duration,
-         COALESCE(ROUND(AVG(user_talk_time FILTER (WHERE user_talk_time > 0))),0)::int AS avg_duration,
+         COALESCE(ROUND(AVG(user_talk_time) FILTER (WHERE user_talk_time > 0)),0)::int AS avg_duration,
          COUNT(*) FILTER (WHERE user_talk_time > 0)::int         AS success_calls,
          COUNT(*) FILTER (WHERE user_talk_time = 0)::int         AS failed_calls
        FROM calls
