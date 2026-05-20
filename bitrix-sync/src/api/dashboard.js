@@ -1053,14 +1053,16 @@ router.get('/utm-campaign-stats', async (req, res) => {
          COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum') AS utm_campaign,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
-           'THINKING','NOT_TRANSFERRED'
-         ))::int                                                                    AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi,
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi,
          COUNT(DISTINCT l.responsible_id)::int                                     AS responsible_count
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
@@ -1088,14 +1090,16 @@ router.get('/utm-responsible-stats', async (req, res) => {
          l.responsible_id,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
-           'THINKING','NOT_TRANSFERRED'
-         ))::int                                                                    AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
        LEFT JOIN responsibles r ON r.id = l.responsible_id
@@ -1127,14 +1131,16 @@ router.get('/utm-stats', async (req, res) => {
          TRIM(l.utm_source) AS utm_source,
          COUNT(*)::int                                                              AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
-           'THINKING','NOT_TRANSFERRED'
-         ))::int                                                                    AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi,
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi,
          COUNT(DISTINCT NULLIF(l.utm_campaign, ''))::int                           AS campaign_count
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
@@ -1175,16 +1181,19 @@ router.get('/source-stats', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT
          COALESCE(l.source_id, 'Nomalum') AS source_id,
-         COUNT(*)::int                                                              AS umumiy_lidlar,
+         COUNT(*)::int AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'CALLS','NEW','MISSED','NO_ANSWER','CALLBACK',
-           'THINKING','NOT_TRANSFERRED'
-         ))::int                                                                    AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN ('JUNK','RECYCLED')))::int AS sifatli_lid,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION')::int                AS konsultatsiya_belgilandi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'CONSULTATION_DONE')::int           AS konsultatsiya_otkazildi,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                        AS sifatsiz,
-         COUNT(*) FILTER (WHERE s.bitrix_id = 'RECYCLED')::int                    AS bekor_boldi
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244',
+           'IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
