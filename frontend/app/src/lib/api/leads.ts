@@ -280,6 +280,38 @@ export async function syncCalls(from?: string, to?: string): Promise<{ ok: boole
   return res.json();
 }
 
+export type ResponsibleLeadRow = {
+  id: number;
+  title: string;
+  stage_bid: string;
+  date_create: string;
+  opportunity: number;
+  ne_obrabotinniy: number;
+  yangi_lid: number;
+  propushenniy: number;
+  javob_bermadi: number;
+  qayta_aloqa: number;
+  oylab_koradi: number;
+  tashrif_belgilandi: number;
+  kelmadi: number;
+  sandiq: number;
+  sifatsiz: number;
+  bekor_boldi: number;
+  tashrif_buyurdi: number;
+};
+
+export function getResponsibleLeads(
+  responsibleId: number,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
+) {
+  return apiGet<ResponsibleLeadRow[]>("/api/dashboard/responsible-leads", {
+    responsible_id: responsibleId,
+    from: filter.start_date,
+    to: filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
 export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,

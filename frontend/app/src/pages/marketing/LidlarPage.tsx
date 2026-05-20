@@ -10,9 +10,9 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats,
-  getSourceStats, getCallStats, syncCalls,
+  getSourceStats, getCallStats, syncCalls, getResponsibleLeads,
   type DashFilter, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow,
-  type SourceStatsRow, type CallStatsRow,
+  type SourceStatsRow, type CallStatsRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -123,6 +123,7 @@ function UtmTable<T extends Record<string, string | number>>({
   loading,
   countKey,
   countLabel,
+  getBitrixUrl,
 }: {
   rows: T[];
   nameKey: keyof T;
@@ -131,6 +132,7 @@ function UtmTable<T extends Record<string, string | number>>({
   loading: boolean;
   countKey?: keyof T;
   countLabel?: string;
+  getBitrixUrl?: (row: T) => string;
 }) {
   const maxes: Record<string, number> = {};
   for (const c of UTM_COLS_DEF)
@@ -170,19 +172,29 @@ function UtmTable<T extends Record<string, string | number>>({
                     onClick={() => onRowClick?.(r)}
                     onMouseEnter={e => { if (onRowClick) e.currentTarget.style.background = "var(--bg3)"; }}
                     onMouseLeave={e => { if (onRowClick) e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
-                  <td style={{ ...TD, fontWeight: 600, color: onRowClick ? "#2196F3" : "#fff", fontSize: 13, whiteSpace: "nowrap", textDecoration: onRowClick ? "underline" : "none" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                      {name}
-                      {countKey && cnt > 0 && (
-                        <span style={{
-                          fontSize: 10, color: "#888", fontWeight: 500,
-                          background: "var(--bg3)", border: "1px solid var(--border)",
-                          padding: "1px 7px", borderRadius: 10, flexShrink: 0,
-                        }}>
-                          {cnt} {countLabel}
-                        </span>
-                      )}
-                    </span>
+                  <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                    {getBitrixUrl ? (
+                      <a
+                        href={getBitrixUrl(r)}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#2196F3", textDecoration: "underline" }}
+                      >
+                        {name}
+                      </a>
+                    ) : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: onRowClick ? "#2196F3" : "#fff", textDecoration: onRowClick ? "underline" : "none" }}>
+                        {name}
+                        {countKey && cnt > 0 && (
+                          <span style={{
+                            fontSize: 10, color: "#888", fontWeight: 500,
+                            background: "var(--bg3)", border: "1px solid var(--border)",
+                            padding: "1px 7px", borderRadius: 10, flexShrink: 0,
+                          }}>
+                            {cnt} {countLabel}
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </td>
                   {UTM_COLS_DEF.map(c => {
                     const val = Number(r[c.key]) || 0;
@@ -377,6 +389,12 @@ export default function LidlarPage() {
   const utmQ        = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const [selectedUtmSource,   setSelectedUtmSource]   = useState<string | null>(null);
   const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string | null>(null);
+  const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
+  const respLeadsQ = useQuery({
+    queryKey: ["stats/responsible-leads", selectedResp?.id, appliedWithMode],
+    queryFn: () => getResponsibleLeads(selectedResp!.id, appliedWithMode),
+    enabled: selectedResp !== null,
+  });
   const utmCampQ = useQuery({
     queryKey: ["stats/utm-campaign", selectedUtmSource, appliedWithMode],
     queryFn:  () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
@@ -877,18 +895,20 @@ export default function LidlarPage() {
                 <tbody>
                   {convRows.map((r, i) => {
                     const konv = r.total > 0 ? (r.tashrif_buyurdi / r.total) * 100 : 0;
+                    const isSelected = selectedResp?.id === r.responsible_id;
                     return (
                       <tr key={r.responsible_id}
-                          style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                          style={{ background: isSelected ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor:"pointer" }}
+                          onClick={() => setSelectedResp(isSelected ? null : { id: r.responsible_id, name: r.full_name || `User ${r.responsible_id}` })}
                           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                          onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                         <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44 }}>
                           {String(i + 1).padStart(2, "0")}
                         </td>
                         <td style={{ ...TD, width:200 }}>
                           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                             <AvatarCircle name={r.full_name || "?"} size={34} />
-                            <span style={{ fontSize:13, color:"#fff", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                            <span style={{ fontSize:13, color: isSelected ? "#2196F3" : "#fff", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                               {r.full_name}
                             </span>
                           </div>
@@ -948,6 +968,96 @@ export default function LidlarPage() {
           )}
         </div>
 
+        {/* ── Responsible leads sub-table (shown after Lid va Konversiya) ── */}
+        {selectedResp && (() => {
+          const leads: ResponsibleLeadRow[] = respLeadsQ.data ?? [];
+          const LEAD_COLS = [
+            { key: "ne_obrabotinniy"    as const, label: "Ne obrabotinniy",    color: "#9E9E9E" },
+            { key: "yangi_lid"          as const, label: "Yangi lid",           color: "#2196F3" },
+            { key: "propushenniy"       as const, label: "Propushenniy",        color: "#9E9E9E" },
+            { key: "javob_bermadi"      as const, label: "Javob bermadi",       color: "#FF9800" },
+            { key: "qayta_aloqa"        as const, label: "Qayta aloha",         color: "#00BCD4" },
+            { key: "oylab_koradi"       as const, label: "O'ylab ko'radi",      color: "#E91E63" },
+            { key: "tashrif_belgilandi" as const, label: "Tashrif belgilandi",  color: "#9C27B0" },
+            { key: "kelmadi"            as const, label: "Kelmadi",             color: "#FF00FF" },
+            { key: "sandiq"             as const, label: "Sandiq",              color: "#42A5F5" },
+            { key: "sifatsiz"           as const, label: "Sifatsiz",            color: "#F44336" },
+            { key: "bekor_boldi"        as const, label: "Bekor bo'ldi",        color: "#FFC107" },
+            { key: "tashrif_buyurdi"    as const, label: "Tashrif buyurdi",     color: "#4CAF50" },
+          ] as const;
+          return (
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "rgba(33,150,243,0.05)" }}>
+                <button
+                  onClick={() => setSelectedResp(null)}
+                  style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px", cursor: "pointer", flexShrink: 0 }}
+                >
+                  ← Orqaga
+                </button>
+                <span style={{ fontSize: 13, color: "#555" }}>Mas'ul:</span>
+                <AvatarCircle name={selectedResp.name} size={24} />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{selectedResp.name}</span>
+                <span style={{ fontSize: 12, color: "#555", marginLeft: "auto" }}>
+                  {respLeadsQ.isLoading ? "Yuklanmoqda…" : `${leads.length} ta lid`}
+                </span>
+              </div>
+              {/* Body */}
+              {respLeadsQ.isLoading ? (
+                <div style={{ padding: 20, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : leads.length === 0 ? (
+                <div style={{ padding: 20, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                    <thead>
+                      <tr>
+                        <th style={TH("#9E9E9E", 240)}>LID</th>
+                        <th style={TH("#2196F3", 60)}>SONI</th>
+                        {LEAD_COLS.map(c => <th key={c.key} style={TH(c.color, 80)}>{c.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leads.map((r, i) => (
+                        <tr key={r.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
+                          <td style={{ ...TD, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <a
+                              href={`https://mountain.bitrix24.kz/crm/lead/details/${r.id}/`}
+                              target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}
+                            >
+                              {r.title}
+                            </a>
+                          </td>
+                          <td style={{ ...TD, fontSize: 13, fontWeight: 600, color: "#2196F3" }}>1</td>
+                          {LEAD_COLS.map(c => (
+                            <td key={c.key} style={{ ...TD, textAlign: "center" }}>
+                              {r[c.key] === 1
+                                ? <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: c.color }} />
+                                : <span style={{ fontSize: 11, color: "#333" }}>—</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#2196F3" }}>{leads.length}</td>
+                        {LEAD_COLS.map(c => (
+                          <td key={c.key} style={{ ...TD, textAlign: "center" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
+                              {leads.reduce((s, row) => s + (row[c.key] as number), 0)}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ══════════════════════════════════════════════════════════
             Lid mas'ullar kesimida table
         ══════════════════════════════════════════════════════════ */}
@@ -991,16 +1101,17 @@ export default function LidlarPage() {
                 <tbody>
                   {byUserFiltered.map((u, i) => (
                     <tr key={u.responsible_id}
-                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                        style={{ background: selectedResp?.id === u.responsible_id ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor:"pointer" }}
+                        onClick={() => setSelectedResp(selectedResp?.id === u.responsible_id ? null : { id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` })}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                        onMouseLeave={(e) => (e.currentTarget.style.background = selectedResp?.id === u.responsible_id ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                       <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
                       <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                           <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                          <span style={{ fontSize:13, color: selectedResp?.id === u.responsible_id ? "#2196F3" : "#fff", fontWeight:500, whiteSpace:"nowrap" }}>
                             {u.full_name || `User ${u.responsible_id}`}
                           </span>
                         </div>
@@ -1041,6 +1152,7 @@ export default function LidlarPage() {
               </table>
             </div>
           )}
+
         </div>
 
         {/* ══════════════════════════════════════════════════════════
@@ -1412,6 +1524,7 @@ export default function LidlarPage() {
                   nameKey="full_name"
                   nameLabel="MAS'UL"
                   loading={utmRespQ.isLoading}
+                  getBitrixUrl={(r) => `https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
                 />
               )}
             </div>

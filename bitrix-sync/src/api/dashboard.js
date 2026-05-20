@@ -1410,5 +1410,56 @@ router.get('/call-stats', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/dashboard/responsible-leads
+ * Individual leads for a specific responsible — used for drill-down sub-table.
+ */
+router.get('/responsible-leads', async (req, res) => {
+  const { responsible_id, from, to, mode } = req.query;
+  if (!responsible_id) return res.status(400).json({ error: 'responsible_id required' });
+
+  const params = [parseInt(responsible_id), from || null, to || null];
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         l.id,
+         COALESCE(NULLIF(TRIM(COALESCE(l.title,'')), ''),
+                  NULLIF(TRIM(COALESCE(l.name,'') || ' ' || COALESCE(l.last_name,'')), ''),
+                  'Nomalum') AS title,
+         s.bitrix_id AS stage_bid,
+         l.date_create::date AS date_create,
+         l.opportunity,
+         (s.bitrix_id IN ('NEW','IN_PROCESS','PROCESSED','UC_1KPATX','NO_ANSWER',
+           'UC_Q2U9EL','CALLBACK','UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'UC_5G8244','NOT_TRANSFERRED'))::int                                     AS ne_obrabotinniy,
+         (s.bitrix_id = 'NEW')::int                                                AS yangi_lid,
+         (s.bitrix_id = 'PROCESSED')::int                                          AS propushenniy,
+         (s.bitrix_id IN ('UC_1KPATX','NO_ANSWER'))::int                           AS javob_bermadi,
+         (s.bitrix_id IN ('UC_Q2U9EL','CALLBACK'))::int                            AS qayta_aloqa,
+         (s.bitrix_id IN ('UC_KXC3ZW','THINKING'))::int                            AS oylab_koradi,
+         (s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int                        AS tashrif_belgilandi,
+         (s.bitrix_id IN ('UC_5G8244','NOT_TRANSFERRED'))::int                     AS kelmadi,
+         (s.bitrix_id IN ('JUNK','ARCHIVE'))::int                                  AS sandiq,
+         (s.bitrix_id = 'UC_F8K4GI')::int                                         AS sifatsiz,
+         (s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int                            AS bekor_boldi,
+         (s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int                   AS tashrif_buyurdi
+       FROM leads l
+       JOIN stages s ON s.id = l.stage_id
+       WHERE l.responsible_id = $1
+         AND ($2::date IS NULL OR l.date_create::date >= $2::date)
+         AND ($3::date IS NULL OR l.date_create::date <= $3::date)
+         ${mode === 'amocrm' ? `AND l.source_id = 'UC_1WUFJB'` : ``}
+       ORDER BY l.date_create DESC
+       LIMIT 1000`,
+      params
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/responsible-leads]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.startCallsAutoSync = startCallsAutoSync;
