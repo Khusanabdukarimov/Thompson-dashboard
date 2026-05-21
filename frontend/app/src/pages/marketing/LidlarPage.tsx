@@ -334,6 +334,11 @@ const TD: React.CSSProperties = {
   borderBottom: "1px solid var(--border)",
 };
 
+// Responsibles excluded from "Lid va konversiya" and "Lid va mas'ullar kesimida" tables
+const EXCLUDED_RESPONSIBLES = ["Data365", "Shaxzod Turanov", "Murodjon"];
+const isExcluded = (name: string) =>
+  EXCLUDED_RESPONSIBLES.some((ex) => name.trim().toLowerCase() === ex.toLowerCase());
+
 // ─────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────
@@ -420,7 +425,7 @@ export default function LidlarPage() {
   });
 
   const header       = statsQ.data?.header;
-  const responsibles = respQ.data?.responsibles ?? [];
+  const responsibles = (respQ.data?.responsibles ?? []).filter((u) => !isExcluded(u.full_name));
 
   const total             = header?.total_leads                    ?? 0;
   const sifatsizBekor     = header?.sifatsiz_bekor_count           ?? 0;
@@ -456,7 +461,7 @@ export default function LidlarPage() {
 
   // ── Lid va Konversiya rows (sorted by total desc) ───────────────
   const convRows = useMemo(() => {
-    const rows = [...(conversionQ.data?.conversion ?? [])];
+    const rows = (conversionQ.data?.conversion ?? []).filter((r) => !isExcluded(r.full_name));
     rows.sort((a, b) => b.total - a.total);
     return rows;
   }, [conversionQ.data]);
