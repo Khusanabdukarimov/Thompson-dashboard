@@ -1327,14 +1327,13 @@ async function ensureCallsTable() {
   await pool.query(`CREATE INDEX IF NOT EXISTS calls_call_start_idx ON calls(call_start)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS calls_responsible_idx ON calls(responsible_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS calls_phone_idx ON calls(phone_number)`);
-  // One-time dedup: remove old voximplant records that have a matching crm.activity record
-  // (prevents 2x total_calls when both sync sources ran on same date range)
+  // Prefer voximplant over crm.activity when both sources have the same call.
   await pool.query(`
     DELETE FROM calls
-    WHERE id NOT LIKE 'act_%'
+    WHERE id LIKE 'act_%'
       AND EXISTS (
         SELECT 1 FROM calls c2
-        WHERE c2.id LIKE 'act_%'
+        WHERE c2.id NOT LIKE 'act_%'
           AND c2.responsible_id = calls.responsible_id
           AND ABS(EXTRACT(EPOCH FROM (c2.call_start - calls.call_start))) < 120
       )
@@ -1393,6 +1392,13 @@ async function syncCallsFromBitrix(from, to) {
       useVoxi = false;
       console.log('[calls] voximplant scope missing, falling back to crm.activity.list');
     } else {
+      await pool.query(
+        `DELETE FROM calls
+         WHERE id LIKE 'act_%'
+           AND ($1::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($2::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
+        [from || null, to || null],
+      );
       records = await fetchAll('voximplant.statistic.get', filter, [
         'CALL_ID', 'PORTAL_USER_ID', 'PORTAL_USER',
         'PHONE_NUMBER', 'CALL_TYPE', 'CALL_DURATION',

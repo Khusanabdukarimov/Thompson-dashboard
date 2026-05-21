@@ -63,20 +63,21 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
   icon: React.ReactNode; iconBg: string;
   badge?: string; badgeColor?: string; valueColor?: string; accentColor?: string;
 }) {
+  const accent = accentColor || "#2196F3";
   return (
-    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px 16px", display: "flex", flexDirection: "column", minWidth: 0 }}>
+    <div style={{ position: "relative", minHeight: 112, background: `linear-gradient(145deg, ${accent}12 0%, var(--bg) 42%, var(--bg) 100%)`, border: `1px solid ${accent}33`, borderRadius: 14, padding: "18px 20px 18px", display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-        <span style={{ fontSize: 12.5, color: accentColor || "var(--text2)", fontWeight: 600, lineHeight: 1.3 }}>{label}</span>
+        <span style={{ fontSize: 12.5, color: accent, fontWeight: 700, lineHeight: 1.3 }}>{label}</span>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
       </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, alignSelf: "flex-start" }}>
         <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, color: valueColor || "var(--text)" }}>{value}</div>
         {badge && (
           <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: `${badgeColor}18`, border: `1.5px solid ${badgeColor}35`, borderRadius: 6, padding: "2px 8px", lineHeight: 1.7, marginBottom: 2 }}>{badge}</span>
         )}
       </div>
       {sub && (
-        <div style={{ fontSize: 11.5, color: "var(--text2)", marginTop: 7, display: "inline-flex", alignItems: "center", gap: 4, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 6, padding: "3px 8px", alignSelf: "flex-start" }}>
+        <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11.5, color: accent, display: "inline-flex", alignItems: "center", gap: 4, background: `${accent}14`, border: `1px solid ${accent}30`, borderRadius: 6, padding: "3px 8px" }}>
           <Clock size={11} />{sub}
         </div>
       )}
