@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   RefreshCw, Search,
   TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
-  ChevronDown, Filter, Users, BarChart2,
+  ChevronDown, Users, BarChart2,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
@@ -25,17 +25,7 @@ function fmtMoney(v: number) {
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
   return `$${fmtNum(Math.round(v))}`;
 }
-function badge(c: "green" | "red" | "amber"): React.CSSProperties {
-  const m = {
-    green: { bg: "rgba(16,185,129,.12)", color: "#10b981", border: "rgba(16,185,129,.25)" },
-    red: { bg: "rgba(239,68,68,.12)", color: "#ef4444", border: "rgba(239,68,68,.25)" },
-    amber: { bg: "rgba(245,158,11,.12)", color: "#f59e0b", border: "rgba(245,158,11,.25)" },
-  }[c];
-  return {
-    display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 20,
-    fontSize: 11, fontWeight: 600, background: m.bg, color: m.color, border: `1px solid ${m.border}`
-  };
-}
+
 
 // ── KPI card ─────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, gradient, icon }: {
