@@ -974,20 +974,28 @@ export default function LidlarPage() {
         {/* ── Responsible leads sub-table (shown after Lid va Konversiya) ── */}
         {selectedResp && (() => {
           const leads: ResponsibleLeadRow[] = respLeadsQ.data ?? [];
-          const LEAD_COLS = [
-            { key: "ne_obrabotinniy"    as const, label: "Ne obrabotinniy",    color: "#9E9E9E" },
-            { key: "yangi_lid"          as const, label: "Yangi lid",           color: "#2196F3" },
-            { key: "propushenniy"       as const, label: "Propushenniy",        color: "#9E9E9E" },
-            { key: "javob_bermadi"      as const, label: "Javob bermadi",       color: "#FF9800" },
-            { key: "qayta_aloqa"        as const, label: "Qayta aloha",         color: "#00BCD4" },
-            { key: "oylab_koradi"       as const, label: "O'ylab ko'radi",      color: "#E91E63" },
-            { key: "tashrif_belgilandi" as const, label: "Tashrif belgilandi",  color: "#9C27B0" },
-            { key: "kelmadi"            as const, label: "Kelmadi",             color: "#FF00FF" },
-            { key: "sandiq"             as const, label: "Sandiq",              color: "#42A5F5" },
-            { key: "sifatsiz"           as const, label: "Sifatsiz",            color: "#F44336" },
-            { key: "bekor_boldi"        as const, label: "Bekor bo'ldi",        color: "#FFC107" },
-            { key: "tashrif_buyurdi"    as const, label: "Tashrif buyurdi",     color: "#4CAF50" },
-          ] as const;
+          const STAGE_MAP: Record<string, { label: string; color: string }> = {
+            NEW:                  { label: "Yangi lid",           color: "#2196F3" },
+            IN_PROCESS:           { label: "Yangi lid",           color: "#2196F3" },
+            PROCESSED:            { label: "Propushenniy",        color: "#9E9E9E" },
+            UC_1KPATX:            { label: "Javob bermadi",       color: "#FF9800" },
+            NO_ANSWER:            { label: "Javob bermadi",       color: "#FF9800" },
+            UC_Q2U9EL:            { label: "Qayta aloqa",         color: "#00BCD4" },
+            CALLBACK:             { label: "Qayta aloqa",         color: "#00BCD4" },
+            UC_KXC3ZW:            { label: "O'ylab ko'radi",      color: "#E91E63" },
+            THINKING:             { label: "O'ylab ko'radi",      color: "#E91E63" },
+            UC_L28G68:            { label: "Tashrif belgilandi",  color: "#9C27B0" },
+            CONSULTATION:         { label: "Tashrif belgilandi",  color: "#9C27B0" },
+            UC_5G8244:            { label: "Kelmadi",             color: "#FF00FF" },
+            NOT_TRANSFERRED:      { label: "Kelmadi",             color: "#FF00FF" },
+            JUNK:                 { label: "Sandiq",              color: "#42A5F5" },
+            ARCHIVE:              { label: "Sandiq",              color: "#42A5F5" },
+            UC_F8K4GI:            { label: "Sifatsiz",            color: "#F44336" },
+            UC_NAZK5J:            { label: "Bekor bo'ldi",        color: "#FFC107" },
+            RECYCLED:             { label: "Bekor bo'ldi",        color: "#FFC107" },
+            CONVERTED_CONSULT:    { label: "Tashrif buyurdi",     color: "#4CAF50" },
+            CONVERTED:            { label: "Tashrif buyurdi",     color: "#4CAF50" },
+          };
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
               {/* Header */}
@@ -1015,50 +1023,60 @@ export default function LidlarPage() {
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
                     <thead>
                       <tr>
-                        <th style={TH("#9E9E9E", 240)}>LID</th>
-                        <th style={TH("#9C27B0", 110)}>TASHRIF SANASI</th>
-                        <th style={TH("#2196F3", 60)}>SONI</th>
-                        {LEAD_COLS.map(c => <th key={c.key} style={TH(c.color, 80)}>{c.label}</th>)}
+                        <th style={TH("#9E9E9E", 40)}>#</th>
+                        <th style={TH("#9E9E9E", 260)}>LID</th>
+                        <th style={TH("#2196F3", 80)}>SANA</th>
+                        <th style={TH("#9C27B0", 120)}>TASHRIF SANASI</th>
+                        <th style={TH("#FF9800", 180)}>BOSQICH</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {leads.map((r, i) => (
-                        <tr key={r.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                          <td style={{ ...TD, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            <a
-                              href={`https://mountain.bitrix24.kz/crm/lead/details/${r.id}/`}
-                              target="_blank" rel="noopener noreferrer"
-                              style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}
-                            >
-                              {r.title}
-                            </a>
-                          </td>
-                          <td style={{ ...TD, fontSize: 12, color: r.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
-                            {r.tashrif_sanasi
-                              ? new Date(r.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" })
-                              : "—"}
-                          </td>
-                          <td style={{ ...TD, fontSize: 13, fontWeight: 600, color: "#2196F3" }}>1</td>
-                          {LEAD_COLS.map(c => (
-                            <td key={c.key} style={{ ...TD, textAlign: "center" }}>
-                              {r[c.key] === 1
-                                ? <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: c.color }} />
-                                : <span style={{ fontSize: 11, color: "#333" }}>—</span>}
+                      {leads.map((r, i) => {
+                        const stage = STAGE_MAP[r.stage_bid] ?? { label: r.stage_bid, color: "#9E9E9E" };
+                        return (
+                          <tr key={r.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
+                            <td style={{ ...TD, color: "#555", fontSize: 12, fontWeight: 600 }}>
+                              {String(i + 1).padStart(2, "0")}
                             </td>
-                          ))}
-                        </tr>
-                      ))}
+                            <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <a
+                                href={`https://mountain.bitrix24.kz/crm/lead/details/${r.id}/`}
+                                target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}
+                              >
+                                {r.title}
+                              </a>
+                            </td>
+                            <td style={{ ...TD, fontSize: 12, color: "#9E9E9E", whiteSpace: "nowrap" }}>
+                              {r.date_create ? new Date(r.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
+                            </td>
+                            <td style={{ ...TD, fontSize: 12, color: r.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
+                              {r.tashrif_sanasi
+                                ? new Date(r.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" })
+                                : "—"}
+                            </td>
+                            <td style={TD}>
+                              <span style={{
+                                display: "inline-block",
+                                padding: "3px 10px", borderRadius: 20,
+                                fontSize: 11, fontWeight: 600,
+                                background: `${stage.color}22`,
+                                border: `1px solid ${stage.color}55`,
+                                color: stage.color,
+                                whiteSpace: "nowrap",
+                              }}>
+                                {stage.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                        <td style={{ ...TD, color: "#666" }} />
                         <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
                         <td style={TD} />
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#2196F3" }}>{leads.length}</td>
-                        {LEAD_COLS.map(c => (
-                          <td key={c.key} style={{ ...TD, textAlign: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
-                              {leads.reduce((s, row) => s + (row[c.key] as number), 0)}
-                            </span>
-                          </td>
-                        ))}
+                        <td style={TD} />
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#fff" }}>{leads.length} ta lid</td>
                       </tr>
                     </tbody>
                   </table>
