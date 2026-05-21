@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
-  Clock, PhoneMissed, PhoneOff, Timer, PhoneCall,
-  Download, CalendarDays, ChevronDown, ChevronUp,
+  Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
+  SlidersHorizontal, Download, PhoneOff, RefreshCw,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { getCallStats, getCallList, syncCalls, type CallStatsRow } from "@/lib/api/leads";
@@ -29,8 +29,8 @@ function fmtDur(secs: number): string {
 function fmtDurMin(secs: number): string {
   if (!secs) return "0 min";
   const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return s > 0 ? `${m},${String(Math.round(s / 6))} min` : `${m} min`;
+  const frac = Math.round((secs % 60) / 6);
+  return frac > 0 ? `${m},${frac} min` : `${m} min`;
 }
 
 function initials(name: string) {
@@ -46,15 +46,13 @@ function initials(name: string) {
 const AVATAR_COLORS = [
   "#4CAF50", "#2196F3", "#9C27B0", "#FF9800",
   "#F44336", "#009688", "#3F51B5", "#E91E63",
+  "#00BCD4", "#FF5722",
 ];
+const avatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
 
-function avatarColor(id: number) {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length];
-}
-
-// ── Metric card ───────────────────────────────────────────────────
-function MetricCard({
-  label, value, sub, icon, iconBg, badge, badgeColor,
+// ── Metric Card ───────────────────────────────────────────────────
+function Card({
+  label, value, sub, icon, iconBg, badge, badgeColor, valueColor,
 }: {
   label: string;
   value: React.ReactNode;
@@ -63,45 +61,53 @@ function MetricCard({
   iconBg: string;
   badge?: string;
   badgeColor?: string;
+  valueColor?: string;
 }) {
   return (
     <div style={{
       background: "var(--bg)",
       border: "1px solid var(--border)",
-      borderRadius: 12,
-      padding: "18px 20px",
+      borderRadius: 14,
+      padding: "18px 20px 16px",
       display: "flex",
       flexDirection: "column",
-      gap: 10,
+      gap: 0,
       minWidth: 0,
     }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500 }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+        <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 500, lineHeight: 1.3 }}>{label}</span>
         <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: iconBg, display: "flex", alignItems: "center",
-          justifyContent: "center", flexShrink: 0,
+          width: 38, height: 38, borderRadius: 10,
+          background: iconBg,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>
           {icon}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-        <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
+        <div style={{
+          fontSize: 28, fontWeight: 700, lineHeight: 1,
+          color: valueColor || "var(--text)",
+        }}>
           {value}
         </div>
         {badge && (
           <span style={{
-            fontSize: 11, fontWeight: 700, color: badgeColor || "#fff",
-            background: badgeColor ? `${badgeColor}20` : "#4CAF5020",
-            border: `1px solid ${badgeColor || "#4CAF50"}40`,
-            borderRadius: 6, padding: "2px 7px", lineHeight: 1.6,
+            fontSize: 11, fontWeight: 700,
+            color: badgeColor,
+            background: `${badgeColor}18`,
+            border: `1.5px solid ${badgeColor}35`,
+            borderRadius: 6,
+            padding: "2px 8px",
+            lineHeight: 1.7,
+            marginBottom: 2,
           }}>
             {badge}
           </span>
         )}
       </div>
       {sub && (
-        <div style={{ fontSize: 12, color: "var(--text2)", display: "flex", alignItems: "center", gap: 4 }}>
+        <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>
           <Clock size={11} />
           {sub}
         </div>
@@ -110,16 +116,98 @@ function MetricCard({
   );
 }
 
-// ── Call-list sub-row ─────────────────────────────────────────────
-const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
+// ── Filter popover ────────────────────────────────────────────────
+function FilterPopover({
+  startDate, endDate,
+  onStartDate, onEndDate,
+  onClose,
+}: {
+  startDate: string; endDate: string;
+  onStartDate: (v: string) => void; onEndDate: (v: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const preset = (days: number) => {
+    onEndDate(todayISO());
+    onStartDate(daysAgoISO(days));
+  };
+
+  return (
+    <div ref={ref} style={{
+      position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 200,
+      background: "var(--bg)", border: "1px solid var(--border)",
+      borderRadius: 14, padding: "18px 20px", minWidth: 300,
+      boxShadow: "0 8px 32px rgba(0,0,0,.12)",
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 14 }}>Filtrlar</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <label style={{ fontSize: 12, color: "var(--text2)", display: "flex", flexDirection: "column", gap: 4 }}>
+          Boshlanish sanasi
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => onStartDate(e.target.value)}
+            style={{
+              border: "1px solid var(--border)", borderRadius: 8,
+              padding: "7px 10px", fontSize: 13,
+              background: "var(--bg2)", color: "var(--text)",
+            }}
+          />
+        </label>
+        <label style={{ fontSize: 12, color: "var(--text2)", display: "flex", flexDirection: "column", gap: 4 }}>
+          Tugash sanasi
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => onEndDate(e.target.value)}
+            style={{
+              border: "1px solid var(--border)", borderRadius: 8,
+              padding: "7px 10px", fontSize: 13,
+              background: "var(--bg2)", color: "var(--text)",
+            }}
+          />
+        </label>
+        <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+          {[
+            { label: "Bugun", days: 0 },
+            { label: "7 kun", days: 7 },
+            { label: "30 kun", days: 30 },
+            { label: "3 oy", days: 90 },
+          ].map(({ label, days }) => (
+            <button
+              key={label}
+              onClick={() => { preset(days); onClose(); }}
+              style={{
+                padding: "5px 12px", borderRadius: 7,
+                border: "1px solid var(--border)",
+                background: "var(--bg2)", color: "var(--text2)",
+                fontSize: 12, cursor: "pointer",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Call list sub-table ───────────────────────────────────────────
+const CALL_TYPE: Record<number, { label: string; color: string }> = {
   1: { label: "Chiquvchi", color: "#2196F3" },
-  2: { label: "Kiruvchi", color: "#4CAF50" },
+  2: { label: "Kiruvchi",  color: "#4CAF50" },
 };
 
-function CallSubTable({
-  responsibleId,
-  filter,
-}: {
+function CallSubTable({ responsibleId, filter }: {
   responsibleId: number;
   filter: { start_date?: string; end_date?: string };
 }) {
@@ -129,58 +217,47 @@ function CallSubTable({
   });
 
   if (q.isLoading) {
-    return (
-      <div style={{ padding: "20px", textAlign: "center", color: "var(--text2)", fontSize: 13 }}>
-        Yuklanmoqda...
-      </div>
-    );
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda...</div>;
   }
 
   const calls = q.data ?? [];
   if (!calls.length) {
-    return (
-      <div style={{ padding: "20px", textAlign: "center", color: "var(--text2)", fontSize: 13 }}>
-        Qo'ng'iroqlar topilmadi
-      </div>
-    );
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
   }
 
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
-          <tr style={{ background: "rgba(33,150,243,0.06)" }}>
-            {["#", "Telefon", "Turi", "Davomiylik", "Sana", "Status", "Lead"].map((h) => (
+          <tr style={{ background: "rgba(33,150,243,0.05)" }}>
+            {["#", "Telefon", "Turi", "Davomiylik", "Sana va vaqt", "Status", "Lead"].map((h) => (
               <th key={h} style={{
-                padding: "8px 12px", textAlign: "left", fontWeight: 600,
+                padding: "8px 14px", textAlign: "left", fontWeight: 600,
                 color: "var(--text2)", borderBottom: "1px solid var(--border)",
+                whiteSpace: "nowrap",
               }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {calls.map((c, i) => {
-            const ct = c.call_type ? CALL_TYPE_LABEL[c.call_type] : null;
-            const isSuccess = c.status_code === 200 || (c.duration ?? 0) >= 10;
+            const ct = c.call_type ? CALL_TYPE[c.call_type] : null;
+            const ok = c.status_code === 200 || (c.duration ?? 0) >= 10;
             return (
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={{ padding: "7px 12px", color: "var(--text2)" }}>{i + 1}</td>
-                <td style={{ padding: "7px 12px", fontFamily: "monospace" }}>
-                  {c.phone_number || "—"}
-                </td>
-                <td style={{ padding: "7px 12px" }}>
+                <td style={{ padding: "8px 14px", color: "var(--text2)" }}>{i + 1}</td>
+                <td style={{ padding: "8px 14px", fontFamily: "monospace" }}>{c.phone_number || "—"}</td>
+                <td style={{ padding: "8px 14px" }}>
                   {ct ? (
                     <span style={{
                       fontSize: 11, fontWeight: 600, color: ct.color,
                       background: `${ct.color}15`, border: `1px solid ${ct.color}30`,
-                      borderRadius: 5, padding: "2px 7px",
+                      borderRadius: 5, padding: "2px 8px",
                     }}>{ct.label}</span>
                   ) : "—"}
                 </td>
-                <td style={{ padding: "7px 12px", fontFamily: "monospace" }}>
-                  {fmtDur(c.duration ?? 0)}
-                </td>
-                <td style={{ padding: "7px 12px", color: "var(--text2)" }}>
+                <td style={{ padding: "8px 14px", fontFamily: "monospace" }}>{fmtDur(c.duration ?? 0)}</td>
+                <td style={{ padding: "8px 14px", color: "var(--text2)", whiteSpace: "nowrap" }}>
                   {c.call_start
                     ? new Date(c.call_start).toLocaleString("ru-RU", {
                         day: "2-digit", month: "2-digit", year: "2-digit",
@@ -188,23 +265,22 @@ function CallSubTable({
                       })
                     : "—"}
                 </td>
-                <td style={{ padding: "7px 12px" }}>
+                <td style={{ padding: "8px 14px" }}>
                   <span style={{
                     fontSize: 11, fontWeight: 600,
-                    color: isSuccess ? "#4CAF50" : "#F44336",
-                    background: isSuccess ? "#4CAF5015" : "#F4433615",
-                    border: `1px solid ${isSuccess ? "#4CAF5030" : "#F4433630"}`,
-                    borderRadius: 5, padding: "2px 7px",
+                    color: ok ? "#4CAF50" : "#F44336",
+                    background: ok ? "#4CAF5015" : "#F4433615",
+                    border: `1px solid ${ok ? "#4CAF5030" : "#F4433630"}`,
+                    borderRadius: 5, padding: "2px 8px",
                   }}>
-                    {isSuccess ? "Muvaffaqiyatli" : "Muvaffaqiyatsiz"}
+                    {ok ? "Muvaffaqiyatli" : "Muvaffaqiyatsiz"}
                   </span>
                 </td>
-                <td style={{ padding: "7px 12px" }}>
+                <td style={{ padding: "8px 14px" }}>
                   {c.lead_id ? (
                     <a
                       href={`https://mountain.bitrix24.kz/crm/lead/details/${c.lead_id}/`}
-                      target="_blank"
-                      rel="noreferrer"
+                      target="_blank" rel="noreferrer"
                       style={{ color: "#2196F3", textDecoration: "none", fontSize: 12 }}
                     >
                       {c.lead_title || `#${c.lead_id}`}
@@ -220,208 +296,188 @@ function CallSubTable({
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────
 export default function CallStatistikasi() {
-  const [startDate, setStartDate] = useState(daysAgoISO(30));
-  const [endDate, setEndDate] = useState(todayISO());
+  const [startDate, setStartDate]     = useState(daysAgoISO(30));
+  const [endDate,   setEndDate]       = useState(todayISO());
+  const [filterOpen, setFilterOpen]   = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  const [syncing, setSyncing]         = useState(false);
 
   const statsQ = useQuery({
     queryKey: ["call-stats", startDate, endDate],
-    queryFn: () => getCallStats({ start_date: startDate, end_date: endDate }),
+    queryFn:  () => getCallStats({ start_date: startDate, end_date: endDate }),
   });
 
   const rows: CallStatsRow[] = statsQ.data ?? [];
 
-  // Global totals computed from per-row data
   const totals = useMemo(() => {
     const sum = (key: keyof CallStatsRow) =>
-      rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
-    const total_calls    = sum("total_calls");
-    const inbound_calls  = sum("inbound_calls");
-    const outbound_calls = sum("outbound_calls");
-    const success_calls  = sum("success_calls");
-    const failed_calls   = sum("failed_calls");
-    const total_duration = sum("total_duration");
-    const missed_inbound = sum("missed_inbound");
-    const avg_dur = total_calls > 0 ? Math.round(total_duration / total_calls) : 0;
-    const success_pct = total_calls > 0 ? Math.round((success_calls / total_calls) * 100) : 0;
-    const failed_pct  = total_calls > 0 ? Math.round((failed_calls  / total_calls) * 100) : 0;
+      rows.reduce((a, r) => a + (Number(r[key]) || 0), 0);
+    const total    = sum("total_calls");
+    const inbound  = sum("inbound_calls");
+    const outbound = sum("outbound_calls");
+    const success  = sum("success_calls");
+    const failed   = sum("failed_calls");
+    const totalDur = sum("total_duration");
+    const missed   = sum("missed_inbound");
+    const avgDur   = total > 0 ? Math.round(totalDur / total) : 0;
     return {
-      total_calls, inbound_calls, outbound_calls,
-      success_calls, failed_calls,
-      total_duration, avg_dur,
-      missed_inbound, success_pct, failed_pct,
-      inbound_duration:  sum("inbound_duration"),
-      outbound_duration: sum("outbound_duration"),
+      total, inbound, outbound, success, failed, totalDur, missed, avgDur,
+      success_pct: total > 0 ? Math.round((success / total) * 100) : 0,
+      failed_pct:  total > 0 ? Math.round((failed  / total) * 100) : 0,
+      inbound_dur:  sum("inbound_duration"),
+      outbound_dur: sum("outbound_duration"),
     };
   }, [rows]);
 
-  async function handleSync() {
+  async function doSync() {
     if (syncing) return;
     setSyncing(true);
-    try {
-      await syncCalls(startDate, endDate);
-      statsQ.refetch();
-    } catch {
-      // ignore
-    } finally {
-      setSyncing(false);
-    }
+    try { await syncCalls(startDate, endDate); statsQ.refetch(); } finally { setSyncing(false); }
   }
 
-  const thStyle: React.CSSProperties = {
-    padding: "11px 14px", textAlign: "left", fontSize: 11.5,
+  // Table styles
+  const TH: React.CSSProperties = {
+    padding: "10px 16px", textAlign: "center", fontSize: 11.5,
     fontWeight: 700, color: "var(--text2)", textTransform: "uppercase",
-    letterSpacing: "0.04em", background: "var(--bg2)",
+    letterSpacing: "0.05em", background: "var(--bg2)",
     borderBottom: "1px solid var(--border)", whiteSpace: "nowrap",
   };
-  const thCenter: React.CSSProperties = { ...thStyle, textAlign: "center" };
-  const tdStyle: React.CSSProperties = {
-    padding: "10px 14px", verticalAlign: "middle",
-    borderBottom: "1px solid var(--border)",
+  const TD: React.CSSProperties = {
+    padding: "12px 16px", verticalAlign: "middle",
+    borderBottom: "1px solid var(--border)", textAlign: "center",
   };
-  const tdCenter: React.CSSProperties = { ...tdStyle, textAlign: "center" };
+
+  const filterBtn: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: 7,
+    padding: "7px 16px", borderRadius: 9,
+    border: "1px solid var(--border)",
+    background: "var(--bg)", color: "var(--text2)",
+    fontSize: 13, cursor: "pointer", fontWeight: 500,
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg2)" }}>
       <Topbar
         title="Call statistikasi"
-        sub="Telefon qo'ng'iroqlari tahlili"
+        actions={
+          <div style={{ display: "flex", gap: 8, position: "relative" }}>
+            <button onClick={doSync} disabled={syncing} style={filterBtn}>
+              <RefreshCw size={14} style={{ opacity: syncing ? 0.5 : 1 }} />
+              {syncing ? "Sinxronizatsiya..." : "Sinxronizatsiya"}
+            </button>
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setFilterOpen((v) => !v)}
+                style={{
+                  ...filterBtn,
+                  color: filterOpen ? "#2196F3" : "var(--text2)",
+                  borderColor: filterOpen ? "#2196F3" : "var(--border)",
+                }}
+              >
+                <SlidersHorizontal size={14} />
+                Filtrlar
+              </button>
+              {filterOpen && (
+                <FilterPopover
+                  startDate={startDate} endDate={endDate}
+                  onStartDate={setStartDate} onEndDate={setEndDate}
+                  onClose={() => setFilterOpen(false)}
+                />
+              )}
+            </div>
+          </div>
+        }
       />
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* ── Filter bar ── */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 10,
-          background: "var(--bg)", border: "1px solid var(--border)",
-          borderRadius: 12, padding: "12px 16px",
-        }}>
-          <CalendarDays size={16} color="var(--text2)" />
-          <span style={{ fontSize: 13, color: "var(--text2)", marginRight: 4 }}>Sana:</span>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            style={{
-              border: "1px solid var(--border)", borderRadius: 8,
-              padding: "5px 10px", fontSize: 13, background: "var(--bg2)",
-              color: "var(--text)", cursor: "pointer",
-            }}
-          />
-          <span style={{ color: "var(--text2)" }}>—</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            style={{
-              border: "1px solid var(--border)", borderRadius: 8,
-              padding: "5px 10px", fontSize: 13, background: "var(--bg2)",
-              color: "var(--text)", cursor: "pointer",
-            }}
-          />
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)",
-              background: syncing ? "var(--bg2)" : "var(--bg)",
-              color: "var(--text2)", fontSize: 13, cursor: syncing ? "not-allowed" : "pointer",
-            }}
-          >
-            <Phone size={14} />
-            {syncing ? "Sinxronizatsiya..." : "Sinxronizatsiya"}
-          </button>
-          <button
-            onClick={() => statsQ.refetch()}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)",
-              background: "var(--bg)", color: "var(--text2)", fontSize: 13, cursor: "pointer",
-            }}
-          >
-            Yangilash
-          </button>
-        </div>
-
-        {/* ── Top metric cards row 1 ── */}
+        {/* ── Row 1: 5 metric cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-          <MetricCard
+          <Card
             label="Qo'ng'iroq jami"
-            value={<>{totals.total_calls} <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            sub={fmtDur(totals.total_duration)}
-            icon={<Phone size={18} color="#2196F3" />}
+            value={<>{totals.total} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            sub={fmtDur(totals.totalDur)}
+            icon={<Phone size={19} color="#2196F3" />}
             iconBg="rgba(33,150,243,0.12)"
           />
-          <MetricCard
+          <Card
             label="Chiquvchi qo'ng'iroq"
-            value={<>{totals.outbound_calls} <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            sub={fmtDur(totals.outbound_duration)}
-            icon={<PhoneOutgoing size={18} color="#2196F3" />}
+            value={<>{totals.outbound} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            sub={fmtDur(totals.outbound_dur)}
+            icon={<PhoneOutgoing size={19} color="#2196F3" />}
             iconBg="rgba(33,150,243,0.12)"
           />
-          <MetricCard
+          <Card
             label="Kiruvchi qo'ng'iroq"
-            value={<>{totals.inbound_calls} <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            sub={fmtDur(totals.inbound_duration)}
-            icon={<PhoneIncoming size={18} color="#4CAF50" />}
-            iconBg="rgba(76,175,80,0.12)"
+            value={<>{totals.inbound} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            sub={fmtDur(totals.inbound_dur)}
+            icon={<PhoneIncoming size={19} color="#E91E63" />}
+            iconBg="rgba(233,30,99,0.10)"
           />
-          <MetricCard
+          <Card
             label="Muvaffaqiyatli"
-            value={<span style={{ color: "#4CAF50" }}>{totals.success_calls}</span>}
-            icon={<CheckCircle size={18} color="#4CAF50" />}
+            value={<span style={{ color: "#4CAF50" }}>{totals.success}</span>}
+            icon={<CheckCircle size={19} color="#4CAF50" />}
             iconBg="rgba(76,175,80,0.12)"
             badge={`${totals.success_pct}%`}
             badgeColor="#4CAF50"
           />
-          <MetricCard
+          <Card
             label="Muvaffaqiyatsiz"
-            value={<span style={{ color: "#F44336" }}>{totals.failed_calls}</span>}
-            icon={<XCircle size={18} color="#F44336" />}
-            iconBg="rgba(244,67,54,0.12)"
+            value={<span style={{ color: "#F44336" }}>{totals.failed}</span>}
+            icon={<XCircle size={19} color="#F44336" />}
+            iconBg="rgba(244,67,54,0.10)"
             badge={`${totals.failed_pct}%`}
             badgeColor="#F44336"
           />
         </div>
 
-        {/* ── Top metric cards row 2 ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-          <MetricCard
+        {/* ── Row 2: 5 metric cards ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+          <Card
             label="O'rtacha davomiyligi"
-            value={fmtDurMin(totals.avg_dur)}
-            icon={<Timer size={18} color="#9C27B0" />}
-            iconBg="rgba(156,39,176,0.12)"
+            value={fmtDurMin(totals.avgDur)}
+            icon={<Timer size={19} color="#9C27B0" />}
+            iconBg="rgba(156,39,176,0.10)"
           />
-          <MetricCard
-            label="NDZ (javob berilmagan)"
-            value={<>{totals.failed_calls} <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            icon={<PhoneOff size={18} color="#607D8B" />}
-            iconBg="rgba(96,125,139,0.12)"
+          <Card
+            label="NDZ"
+            value={<>{totals.failed} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            icon={<PhoneOff size={19} color="#607D8B" />}
+            iconBg="rgba(96,125,139,0.10)"
           />
-          <MetricCard
+          <Card
             label="Propushenniy"
-            value={<span style={{ color: "#FF9800" }}>{totals.missed_inbound} <span style={{ fontSize: 14, fontWeight: 500 }}>ta</span></span>}
-            icon={<PhoneMissed size={18} color="#FF9800" />}
-            iconBg="rgba(255,152,0,0.12)"
+            value={
+              <span style={{ color: "#FF9800" }}>
+                {totals.missed} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span>
+              </span>
+            }
+            icon={<PhoneMissed size={19} color="#FF9800" />}
+            iconBg="rgba(255,152,0,0.10)"
           />
-          <MetricCard
-            label="Muvaffaqiyatli (davomiylik)"
-            value={fmtDur(totals.total_duration)}
-            icon={<PhoneCall size={18} color="#2196F3" />}
-            iconBg="rgba(33,150,243,0.12)"
+          <Card
+            label="Reaksiya vaqti"
+            value={<span style={{ fontSize: 24 }}>00:00:00</span>}
+            icon={<Clock size={19} color="#607D8B" />}
+            iconBg="rgba(96,125,139,0.10)"
+          />
+          <Card
+            label="Ne perezvonili"
+            value={0}
+            icon={<PhoneMissed size={19} color="#F44336" />}
+            iconBg="rgba(244,67,54,0.10)"
           />
         </div>
 
-        {/* ── Per-responsible table ── */}
+        {/* ── Table ── */}
         <div style={{
           background: "var(--bg)", border: "1px solid var(--border)",
           borderRadius: 14, overflow: "hidden",
         }}>
+          {/* Table header */}
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "16px 20px", borderBottom: "1px solid var(--border)",
@@ -434,54 +490,53 @@ export default function CallStatistikasi() {
                 {rows.length} xodim • {startDate} — {endDate}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "7px 12px", borderRadius: 8, border: "1px solid var(--border)",
-                  background: "var(--bg2)", color: "var(--text2)", fontSize: 12, cursor: "pointer",
-                }}
-                title="Export (tez kunda)"
-              >
-                <Download size={14} />
-              </button>
-            </div>
+            <button
+              title="Export"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 34, height: 34, borderRadius: 8,
+                border: "1px solid var(--border)", background: "var(--bg2)",
+                color: "var(--text2)", cursor: "pointer",
+              }}
+            >
+              <Download size={15} />
+            </button>
           </div>
 
           {statsQ.isLoading ? (
-            <div style={{ padding: 40, textAlign: "center", color: "var(--text2)" }}>
-              Yuklanmoqda...
-            </div>
+            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Yuklanmoqda...</div>
           ) : rows.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "var(--text2)" }}>
-              Ma'lumot topilmadi. Sinxronizatsiya qiling.
+            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>
+              Ma'lumot topilmadi. "Sinxronizatsiya" tugmasini bosing.
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, minWidth: 180 }} rowSpan={2}>Operatorlar</th>
-                    <th style={{ ...thCenter, color: "#2196F3", borderLeft: "2px solid #2196F320" }} colSpan={3}>
-                      Qo'ng'iroqlar soni
+                    <th style={{ ...TH, textAlign: "left", minWidth: 200 }} rowSpan={2}>
+                      OPERATORLAR
                     </th>
-                    <th style={{ ...thCenter, color: "#4CAF50", borderLeft: "2px solid #4CAF5020" }} colSpan={3}>
-                      Unikal qo'ng'iroqlar
+                    <th style={{ ...TH, color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.15)" }} colSpan={3}>
+                      QO'NG'IROQLAR SONI
                     </th>
-                    <th style={{ ...thCenter, color: "#9C27B0", borderLeft: "2px solid #9C27B020" }} colSpan={3}>
-                      Qo'ng'iroq davomiyligi
+                    <th style={{ ...TH, color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.15)" }} colSpan={3}>
+                      UNIKAL QO'NG'IROQLAR SONI
+                    </th>
+                    <th style={{ ...TH, color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.15)" }} colSpan={3}>
+                      QO'NG'IROQ DAVOMIYLIGI
                     </th>
                   </tr>
                   <tr>
-                    <th style={{ ...thCenter, borderLeft: "2px solid #2196F320" }}>Kiruvchi</th>
-                    <th style={{ ...thCenter }}>Chiquvchi</th>
-                    <th style={{ ...thCenter }}>Umumiy</th>
-                    <th style={{ ...thCenter, borderLeft: "2px solid #4CAF5020" }}>Kiruvchi</th>
-                    <th style={{ ...thCenter }}>Chiquvchi</th>
-                    <th style={{ ...thCenter }}>Umumiy</th>
-                    <th style={{ ...thCenter, borderLeft: "2px solid #9C27B020" }}>Kiruvchi</th>
-                    <th style={{ ...thCenter }}>Isxodyashie</th>
-                    <th style={{ ...thCenter }}>Jami</th>
+                    <th style={{ ...TH, borderLeft: "2px solid rgba(33,150,243,0.15)" }}>Kiruvchi</th>
+                    <th style={TH}>Chiquvchi</th>
+                    <th style={TH}>Umumiy</th>
+                    <th style={{ ...TH, borderLeft: "2px solid rgba(76,175,80,0.15)" }}>Kiruvchi</th>
+                    <th style={TH}>Chiquvchi</th>
+                    <th style={TH}>Umumiy</th>
+                    <th style={{ ...TH, borderLeft: "2px solid rgba(156,39,176,0.15)" }}>Kiruvchi</th>
+                    <th style={TH}>Isxodyashie</th>
+                    <th style={TH}>Vse zvonki</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -492,78 +547,67 @@ export default function CallStatistikasi() {
                         <tr
                           key={u.responsible_id}
                           style={{
-                            background: isSel ? "rgba(33,150,243,0.07)" : "var(--bg)",
+                            background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)",
                             cursor: "pointer",
-                            transition: "background 0.15s",
                           }}
                           onClick={() =>
                             setSelectedResp(isSel ? null : { id: u.responsible_id, name: u.full_name })
                           }
                         >
-                          {/* Operator */}
-                          <td style={tdStyle}>
+                          {/* Operator cell */}
+                          <td style={{ ...TD, textAlign: "left" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <div style={{
-                                width: 34, height: 34, borderRadius: "50%",
+                                width: 36, height: 36, borderRadius: "50%",
                                 background: avatarColor(u.responsible_id),
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0,
+                                fontSize: 12.5, fontWeight: 700, color: "#fff", flexShrink: 0,
                               }}>
                                 {initials(u.full_name)}
                               </div>
-                              <div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
                                   {u.full_name}
                                 </div>
-                                <div style={{ fontSize: 11, color: "var(--text2)" }}>
-                                  ID: {u.responsible_id}
-                                </div>
+                                <div style={{ fontSize: 11.5, color: "var(--text2)" }}>ID: {u.responsible_id}</div>
                               </div>
-                              <div style={{ marginLeft: "auto" }}>
-                                {isSel
-                                  ? <ChevronUp size={14} color="#2196F3" />
-                                  : <ChevronDown size={14} color="var(--text2)" />}
-                              </div>
+                              {isSel
+                                ? <ChevronUp size={14} color="#2196F3" />
+                                : <ChevronDown size={14} color="var(--text2)" />}
                             </div>
                           </td>
 
                           {/* Qo'ng'iroqlar soni */}
-                          <td style={{ ...tdCenter, borderLeft: "2px solid #2196F320" }}>{u.inbound_calls}</td>
-                          <td style={tdCenter}>{u.outbound_calls}</td>
-                          <td style={{ ...tdCenter, fontWeight: 700 }}>{u.total_calls}</td>
+                          <td style={{ ...TD, borderLeft: "2px solid rgba(33,150,243,0.10)" }}>{u.inbound_calls}</td>
+                          <td style={TD}>{u.outbound_calls}</td>
+                          <td style={{ ...TD, fontWeight: 700 }}>{u.total_calls}</td>
 
                           {/* Unikal */}
-                          <td style={{ ...tdCenter, borderLeft: "2px solid #4CAF5020" }}>{u.unique_inbound}</td>
-                          <td style={tdCenter}>{u.unique_outbound}</td>
-                          <td style={{ ...tdCenter, fontWeight: 700 }}>{u.unique_total}</td>
+                          <td style={{ ...TD, borderLeft: "2px solid rgba(76,175,80,0.10)" }}>{u.unique_inbound}</td>
+                          <td style={TD}>{u.unique_outbound}</td>
+                          <td style={{ ...TD, fontWeight: 700 }}>{u.unique_total}</td>
 
                           {/* Davomiylik */}
-                          <td style={{ ...tdCenter, borderLeft: "2px solid #9C27B020", fontFamily: "monospace", fontSize: 12 }}>
+                          <td style={{ ...TD, borderLeft: "2px solid rgba(156,39,176,0.10)", fontFamily: "monospace", fontSize: 12.5 }}>
                             {fmtDur(u.inbound_duration)}
                           </td>
-                          <td style={{ ...tdCenter, fontFamily: "monospace", fontSize: 12 }}>
+                          <td style={{ ...TD, fontFamily: "monospace", fontSize: 12.5 }}>
                             {fmtDur(u.outbound_duration)}
                           </td>
-                          <td style={{ ...tdCenter, fontWeight: 700, fontFamily: "monospace", fontSize: 12 }}>
+                          <td style={{ ...TD, fontWeight: 700, fontFamily: "monospace", fontSize: 12.5 }}>
                             {fmtDur(u.total_duration)}
                           </td>
                         </tr>
 
-                        {/* Drill-down call list */}
+                        {/* Drill-down */}
                         {isSel && (
                           <tr key={`sub-${u.responsible_id}`}>
-                            <td
-                              colSpan={10}
-                              style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}
-                            >
-                              <div style={{
-                                borderTop: "1px solid rgba(33,150,243,0.2)",
-                                borderBottom: "1px solid rgba(33,150,243,0.2)",
-                              }}>
+                            <td colSpan={10} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
+                              <div style={{ borderTop: "1.5px solid rgba(33,150,243,0.2)" }}>
                                 <div style={{
-                                  padding: "10px 16px",
+                                  padding: "10px 18px",
                                   background: "rgba(33,150,243,0.06)",
-                                  fontSize: 12, fontWeight: 600, color: "#2196F3",
+                                  fontSize: 12.5, fontWeight: 600, color: "#2196F3",
                                 }}>
                                   {u.full_name} — qo'ng'iroqlar ro'yxati
                                 </div>
