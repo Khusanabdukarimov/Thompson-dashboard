@@ -1347,7 +1347,7 @@ async function syncCallsFromBitrix(from, to) {
     if (to)   filter['<=START_TIME'] = to;
     records = await fetchAll('crm.activity.list', filter, [
       'ID', 'RESPONSIBLE_ID', 'START_TIME', 'END_TIME',
-      'DIRECTION', 'COMPLETED', 'SUBJECT', 'BINDINGS',
+      'DIRECTION', 'COMPLETED', 'SUBJECT', 'OWNER_ID', 'OWNER_TYPE_ID',
     ]);
   }
 
@@ -1370,22 +1370,23 @@ async function syncCallsFromBitrix(from, to) {
                         ? parseInt(r.CRM_ENTITY_ID) : null;
       userName      = r.PORTAL_USER     || null;
     } else {
-      const startMs = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
-      const endMs   = r.END_TIME   ? new Date(r.END_TIME).getTime()   : null;
-      const binding = Array.isArray(r.BINDINGS)
-        ? r.BINDINGS.find(b => String(b.OWNER_TYPE_ID) === '1') : null;
+      const startMs   = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
+      const endMs     = r.END_TIME   ? new Date(r.END_TIME).getTime()   : null;
+      // Extract phone from subject like "Исходящий на 90 303 07 70"
+      const phoneMatch = r.SUBJECT ? r.SUBJECT.match(/[\d\s\-\+\(\)]{7,}/) : null;
+      const isLead     = String(r.OWNER_TYPE_ID) === '1';
 
       id            = `act_${r.ID}`;
       responsibleId = r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null;
-      phoneNumber   = r.SUBJECT        || null;
+      phoneNumber   = phoneMatch ? phoneMatch[0].replace(/\s/g, '') : null;
       callType      = r.DIRECTION      ? parseInt(r.DIRECTION)       : null;
       duration      = (startMs && endMs && endMs > startMs)
                         ? Math.round((endMs - startMs) / 1000) : 0;
       callStart     = r.START_TIME     || null;
       statusCode    = r.COMPLETED === 'Y' ? 200 : null;
       statusName    = r.COMPLETED === 'Y' ? 'SUCCESS' : null;
-      crmEntityType = binding ? 'LEAD' : null;
-      leadId        = binding ? parseInt(binding.OWNER_ID) : null;
+      crmEntityType = isLead ? 'LEAD' : (r.OWNER_TYPE_ID ? String(r.OWNER_TYPE_ID) : null);
+      leadId        = isLead && r.OWNER_ID ? parseInt(r.OWNER_ID) : null;
       userName      = null;
     }
 
