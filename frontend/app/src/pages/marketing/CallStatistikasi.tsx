@@ -135,12 +135,12 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
   const calls = q.data ?? [];
   if (!calls.length) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+    <div style={{ maxHeight: "min(40vh, 320px)", overflow: "auto", borderTop: "1px solid var(--border)" }}>
+      <table style={{ width: "100%", minWidth: 920, borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
           <tr style={{ background: "rgba(33,150,243,0.05)" }}>
             {["#","Telefon","Turi","Davomiylik","Sana va vaqt","Status","Lead"].map((h) => (
-              <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontWeight: 600, color: "var(--text2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" }}>{h}</th>
+              <th key={h} style={{ position: "sticky", top: 0, zIndex: 1, padding: "8px 14px", textAlign: "left", fontWeight: 600, color: "var(--text2)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" }}>{h}</th>
             ))}
           </tr>
         </thead>
