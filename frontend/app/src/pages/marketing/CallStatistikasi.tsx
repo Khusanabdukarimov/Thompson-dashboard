@@ -528,11 +528,9 @@ export default function CallStatistikasi() {
                         <tr key={uid} style={{ background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)", cursor: "pointer" }}
                           onClick={() => setSelectedResp(isSel ? null : { id: uid, name: u.full_name })}>
                           <td style={TD({ textAlign: "left" })}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <Avatar name={u.full_name} photoUrl={u.photo_url} id={uid} />
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{u.full_name}</div>
-                                <div style={{ fontSize: 11.5, color: "var(--text2)" }}>ID: {u.responsible_id ?? "—"}</div>
                               </div>
                               {isSel ? <ChevronUp size={14} color="#2196F3" /> : <ChevronDown size={14} color="var(--text2)" />}
                             </div>
@@ -563,13 +561,9 @@ export default function CallStatistikasi() {
           <div ref={detailRef} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", scrollMarginTop: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: "1px solid var(--border)", background: "rgba(33,150,243,0.05)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <Avatar name={selectedRow.full_name} photoUrl={selectedRow.photo_url} id={selectedRow.responsible_id} size={32} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {selectedRow.full_name} — qo'ng'iroqlar ro'yxati
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--text2)" }}>
-                    ID: {selectedRow.responsible_id}
                   </div>
                 </div>
               </div>

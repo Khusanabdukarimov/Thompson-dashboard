@@ -1890,19 +1890,11 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeRespon
     })
     .sort((a, b) => b.total_calls - a.total_calls);
 
-  // Append zero-stat rows for active responsibles who had no calls in the period
+  // Append zero-call rows only for active responsibles not seen in call data at all
   for (const r of activeResponsibles) {
     if (seenIds.has(r.id)) continue;
-    responsibles.push({
-      responsible_id: r.id,
-      full_name: r.full_name || "Noma'lum",
-      photo_url: r.photo_url || null,
-      total_calls: 0, inbound_calls: 0, outbound_calls: 0, callback_calls: 0,
-      success_calls: 0, failed_calls: 0, ndz_calls: 0,
-      missed_inbound: 0, missed_recalled: 0, missed_unrecalled: 0,
-      total_duration: 0, avg_duration: 0, inbound_duration: 0, outbound_duration: 0,
-      unique_inbound: 0, unique_outbound: 0, unique_total: 0,
-    });
+    // Only include if they had any call record in the calls table (total_calls=0 means filtered period only)
+    // We skip purely inactive operators to keep the table focused on active call staff
   }
 
   const failed = ndz + missed;
