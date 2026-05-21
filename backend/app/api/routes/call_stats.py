@@ -243,17 +243,23 @@ async def _fetch_all(date_from: str, date_to: str) -> list[dict[str, Any]]:
             ">=START_TIME":  date_from,
             "<=START_TIME":  date_to,
         }
-        records = await _paginate(
-            client, act_url,
-            {"FILTER": act_filter,
-             "SELECT": ["ID","RESPONSIBLE_ID","DIRECTION","COMPLETED",
-                        "START_TIME","END_TIME","SUBJECT"],
-             "start": 0},
-            lambda s: {"FILTER": act_filter,
-                       "SELECT": ["ID","RESPONSIBLE_ID","DIRECTION","COMPLETED",
-                                  "START_TIME","END_TIME","SUBJECT"],
-                       "start": s},
-        )
+        try:
+            records = await _paginate(
+                client, act_url,
+                {"FILTER": act_filter,
+                 "SELECT": ["ID","RESPONSIBLE_ID","DIRECTION","COMPLETED",
+                            "START_TIME","END_TIME","SUBJECT"],
+                 "start": 0},
+                lambda s: {"FILTER": act_filter,
+                           "SELECT": ["ID","RESPONSIBLE_ID","DIRECTION","COMPLETED",
+                                      "START_TIME","END_TIME","SUBJECT"],
+                           "start": s},
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                log.warning("crm.activity.list 401/403 — webhook scope missing; returning empty records")
+                return []
+            raise
         log.info("crm.activity fallback: fetched %d records", len(records))
         return _normalise_activity(records)
 
