@@ -1461,5 +1461,39 @@ router.get('/responsible-leads', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/dashboard/deals-source-stats?from=&to=&mode=
+ * Deal counts grouped by source — umumiy, jarayonda, bekor bo'ldi, sotuv bo'ldi.
+ */
+router.get('/deals-source-stats', async (req, res) => {
+  const { from, to, mode } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(d.source_id, '') AS source_id,
+         COUNT(d.id)::int                                                              AS umumiy,
+         COUNT(d.id) FILTER (WHERE NOT s.is_won AND NOT s.is_final)::int              AS jarayonda,
+         COUNT(d.id) FILTER (WHERE s.is_final AND NOT s.is_won)::int                  AS bekor_boldi,
+         COUNT(d.id) FILTER (WHERE s.is_won)::int                                     AS sotuv_boldi
+       FROM deals d
+       JOIN stages s ON s.id = d.stage_id
+       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         ${dealModeClause(mode)}
+       GROUP BY d.source_id
+       ORDER BY umumiy DESC`,
+      [from || null, to || null]
+    );
+    const result = rows.map(r => ({
+      ...r,
+      source_name: SOURCE_NAMES[r.source_id] || r.source_id || 'Manbasiz',
+    }));
+    res.json(result);
+  } catch (err) {
+    console.error('[dashboard/deals-source-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.startCallsAutoSync = startCallsAutoSync;

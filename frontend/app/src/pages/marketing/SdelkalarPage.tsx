@@ -9,7 +9,7 @@ import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
 import {
   getDealKpiStats, getDealsList, getDealFilterOptions,
-  getDealsConversion, getDealsResponsibles,
+  getDealsConversion, getDealsResponsibles, getDealSourceStats,
 } from "@/lib/api/deals";
 import { getDealCancelReasons } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
@@ -236,6 +236,12 @@ export default function SdelkalarPage() {
     staleTime: 60_000,
   });
 
+  const sourceStatsQ = useQuery({
+    queryKey: ["deals-source-stats", applied.from, applied.to, mode],
+    queryFn: () => getDealSourceStats({ from: applied.from || undefined, to: applied.to || undefined, mode }),
+    staleTime: 60_000,
+  });
+
   const apply = useCallback(() => {
     setApplied({ ...pending });
     setPage(1);
@@ -255,7 +261,8 @@ export default function SdelkalarPage() {
     listQ.refetch();
     convQ.refetch();
     respQ.refetch();
-  }, [kpiQ, listQ, convQ, respQ]);
+    sourceStatsQ.refetch();
+  }, [kpiQ, listQ, convQ, respQ, sourceStatsQ]);
 
   const kpi = kpiQ.data;
 
@@ -299,6 +306,24 @@ export default function SdelkalarPage() {
     }),
     { total: 0, jarayonda: 0, sotuv_boldi: 0, bekor_boldi: 0, jami_sotuv: 0 }
   ), [convRows]);
+
+  // ── Source stats derived data ────────────────────────────────────
+  const srcStatRows = sourceStatsQ.data ?? [];
+  const srcStatMax = useMemo(() => ({
+    umumiy:     Math.max(1, ...srcStatRows.map(r => r.umumiy)),
+    jarayonda:  Math.max(1, ...srcStatRows.map(r => r.jarayonda)),
+    bekor_boldi: Math.max(1, ...srcStatRows.map(r => r.bekor_boldi)),
+    sotuv_boldi: Math.max(1, ...srcStatRows.map(r => r.sotuv_boldi)),
+  }), [srcStatRows]);
+  const srcStatTotals = useMemo(() => srcStatRows.reduce(
+    (acc, r) => ({
+      umumiy:     acc.umumiy     + r.umumiy,
+      jarayonda:  acc.jarayonda  + r.jarayonda,
+      bekor_boldi: acc.bekor_boldi + r.bekor_boldi,
+      sotuv_boldi: acc.sotuv_boldi + r.sotuv_boldi,
+    }),
+    { umumiy: 0, jarayonda: 0, bekor_boldi: 0, sotuv_boldi: 0 }
+  ), [srcStatRows]);
 
   // ── Responsibles table derived data ──────────────────────────────
   const dealRespRows = respQ.data ?? [];
@@ -795,6 +820,99 @@ export default function SdelkalarPage() {
           );
         })()}
 
+
+        {/* ══════════════════════════════════════════════════════════
+            Manba bo'yicha table
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
+          <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+            <BarChart2 size={16} style={{ color: "#9C27B0" }} />
+            <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Manba bo'yicha</span>
+            <span style={{ fontSize: 12, color: "#555" }}>{srcStatRows.length} ta manba</span>
+          </div>
+
+          {sourceStatsQ.isLoading ? (
+            <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: 44 }} />
+                  <col style={{ minWidth: 200 }} />
+                  <col />
+                  <col />
+                  <col />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={THc("#555", 44)}>#</th>
+                    <th style={THc("#9E9E9E", 200)}>Manba</th>
+                    <th style={THc("#2196F3")}>Umumiy</th>
+                    <th style={THc("#FF9800")}>Jarayonda</th>
+                    <th style={THc("#F44336")}>Bekor bo'ldi</th>
+                    <th style={THc("#4CAF50")}>Sotuv bo'ldi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {srcStatRows.map((r, i) => (
+                    <tr key={r.source_id}
+                      style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>
+                        {String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td style={{ ...TDa, fontSize: 13, color: "#fff", fontWeight: 500 }}>
+                        {r.source_name}
+                      </td>
+                      <td style={TDa}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.umumiy)}</span>
+                        <MiniBar value={r.umumiy} max={srcStatMax.umumiy} color="#2196F3" />
+                      </td>
+                      <td style={TDa}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.jarayonda)}</span>
+                        <MiniBar value={r.jarayonda} max={srcStatMax.jarayonda} color="#FF9800" />
+                      </td>
+                      <td style={TDa}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.bekor_boldi)}</span>
+                        <MiniBar value={r.bekor_boldi} max={srcStatMax.bekor_boldi} color="#F44336" />
+                      </td>
+                      <td style={TDa}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sotuv_boldi)}</span>
+                        <MiniBar value={r.sotuv_boldi} max={srcStatMax.sotuv_boldi} color="#4CAF50" />
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* JAMI row */}
+                  <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                    <td style={{ ...TDa, color: "#666" }} />
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      JAMI
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.umumiy)}</span>
+                      <MiniBar value={1} max={1} color="#2196F3" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.jarayonda)}</span>
+                      <MiniBar value={1} max={1} color="#FF9800" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.bekor_boldi)}</span>
+                      <MiniBar value={1} max={1} color="#F44336" />
+                    </td>
+                    <td style={TDa}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.sotuv_boldi)}</span>
+                      <MiniBar value={1} max={1} color="#4CAF50" />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {(kpiQ.error || listQ.error) && (
           <div style={{

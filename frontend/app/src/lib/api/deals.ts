@@ -153,3 +153,16 @@ export function getDealsConversion(filter: { from?: string; to?: string; mode?: 
 export function getDealsResponsibles(filter: { from?: string; to?: string; mode?: string }) {
   return apiGet<DealsResponsiblesRow[]>('/api/dashboard/deals-responsibles', filter as Record<string, string | undefined>, API_URL_CRM);
 }
+
+export type DealSourceStatsRow = {
+  source_id: string;
+  source_name: string;
+  umumiy: number;
+  jarayonda: number;
+  bekor_boldi: number;
+  sotuv_boldi: number;
+};
+
+export function getDealSourceStats(filter: { from?: string; to?: string; mode?: string }) {
+  return apiGet<DealSourceStatsRow[]>('/api/dashboard/deals-source-stats', filter as Record<string, string | undefined>, API_URL_CRM);
+}
