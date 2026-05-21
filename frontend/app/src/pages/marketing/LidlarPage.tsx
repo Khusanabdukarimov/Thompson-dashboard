@@ -872,9 +872,9 @@ export default function LidlarPage() {
                     <XCircle size={20} style={{ color:"#F44336" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize:12, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz / Bekor</div>
+                    <div style={{ fontSize:12, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz</div>
                     <div style={{ fontSize:36, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:3 }}>{fmtNum(sifatsizBekor)}</div>
-                    <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor qilingan lidlar</div>
+                    <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
                   </div>
                 </div>
                 <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
