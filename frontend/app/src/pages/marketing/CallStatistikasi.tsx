@@ -120,8 +120,8 @@ function FilterPopover({ startDate, endDate, onStartDate, onEndDate, onClose }: 
 
 // ── Call list sub-table ───────────────────────────────────────────
 const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
-  1: { label: "Chiquvchi", color: "#2196F3" },
-  2: { label: "Kiruvchi",  color: "#4CAF50" },
+  1: { label: "Kiruvchi",  color: "#4CAF50" },  // DIRECTION=1 = inbound
+  2: { label: "Chiquvchi", color: "#2196F3" },  // DIRECTION=2 = outbound
 };
 
 function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter: { start_date?: string; end_date?: string } }) {

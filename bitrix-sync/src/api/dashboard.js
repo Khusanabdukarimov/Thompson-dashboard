@@ -1492,8 +1492,8 @@ router.get('/call-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE c.call_type IN (1,2))::int                                   AS total_calls,
          COALESCE(SUM(c.duration) FILTER (WHERE c.call_type IN (1,2)), 0)::int              AS total_duration,
          COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10 AND c.call_type IN (1,2))), 0)::int AS avg_duration,
-         COUNT(*) FILTER (WHERE c.call_type IN (1,2) AND (c.status_code = 200 OR c.duration >= 10))::int AS success_calls,
-         COUNT(*) FILTER (WHERE c.call_type IN (1,2) AND c.status_code != 200 AND c.duration < 10)::int  AS failed_calls,
+         COUNT(*) FILTER (WHERE c.call_type IN (1,2) AND (COALESCE(c.status_code,0) = 200 OR c.duration >= 10))::int AS success_calls,
+         COUNT(*) FILTER (WHERE c.call_type IN (1,2) AND COALESCE(c.status_code,0) != 200 AND c.duration < 10)::int  AS failed_calls,
          COUNT(*) FILTER (WHERE c.call_type = 2)::int                                       AS outbound_calls,
          COUNT(*) FILTER (WHERE c.call_type = 1)::int                                       AS inbound_calls,
          COUNT(*) FILTER (WHERE c.lead_id IS NOT NULL)::int                                 AS calls_with_lead,
@@ -1502,7 +1502,7 @@ router.get('/call-stats', async (req, res) => {
          COUNT(DISTINCT c.phone_number)::int                                                 AS unique_total,
          COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 2), 0)::int                   AS outbound_duration,
          COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 1), 0)::int                   AS inbound_duration,
-         COUNT(*) FILTER (WHERE c.call_type = 1 AND c.status_code != 200 AND c.duration < 10)::int AS missed_inbound,
+         COUNT(*) FILTER (WHERE c.call_type = 1 AND COALESCE(c.status_code,0) != 200 AND c.duration < 10)::int AS missed_inbound,
          -- Обратные: outbound (type=2) calls to a number that had a missed inbound (type=1) within 72h
          COUNT(DISTINCT c.id) FILTER (WHERE
            c.call_type = 2
@@ -1510,7 +1510,7 @@ router.get('/call-stats', async (req, res) => {
              SELECT 1 FROM calls m
              WHERE m.phone_number = c.phone_number
                AND m.call_type = 1
-               AND m.status_code != 200 AND m.duration < 10
+               AND COALESCE(m.status_code,0) != 200 AND m.duration < 10
                AND m.call_start < c.call_start
                AND c.call_start - m.call_start <= INTERVAL '72 hours'
            )
@@ -1564,13 +1564,13 @@ router.get('/call-global-stats', async (req, res) => {
                 AND cb2.call_start - m2.call_start <= INTERVAL '72 hours'
               ORDER BY call_start LIMIT 1
             ) first_cb ON TRUE
-            WHERE m2.call_type = 1 AND m2.status_code != 200 AND m2.duration < 10
+            WHERE m2.call_type = 1 AND COALESCE(m2.status_code,0) != 200 AND m2.duration < 10
               AND ($1::date IS NULL OR (m2.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
               AND ($2::date IS NULL OR (m2.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
            ), 0
          )::int AS reaksiya_vaqti
        FROM calls m
-       WHERE m.call_type = 1 AND m.status_code != 200 AND m.duration < 10
+       WHERE m.call_type = 1 AND COALESCE(m.status_code,0) != 200 AND m.duration < 10
          AND ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
       [from || null, to || null]
@@ -1624,7 +1624,7 @@ router.get('/call-reaction-stats', async (req, res) => {
        FROM calls m
        LEFT JOIN responsibles r ON r.id = m.responsible_id
        WHERE m.call_type = 1
-         AND m.status_code != 200 AND m.duration < 10
+         AND COALESCE(m.status_code,0) != 200 AND m.duration < 10
          AND m.responsible_id IS NOT NULL
          AND ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
