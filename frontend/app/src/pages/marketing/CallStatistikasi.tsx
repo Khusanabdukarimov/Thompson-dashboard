@@ -364,6 +364,7 @@ export default function CallStatistikasi() {
   const [draftFilters, setDraftFilters] = useState<CallFilterState>(() => defaultCallFilters());
   const [filterOpen, setFilterOpen]     = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
+  const pageScrollRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const apiFilter = toApiFilter(filters);
   const activeFilters = activeFilterCount(filters);
@@ -387,7 +388,10 @@ export default function CallStatistikasi() {
   useEffect(() => {
     if (!selectedResp) return;
     const t = window.setTimeout(() => {
-      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const scroller = pageScrollRef.current;
+      const detail = detailRef.current;
+      if (!scroller || !detail) return;
+      scroller.scrollTo({ top: Math.max(0, detail.offsetTop - 16), behavior: "smooth" });
     }, 80);
     return () => window.clearTimeout(t);
   }, [selectedResp?.id]);
@@ -396,7 +400,7 @@ export default function CallStatistikasi() {
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg2)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "var(--bg2)" }}>
       <Topbar
         title="Call statistikasi"
         actions={
@@ -429,7 +433,7 @@ export default function CallStatistikasi() {
         }
       />
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div ref={pageScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "20px 24px 96px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ── Row 1 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
