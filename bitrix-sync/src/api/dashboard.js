@@ -1313,6 +1313,10 @@ async function ensureCallsTable() {
       ADD COLUMN IF NOT EXISTS call_source     TEXT
   `);
   await pool.query(`
+    ALTER TABLE calls
+      ALTER COLUMN failed_code TYPE TEXT USING failed_code::text
+  `);
+  await pool.query(`
     UPDATE calls
     SET call_type = CASE call_type WHEN 1 THEN 2 WHEN 2 THEN 1 ELSE call_type END,
         call_source = 'activity'
