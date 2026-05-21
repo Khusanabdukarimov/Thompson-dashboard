@@ -1649,10 +1649,107 @@ function pct(part, whole) {
   return whole ? Math.round((part / whole) * 1000) / 10 : 0;
 }
 
-function computeCallStatsFull(rows, dateFrom, dateTo) {
+function optionalInt(value) {
+  if (value == null || value === '') return null;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function optionalText(value) {
+  const v = String(value || '').trim();
+  return v && v !== 'all' ? v : null;
+}
+
+function normalizeCallFilters(query) {
+  return {
+    responsible_id: optionalInt(query.responsible_id),
+    phone: optionalText(query.phone),
+    source: optionalText(query.source),
+    call_kind: optionalText(query.call_kind),
+    status: optionalText(query.status),
+    duration_from: optionalInt(query.duration_from),
+    duration_to: optionalInt(query.duration_to),
+  };
+}
+
+function buildOutboundMap(rows) {
+  const outboundMap = new Map();
+  for (const row of rows) {
+    if (isInternalCall(row)) continue;
+    const dt = callDate(row);
+    const phoneKey = callPhoneKey(row.phone_number);
+    if (dt && phoneKey && isOutboundCall(row)) {
+      const list = outboundMap.get(phoneKey) || [];
+      list.push(dt);
+      outboundMap.set(phoneKey, list);
+    }
+  }
+  return outboundMap;
+}
+
+function makeCallbackFinder(outboundMap) {
+  return (phoneKey, missedAt) => {
+    if (!phoneKey || !missedAt) return null;
+    const maxTime = missedAt.getTime() + CALL_RECALL_WINDOW_MS;
+    return (outboundMap.get(phoneKey) || [])
+      .filter((dt) => dt.getTime() > missedAt.getTime() && dt.getTime() <= maxTime)
+      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
+  };
+}
+
+function matchesCallFilters(row, filters, findCallback) {
+  if (isInternalCall(row)) return false;
+
+  if (filters.responsible_id != null && Number(row.responsible_id) !== filters.responsible_id) {
+    return false;
+  }
+
+  if (filters.phone) {
+    const needle = String(filters.phone).replace(/\D+/g, '');
+    const haystack = String(row.phone_number || '').replace(/\D+/g, '');
+    if (!needle || !haystack.includes(needle)) return false;
+  }
+
+  if (filters.source && String(row.call_source || '') !== filters.source) {
+    return false;
+  }
+
+  if (filters.call_kind === 'inbound' && !isInboundCall(row)) return false;
+  if (filters.call_kind === 'outbound' && !isOutboundCall(row)) return false;
+  if (filters.call_kind === 'callback' && !isCallbackCall(row)) return false;
+
+  const dur = callDuration(row);
+  if (filters.duration_from != null && dur < filters.duration_from) return false;
+  if (filters.duration_to != null && dur > filters.duration_to) return false;
+
+  if (filters.status) {
+    const missed = isMissedInbound(row);
+    const phoneKey = callPhoneKey(row.phone_number);
+    const dt = callDate(row);
+    const callbackAt = missed && findCallback ? findCallback(phoneKey, dt) : null;
+
+    if (filters.status === 'success' && !isSuccessfulCall(row)) return false;
+    if (filters.status === 'failed' && isSuccessfulCall(row)) return false;
+    if (filters.status === 'missed' && !missed) return false;
+    if (filters.status === 'ndz' && !isNdzCall(row)) return false;
+    if (filters.status === 'recalled' && (!missed || !callbackAt)) return false;
+    if (filters.status === 'unrecalled' && (!missed || callbackAt)) return false;
+  }
+
+  return true;
+}
+
+function callSourceName(source) {
+  if (source === 'voximplant') return 'Bitrix24 telephony';
+  if (source === 'activity') return 'CRM activity';
+  return source || "Noma'lum";
+}
+
+function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}) {
   const buckets = new Map();
   const missedMap = new Map();
-  const outboundMap = new Map();
+  const outboundMap = buildOutboundMap(rows);
+  const findCallback = makeCallbackFinder(outboundMap);
   let total = 0;
   let inbound = 0;
   let outbound = 0;
@@ -1700,15 +1797,11 @@ function computeCallStatsFull(rows, dateFrom, dateTo) {
 
   for (const row of rows) {
     if (isInternalCall(row)) continue;
-    const dt = callDate(row);
     const phoneKey = callPhoneKey(row.phone_number);
-    if (dt && phoneKey && isOutboundCall(row)) {
-      const list = outboundMap.get(phoneKey) || [];
-      list.push(dt);
-      outboundMap.set(phoneKey, list);
-    }
-
     if (!row.in_range) continue;
+    if (!matchesCallFilters(row, filters, findCallback)) continue;
+
+    const dt = callDate(row);
     if (isCallbackCall(row)) {
       callback += 1;
       getBucket(row).callback_calls += 1;
@@ -1764,13 +1857,6 @@ function computeCallStatsFull(rows, dateFrom, dateTo) {
 
   let nePerezvonili = noPhoneMissed;
   const reactionTimes = [];
-  const findCallback = (phoneKey, missedAt) => {
-    if (!phoneKey || !missedAt) return null;
-    const maxTime = missedAt.getTime() + CALL_RECALL_WINDOW_MS;
-    return (outboundMap.get(phoneKey) || [])
-      .filter((dt) => dt.getTime() > missedAt.getTime() && dt.getTime() <= maxTime)
-      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
-  };
 
   for (const [phoneKey, missedTimes] of missedMap.entries()) {
     for (const missedAt of missedTimes) {
@@ -1829,11 +1915,50 @@ function computeCallStatsFull(rows, dateFrom, dateTo) {
 }
 
 /**
+ * GET /api/dashboard/call-filter-options
+ * Options for CallStatistikasi filter drawer.
+ */
+router.get('/call-filter-options', async (_req, res) => {
+  try {
+    await ensureCallsTable();
+    const [respRes, sourceRes] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT r.id,
+           TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name
+         FROM responsibles r
+         JOIN calls c ON c.responsible_id = r.id
+         WHERE r.active = TRUE
+         ORDER BY full_name`
+      ),
+      pool.query(
+        `SELECT DISTINCT call_source
+         FROM calls
+         WHERE call_source IS NOT NULL AND call_source != ''
+         ORDER BY call_source`
+      ),
+    ]);
+
+    res.json({
+      responsibles: respRes.rows,
+      sources: sourceRes.rows.map((r) => ({
+        id: r.call_source,
+        name: callSourceName(r.call_source),
+      })),
+    });
+  } catch (err) {
+    if (err.code === '42P01') return res.json({ responsibles: [], sources: [] });
+    console.error('[dashboard/call-filter-options]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/dashboard/call-stats-full
  * DB-backed CallStatistikasi payload. No Bitrix24 request is made here.
  */
 router.get('/call-stats-full', async (req, res) => {
   const { from, to } = req.query;
+  const filters = normalizeCallFilters(req.query);
   const lookupTo = addDaysISO(to, 1) || to || null;
   try {
     await ensureCallsTable();
@@ -1855,9 +1980,9 @@ router.get('/call-stats-full', async (req, res) => {
        ORDER BY c.call_start DESC`,
       [from || null, to || null, lookupTo]
     );
-    res.json(computeCallStatsFull(rows, from, to));
+    res.json(computeCallStatsFull(rows, from, to, filters));
   } catch (err) {
-    if (err.code === '42P01') return res.json(computeCallStatsFull([], from, to));
+    if (err.code === '42P01') return res.json(computeCallStatsFull([], from, to, filters));
     console.error('[dashboard/call-stats-full]', err.message);
     res.status(500).json({ error: err.message });
   }
@@ -2057,23 +2182,37 @@ router.post('/sync-user-photos', async (_req, res) => {
 router.get('/call-list', async (req, res) => {
   const { responsible_id, from, to } = req.query;
   if (!responsible_id) return res.status(400).json({ error: 'responsible_id required' });
+  const filters = normalizeCallFilters(req.query);
+  const lookupTo = addDaysISO(to, 1) || to || null;
   try {
     const { rows } = await pool.query(
       `SELECT
          c.id, c.phone_number, c.call_type, c.duration,
          c.call_start, c.status_code, c.status_name,
-         c.lead_id, c.crm_entity_type,
-         l.title AS lead_title
+         c.failed_code, c.call_category, c.call_source,
+         c.lead_id, c.crm_entity_type, c.responsible_id,
+         l.title AS lead_title,
+         (
+           ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+         ) AS in_range
        FROM calls c
        LEFT JOIN leads l ON l.id = c.lead_id
-       WHERE c.responsible_id = $1
-         AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $2::date)
+       WHERE c.call_start IS NOT NULL
+         AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
        ORDER BY c.call_start DESC
-       LIMIT 500`,
-      [parseInt(responsible_id), from || null, to || null]
+       LIMIT 5000`,
+      [from || null, to || null, lookupTo]
     );
-    res.json(rows);
+    const findCallback = makeCallbackFinder(buildOutboundMap(rows));
+    const responsibleId = parseInt(responsible_id);
+    const filtered = rows
+      .filter((row) => Number(row.responsible_id) === responsibleId)
+      .filter((row) => row.in_range)
+      .filter((row) => matchesCallFilters(row, { ...filters, responsible_id: responsibleId }, findCallback))
+      .slice(0, 500);
+    res.json(filtered);
   } catch (err) {
     if (err.code === '42P01') return res.json([]);
     console.error('[dashboard/call-list]', err.message);

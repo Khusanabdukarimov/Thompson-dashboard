@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
   Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
-  SlidersHorizontal, Download, PhoneOff,
+  SlidersHorizontal, Download, PhoneOff, X, CalendarDays,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
-  getPyCallStats, getCallList,
+  getPyCallStats, getCallList, getCallFilterOptions,
+  type CallDashboardFilter, type CallFilterOptions,
   type PyCallStatsResult, type PyResponsibleCallStats,
 } from "@/lib/api/leads";
 
@@ -42,6 +43,96 @@ function initials(name: string) {
 }
 const AVATAR_COLORS = ["#4CAF50","#2196F3","#9C27B0","#FF9800","#F44336","#009688","#3F51B5","#E91E63","#00BCD4","#FF5722"];
 const avatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+
+type CallFilterState = {
+  start_date: string;
+  end_date: string;
+  responsible_id: string;
+  phone: string;
+  source: string;
+  call_kind: string;
+  status: string;
+  duration_from: string;
+  duration_to: string;
+};
+
+const callStatusOptions = [
+  { value: "all", label: "Barchasi" },
+  { value: "success", label: "Muvaffaqiyatli" },
+  { value: "failed", label: "Muvaffaqiyatsiz" },
+  { value: "missed", label: "Propushenniy" },
+  { value: "ndz", label: "NDZ" },
+  { value: "recalled", label: "Qayta chiqilgan" },
+  { value: "unrecalled", label: "Qayta chiqilmagan" },
+];
+
+const callKindOptions = [
+  { value: "all", label: "Barchasi" },
+  { value: "inbound", label: "Kiruvchi" },
+  { value: "outbound", label: "Chiquvchi" },
+  { value: "callback", label: "Callback" },
+];
+
+function defaultCallFilters(): CallFilterState {
+  return {
+    start_date: daysAgoISO(30),
+    end_date: todayISO(),
+    responsible_id: "all",
+    phone: "",
+    source: "all",
+    call_kind: "all",
+    status: "all",
+    duration_from: "",
+    duration_to: "",
+  };
+}
+
+function parseFilterNumber(value: string): number | undefined {
+  if (value.trim() === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : undefined;
+}
+
+function toApiFilter(filter: CallFilterState): CallDashboardFilter {
+  const responsibleId = filter.responsible_id !== "all" ? Number(filter.responsible_id) : undefined;
+  return {
+    start_date: filter.start_date,
+    end_date: filter.end_date,
+    responsible_id: Number.isFinite(responsibleId) ? responsibleId : undefined,
+    phone: filter.phone.trim() || undefined,
+    source: filter.source !== "all" ? filter.source : undefined,
+    call_kind: filter.call_kind !== "all" ? filter.call_kind : undefined,
+    status: filter.status !== "all" ? filter.status : undefined,
+    duration_from: parseFilterNumber(filter.duration_from),
+    duration_to: parseFilterNumber(filter.duration_to),
+  };
+}
+
+function shortDate(iso: string) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+function filterDateLabel(filter: CallFilterState) {
+  if (filter.start_date === todayISO() && filter.end_date === todayISO()) {
+    return `Bugun, ${shortDate(filter.end_date)}`;
+  }
+  if (filter.start_date === filter.end_date) return shortDate(filter.end_date);
+  return `${shortDate(filter.start_date)} - ${shortDate(filter.end_date)}`;
+}
+
+function activeFilterCount(filter: CallFilterState) {
+  return [
+    filter.responsible_id !== "all",
+    Boolean(filter.phone.trim()),
+    filter.source !== "all",
+    filter.call_kind !== "all",
+    filter.status !== "all",
+    Boolean(filter.duration_from.trim()),
+    Boolean(filter.duration_to.trim()),
+  ].filter(Boolean).length;
+}
 
 // ── Avatar ────────────────────────────────────────────────────────
 function Avatar({ name, photoUrl, id, size = 36 }: { name: string; photoUrl: string | null; id: number; size?: number }) {
@@ -85,37 +176,137 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
   );
 }
 
-// ── Filter popover ────────────────────────────────────────────────
-function FilterPopover({ startDate, endDate, onStartDate, onEndDate, onClose }: {
-  startDate: string; endDate: string;
-  onStartDate: (v: string) => void; onEndDate: (v: string) => void;
+// ── Filter drawer ─────────────────────────────────────────────────
+function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply, onReset, onClose }: {
+  open: boolean;
+  value: CallFilterState;
+  options?: CallFilterOptions;
+  optionsLoading: boolean;
+  onChange: (v: CallFilterState) => void;
+  onApply: () => void;
+  onReset: () => void;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [onClose]);
-  const preset = (days: number) => { onEndDate(todayISO()); onStartDate(daysAgoISO(days)); onClose(); };
+  if (!open) return null;
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    border: "1px solid transparent",
+    borderRadius: 4,
+    background: "var(--bg2)",
+    color: "var(--text)",
+    padding: "11px 12px",
+    fontSize: 13,
+    outline: "none",
+  };
+  const labelStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    fontSize: 11,
+    color: "var(--text2)",
+  };
+  const update = (patch: Partial<CallFilterState>) => onChange({ ...value, ...patch });
+  const preset = (days: number) => update({ end_date: todayISO(), start_date: daysAgoISO(days) });
+
   return (
-    <div ref={ref} style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 200, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", minWidth: 300, boxShadow: "0 8px 32px rgba(0,0,0,.12)" }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 14 }}>Filtrlar</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <label style={{ fontSize: 12, color: "var(--text2)", display: "flex", flexDirection: "column", gap: 4 }}>
-          Boshlanish sanasi
-          <input type="date" value={startDate} onChange={(e) => onStartDate(e.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", fontSize: 13, background: "var(--bg2)", color: "var(--text)" }} />
-        </label>
-        <label style={{ fontSize: 12, color: "var(--text2)", display: "flex", flexDirection: "column", gap: 4 }}>
-          Tugash sanasi
-          <input type="date" value={endDate} onChange={(e) => onEndDate(e.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", fontSize: 13, background: "var(--bg2)", color: "var(--text)" }} />
-        </label>
-        <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-          {[{ label: "Bugun", days: 0 },{ label: "7 kun", days: 7 },{ label: "30 kun", days: 30 },{ label: "3 oy", days: 90 }].map(({ label, days }) => (
-            <button key={label} onClick={() => preset(days)} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", fontSize: 12, cursor: "pointer" }}>{label}</button>
-          ))}
+    <div style={{ position: "fixed", inset: 0, zIndex: 500 }}>
+      <button aria-label="Filtrni yopish" onClick={onClose} style={{ position: "absolute", inset: 0, border: 0, background: "rgba(0,0,0,0.35)", cursor: "default" }} />
+      <aside style={{ position: "absolute", top: 0, right: 0, width: 336, maxWidth: "calc(100vw - 20px)", height: "100%", background: "var(--bg)", borderLeft: "1px solid var(--border)", boxShadow: "-18px 0 40px rgba(0,0,0,0.24)", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "28px 24px 18px" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.08em", color: "var(--text)" }}>FILTR</div>
+          <button onClick={onClose} style={{ width: 34, height: 34, border: 0, background: "transparent", color: "var(--text2)", cursor: "pointer", display: "grid", placeItems: "center" }}>
+            <X size={20} />
+          </button>
         </div>
-      </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 24px 110px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px", borderRadius: 5, background: "var(--bg2)", color: "var(--text)" }}>
+            <span style={{ fontSize: 13 }}>{filterDateLabel(value)}</span>
+            <CalendarDays size={16} color="var(--text2)" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <label style={labelStyle}>
+              Dan
+              <input type="date" value={value.start_date} onChange={(e) => update({ start_date: e.target.value })} style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Gacha
+              <input type="date" value={value.end_date} onChange={(e) => update({ end_date: e.target.value })} style={inputStyle} />
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: 6 }}>
+            {[{ label: "Bugun", days: 0 }, { label: "7 kun", days: 7 }, { label: "30 kun", days: 30 }].map(({ label, days }) => (
+              <button key={label} onClick={() => preset(days)} style={{ flex: 1, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", borderRadius: 6, padding: "7px 6px", fontSize: 12, cursor: "pointer" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <label style={labelStyle}>
+            Xodim
+            <select value={value.responsible_id} onChange={(e) => update({ responsible_id: e.target.value })} style={inputStyle}>
+              <option value="all">{optionsLoading ? "Yuklanmoqda..." : "Barcha xodimlar"}</option>
+              {(options?.responsibles ?? []).map((r) => (
+                <option key={r.id} value={r.id}>{r.full_name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={labelStyle}>
+            Holat
+            <select value={value.status} onChange={(e) => update({ status: e.target.value })} style={inputStyle}>
+              {callStatusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)", fontSize: 14, paddingTop: 4 }}>
+            Klient
+            <ChevronDown size={16} color="var(--text2)" />
+          </div>
+
+          <input value={value.phone} onChange={(e) => update({ phone: e.target.value })} placeholder="Telefon klienta" style={inputStyle} />
+
+          <label style={labelStyle}>
+            Manba
+            <select value={value.source} onChange={(e) => update({ source: e.target.value })} style={inputStyle}>
+              <option value="all">Barchasi</option>
+              {(options?.sources ?? []).map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={labelStyle}>
+            Qo'ng'iroq turi
+            <select value={value.call_kind} onChange={(e) => update({ call_kind: e.target.value })} style={inputStyle}>
+              {callKindOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)", fontSize: 14, paddingTop: 4 }}>
+            Davomiylik
+            <ChevronDown size={16} color="var(--text2)" />
+          </div>
+
+          <div style={{ color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroq davomiyligi, sek</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, overflow: "hidden", borderRadius: 4 }}>
+            <input type="number" min={0} value={value.duration_from} onChange={(e) => update({ duration_from: e.target.value })} placeholder="ot 0" style={{ ...inputStyle, borderRadius: 0 }} />
+            <input type="number" min={0} value={value.duration_to} onChange={(e) => update({ duration_to: e.target.value })} placeholder="do ∞" style={{ ...inputStyle, borderRadius: 0 }} />
+          </div>
+        </div>
+
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 24px 24px", background: "linear-gradient(180deg, transparent, var(--bg) 24%)", display: "flex", gap: 10 }}>
+          <button onClick={onReset} style={{ width: 88, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", borderRadius: 6, padding: "10px 12px", fontSize: 13, cursor: "pointer" }}>
+            Tozalash
+          </button>
+          <button onClick={onApply} style={{ flex: 1, border: 0, background: "#1976D2", color: "#fff", borderRadius: 6, padding: "10px 14px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            Qo'llash
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -130,7 +321,7 @@ const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
   4: { label: "Callback",  color: "#607D8B" },
 };
 
-function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter: { start_date?: string; end_date?: string } }) {
+function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter: CallDashboardFilter }) {
   const q = useQuery({ queryKey: ["call-list", responsibleId, filter], queryFn: () => getCallList(responsibleId, filter) });
   if (q.isLoading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda...</div>;
   const calls = q.data ?? [];
@@ -169,15 +360,22 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
 
 // ── Page ──────────────────────────────────────────────────────────
 export default function CallStatistikasi() {
-  const [startDate, setStartDate]       = useState(daysAgoISO(30));
-  const [endDate,   setEndDate]         = useState(todayISO());
+  const [filters, setFilters]           = useState<CallFilterState>(() => defaultCallFilters());
+  const [draftFilters, setDraftFilters] = useState<CallFilterState>(() => defaultCallFilters());
   const [filterOpen, setFilterOpen]     = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
+  const apiFilter = toApiFilter(filters);
+  const activeFilters = activeFilterCount(filters);
 
   const statsQ = useQuery({
-    queryKey: ["py-call-stats", startDate, endDate],
-    queryFn:  () => getPyCallStats({ start_date: startDate, end_date: endDate }),
+    queryKey: ["py-call-stats", apiFilter],
+    queryFn:  () => getPyCallStats(apiFilter),
+  });
+
+  const filterOptionsQ = useQuery({
+    queryKey: ["call-filter-options"],
+    queryFn: getCallFilterOptions,
   });
 
   const data: PyCallStatsResult | undefined = statsQ.data;
@@ -204,11 +402,29 @@ export default function CallStatistikasi() {
         actions={
           <div style={{ display: "flex", gap: 8, position: "relative" }}>
             <div style={{ position: "relative" }}>
-              <button onClick={() => setFilterOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: `1px solid ${filterOpen ? "#2196F3" : "var(--border)"}`, background: "var(--bg)", color: filterOpen ? "#2196F3" : "var(--text2)", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
+              <button onClick={() => { setDraftFilters(filters); setFilterOpen(true); }} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: `1px solid ${filterOpen || activeFilters ? "#2196F3" : "var(--border)"}`, background: "var(--bg)", color: filterOpen || activeFilters ? "#2196F3" : "var(--text2)", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
                 <SlidersHorizontal size={14} />Filtrlar
+                {activeFilters > 0 && (
+                  <span style={{ minWidth: 18, height: 18, borderRadius: 9, background: "#2196F3", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
+                    {activeFilters}
+                  </span>
+                )}
               </button>
-              {filterOpen && <FilterPopover startDate={startDate} endDate={endDate} onStartDate={setStartDate} onEndDate={setEndDate} onClose={() => setFilterOpen(false)} />}
             </div>
+            <FilterDrawer
+              open={filterOpen}
+              value={draftFilters}
+              options={filterOptionsQ.data}
+              optionsLoading={filterOptionsQ.isLoading}
+              onChange={setDraftFilters}
+              onClose={() => setFilterOpen(false)}
+              onReset={() => setDraftFilters(defaultCallFilters())}
+              onApply={() => {
+                setFilters(draftFilters);
+                setSelectedResp(null);
+                setFilterOpen(false);
+              }}
+            />
           </div>
         }
       />
@@ -357,7 +573,7 @@ export default function CallStatistikasi() {
                 Yopish
               </button>
             </div>
-            <CallSubTable responsibleId={selectedRow.responsible_id} filter={{ start_date: startDate, end_date: endDate }} />
+            <CallSubTable responsibleId={selectedRow.responsible_id} filter={apiFilter} />
           </div>
         )}
 

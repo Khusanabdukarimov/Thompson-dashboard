@@ -300,6 +300,41 @@ export type CallListRow = {
   lead_title: string | null;
 };
 
+export type CallDashboardFilter = {
+  start_date?: string;
+  end_date?: string;
+  responsible_id?: number;
+  phone?: string;
+  source?: string;
+  call_kind?: string;
+  status?: string;
+  duration_from?: number;
+  duration_to?: number;
+};
+
+export type CallFilterOptions = {
+  responsibles: { id: number; full_name: string }[];
+  sources: { id: string; name: string }[];
+};
+
+function callFilterParams(filter: CallDashboardFilter) {
+  return {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_id,
+    phone: filter.phone,
+    source: filter.source,
+    call_kind: filter.call_kind,
+    status: filter.status,
+    duration_from: filter.duration_from,
+    duration_to: filter.duration_to,
+  };
+}
+
+export function getCallFilterOptions() {
+  return apiGet<CallFilterOptions>("/api/dashboard/call-filter-options", {}, API_URL_CRM);
+}
+
 export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
   return apiGet<CallStatsRow[]>("/api/dashboard/call-stats", {
     from: filter.start_date,
@@ -331,11 +366,10 @@ export async function syncUserPhotos(): Promise<{ ok: boolean; total: number; wi
   return res.json();
 }
 
-export function getCallList(responsibleId: number, filter: Pick<DashFilter, "start_date" | "end_date">) {
+export function getCallList(responsibleId: number, filter: CallDashboardFilter) {
   return apiGet<CallListRow[]>("/api/dashboard/call-list", {
+    ...callFilterParams(filter),
     responsible_id: responsibleId,
-    from: filter.start_date,
-    to: filter.end_date,
   }, API_URL_CRM);
 }
 
@@ -502,9 +536,8 @@ export type PyCallStatsResult = {
   responsibles:   PyResponsibleCallStats[];
 };
 
-export function getPyCallStats(filter: Pick<DashFilter, "start_date" | "end_date">) {
+export function getPyCallStats(filter: CallDashboardFilter) {
   return apiGet<PyCallStatsResult>("/api/dashboard/call-stats-full", {
-    from: filter.start_date,
-    to:   filter.end_date,
+    ...callFilterParams(filter),
   }, API_URL_CRM);
 }
