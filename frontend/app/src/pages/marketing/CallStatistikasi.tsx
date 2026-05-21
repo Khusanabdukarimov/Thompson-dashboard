@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
-  getCallStats, getCallList, getCallGlobalStats, getCallReactionStats,
+  getCallStats, getCallList, getCallGlobalStats,
   syncCalls, syncUserPhotos,
-  type CallStatsRow, type CallReactionRow,
+  type CallStatsRow,
 } from "@/lib/api/leads";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -33,14 +33,6 @@ function fmtDurMin(secs: number): string {
   return frac > 0 ? `${m},${frac} min` : `${m} min`;
 }
 
-function fmtReaction(secs: number): string {
-  if (!secs) return "—";
-  if (secs < 60) return `${secs} son`;
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  if (h > 0) return `${h} ch, ${m} min`;
-  return `${m} min`;
-}
 
 function prevPeriod(from: string, to: string): [string, string] {
   const f = new Date(from), t = new Date(to);
@@ -199,17 +191,12 @@ export default function CallStatistikasi() {
 
   const statsQ     = useQuery({ queryKey: ["call-stats", startDate, endDate], queryFn: () => getCallStats({ start_date: startDate, end_date: endDate }) });
   const globalQ    = useQuery({ queryKey: ["call-global-stats", startDate, endDate], queryFn: () => getCallGlobalStats({ start_date: startDate, end_date: endDate }) });
-  const reactionQ  = useQuery({ queryKey: ["call-reaction-stats", startDate, endDate], queryFn: () => getCallReactionStats({ start_date: startDate, end_date: endDate }) });
-
   const [prevFrom, prevTo] = useMemo(() => prevPeriod(startDate, endDate), [startDate, endDate]);
-  const prevStatsQ    = useQuery({ queryKey: ["call-stats-prev", prevFrom, prevTo],    queryFn: () => getCallStats({ start_date: prevFrom, end_date: prevTo }) });
-  const prevReactionQ = useQuery({ queryKey: ["call-reaction-prev", prevFrom, prevTo], queryFn: () => getCallReactionStats({ start_date: prevFrom, end_date: prevTo }) });
+  const prevStatsQ = useQuery({ queryKey: ["call-stats-prev", prevFrom, prevTo], queryFn: () => getCallStats({ start_date: prevFrom, end_date: prevTo }) });
 
-  const rows: CallStatsRow[]     = statsQ.data    ?? [];
-  const reactionRows: CallReactionRow[] = reactionQ.data ?? [];
+  const rows: CallStatsRow[] = statsQ.data ?? [];
 
-  const prevStatsMap = useMemo(() => { const m = new Map<number,CallStatsRow>();    (prevStatsQ.data    ?? []).forEach((r) => m.set(r.responsible_id, r)); return m; }, [prevStatsQ.data]);
-  const prevReactMap = useMemo(() => { const m = new Map<number,CallReactionRow>(); (prevReactionQ.data ?? []).forEach((r) => m.set(r.responsible_id, r)); return m; }, [prevReactionQ.data]);
+  const prevStatsMap = useMemo(() => { const m = new Map<number,CallStatsRow>(); (prevStatsQ.data ?? []).forEach((r) => m.set(r.responsible_id, r)); return m; }, [prevStatsQ.data]);
 
   const totals = useMemo(() => {
     const sum = (key: keyof CallStatsRow) => rows.reduce((a, r) => a + (Number(r[key]) || 0), 0);
@@ -231,12 +218,12 @@ export default function CallStatistikasi() {
   async function doSync() {
     if (syncing) return;
     setSyncing(true);
-    try { await syncCalls(startDate, endDate); statsQ.refetch(); reactionQ.refetch(); } finally { setSyncing(false); }
+    try { await syncCalls(startDate, endDate); statsQ.refetch(); } finally { setSyncing(false); }
   }
   async function doSyncPhotos() {
     if (syncingPhotos) return;
     setSyncingPhotos(true);
-    try { await syncUserPhotos(); statsQ.refetch(); reactionQ.refetch(); } finally { setSyncingPhotos(false); }
+    try { await syncUserPhotos(); statsQ.refetch(); } finally { setSyncingPhotos(false); }
   }
 
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
@@ -334,7 +321,6 @@ export default function CallStatistikasi() {
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
                     <th style={TH({ color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.2)" })} colSpan={3}>UNIKAL QO'NG'IROQLAR</th>
                     <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={3}>DAVOMIYLIK</th>
-                    <th style={TH({ color: "#FF9800", borderLeft: "2px solid rgba(255,152,0,0.2)" })} colSpan={2}>NATIJA</th>
                     <th style={TH({ borderLeft: "2px solid rgba(0,0,0,0.06)" })} rowSpan={2}>DINAMIKA</th>
                   </tr>
                   <tr>
@@ -347,8 +333,6 @@ export default function CallStatistikasi() {
                     <th style={TH({ borderLeft: "2px solid rgba(156,39,176,0.2)" })}>Kiruvchi</th>
                     <th style={TH()}>Isxodyashie</th>
                     <th style={TH()}>Jami</th>
-                    <th style={TH({ borderLeft: "2px solid rgba(255,152,0,0.2)" })}>Обратные</th>
-                    <th style={TH()}>Ne perezv.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -378,13 +362,11 @@ export default function CallStatistikasi() {
                           <td style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)", fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.inbound_duration)}</td>
                           <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.outbound_duration)}</td>
                           <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
-                          <td style={TD({ borderLeft: "2px solid rgba(255,152,0,0.10)", color: u.callback_calls > 0 ? "#4CAF50" : "var(--text)" })}>{u.callback_calls}</td>
-                          <td style={TD({ color: "var(--text2)", fontSize: 12 })}>—</td>
                           <td style={TD({ borderLeft: "2px solid rgba(0,0,0,0.05)" })}><Delta curr={u.total_calls} prev={prev?.total_calls} /></td>
                         </tr>
                         {isSel && (
                           <tr key={`sub-${u.responsible_id}`}>
-                            <td colSpan={13} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
+                            <td colSpan={11} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
                               <div style={{ borderTop: "1.5px solid rgba(33,150,243,0.2)" }}>
                                 <div style={{ padding: "10px 18px", background: "rgba(33,150,243,0.06)", fontSize: 12.5, fontWeight: 600, color: "#2196F3" }}>
                                   {u.full_name} — qo'ng'iroqlar ro'yxati
@@ -395,60 +377,6 @@ export default function CallStatistikasi() {
                           </tr>
                         )}
                       </>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ── Propushenniy va reaksiya vaqti table ── */}
-        <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Propushenniy va reaksiya vaqti</div>
-            <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>Pропushenniy qo'ng'iroqlar va qayta aloqa statistikasi</div>
-          </div>
-
-          {reactionQ.isLoading ? (
-            <div style={{ padding: 40, textAlign: "center", color: "var(--text2)" }}>Yuklanmoqda...</div>
-          ) : reactionRows.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "var(--text2)" }}>Propushenniy qo'ng'iroqlar topilmadi</div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={TH({ textAlign: "left", minWidth: 200 })}>XODIM</th>
-                    <th style={TH({ color: "#FF9800", borderLeft: "2px solid rgba(255,152,0,0.2)" })}>PРОПUSHENNIY</th>
-                    <th style={TH({ color: "#F44336", borderLeft: "2px solid rgba(244,67,54,0.2)" })}>BEZ OTVETA (72 soat)</th>
-                    <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })}>O'RTACHA REAKSIYA</th>
-                    <th style={TH({ borderLeft: "2px solid rgba(0,0,0,0.06)" })}>DINAMIKA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reactionRows.map((u) => {
-                    const prev = prevReactMap.get(u.responsible_id);
-                    return (
-                      <tr key={u.responsible_id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={TD({ textAlign: "left" })}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <Avatar name={u.full_name} photoUrl={u.photo_url} id={u.responsible_id} />
-                            <div>
-                              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{u.full_name}</div>
-                              <div style={{ fontSize: 11.5, color: "var(--text2)" }}>ID: {u.responsible_id}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={TD({ borderLeft: "2px solid rgba(255,152,0,0.10)", color: "#FF9800", fontWeight: 600 })}>{u.missed_calls}</td>
-                        <td style={TD({ borderLeft: "2px solid rgba(244,67,54,0.10)", color: u.bez_otveta > 0 ? "#F44336" : "var(--text)" })}>{u.bez_otveta}</td>
-                        <td style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)", fontWeight: 600, color: "var(--text)" })}>
-                          {u.avg_response_secs > 0 ? fmtReaction(u.avg_response_secs) : <span style={{ color: "var(--text2)" }}>—</span>}
-                        </td>
-                        <td style={TD({ borderLeft: "2px solid rgba(0,0,0,0.05)" })}>
-                          <Delta curr={u.missed_calls} prev={prev?.missed_calls} />
-                        </td>
-                      </tr>
                     );
                   })}
                 </tbody>
