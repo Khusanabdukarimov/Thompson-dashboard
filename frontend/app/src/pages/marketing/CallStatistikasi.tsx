@@ -38,11 +38,6 @@ function fmtPct(pct: number): string {
   return `${Math.round(pct)}%`;
 }
 
-function initials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-}
-const AVATAR_COLORS = ["#4CAF50","#2196F3","#9C27B0","#FF9800","#F44336","#009688","#3F51B5","#E91E63","#00BCD4","#FF5722"];
-const avatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
 
 type CallFilterState = {
   start_date: string;
@@ -134,19 +129,6 @@ function activeFilterCount(filter: CallFilterState) {
   ].filter(Boolean).length;
 }
 
-// ── Avatar ────────────────────────────────────────────────────────
-function Avatar({ name, photoUrl, id, size = 36 }: { name: string; photoUrl: string | null; id: number; size?: number }) {
-  const [err, setErr] = useState(false);
-  if (photoUrl && !err) {
-    return <img src={photoUrl} alt={name} onError={() => setErr(true)}
-      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  }
-  return (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: avatarColor(id), display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.34, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-      {initials(name)}
-    </div>
-  );
-}
 
 // ── Metric Card ───────────────────────────────────────────────────
 function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor }: {
