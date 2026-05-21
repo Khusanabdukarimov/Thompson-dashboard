@@ -1308,23 +1308,87 @@ async function ensureCallsTable() {
 
 async function syncCallsFromBitrix(from, to) {
   await ensureCallsTable();
-  const { fetchAll } = require('../services/bitrix');
+  const { fetchAll, bitrixCall } = require('../services/bitrix');
 
-  const filter = {};
-  if (from) filter['>=CALL_START_DATE'] = `${from}T00:00:00`;
-  if (to)   filter['<=CALL_START_DATE'] = `${to}T23:59:59`;
+  // Try voximplant.statistic.get first (requires telephony scope on webhook)
+  // Fallback: crm.activity.list with BINDINGS (works with crm scope)
+  let records = [];
+  let useVoxi = true;
 
-  const records = await fetchAll('voximplant.statistic.get', filter, [
-    'CALL_ID', 'PORTAL_USER_ID', 'PORTAL_USER',
-    'PHONE_NUMBER', 'CALL_TYPE', 'CALL_DURATION',
-    'CALL_START_TIME', 'CALL_STATUS_CODE', 'CALL_STATUS_CODE_NAME',
-    'CRM_ENTITY_ID', 'CRM_ENTITY_TYPE',
-  ]);
+  try {
+    const filter = {};
+    if (from) filter['>=CALL_START_DATE'] = `${from}T00:00:00`;
+    if (to)   filter['<=CALL_START_DATE'] = `${to}T23:59:59`;
+
+    const testRes = await bitrixCall('voximplant.statistic.get', {
+      'FILTER[>=CALL_START_DATE]': filter['>=CALL_START_DATE'] || '',
+      start: 0,
+    });
+    if (testRes.error === 'insufficient_scope') {
+      useVoxi = false;
+      console.log('[calls] voximplant scope missing, falling back to crm.activity.list');
+    } else {
+      records = await fetchAll('voximplant.statistic.get', filter, [
+        'CALL_ID', 'PORTAL_USER_ID', 'PORTAL_USER',
+        'PHONE_NUMBER', 'CALL_TYPE', 'CALL_DURATION',
+        'CALL_START_TIME', 'CALL_STATUS_CODE', 'CALL_STATUS_CODE_NAME',
+        'CRM_ENTITY_ID', 'CRM_ENTITY_TYPE',
+      ]);
+    }
+  } catch (e) {
+    useVoxi = false;
+    console.warn('[calls] voximplant error:', e.message);
+  }
+
+  if (!useVoxi) {
+    // Fallback: crm.activity.list (TYPE_ID=2 = calls)
+    const filter = { TYPE_ID: 2 };
+    if (from) filter['>=START_TIME'] = from;
+    if (to)   filter['<=START_TIME'] = to;
+    records = await fetchAll('crm.activity.list', filter, [
+      'ID', 'RESPONSIBLE_ID', 'START_TIME', 'END_TIME',
+      'DIRECTION', 'COMPLETED', 'SUBJECT', 'BINDINGS',
+    ]);
+  }
 
   let upserted = 0;
   for (const r of records) {
-    const leadId = r.CRM_ENTITY_TYPE === 'LEAD' && r.CRM_ENTITY_ID
-      ? parseInt(r.CRM_ENTITY_ID) : null;
+    let id, responsibleId, phoneNumber, callType, duration, callStart,
+        statusCode, statusName, leadId, crmEntityType, userName;
+
+    if (useVoxi) {
+      id            = String(r.CALL_ID);
+      responsibleId = r.PORTAL_USER_ID  ? parseInt(r.PORTAL_USER_ID)  : null;
+      phoneNumber   = r.PHONE_NUMBER    || null;
+      callType      = r.CALL_TYPE       ? parseInt(r.CALL_TYPE)        : null;
+      duration      = r.CALL_DURATION   ? parseInt(r.CALL_DURATION)    : 0;
+      callStart     = r.CALL_START_TIME || null;
+      statusCode    = r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null;
+      statusName    = r.CALL_STATUS_CODE_NAME || null;
+      crmEntityType = r.CRM_ENTITY_TYPE  || null;
+      leadId        = crmEntityType === 'LEAD' && r.CRM_ENTITY_ID
+                        ? parseInt(r.CRM_ENTITY_ID) : null;
+      userName      = r.PORTAL_USER     || null;
+    } else {
+      const startMs = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
+      const endMs   = r.END_TIME   ? new Date(r.END_TIME).getTime()   : null;
+      const binding = Array.isArray(r.BINDINGS)
+        ? r.BINDINGS.find(b => String(b.OWNER_TYPE_ID) === '1') : null;
+
+      id            = `act_${r.ID}`;
+      responsibleId = r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null;
+      phoneNumber   = r.SUBJECT        || null;
+      callType      = r.DIRECTION      ? parseInt(r.DIRECTION)       : null;
+      duration      = (startMs && endMs && endMs > startMs)
+                        ? Math.round((endMs - startMs) / 1000) : 0;
+      callStart     = r.START_TIME     || null;
+      statusCode    = r.COMPLETED === 'Y' ? 200 : null;
+      statusName    = r.COMPLETED === 'Y' ? 'SUCCESS' : null;
+      crmEntityType = binding ? 'LEAD' : null;
+      leadId        = binding ? parseInt(binding.OWNER_ID) : null;
+      userName      = null;
+    }
+
     await pool.query(
       `INSERT INTO calls (
          id, responsible_id, phone_number, call_type, duration,
@@ -1343,19 +1407,8 @@ async function syncCallsFromBitrix(from, to) {
          crm_entity_type = EXCLUDED.crm_entity_type,
          user_name       = EXCLUDED.user_name,
          synced_at       = NOW()`,
-      [
-        String(r.CALL_ID),
-        r.PORTAL_USER_ID  ? parseInt(r.PORTAL_USER_ID) : null,
-        r.PHONE_NUMBER    || null,
-        r.CALL_TYPE       ? parseInt(r.CALL_TYPE)       : null,
-        r.CALL_DURATION   ? parseInt(r.CALL_DURATION)   : 0,
-        r.CALL_START_TIME || null,
-        r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null,
-        r.CALL_STATUS_CODE_NAME || null,
-        leadId,
-        r.CRM_ENTITY_TYPE || null,
-        r.PORTAL_USER     || null,
-      ]
+      [id, responsibleId, phoneNumber, callType, duration,
+       callStart, statusCode, statusName, leadId, crmEntityType, userName]
     );
     upserted++;
   }
