@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Configure SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          test -n "$SERVER_HOST"
+          test -n "$SERVER_USER"
+          test -n "$SERVER_SSH_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/mountain_deploy
+          chmod 600 ~/.ssh/mountain_deploy
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/mountain_deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            "set -euo pipefail
+             cd /var/www/mountain
+             git pull --ff-only origin main
+             npm --prefix /var/www/mountain/bitrix-sync ci --silent
+             npm --prefix /var/www/mountain/frontend/app ci --silent
+             npm --prefix /var/www/mountain/frontend/app run build
+             systemctl restart mountain
+             systemctl restart bitrix-sync
+             nginx -t
+             systemctl reload nginx
+             systemctl is-active --quiet mountain
+             systemctl is-active --quiet bitrix-sync
+             systemctl is-active --quiet nginx"
