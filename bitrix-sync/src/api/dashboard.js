@@ -1293,6 +1293,9 @@ async function ensureCallsTable() {
       lead_id          INT,
       crm_entity_type  TEXT,
       user_name        TEXT,
+      failed_code      TEXT,
+      call_category    TEXT,
+      call_source      TEXT,
       synced_at        TIMESTAMPTZ DEFAULT NOW()
     )
   `);
@@ -1304,8 +1307,26 @@ async function ensureCallsTable() {
       ADD COLUMN IF NOT EXISTS status_name     TEXT,
       ADD COLUMN IF NOT EXISTS lead_id         INT,
       ADD COLUMN IF NOT EXISTS crm_entity_type TEXT,
-      ADD COLUMN IF NOT EXISTS user_name       TEXT
+      ADD COLUMN IF NOT EXISTS user_name       TEXT,
+      ADD COLUMN IF NOT EXISTS failed_code     TEXT,
+      ADD COLUMN IF NOT EXISTS call_category   TEXT,
+      ADD COLUMN IF NOT EXISTS call_source     TEXT
   `);
+  await pool.query(`
+    UPDATE calls
+    SET call_type = CASE call_type WHEN 1 THEN 2 WHEN 2 THEN 1 ELSE call_type END,
+        call_source = 'activity'
+    WHERE id LIKE 'act_%'
+      AND call_source IS NULL
+  `);
+  await pool.query(`
+    UPDATE calls
+    SET call_source = 'voximplant'
+    WHERE call_source IS NULL
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS calls_call_start_idx ON calls(call_start)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS calls_responsible_idx ON calls(responsible_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS calls_phone_idx ON calls(phone_number)`);
   // One-time dedup: remove old voximplant records that have a matching crm.activity record
   // (prevents 2x total_calls when both sync sources ran on same date range)
   await pool.query(`
@@ -1318,6 +1339,36 @@ async function ensureCallsTable() {
           AND ABS(EXTRACT(EPOCH FROM (c2.call_start - calls.call_start))) < 120
       )
   `);
+}
+
+async function syncCallUsersFromBitrix() {
+  const { fetchAll } = require('../services/bitrix');
+  const users = await fetchAll('user.get', { ACTIVE: 'Y' });
+  await pool.query(`ALTER TABLE responsibles ADD COLUMN IF NOT EXISTS photo_url TEXT`);
+  for (const u of users) {
+    await pool.query(
+      `INSERT INTO responsibles (id, name, last_name, email, work_position, active, photo_url, synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         last_name = EXCLUDED.last_name,
+         email = EXCLUDED.email,
+         work_position = EXCLUDED.work_position,
+         active = EXCLUDED.active,
+         photo_url = COALESCE(EXCLUDED.photo_url, responsibles.photo_url),
+         synced_at = NOW()`,
+      [
+        parseInt(u.ID),
+        u.NAME || null,
+        u.LAST_NAME || null,
+        u.EMAIL || null,
+        u.WORK_POSITION || null,
+        u.ACTIVE === 'Y' || u.ACTIVE === true,
+        u.PERSONAL_PHOTO || null,
+      ]
+    );
+  }
+  return users.length;
 }
 
 async function syncCallsFromBitrix(from, to) {
@@ -1345,7 +1396,9 @@ async function syncCallsFromBitrix(from, to) {
       records = await fetchAll('voximplant.statistic.get', filter, [
         'CALL_ID', 'PORTAL_USER_ID', 'PORTAL_USER',
         'PHONE_NUMBER', 'CALL_TYPE', 'CALL_DURATION',
-        'CALL_START_TIME', 'CALL_STATUS_CODE', 'CALL_STATUS_CODE_NAME',
+        'CALL_START_DATE', 'CALL_START_TIME',
+        'CALL_STATUS_CODE', 'CALL_STATUS_CODE_NAME',
+        'CALL_FAILED_CODE', 'CALL_FAILED_REASON', 'CALL_CATEGORY',
         'CRM_ENTITY_ID', 'CRM_ENTITY_TYPE',
       ]);
     }
@@ -1376,7 +1429,8 @@ async function syncCallsFromBitrix(from, to) {
   let upserted = 0;
   for (const r of records) {
     let id, responsibleId, phoneNumber, callType, duration, callStart,
-        statusCode, statusName, leadId, crmEntityType, userName;
+        statusCode, statusName, leadId, crmEntityType, userName,
+        failedCode, callCategory, callSource;
 
     if (useVoxi) {
       id            = String(r.CALL_ID);
@@ -1384,9 +1438,12 @@ async function syncCallsFromBitrix(from, to) {
       phoneNumber   = r.PHONE_NUMBER    || null;
       callType      = r.CALL_TYPE       ? parseInt(r.CALL_TYPE)        : null;
       duration      = r.CALL_DURATION   ? parseInt(r.CALL_DURATION)    : 0;
-      callStart     = r.CALL_START_TIME || null;
+      callStart     = r.CALL_START_DATE || r.CALL_START_TIME || null;
       statusCode    = r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null;
       statusName    = r.CALL_STATUS_CODE_NAME || null;
+      failedCode    = r.CALL_FAILED_CODE != null && r.CALL_FAILED_CODE !== '' ? String(r.CALL_FAILED_CODE) : null;
+      callCategory  = r.CALL_CATEGORY || null;
+      callSource    = 'voximplant';
       crmEntityType = r.CRM_ENTITY_TYPE  || null;
       leadId        = crmEntityType === 'LEAD' && r.CRM_ENTITY_ID
                         ? parseInt(r.CRM_ENTITY_ID) : null;
@@ -1401,12 +1458,15 @@ async function syncCallsFromBitrix(from, to) {
       id            = `act_${r.ID}`;
       responsibleId = r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null;
       phoneNumber   = phoneMatch ? phoneMatch[0].replace(/\s/g, '') : null;
-      callType      = r.DIRECTION      ? parseInt(r.DIRECTION)       : null;
+      callType      = ({ 1: 2, 2: 1 })[parseInt(r.DIRECTION)] || null;
       duration      = (startMs && endMs && endMs > startMs)
                         ? Math.round((endMs - startMs) / 1000) : 0;
       callStart     = r.START_TIME     || null;
       statusCode    = r.COMPLETED === 'Y' ? 200 : null;
       statusName    = r.COMPLETED === 'Y' ? 'SUCCESS' : null;
+      failedCode    = r.COMPLETED === 'Y' ? '200' : null;
+      callCategory  = null;
+      callSource    = 'activity';
       crmEntityType = isLead ? 'LEAD' : (r.OWNER_TYPE_ID ? String(r.OWNER_TYPE_ID) : null);
       leadId        = isLead && r.OWNER_ID ? parseInt(r.OWNER_ID) : null;
       userName      = null;
@@ -1416,8 +1476,8 @@ async function syncCallsFromBitrix(from, to) {
       `INSERT INTO calls (
          id, responsible_id, phone_number, call_type, duration,
          call_start, status_code, status_name, lead_id, crm_entity_type,
-         user_name, synced_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+         user_name, failed_code, call_category, call_source, synced_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
        ON CONFLICT (id) DO UPDATE SET
          responsible_id  = EXCLUDED.responsible_id,
          phone_number    = EXCLUDED.phone_number,
@@ -1429,9 +1489,13 @@ async function syncCallsFromBitrix(from, to) {
          lead_id         = EXCLUDED.lead_id,
          crm_entity_type = EXCLUDED.crm_entity_type,
          user_name       = EXCLUDED.user_name,
+         failed_code     = EXCLUDED.failed_code,
+         call_category   = EXCLUDED.call_category,
+         call_source     = EXCLUDED.call_source,
          synced_at       = NOW()`,
       [id, responsibleId, phoneNumber, callType, duration,
-       callStart, statusCode, statusName, leadId, crmEntityType, userName]
+       callStart, statusCode, statusName, leadId, crmEntityType, userName,
+       failedCode, callCategory, callSource]
     );
     upserted++;
   }
@@ -1446,12 +1510,25 @@ function tashkentDateISO(offsetDays = 0) {
 
 // Auto-sync every 5 minutes: last 2 days rolling window (Tashkent time)
 function startCallsAutoSync() {
+  let firstRun = true;
   const run = async () => {
     try {
+      const backfillDays = parseInt(process.env.CALL_SYNC_BACKFILL_DAYS || '45', 10);
+      const rollingDays = parseInt(process.env.CALL_SYNC_ROLLING_DAYS || '2', 10);
+      const days = firstRun ? backfillDays : rollingDays;
+      if (firstRun) {
+        try {
+          const users = await syncCallUsersFromBitrix();
+          console.log(`[calls-autosync] synced ${users} Bitrix users`);
+        } catch (userErr) {
+          console.warn('[calls-autosync] user sync skipped:', userErr.message);
+        }
+      }
       const to   = tashkentDateISO(0);
-      const from = tashkentDateISO(-2);
+      const from = tashkentDateISO(-Math.max(days, 1));
       const n = await syncCallsFromBitrix(from, to);
       console.log(`[calls-autosync] synced ${n} calls (${from} → ${to} Tashkent)`);
+      firstRun = false;
     } catch (err) {
       console.error('[calls-autosync] error:', err.message);
     }
@@ -1473,6 +1550,305 @@ router.post('/sync-calls', async (req, res) => {
     res.json({ ok: true, synced: upserted });
   } catch (err) {
     console.error('[dashboard/sync-calls]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const CALL_OUTBOUND = 1;
+const CALL_INBOUND_TYPES = new Set([2, 3]);
+const CALL_CALLBACK = 4;
+const CALL_SUCCESS_CODES = new Set(['0', '200']);
+const CALL_MISSED_CODE = '304';
+const CALL_RECALL_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function addDaysISO(iso, days) {
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function callPhoneKey(phone) {
+  const digits = String(phone || '').replace(/\D+/g, '');
+  if (!digits) return null;
+  return digits.length >= 9 ? digits.slice(-9) : digits;
+}
+
+function callCode(value) {
+  if (value == null || value === '') return null;
+  return String(value).trim().toUpperCase();
+}
+
+function callDuration(row) {
+  return Number(row.duration || 0);
+}
+
+function callType(row) {
+  return Number(row.call_type || 0);
+}
+
+function callDate(row) {
+  if (!row.call_start) return null;
+  const d = new Date(row.call_start);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isInternalCall(row) {
+  return String(row.call_category || '').toLowerCase() === 'internal';
+}
+
+function isInboundCall(row) {
+  return CALL_INBOUND_TYPES.has(callType(row));
+}
+
+function isOutboundCall(row) {
+  return callType(row) === CALL_OUTBOUND;
+}
+
+function isCallbackCall(row) {
+  return callType(row) === CALL_CALLBACK;
+}
+
+function isSuccessfulCall(row) {
+  const code = callCode(row.failed_code);
+  if (code) return CALL_SUCCESS_CODES.has(code);
+  return Number(row.status_code || 0) === 200 || callDuration(row) >= 10;
+}
+
+function isMissedInbound(row) {
+  if (!isInboundCall(row)) return false;
+  const code = callCode(row.failed_code);
+  if (code) return code === CALL_MISSED_CODE;
+  return !isSuccessfulCall(row) && callDuration(row) < 10;
+}
+
+function isNdzCall(row) {
+  return isOutboundCall(row) && !isSuccessfulCall(row);
+}
+
+function callFullName(row) {
+  const dbName = `${row.resp_name || ''} ${row.resp_last_name || ''}`.trim();
+  const userName = String(row.user_name || '').trim();
+  if (dbName) return dbName;
+  if (userName) return userName;
+  return "Noma'lum";
+}
+
+function pct(part, whole) {
+  return whole ? Math.round((part / whole) * 1000) / 10 : 0;
+}
+
+function computeCallStatsFull(rows, dateFrom, dateTo) {
+  const buckets = new Map();
+  const missedMap = new Map();
+  const outboundMap = new Map();
+  let total = 0;
+  let inbound = 0;
+  let outbound = 0;
+  let callback = 0;
+  let ndz = 0;
+  let missed = 0;
+  let totalDuration = 0;
+  let noPhoneMissed = 0;
+
+  const getBucket = (row) => {
+    const key = row.responsible_id != null ? String(row.responsible_id) : 'unknown';
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        responsible_id: row.responsible_id != null ? Number(row.responsible_id) : null,
+        full_name: callFullName(row),
+        photo_url: row.photo_url || null,
+        total_calls: 0,
+        inbound_calls: 0,
+        outbound_calls: 0,
+        callback_calls: 0,
+        success_calls: 0,
+        failed_calls: 0,
+        ndz_calls: 0,
+        missed_inbound: 0,
+        missed_recalled: 0,
+        missed_unrecalled: 0,
+        total_duration: 0,
+        avg_duration: 0,
+        inbound_duration: 0,
+        outbound_duration: 0,
+        unique_inbound: 0,
+        unique_outbound: 0,
+        unique_total: 0,
+        inPhones: new Set(),
+        outPhones: new Set(),
+        allPhones: new Set(),
+        missedEvents: [],
+      });
+    }
+    const bucket = buckets.get(key);
+    if (bucket.full_name === "Noma'lum") bucket.full_name = callFullName(row);
+    if (!bucket.photo_url && row.photo_url) bucket.photo_url = row.photo_url;
+    return bucket;
+  };
+
+  for (const row of rows) {
+    if (isInternalCall(row)) continue;
+    const dt = callDate(row);
+    const phoneKey = callPhoneKey(row.phone_number);
+    if (dt && phoneKey && isOutboundCall(row)) {
+      const list = outboundMap.get(phoneKey) || [];
+      list.push(dt);
+      outboundMap.set(phoneKey, list);
+    }
+
+    if (!row.in_range) continue;
+    if (isCallbackCall(row)) {
+      callback += 1;
+      getBucket(row).callback_calls += 1;
+      continue;
+    }
+    if (!isInboundCall(row) && !isOutboundCall(row)) continue;
+
+    const dur = callDuration(row);
+    const bucket = getBucket(row);
+    const failedForDashboard = isNdzCall(row) || isMissedInbound(row);
+
+    total += 1;
+    totalDuration += dur;
+    bucket.total_calls += 1;
+    bucket.total_duration += dur;
+
+    if (phoneKey) bucket.allPhones.add(phoneKey);
+
+    if (isInboundCall(row)) {
+      inbound += 1;
+      bucket.inbound_calls += 1;
+      bucket.inbound_duration += dur;
+      if (phoneKey) bucket.inPhones.add(phoneKey);
+    }
+    if (isOutboundCall(row)) {
+      outbound += 1;
+      bucket.outbound_calls += 1;
+      bucket.outbound_duration += dur;
+      if (phoneKey) bucket.outPhones.add(phoneKey);
+    }
+    if (isNdzCall(row)) {
+      ndz += 1;
+      bucket.ndz_calls += 1;
+    }
+    if (isMissedInbound(row)) {
+      missed += 1;
+      bucket.missed_inbound += 1;
+      bucket.missedEvents.push({ phoneKey, dt });
+      if (phoneKey && dt) {
+        const list = missedMap.get(phoneKey) || [];
+        list.push(dt);
+        missedMap.set(phoneKey, list);
+      } else {
+        noPhoneMissed += 1;
+      }
+    }
+    if (failedForDashboard) {
+      bucket.failed_calls += 1;
+    } else {
+      bucket.success_calls += 1;
+    }
+  }
+
+  let nePerezvonili = noPhoneMissed;
+  const reactionTimes = [];
+  const findCallback = (phoneKey, missedAt) => {
+    if (!phoneKey || !missedAt) return null;
+    const maxTime = missedAt.getTime() + CALL_RECALL_WINDOW_MS;
+    return (outboundMap.get(phoneKey) || [])
+      .filter((dt) => dt.getTime() > missedAt.getTime() && dt.getTime() <= maxTime)
+      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
+  };
+
+  for (const [phoneKey, missedTimes] of missedMap.entries()) {
+    for (const missedAt of missedTimes) {
+      const callbackAt = findCallback(phoneKey, missedAt);
+      if (callbackAt) {
+        reactionTimes.push(Math.round((callbackAt.getTime() - missedAt.getTime()) / 1000));
+      } else {
+        nePerezvonili += 1;
+      }
+    }
+  }
+
+  const responsibles = Array.from(buckets.values())
+    .filter((bucket) => bucket.total_calls > 0)
+    .map((bucket) => {
+      for (const ev of bucket.missedEvents) {
+        if (findCallback(ev.phoneKey, ev.dt)) bucket.missed_recalled += 1;
+        else bucket.missed_unrecalled += 1;
+      }
+      bucket.avg_duration = bucket.total_calls ? Math.round(bucket.total_duration / bucket.total_calls) : 0;
+      bucket.unique_inbound = bucket.inPhones.size;
+      bucket.unique_outbound = bucket.outPhones.size;
+      bucket.unique_total = bucket.allPhones.size;
+      delete bucket.inPhones;
+      delete bucket.outPhones;
+      delete bucket.allPhones;
+      delete bucket.missedEvents;
+      return bucket;
+    })
+    .sort((a, b) => b.total_calls - a.total_calls);
+
+  const failed = ndz + missed;
+  const success = Math.max(total - failed, 0);
+
+  return {
+    date_from: dateFrom || '',
+    date_to: dateTo || '',
+    total_calls: total,
+    inbound_calls: inbound,
+    outbound_calls: outbound,
+    callback_calls: callback,
+    success_calls: success,
+    failed_calls: failed,
+    ndz_calls: ndz,
+    missed_inbound: missed,
+    total_duration: totalDuration,
+    avg_duration: total ? Math.round(totalDuration / total) : 0,
+    success_pct: pct(success, total),
+    failed_pct: pct(failed, total),
+    ne_perezvonili: nePerezvonili,
+    reaksiya_vaqti: reactionTimes.length
+      ? Math.round(reactionTimes.reduce((s, n) => s + n, 0) / reactionTimes.length)
+      : 0,
+    responsibles,
+  };
+}
+
+/**
+ * GET /api/dashboard/call-stats-full
+ * DB-backed CallStatistikasi payload. No Bitrix24 request is made here.
+ */
+router.get('/call-stats-full', async (req, res) => {
+  const { from, to } = req.query;
+  const lookupTo = addDaysISO(to, 1) || to || null;
+  try {
+    await ensureCallsTable();
+    const { rows } = await pool.query(
+      `SELECT
+         c.id, c.responsible_id, c.phone_number, c.call_type, c.duration,
+         c.call_start, c.status_code, c.status_name, c.failed_code,
+         c.call_category, c.lead_id, c.crm_entity_type, c.user_name,
+         r.name AS resp_name, r.last_name AS resp_last_name, r.photo_url,
+         (
+           ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+         ) AS in_range
+       FROM calls c
+       LEFT JOIN responsibles r ON r.id = c.responsible_id
+       WHERE c.call_start IS NOT NULL
+         AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+         AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
+       ORDER BY c.call_start DESC`,
+      [from || null, to || null, lookupTo]
+    );
+    res.json(computeCallStatsFull(rows, from, to));
+  } catch (err) {
+    if (err.code === '42P01') return res.json(computeCallStatsFull([], from, to));
+    console.error('[dashboard/call-stats-full]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

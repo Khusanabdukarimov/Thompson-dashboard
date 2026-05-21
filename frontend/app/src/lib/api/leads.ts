@@ -458,7 +458,7 @@ export async function createLead(
   return res.json();
 }
 
-// ── Python call-stats endpoint (/api/calls/stats) ────────────────────────────
+// ── DB-backed call-stats endpoint (/api/dashboard/call-stats-full) ───────────
 export type PyResponsibleCallStats = {
   responsible_id:    number | null;
   full_name:         string;
@@ -503,8 +503,8 @@ export type PyCallStatsResult = {
 };
 
 export function getPyCallStats(filter: Pick<DashFilter, "start_date" | "end_date">) {
-  return apiGet<PyCallStatsResult>("/api/calls/stats", {
-    date_from: filter.start_date,
-    date_to:   filter.end_date,
-  });
+  return apiGet<PyCallStatsResult>("/api/dashboard/call-stats-full", {
+    from: filter.start_date,
+    to:   filter.end_date,
+  }, API_URL_CRM);
 }
