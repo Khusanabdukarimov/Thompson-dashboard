@@ -224,7 +224,6 @@ function CallSubTable({
 export default function CallStatistikasi() {
   const [startDate, setStartDate] = useState(daysAgoISO(30));
   const [endDate, setEndDate] = useState(todayISO());
-  const [filterOpen, setFilterOpen] = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -289,7 +288,7 @@ export default function CallStatistikasi() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg2)" }}>
       <Topbar
         title="Call statistikasi"
-        subtitle="Telefon qo'ng'iroqlari tahlili"
+        sub="Telefon qo'ng'iroqlari tahlili"
       />
 
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
