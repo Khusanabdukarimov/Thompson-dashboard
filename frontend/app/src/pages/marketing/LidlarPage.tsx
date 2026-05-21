@@ -773,34 +773,25 @@ export default function LidlarPage() {
 
         {/* ── KPI cards + Voronka ── */}
         {isLoading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
             {[0,1,2,3].map((i) => <div key={i} style={{ height: 200, borderRadius: 16, background: "var(--bg2)" }} />)}
           </div>
         ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 300px", gap:12, marginBottom:20 }}>
-            {/* ── Left 3 KPI cards (row 1) ── */}
-            <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" border="rgba(33,150,243,0.3)"
-                      shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
-                      title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0}>
-              <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
-              <div style={{ fontSize:11, color:"#9E9E9E" }}>Umumiy Lid</div>
-            </GradCard>
-            <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" border="rgba(0,188,212,0.3)"
-                      shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
-                      title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1}>
-              <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
-              <div style={{ fontSize:11, color:"#9E9E9E" }}>Sifatli Lid</div>
-            </GradCard>
-            <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" border="rgba(76,175,80,0.3)"
-                      shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
-                      title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
-              <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
-              <div style={{ fontSize:11, color:"#9E9E9E" }}>Konversiya</div>
-            </GradCard>
-
-            {/* ── Right column: Konsultatsiyalar + Voronka (spans 2 rows) ── */}
-            <div style={{ gridRow:"1 / 3", display:"flex", flexDirection:"column", gap:12 }}>
-              {/* Konsultatsiyalar card */}
+          <>
+            {/* Row 1 — 4 equal KPI cards */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:12 }}>
+              <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" border="rgba(33,150,243,0.3)"
+                        shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
+                        title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0}>
+                <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
+                <div style={{ fontSize:11, color:"#9E9E9E" }}>Umumiy Lid</div>
+              </GradCard>
+              <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" border="rgba(0,188,212,0.3)"
+                        shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
+                        title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1}>
+                <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
+                <div style={{ fontSize:11, color:"#9E9E9E" }}>Sifatli Lid</div>
+              </GradCard>
               <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" border="rgba(156,39,176,0.3)"
                         shadow="0 4px 20px rgba(156,39,176,0.15)" icon={<Calendar size={20} style={{ color:"#9C27B0" }} />}
                         title="Konsultatsiyalar" sparkColor="#9C27B0" sparkVariant={2}>
@@ -815,51 +806,60 @@ export default function LidlarPage() {
                   <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
                 </div>
               </GradCard>
+              <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" border="rgba(76,175,80,0.3)"
+                        shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
+                        title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
+                <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
+                <div style={{ fontSize:11, color:"#9E9E9E" }}>Konversiya</div>
+              </GradCard>
+            </div>
 
-              {/* Voronka samaradorligi — stacked metrics */}
-              <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16, flex:1 }}>
+            {/* Row 2 — Voronka (3 cols) + Sifatsiz/Bekor (1 col, aligned with Konsultatsiyalar) */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+              {/* Voronka — spans first 3 columns */}
+              <div style={{ gridColumn:"1 / 4", background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-                  <Filter size={14} style={{ color:"#9E9E9E" }} />
-                  <span style={{ fontSize:12, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
+                  <Filter size={15} style={{ color:"#9E9E9E" }} />
+                  <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
+                  <span style={{ fontSize:11, color:"#9E9E9E", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
                 </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                   {[
-                    { icon:<Percent size={16} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
-                    { icon:<ArrowLeftRight size={16} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
-                    { icon:<Target size={16} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
+                    { icon:<Percent size={18} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
+                    { icon:<ArrowLeftRight size={18} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
+                    { icon:<Target size={18} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
                   ].map((m) => (
-                    <div key={m.title} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                      <div style={{ width:32, height:32, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
+                    <div key={m.title} style={{ display:"flex", alignItems:"center", gap:12 }}>
+                      <div style={{ width:36, height:36, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
                       <div>
-                        <div style={{ fontSize:10, fontWeight:600, color:"#9E9E9E", marginBottom:1 }}>{m.title}</div>
-                        <div style={{ fontSize:20, fontWeight:800, color:m.color, lineHeight:1.1 }}>{m.val.toFixed(1)}%</div>
-                        <div style={{ fontSize:9, color:"#555" }}>{m.sub}</div>
+                        <div style={{ fontSize:11, fontWeight:600, color:"#fff", marginBottom:3 }}>{m.title}</div>
+                        <div style={{ fontSize:24, fontWeight:800, color:m.color, lineHeight:1.1, marginBottom:3 }}>{m.val.toFixed(1)}%</div>
+                        <div style={{ fontSize:10, color:"#9E9E9E" }}>{m.sub}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-
-            {/* ── Sifatsiz / Bekor (row 2, spans 3 left cols) ── */}
-            <div style={{ gridColumn:"1 / 4", background:"linear-gradient(135deg,#2a0000,#6e1a1a)", border:"1px solid rgba(244,67,54,0.3)",
-                          boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
-                          padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden", maxHeight:140 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(244,67,54,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <XCircle size={20} style={{ color:"#F44336" }} />
+              {/* Sifatsiz/Bekor — 4th column, aligned under Konsultatsiyalar */}
+              <div style={{ background:"linear-gradient(135deg,#2a0000,#6e1a1a)", border:"1px solid rgba(244,67,54,0.3)",
+                            boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
+                            padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                  <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(244,67,54,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <XCircle size={20} style={{ color:"#F44336" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:600, color:"#fff" }}>Sifatsiz / Bekor</div>
+                    <div style={{ fontSize:36, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:3 }}>{fmtNum(sifatsizBekor)}</div>
+                    <div style={{ fontSize:11, color:"#9E9E9E", marginTop:2 }}>Bekor qilingan lidlar</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize:12, fontWeight:600, color:"#fff" }}>Sifatsiz / Bekor</div>
-                  <div style={{ fontSize:36, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:3 }}>{fmtNum(sifatsizBekor)}</div>
-                  <div style={{ fontSize:11, color:"#9E9E9E", marginTop:2 }}>Bekor qilingan lidlar</div>
+                <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
+                  <Sparkline color="#F44336" variant={0} />
                 </div>
               </div>
-              <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
-                <Sparkline color="#F44336" variant={0} />
-              </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* ══════════════════════════════════════════════════════════
