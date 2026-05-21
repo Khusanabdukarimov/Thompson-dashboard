@@ -226,7 +226,7 @@ function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply,
             <CalendarDays size={16} color="var(--text2)" />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
             <label style={labelStyle}>
               Dan
               <input type="date" value={value.start_date} onChange={(e) => update({ start_date: e.target.value })} style={inputStyle} />
