@@ -457,3 +457,50 @@ export async function createLead(
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
+
+// ── Python call-stats endpoint (/api/calls/stats) ────────────────────────────
+export type PyResponsibleCallStats = {
+  responsible_id:    number | null;
+  full_name:         string;
+  photo_url:         string | null;
+  total_calls:       number;
+  inbound_calls:     number;
+  outbound_calls:    number;
+  callback_calls:    number;
+  success_calls:     number;
+  failed_calls:      number;
+  missed_inbound:    number;
+  total_duration:    number;
+  avg_duration:      number;
+  inbound_duration:  number;
+  outbound_duration: number;
+  unique_inbound:    number;
+  unique_outbound:   number;
+  unique_total:      number;
+};
+
+export type PyCallStatsResult = {
+  date_from:      string;
+  date_to:        string;
+  total_calls:    number;
+  inbound_calls:  number;
+  outbound_calls: number;
+  callback_calls: number;
+  success_calls:  number;
+  failed_calls:   number;
+  missed_inbound: number;
+  total_duration: number;
+  avg_duration:   number;
+  success_pct:    number;
+  failed_pct:     number;
+  ne_perezvonili: number;
+  reaksiya_vaqti: number;
+  responsibles:   PyResponsibleCallStats[];
+};
+
+export function getPyCallStats(filter: Pick<DashFilter, "start_date" | "end_date">) {
+  return apiGet<PyCallStatsResult>("/api/calls/stats", {
+    date_from: filter.start_date,
+    date_to:   filter.end_date,
+  });
+}

@@ -21,6 +21,7 @@ load_dotenv(BACKEND_DIR / ".env")
 from datetime import date
 
 from app.api.routes import payroll as payroll_routes
+from app.api.routes import call_stats as call_stats_routes
 from app.core import auth as auth_module
 from app.db import init_db
 from app.db_bx import init_bx_db, bx_engine
@@ -43,6 +44,7 @@ def _on_startup():
 
 app.include_router(payroll_routes.router)
 app.include_router(auth_module.router)
+app.include_router(call_stats_routes.router)
 
 
 @app.get("/api/config")

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
-  getCallStats, getCallList, getCallGlobalStats,
-  type CallStatsRow,
+  getPyCallStats, getCallList,
+  type PyCallStatsResult, type PyResponsibleCallStats,
 } from "@/lib/api/leads";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -163,31 +163,18 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
 
 // ── Page ──────────────────────────────────────────────────────────
 export default function CallStatistikasi() {
-  const [startDate, setStartDate]         = useState(daysAgoISO(30));
-  const [endDate,   setEndDate]           = useState(todayISO());
-  const [filterOpen, setFilterOpen]       = useState(false);
-  const [selectedResp, setSelectedResp]   = useState<{ id: number; name: string } | null>(null);
-  const statsQ     = useQuery({ queryKey: ["call-stats", startDate, endDate], queryFn: () => getCallStats({ start_date: startDate, end_date: endDate }) });
-  const globalQ    = useQuery({ queryKey: ["call-global-stats", startDate, endDate], queryFn: () => getCallGlobalStats({ start_date: startDate, end_date: endDate }) });
-  const rows: CallStatsRow[] = statsQ.data ?? [];
+  const [startDate, setStartDate]       = useState(daysAgoISO(30));
+  const [endDate,   setEndDate]         = useState(todayISO());
+  const [filterOpen, setFilterOpen]     = useState(false);
+  const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
 
+  const statsQ = useQuery({
+    queryKey: ["py-call-stats", startDate, endDate],
+    queryFn:  () => getPyCallStats({ start_date: startDate, end_date: endDate }),
+  });
 
-  const totals = useMemo(() => {
-    const sum = (key: keyof CallStatsRow) => rows.reduce((a, r) => a + (Number(r[key]) || 0), 0);
-    const total=sum("total_calls"), inbound=sum("inbound_calls"), outbound=sum("outbound_calls");
-    const success=sum("success_calls"), failed=sum("failed_calls"), totalDur=sum("total_duration");
-    return {
-      total, inbound, outbound, success, failed, totalDur,
-      avgDur: total > 0 ? Math.round(totalDur / total) : 0,
-      missed: sum("missed_inbound"),
-      callback: sum("callback_calls"),
-      success_pct: total > 0 ? Math.round((success/total)*100) : 0,
-      failed_pct:  total > 0 ? Math.round((failed /total)*100) : 0,
-      inbound_dur: sum("inbound_duration"), outbound_dur: sum("outbound_duration"),
-    };
-  }, [rows]);
-
-  const globalStats = globalQ.data;
+  const data: PyCallStatsResult | undefined = statsQ.data;
+  const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
 
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
@@ -213,43 +200,43 @@ export default function CallStatistikasi() {
         {/* ── Row 1 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
           <Card label="Qo'ng'iroq jami" accentColor="#2196F3"
-            value={<>{totals.total} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            sub={fmtDur(totals.totalDur)}
+            value={<>{data?.total_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            sub={fmtDur(data?.total_duration ?? 0)}
             icon={<Phone size={19} color="#2196F3" />} iconBg="rgba(33,150,243,0.12)" />
           <Card label="Chiquvchi qo'ng'iroq" accentColor="#2196F3"
-            value={<>{totals.outbound} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            sub={fmtDur(totals.outbound_dur)}
+            value={<>{data?.outbound_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            sub={fmtDur(rows.reduce((s, r) => s + r.outbound_duration, 0))}
             icon={<PhoneOutgoing size={19} color="#2196F3" />} iconBg="rgba(33,150,243,0.12)" />
           <Card label="Kiruvchi qo'ng'iroq" accentColor="#4CAF50"
-            value={<>{totals.inbound} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            sub={fmtDur(totals.inbound_dur)}
+            value={<>{data?.inbound_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            sub={fmtDur(rows.reduce((s, r) => s + r.inbound_duration, 0))}
             icon={<PhoneIncoming size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)" />
           <Card label="Muvaffaqiyatli" accentColor="#4CAF50"
-            value={<span style={{ color: "#4CAF50" }}>{totals.success}</span>}
+            value={<span style={{ color: "#4CAF50" }}>{data?.success_calls ?? 0}</span>}
             icon={<CheckCircle size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)"
-            badge={`${totals.success_pct}%`} badgeColor="#4CAF50" />
+            badge={`${Math.round(data?.success_pct ?? 0)}%`} badgeColor="#4CAF50" />
           <Card label="Muvaffaqiyatsiz" accentColor="#F44336"
-            value={<span style={{ color: "#F44336" }}>{totals.failed}</span>}
+            value={<span style={{ color: "#F44336" }}>{data?.failed_calls ?? 0}</span>}
             icon={<XCircle size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
-            badge={totals.failed_pct > 0 ? `${totals.failed_pct}%` : undefined} badgeColor="#F44336" />
+            badge={(data?.failed_pct ?? 0) > 0 ? `${Math.round(data!.failed_pct)}%` : undefined} badgeColor="#F44336" />
         </div>
 
         {/* ── Row 2 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
           <Card label="O'rtacha davomiyligi" accentColor="#9C27B0"
-            value={fmtDurMin(totals.avgDur)}
+            value={fmtDurMin(data?.avg_duration ?? 0)}
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)" />
           <Card label="NDZ (javob berilmagan)" accentColor="#607D8B"
-            value={<>{totals.failed} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            value={<>{data?.failed_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
           <Card label="Propushenniy" accentColor="#FF9800"
-            value={<span style={{ color: "#FF9800" }}>{totals.missed} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
+            value={<span style={{ color: "#FF9800" }}>{data?.missed_inbound ?? 0} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
             icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)" />
           <Card label="Reaksiya vaqti" accentColor="#607D8B"
-            value={<span style={{ fontSize: 22 }}>{fmtDur(globalStats?.reaksiya_vaqti ?? 0)}</span>}
+            value={<span style={{ fontSize: 22 }}>{fmtDur(data?.reaksiya_vaqti ?? 0)}</span>}
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
           <Card label="Ne perezvonili" accentColor="#F44336"
-            value={<>{globalStats?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)" />
         </div>
 
@@ -265,8 +252,10 @@ export default function CallStatistikasi() {
 
           {statsQ.isLoading ? (
             <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Yuklanmoqda...</div>
+          ) : statsQ.isError ? (
+            <div style={{ padding: 48, textAlign: "center", color: "#F44336", fontSize: 13 }}>Xatolik: {String((statsQ.error as Error)?.message ?? "noma'lum xato")}</div>
           ) : rows.length === 0 ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Ma'lumot topilmadi. "Sinxronizatsiya" tugmasini bosing.</div>
+            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Ma'lumot topilmadi</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -290,18 +279,19 @@ export default function CallStatistikasi() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((u) => {
-                    const isSel = selectedResp?.id === u.responsible_id;
+                  {rows.map((u, idx) => {
+                    const uid    = u.responsible_id ?? idx;
+                    const isSel  = selectedResp?.id === uid;
                     return (
                       <>
-                        <tr key={u.responsible_id} style={{ background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)", cursor: "pointer" }}
-                          onClick={() => setSelectedResp(isSel ? null : { id: u.responsible_id, name: u.full_name })}>
+                        <tr key={uid} style={{ background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)", cursor: "pointer" }}
+                          onClick={() => setSelectedResp(isSel ? null : { id: uid, name: u.full_name })}>
                           <td style={TD({ textAlign: "left" })}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <Avatar name={u.full_name} photoUrl={u.photo_url} id={u.responsible_id} />
+                              <Avatar name={u.full_name} photoUrl={u.photo_url} id={uid} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{u.full_name}</div>
-                                <div style={{ fontSize: 11.5, color: "var(--text2)" }}>ID: {u.responsible_id}</div>
+                                <div style={{ fontSize: 11.5, color: "var(--text2)" }}>ID: {u.responsible_id ?? "—"}</div>
                               </div>
                               {isSel ? <ChevronUp size={14} color="#2196F3" /> : <ChevronDown size={14} color="var(--text2)" />}
                             </div>
@@ -316,8 +306,8 @@ export default function CallStatistikasi() {
                           <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.outbound_duration)}</td>
                           <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
                         </tr>
-                        {isSel && (
-                          <tr key={`sub-${u.responsible_id}`}>
+                        {isSel && u.responsible_id != null && (
+                          <tr key={`sub-${uid}`}>
                             <td colSpan={10} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
                               <div style={{ borderTop: "1.5px solid rgba(33,150,243,0.2)" }}>
                                 <div style={{ padding: "10px 18px", background: "rgba(33,150,243,0.06)", fontSize: 12.5, fontWeight: 600, color: "#2196F3" }}>
