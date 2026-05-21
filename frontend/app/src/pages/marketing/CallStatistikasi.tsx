@@ -3,12 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
   Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
-  SlidersHorizontal, Download, PhoneOff, RefreshCw, PhoneCall,
+  SlidersHorizontal, Download, PhoneOff,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
   getCallStats, getCallList, getCallGlobalStats,
-  syncCalls, syncUserPhotos,
+  syncCalls,
   type CallStatsRow,
 } from "@/lib/api/leads";
 
@@ -186,17 +186,12 @@ export default function CallStatistikasi() {
   const [endDate,   setEndDate]           = useState(todayISO());
   const [filterOpen, setFilterOpen]       = useState(false);
   const [selectedResp, setSelectedResp]   = useState<{ id: number; name: string } | null>(null);
-  const [syncing, setSyncing]             = useState(false);
-  const [syncingPhotos, setSyncingPhotos] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const statsQ     = useQuery({ queryKey: ["call-stats", startDate, endDate], queryFn: () => getCallStats({ start_date: startDate, end_date: endDate }) });
   const globalQ    = useQuery({ queryKey: ["call-global-stats", startDate, endDate], queryFn: () => getCallGlobalStats({ start_date: startDate, end_date: endDate }) });
-  const [prevFrom, prevTo] = useMemo(() => prevPeriod(startDate, endDate), [startDate, endDate]);
-  const prevStatsQ = useQuery({ queryKey: ["call-stats-prev", prevFrom, prevTo], queryFn: () => getCallStats({ start_date: prevFrom, end_date: prevTo }) });
-
   const rows: CallStatsRow[] = statsQ.data ?? [];
 
-  const prevStatsMap = useMemo(() => { const m = new Map<number,CallStatsRow>(); (prevStatsQ.data ?? []).forEach((r) => m.set(r.responsible_id, r)); return m; }, [prevStatsQ.data]);
 
   const totals = useMemo(() => {
     const sum = (key: keyof CallStatsRow) => rows.reduce((a, r) => a + (Number(r[key]) || 0), 0);
@@ -220,15 +215,9 @@ export default function CallStatistikasi() {
     setSyncing(true);
     try { await syncCalls(startDate, endDate); statsQ.refetch(); } finally { setSyncing(false); }
   }
-  async function doSyncPhotos() {
-    if (syncingPhotos) return;
-    setSyncingPhotos(true);
-    try { await syncUserPhotos(); statsQ.refetch(); } finally { setSyncingPhotos(false); }
-  }
 
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
-  const btn: React.CSSProperties = { display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text2)", fontSize: 13, cursor: "pointer", fontWeight: 500 };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg2)" }}>
@@ -236,13 +225,6 @@ export default function CallStatistikasi() {
         title="Call statistikasi"
         actions={
           <div style={{ display: "flex", gap: 8, position: "relative" }}>
-            <button onClick={doSyncPhotos} disabled={syncingPhotos} style={btn} title="Bitrix24 dan foydalanuvchi rasmlarini yuklash">
-              <PhoneCall size={14} />{syncingPhotos ? "Rasmlar..." : "Rasmlar sync"}
-            </button>
-            <button onClick={doSync} disabled={syncing} style={btn}>
-              <RefreshCw size={14} style={{ opacity: syncing ? 0.5 : 1 }} />
-              {syncing ? "Sinxronizatsiya..." : "Sinxronizatsiya"}
-            </button>
             <div style={{ position: "relative" }}>
               <button onClick={() => setFilterOpen((v) => !v)} style={{ ...btn, color: filterOpen ? "#2196F3" : "var(--text2)", borderColor: filterOpen ? "#2196F3" : "var(--border)" }}>
                 <SlidersHorizontal size={14} />Filtrlar
@@ -321,7 +303,6 @@ export default function CallStatistikasi() {
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
                     <th style={TH({ color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.2)" })} colSpan={3}>UNIKAL QO'NG'IROQLAR</th>
                     <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={3}>DAVOMIYLIK</th>
-                    <th style={TH({ borderLeft: "2px solid rgba(0,0,0,0.06)" })} rowSpan={2}>DINAMIKA</th>
                   </tr>
                   <tr>
                     <th style={TH({ borderLeft: "2px solid rgba(33,150,243,0.2)" })}>Kiruvchi</th>
@@ -338,7 +319,6 @@ export default function CallStatistikasi() {
                 <tbody>
                   {rows.map((u) => {
                     const isSel = selectedResp?.id === u.responsible_id;
-                    const prev  = prevStatsMap.get(u.responsible_id);
                     return (
                       <>
                         <tr key={u.responsible_id} style={{ background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)", cursor: "pointer" }}
@@ -362,11 +342,10 @@ export default function CallStatistikasi() {
                           <td style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)", fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.inbound_duration)}</td>
                           <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.outbound_duration)}</td>
                           <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
-                          <td style={TD({ borderLeft: "2px solid rgba(0,0,0,0.05)" })}><Delta curr={u.total_calls} prev={prev?.total_calls} /></td>
                         </tr>
                         {isSel && (
                           <tr key={`sub-${u.responsible_id}`}>
-                            <td colSpan={11} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
+                            <td colSpan={10} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
                               <div style={{ borderTop: "1.5px solid rgba(33,150,243,0.2)" }}>
                                 <div style={{ padding: "10px 18px", background: "rgba(33,150,243,0.06)", fontSize: 12.5, fontWeight: 600, color: "#2196F3" }}>
                                   {u.full_name} — qo'ng'iroqlar ro'yxati
