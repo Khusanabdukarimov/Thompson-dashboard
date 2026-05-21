@@ -771,13 +771,14 @@ export default function LidlarPage() {
           )}
         </div>
 
-        {/* ── Row 1 — 4 gradient KPI cards ── */}
+        {/* ── KPI cards + Voronka ── */}
         {isLoading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
             {[0,1,2,3].map((i) => <div key={i} style={{ height: 200, borderRadius: 16, background: "var(--bg2)" }} />)}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 300px", gap:12, marginBottom:20 }}>
+            {/* ── Left 3 KPI cards (row 1) ── */}
             <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" border="rgba(33,150,243,0.3)"
                       shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
                       title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0}>
@@ -790,56 +791,58 @@ export default function LidlarPage() {
               <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
               <div style={{ fontSize:11, color:"#9E9E9E" }}>Sifatli Lid</div>
             </GradCard>
-            <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" border="rgba(156,39,176,0.3)"
-                      shadow="0 4px 20px rgba(156,39,176,0.15)" icon={<Calendar size={20} style={{ color:"#9C27B0" }} />}
-                      title="Konsultatsiyalar" sparkColor="#9C27B0" sparkVariant={2}>
-              <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginBottom:3 }}>
-                <span style={{ fontSize:36, fontWeight:800, color:"#4CAF50" }}>{fmtNum(konsultBelgilandi)}</span>
-                <span style={{ fontSize:24, fontWeight:700, color:"#fff" }}>/</span>
-                <span style={{ fontSize:36, fontWeight:800, color:"#fff" }}>{fmtNum(konsultOtkazildi)}</span>
-              </div>
-              <div style={{ fontSize:10 }}>
-                <span style={{ color:"#4CAF50" }}>Belgilandi</span>
-                <span style={{ color:"#9E9E9E" }}> / </span>
-                <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
-              </div>
-            </GradCard>
             <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" border="rgba(76,175,80,0.3)"
                       shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
                       title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
               <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
               <div style={{ fontSize:11, color:"#9E9E9E" }}>Konversiya</div>
             </GradCard>
-          </div>
-        )}
 
-        {/* ── Row 2 — Funnel Efficiency + Discarded ── */}
-        {!isLoading && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 280px", gap:12, marginBottom:20 }}>
-            <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16, maxHeight:140 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-                <Filter size={15} style={{ color:"#9E9E9E" }} />
-                <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
-                <span style={{ fontSize:11, color:"#9E9E9E", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
-                {[
-                  { icon:<Percent size={18} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
-                  { icon:<ArrowLeftRight size={18} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
-                  { icon:<Target size={18} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:overallConvPct,   color:"#4CAF50", title:"Umumiy Konversiya",    sub:"Umumiy → K.O'tkazildi" },
-                ].map((m) => (
-                  <div key={m.title} style={{ display:"flex", alignItems:"center", gap:12 }}>
-                    <div style={{ width:36, height:36, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
-                    <div>
-                      <div style={{ fontSize:11, fontWeight:600, color:"#fff", marginBottom:3 }}>{m.title}</div>
-                      <div style={{ fontSize:24, fontWeight:800, color:m.color, lineHeight:1.1, marginBottom:3 }}>{m.val.toFixed(1)}%</div>
-                      <div style={{ fontSize:10, color:"#9E9E9E" }}>{m.sub}</div>
+            {/* ── Right column: Konsultatsiyalar + Voronka (spans 2 rows) ── */}
+            <div style={{ gridRow:"1 / 3", display:"flex", flexDirection:"column", gap:12 }}>
+              {/* Konsultatsiyalar card */}
+              <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" border="rgba(156,39,176,0.3)"
+                        shadow="0 4px 20px rgba(156,39,176,0.15)" icon={<Calendar size={20} style={{ color:"#9C27B0" }} />}
+                        title="Konsultatsiyalar" sparkColor="#9C27B0" sparkVariant={2}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginBottom:3 }}>
+                  <span style={{ fontSize:36, fontWeight:800, color:"#fff" }}>{fmtNum(konsultBelgilandi)}</span>
+                  <span style={{ fontSize:24, fontWeight:700, color:"#9E9E9E" }}>/</span>
+                  <span style={{ fontSize:36, fontWeight:800, color:"#4CAF50" }}>{fmtNum(konsultOtkazildi)}</span>
+                </div>
+                <div style={{ fontSize:10 }}>
+                  <span style={{ color:"#9E9E9E" }}>Belgilandi</span>
+                  <span style={{ color:"#555" }}> / </span>
+                  <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
+                </div>
+              </GradCard>
+
+              {/* Voronka samaradorligi — stacked metrics */}
+              <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16, flex:1 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
+                  <Filter size={14} style={{ color:"#9E9E9E" }} />
+                  <span style={{ fontSize:12, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                  {[
+                    { icon:<Percent size={16} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
+                    { icon:<ArrowLeftRight size={16} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
+                    { icon:<Target size={16} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
+                  ].map((m) => (
+                    <div key={m.title} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ width:32, height:32, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
+                      <div>
+                        <div style={{ fontSize:10, fontWeight:600, color:"#9E9E9E", marginBottom:1 }}>{m.title}</div>
+                        <div style={{ fontSize:20, fontWeight:800, color:m.color, lineHeight:1.1 }}>{m.val.toFixed(1)}%</div>
+                        <div style={{ fontSize:9, color:"#555" }}>{m.sub}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-            <div style={{ background:"linear-gradient(135deg,#2a0000,#6e1a1a)", border:"1px solid rgba(244,67,54,0.3)",
+
+            {/* ── Sifatsiz / Bekor (row 2, spans 3 left cols) ── */}
+            <div style={{ gridColumn:"1 / 4", background:"linear-gradient(135deg,#2a0000,#6e1a1a)", border:"1px solid rgba(244,67,54,0.3)",
                           boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
                           padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden", maxHeight:140 }}>
               <div style={{ display:"flex", alignItems:"center", gap:14 }}>
@@ -1013,6 +1016,7 @@ export default function LidlarPage() {
                     <thead>
                       <tr>
                         <th style={TH("#9E9E9E", 240)}>LID</th>
+                        <th style={TH("#9C27B0", 110)}>TASHRIF SANASI</th>
                         <th style={TH("#2196F3", 60)}>SONI</th>
                         {LEAD_COLS.map(c => <th key={c.key} style={TH(c.color, 80)}>{c.label}</th>)}
                       </tr>
@@ -1029,6 +1033,11 @@ export default function LidlarPage() {
                               {r.title}
                             </a>
                           </td>
+                          <td style={{ ...TD, fontSize: 12, color: r.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
+                            {r.tashrif_sanasi
+                              ? new Date(r.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" })
+                              : "—"}
+                          </td>
                           <td style={{ ...TD, fontSize: 13, fontWeight: 600, color: "#2196F3" }}>1</td>
                           {LEAD_COLS.map(c => (
                             <td key={c.key} style={{ ...TD, textAlign: "center" }}>
@@ -1041,6 +1050,7 @@ export default function LidlarPage() {
                       ))}
                       <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
                         <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
+                        <td style={TD} />
                         <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#2196F3" }}>{leads.length}</td>
                         {LEAD_COLS.map(c => (
                           <td key={c.key} style={{ ...TD, textAlign: "center" }}>

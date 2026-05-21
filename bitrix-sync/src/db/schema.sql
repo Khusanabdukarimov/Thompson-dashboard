@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS leads (
   uf_service      TEXT,
   uf_activity     TEXT,
   uf_with_whom    TEXT,
+  uf_tashrif_sanasi TEXT,
   name            TEXT,
   last_name       TEXT,
   title           TEXT,

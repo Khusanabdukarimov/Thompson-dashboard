@@ -790,8 +790,8 @@ router.get('/lead-stats', async (req, res) => {
              FILTER (WHERE NOT s.is_final), 1)                                                AS avg_age_days,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_bekor_count,
            (COUNT(*) - COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK')))::int   AS sifatli_lid_count,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int        AS konsultatsiya_belgilandi_count,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id = 'CONVERTED')::int                         AS konsultatsiya_otkazildi_count,
+           COUNT(l.id) FILTER (WHERE l.uf_tashrif_sanasi IS NOT NULL AND l.uf_tashrif_sanasi != '' AND l.uf_tashrif_sanasi != 'false')::int AS konsultatsiya_belgilandi_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int  AS konsultatsiya_otkazildi_count,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS muvaffaqiyatsiz_count
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
@@ -1430,6 +1430,7 @@ router.get('/responsible-leads', async (req, res) => {
          s.bitrix_id AS stage_bid,
          l.date_create::date AS date_create,
          l.opportunity,
+         NULLIF(NULLIF(l.uf_tashrif_sanasi, ''), 'false') AS tashrif_sanasi,
          (s.bitrix_id IN ('NEW','IN_PROCESS','PROCESSED','UC_1KPATX','NO_ANSWER',
            'UC_Q2U9EL','CALLBACK','UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
            'UC_5G8244','NOT_TRANSFERRED'))::int                                     AS ne_obrabotinniy,

@@ -286,6 +286,7 @@ export type ResponsibleLeadRow = {
   stage_bid: string;
   date_create: string;
   opportunity: number;
+  tashrif_sanasi: string | null;
   ne_obrabotinniy: number;
   yangi_lid: number;
   propushenniy: number;
