@@ -345,6 +345,8 @@ class ResponsibleCallStats(BaseModel):
     failed_calls:     int = 0
     ndz_calls:        int = 0
     missed_inbound:   int = 0
+    missed_recalled:   int = 0
+    missed_unrecalled: int = 0
 
     total_duration:   int = 0
     avg_duration:     int = 0
@@ -403,6 +405,7 @@ def _compute(
         "ndz": 0, "miss": 0,
         "dur": 0, "in_dur": 0, "out_dur": 0,
         "in_phones": set(), "out_phones": set(), "all_phones": set(),
+        "missed_events": [],
     })
 
     # For ne_perezvonili / reaksiya_vaqti:
@@ -441,8 +444,8 @@ def _compute(
 
         # ne_perezvonili tracking
         phone_key = _phone_key(c.phone)
-        if c.is_missed and c.start_time:
-            if phone_key:
+        if c.is_missed:
+            if phone_key and c.start_time:
                 missed_map[phone_key].append(c.start_time)
             else:
                 no_phone_missed += 1
@@ -468,7 +471,9 @@ def _compute(
         if c.phone: b["all_phones"].add(c.phone)
 
         if c.is_ndz:    b["ndz"]  += 1
-        if c.is_missed: b["miss"] += 1
+        if c.is_missed:
+            b["miss"] += 1
+            b["missed_events"].append((phone_key, c.start_time))
 
     for c in lookup_calls:
         if c.is_internal:
@@ -506,6 +511,22 @@ def _compute(
         if not t:
             continue
         b_failed = b["ndz"] + b["miss"]
+        missed_recalled = 0
+        missed_unrecalled = 0
+        for phone_key, missed_at in b["missed_events"]:
+            if not phone_key or not missed_at:
+                missed_unrecalled += 1
+                continue
+            window = missed_at + _RECALL_WINDOW
+            out_times = sorted(outbound_map.get(phone_key, []))
+            callback_dt = next(
+                (ot for ot in out_times if missed_at < ot <= window), None
+            )
+            if callback_dt:
+                missed_recalled += 1
+            else:
+                missed_unrecalled += 1
+
         responsibles.append(ResponsibleCallStats(
             responsible_id    = b["uid"],
             full_name         = b["name"],
@@ -517,6 +538,8 @@ def _compute(
             failed_calls      = b_failed,
             ndz_calls         = b["ndz"],
             missed_inbound    = b["miss"],
+            missed_recalled   = missed_recalled,
+            missed_unrecalled = missed_unrecalled,
             total_duration    = b["dur"],
             avg_duration      = round(b["dur"] / t) if t else 0,
             inbound_duration  = b["in_dur"],

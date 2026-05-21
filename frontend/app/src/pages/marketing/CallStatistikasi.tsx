@@ -271,6 +271,7 @@ export default function CallStatistikasi() {
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
                     <th style={TH({ color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.2)" })} colSpan={3}>UNIKAL QO'NG'IROQLAR</th>
                     <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={3}>DAVOMIYLIK</th>
+                    <th style={TH({ color: "#FF9800", borderLeft: "2px solid rgba(255,152,0,0.24)" })} colSpan={3}>PROPUSHENNIY</th>
                   </tr>
                   <tr>
                     <th style={TH({ borderLeft: "2px solid rgba(33,150,243,0.2)" })}>Kiruvchi</th>
@@ -282,6 +283,9 @@ export default function CallStatistikasi() {
                     <th style={TH({ borderLeft: "2px solid rgba(156,39,176,0.2)" })}>Kiruvchi</th>
                     <th style={TH()}>Isxodyashie</th>
                     <th style={TH()}>Jami</th>
+                    <th style={TH({ borderLeft: "2px solid rgba(255,152,0,0.24)" })}>Umumiy</th>
+                    <th style={TH()}>Qayta chiqilgan</th>
+                    <th style={TH()}>Chiqilmagan</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -311,10 +315,13 @@ export default function CallStatistikasi() {
                           <td style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)", fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.inbound_duration)}</td>
                           <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.outbound_duration)}</td>
                           <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
+                          <td style={TD({ borderLeft: "2px solid rgba(255,152,0,0.12)", color: "#FF9800", fontWeight: 700 })}>{u.missed_inbound}</td>
+                          <td style={TD({ color: "#4CAF50", fontWeight: 700 })}>{u.missed_recalled}</td>
+                          <td style={TD({ color: "#F44336", fontWeight: 700 })}>{u.missed_unrecalled}</td>
                         </tr>
                         {isSel && u.responsible_id != null && (
                           <tr key={`sub-${uid}`}>
-                            <td colSpan={10} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
+                            <td colSpan={13} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
                               <div style={{ borderTop: "1.5px solid rgba(33,150,243,0.2)" }}>
                                 <div style={{ padding: "10px 18px", background: "rgba(33,150,243,0.06)", fontSize: 12.5, fontWeight: 600, color: "#2196F3" }}>
                                   {u.full_name} — qo'ng'iroqlar ro'yxati
