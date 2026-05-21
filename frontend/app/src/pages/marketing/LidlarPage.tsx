@@ -395,12 +395,6 @@ export default function LidlarPage() {
     queryFn: () => getResponsibleLeads(selectedRespConv!.id, appliedWithMode),
     enabled: selectedRespConv !== null,
   });
-  const [selectedRespMasul, setSelectedRespMasul] = useState<{ id: number; name: string } | null>(null);
-  const respLeadsMasulQ = useQuery({
-    queryKey: ["stats/responsible-leads-masul", selectedRespMasul?.id, appliedWithMode],
-    queryFn: () => getResponsibleLeads(selectedRespMasul!.id, appliedWithMode),
-    enabled: selectedRespMasul !== null,
-  });
   const utmCampQ = useQuery({
     queryKey: ["stats/utm-campaign", selectedUtmSource, appliedWithMode],
     queryFn:  () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
@@ -1108,17 +1102,16 @@ export default function LidlarPage() {
                 <tbody>
                   {byUserFiltered.map((u, i) => (
                     <tr key={u.responsible_id}
-                        style={{ background: selectedRespMasul?.id === u.responsible_id ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor:"pointer" }}
-                        onClick={() => setSelectedRespMasul(selectedRespMasul?.id === u.responsible_id ? null : { id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` })}
+                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = selectedRespMasul?.id === u.responsible_id ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
                       <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
                       <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                           <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                          <span style={{ fontSize:13, color: selectedRespMasul?.id === u.responsible_id ? "#2196F3" : "#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
                             {u.full_name || `User ${u.responsible_id}`}
                           </span>
                         </div>
@@ -1161,112 +1154,6 @@ export default function LidlarPage() {
           )}
 
         </div>
-
-        {/* ── Responsible leads sub-table (shown below Lid mas'ullar kesimida) ── */}
-        {selectedRespMasul && (() => {
-          const leads: ResponsibleLeadRow[] = respLeadsMasulQ.data ?? [];
-          const STAGE_MAP: Record<string, { label: string; color: string }> = {
-            NEW:                  { label: "Yangi lid",           color: "#2196F3" },
-            IN_PROCESS:           { label: "Yangi lid",           color: "#2196F3" },
-            PROCESSED:            { label: "Propushenniy",        color: "#9E9E9E" },
-            UC_1KPATX:            { label: "Javob bermadi",       color: "#FF9800" },
-            NO_ANSWER:            { label: "Javob bermadi",       color: "#FF9800" },
-            UC_Q2U9EL:            { label: "Qayta aloqa",         color: "#00BCD4" },
-            CALLBACK:             { label: "Qayta aloqa",         color: "#00BCD4" },
-            UC_KXC3ZW:            { label: "O'ylab ko'radi",      color: "#E91E63" },
-            THINKING:             { label: "O'ylab ko'radi",      color: "#E91E63" },
-            UC_L28G68:            { label: "Tashrif belgilandi",  color: "#9C27B0" },
-            CONSULTATION:         { label: "Tashrif belgilandi",  color: "#9C27B0" },
-            UC_5G8244:            { label: "Kelmadi",             color: "#FF00FF" },
-            NOT_TRANSFERRED:      { label: "Kelmadi",             color: "#FF00FF" },
-            JUNK:                 { label: "Sandiq",              color: "#42A5F5" },
-            ARCHIVE:              { label: "Sandiq",              color: "#42A5F5" },
-            UC_F8K4GI:            { label: "Sifatsiz",            color: "#F44336" },
-            UC_NAZK5J:            { label: "Bekor bo'ldi",        color: "#FFC107" },
-            RECYCLED:             { label: "Bekor bo'ldi",        color: "#FFC107" },
-            CONVERTED_CONSULT:    { label: "Tashrif buyurdi",     color: "#4CAF50" },
-            CONVERTED:            { label: "Tashrif buyurdi",     color: "#4CAF50" },
-          };
-          return (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "rgba(33,150,243,0.05)" }}>
-                <button
-                  onClick={() => setSelectedRespMasul(null)}
-                  style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px", cursor: "pointer", flexShrink: 0 }}
-                >
-                  ← Orqaga
-                </button>
-                <span style={{ fontSize: 13, color: "#555" }}>Mas'ul:</span>
-                <AvatarCircle name={selectedRespMasul.name} size={24} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{selectedRespMasul.name}</span>
-                <span style={{ fontSize: 12, color: "#555", marginLeft: "auto" }}>
-                  {respLeadsMasulQ.isLoading ? "Yuklanmoqda…" : `${leads.length} ta lid`}
-                </span>
-              </div>
-              {respLeadsMasulQ.isLoading ? (
-                <div style={{ padding: 20, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : leads.length === 0 ? (
-                <div style={{ padding: 20, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                    <thead>
-                      <tr>
-                        <th style={TH("#9E9E9E", 40)}>#</th>
-                        <th style={TH("#9E9E9E", 260)}>LID</th>
-                        <th style={TH("#2196F3", 80)}>SANA</th>
-                        <th style={TH("#9C27B0", 120)}>TASHRIF SANASI</th>
-                        <th style={TH("#FF9800", 180)}>BOSQICH</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leads.map((r, i) => {
-                        const stage = STAGE_MAP[r.stage_bid] ?? { label: r.stage_bid, color: "#9E9E9E" };
-                        return (
-                          <tr key={r.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                            <td style={{ ...TD, color: "#555", fontSize: 12, fontWeight: 600 }}>
-                              {String(i + 1).padStart(2, "0")}
-                            </td>
-                            <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              <a href={`https://mountain.bitrix24.kz/crm/lead/details/${r.id}/`}
-                                 target="_blank" rel="noopener noreferrer"
-                                 style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                {r.title}
-                              </a>
-                            </td>
-                            <td style={{ ...TD, fontSize: 12, color: "#9E9E9E", whiteSpace: "nowrap" }}>
-                              {r.date_create ? new Date(r.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
-                            </td>
-                            <td style={{ ...TD, fontSize: 12, color: r.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
-                              {r.tashrif_sanasi ? new Date(r.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
-                            </td>
-                            <td style={TD}>
-                              <span style={{
-                                display: "inline-block", padding: "3px 10px", borderRadius: 20,
-                                fontSize: 11, fontWeight: 600,
-                                background: `${stage.color}22`, border: `1px solid ${stage.color}55`, color: stage.color,
-                                whiteSpace: "nowrap",
-                              }}>
-                                {stage.label}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                        <td style={{ ...TD, color: "#666" }} />
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
-                        <td style={TD} />
-                        <td style={TD} />
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#fff" }}>{leads.length} ta lid</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          );
-        })()}
 
         {/* ══════════════════════════════════════════════════════════
             Vazifalar kesimida table
