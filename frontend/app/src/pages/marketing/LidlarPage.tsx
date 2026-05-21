@@ -335,7 +335,7 @@ const TD: React.CSSProperties = {
 };
 
 // Responsibles excluded from "Lid va konversiya" and "Lid va mas'ullar kesimida" tables
-const EXCLUDED_RESPONSIBLES = ["Data365", "Shaxzod Turanov", "Murodjon"];
+const EXCLUDED_RESPONSIBLES = ["Data365", "Data365 Support", "Shaxzod Turanov", "Murodjon"];
 const isExcluded = (name: string) =>
   EXCLUDED_RESPONSIBLES.some((ex) => name.trim().toLowerCase() === ex.toLowerCase());
 
