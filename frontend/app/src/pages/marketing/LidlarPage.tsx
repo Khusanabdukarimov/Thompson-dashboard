@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useDarkMode } from "@/hooks/useDarkMode";
 import {
   RefreshCw, Calendar, Users, Star, TrendingUp, Filter,
   Percent, ArrowLeftRight, Target, XCircle, ChevronDown, Search,
@@ -289,26 +290,30 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
 
 // ── Gradient card shell ───────────────────────────────────────────
 type GradCardProps = {
-  gradient: string; border: string; shadow: string;
+  gradient: string; lightGradient: string; border: string; lightBorder: string; shadow: string;
   icon: React.ReactNode; title: string; children: React.ReactNode;
   sparkColor: string; sparkVariant?: number;
 };
-function GradCard({ gradient, border, shadow, icon, title, children, sparkColor, sparkVariant = 0 }: GradCardProps) {
+function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, title, children, sparkColor, sparkVariant = 0 }: GradCardProps) {
+  const { theme } = useDarkMode();
+  const isDark = theme === 'dark';
   return (
     <div style={{
-      background: gradient, border: `1px solid ${border}`, boxShadow: shadow,
+      background: isDark ? gradient : lightGradient,
+      border: `1px solid ${isDark ? border : lightBorder}`,
+      boxShadow: shadow,
       borderRadius: 16, padding: "16px 16px 0 16px",
       display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 200,
     }}>
       <div style={{
         width: 36, height: 36, borderRadius: "50%",
-        background: border.replace(/[\d.]+\)$/, "0.18)"),
+        background: isDark ? border.replace(/[\d.]+\)$/, "0.18)") : lightBorder.replace(/[\d.]+\)$/, "0.18)"),
         display: "flex", alignItems: "center", justifyContent: "center",
         marginBottom: 8, flexShrink: 0,
       }}>
         {icon}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", marginBottom: 3 }}>{title}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#fff" : "var(--text)", marginBottom: 3 }}>{title}</div>
       {children}
       <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
         <Sparkline color={sparkColor} variant={sparkVariant} />
@@ -333,6 +338,8 @@ const TD: React.CSSProperties = {
 // Page
 // ─────────────────────────────────────────────────────────────────
 export default function LidlarPage() {
+  const { theme } = useDarkMode();
+  const isDark = theme === 'dark';
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
@@ -786,37 +793,41 @@ export default function LidlarPage() {
           <>
             {/* Row 1 — 4 equal KPI cards */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:12 }}>
-              <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" border="rgba(33,150,243,0.3)"
+              <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(33,150,243,0.03))"
+                        border="rgba(33,150,243,0.3)" lightBorder="rgba(33,150,243,0.25)"
                         shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
                         title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0}>
-                <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
-                <div style={{ fontSize:11, color:"#9E9E9E" }}>Umumiy Lid</div>
+                <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Umumiy Lid</div>
               </GradCard>
-              <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" border="rgba(0,188,212,0.3)"
+              <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.03))"
+                        border="rgba(0,188,212,0.3)" lightBorder="rgba(0,188,212,0.25)"
                         shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
                         title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
-                <div style={{ fontSize:11, color:"#9E9E9E" }}>Sifatli Lid</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Sifatli Lid</div>
               </GradCard>
-              <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" border="rgba(156,39,176,0.3)"
+              <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" lightGradient="linear-gradient(135deg,rgba(156,39,176,0.07),rgba(156,39,176,0.03))"
+                        border="rgba(156,39,176,0.3)" lightBorder="rgba(156,39,176,0.25)"
                         shadow="0 4px 20px rgba(156,39,176,0.15)" icon={<Calendar size={20} style={{ color:"#9C27B0" }} />}
                         title="Konsultatsiyalar" sparkColor="#9C27B0" sparkVariant={2}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginBottom:3 }}>
-                  <span style={{ fontSize:36, fontWeight:800, color:"#fff" }}>{fmtNum(konsultBelgilandi)}</span>
-                  <span style={{ fontSize:24, fontWeight:700, color:"#9E9E9E" }}>/</span>
+                  <span style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
+                  <span style={{ fontSize:24, fontWeight:700, color: isDark ? "#9E9E9E" : "var(--text3)" }}>/</span>
                   <span style={{ fontSize:36, fontWeight:800, color:"#4CAF50" }}>{fmtNum(konsultOtkazildi)}</span>
                 </div>
                 <div style={{ fontSize:10 }}>
-                  <span style={{ color:"#9E9E9E" }}>Belgilandi</span>
-                  <span style={{ color:"#555" }}> / </span>
+                  <span style={{ color: isDark ? "#9E9E9E" : "var(--text3)" }}>Belgilandi</span>
+                  <span style={{ color: isDark ? "#555" : "var(--text3)" }}> / </span>
                   <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
                 </div>
               </GradCard>
-              <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" border="rgba(76,175,80,0.3)"
+              <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" lightGradient="linear-gradient(135deg,rgba(76,175,80,0.07),rgba(76,175,80,0.03))"
+                        border="rgba(76,175,80,0.3)" lightBorder="rgba(76,175,80,0.25)"
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
                         title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
-                <div style={{ fontSize:36, fontWeight:800, color:"#fff", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
-                <div style={{ fontSize:11, color:"#9E9E9E" }}>Konversiya</div>
+                <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Konversiya</div>
               </GradCard>
             </div>
 
@@ -825,9 +836,9 @@ export default function LidlarPage() {
               {/* Voronka — spans first 3 columns */}
               <div style={{ gridColumn:"1 / 4", background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-                  <Filter size={15} style={{ color:"#9E9E9E" }} />
-                  <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>Voronka samaradorligi</span>
-                  <span style={{ fontSize:11, color:"#9E9E9E", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
+                  <Filter size={15} style={{ color:"var(--text3)" }} />
+                  <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>Voronka samaradorligi</span>
+                  <span style={{ fontSize:11, color:"var(--text3)", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
                   {[
@@ -838,16 +849,17 @@ export default function LidlarPage() {
                     <div key={m.title} style={{ display:"flex", alignItems:"center", gap:12 }}>
                       <div style={{ width:36, height:36, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
                       <div>
-                        <div style={{ fontSize:11, fontWeight:600, color:"#fff", marginBottom:3 }}>{m.title}</div>
+                        <div style={{ fontSize:11, fontWeight:600, color:"var(--text)", marginBottom:3 }}>{m.title}</div>
                         <div style={{ fontSize:24, fontWeight:800, color:m.color, lineHeight:1.1, marginBottom:3 }}>{m.val.toFixed(1)}%</div>
-                        <div style={{ fontSize:10, color:"#9E9E9E" }}>{m.sub}</div>
+                        <div style={{ fontSize:10, color:"var(--text3)" }}>{m.sub}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
               {/* Sifatsiz/Bekor — 4th column, aligned under Konsultatsiyalar */}
-              <div style={{ background:"linear-gradient(135deg,#2a0000,#6e1a1a)", border:"1px solid rgba(244,67,54,0.3)",
+              <div style={{ background: isDark ? "linear-gradient(135deg,#2a0000,#6e1a1a)" : "linear-gradient(135deg,rgba(244,67,54,0.07),rgba(244,67,54,0.03))",
+                            border: `1px solid ${isDark ? "rgba(244,67,54,0.3)" : "rgba(244,67,54,0.25)"}`,
                             boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
                             padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:14 }}>
@@ -855,9 +867,9 @@ export default function LidlarPage() {
                     <XCircle size={20} style={{ color:"#F44336" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize:12, fontWeight:600, color:"#fff" }}>Sifatsiz / Bekor</div>
+                    <div style={{ fontSize:12, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz / Bekor</div>
                     <div style={{ fontSize:36, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:3 }}>{fmtNum(sifatsizBekor)}</div>
-                    <div style={{ fontSize:11, color:"#9E9E9E", marginTop:2 }}>Bekor qilingan lidlar</div>
+                    <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor qilingan lidlar</div>
                   </div>
                 </div>
                 <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
@@ -873,7 +885,7 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
           <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)" }}>
-            <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid va Konversiya</span>
+            <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid va Konversiya</span>
           </div>
 
           {conversionQ.isLoading ? (
@@ -941,25 +953,25 @@ export default function LidlarPage() {
                           <td style={{ ...TD, width:200 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <AvatarCircle name={r.full_name || "?"} size={34} />
-                              <span style={{ fontSize:13, color: isSelected ? "#2196F3" : "#fff", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                              <span style={{ fontSize:13, color: isSelected ? "#2196F3" : "var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                                 {r.full_name}
                               </span>
                             </div>
                           </td>
                           <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.total)}</span>
+                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.total)}</span>
                             <MiniBar value={r.total} max={convMax.total} color="#2196F3" />
                           </td>
                           <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.jarayonda)}</span>
+                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.jarayonda)}</span>
                             <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
                           </td>
                           <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.sifatsiz_lid)}</span>
+                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.sifatsiz_lid)}</span>
                             <MiniBar value={r.sifatsiz_lid} max={convMax.sifatsiz} color="#F44336" />
                           </td>
                           <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"#fff" }}>{fmtNum(r.tashrif_buyurdi)}</span>
+                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.tashrif_buyurdi)}</span>
                             <MiniBar value={r.tashrif_buyurdi} max={convMax.otkazildi} color="#4CAF50" />
                           </td>
                           <td style={{ ...TD, textAlign:"center" }}>
@@ -1021,7 +1033,7 @@ export default function LidlarPage() {
                                     <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
                                       <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
                                       <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
-                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#fff" }}>{subLeads.length} ta lid</td>
+                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{subLeads.length} ta lid</td>
                                     </tr>
                                   </tbody>
                                 </table>
@@ -1035,24 +1047,24 @@ export default function LidlarPage() {
 
                   {/* JAMI row */}
                   <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
-                    <td style={{ ...TD, color:"#666" }} />
-                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                    <td style={{ ...TD, color:"var(--text3)" }} />
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
                       JAMI
                     </td>
                     <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.total)}</span>
+                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.total)}</span>
                       <MiniBar value={1} max={1} color="#2196F3" />
                     </td>
                     <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.jarayonda)}</span>
+                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.jarayonda)}</span>
                       <MiniBar value={1} max={1} color="#FF9800" />
                     </td>
                     <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.sifatsiz)}</span>
+                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.sifatsiz)}</span>
                       <MiniBar value={1} max={1} color="#F44336" />
                     </td>
                     <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"#fff" }}>{fmtNum(convTotals.otkazildi)}</span>
+                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.otkazildi)}</span>
                       <MiniBar value={1} max={1} color="#4CAF50" />
                     </td>
                     <td style={{ ...TD, textAlign:"center" }}>
@@ -1071,8 +1083,8 @@ export default function LidlarPage() {
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
           <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:18, fontWeight:700, color:"#fff" }}>Lid mas'ullar kesimida</span>
-              <span style={{ fontSize:12, color:"#555" }}>{byUserFiltered.length} ta xodim</span>
+              <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid mas'ullar kesimida</span>
+              <span style={{ fontSize:12, color:"var(--text3)" }}>{byUserFiltered.length} ta xodim</span>
             </div>
             {/* Search */}
             <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
@@ -1145,7 +1157,7 @@ export default function LidlarPage() {
                           <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                              <span style={{ fontSize:13, color: isSel ? "#2196F3" : "#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                              <span style={{ fontSize:13, color: isSel ? "#2196F3" : "var(--text)", fontWeight:500, whiteSpace:"nowrap" }}>
                                 {u.full_name || `User ${u.responsible_id}`}
                               </span>
                             </div>
@@ -1157,11 +1169,11 @@ export default function LidlarPage() {
                               <td key={col.key} style={{ ...TD, minWidth:90 }}>
                                 {cnt > 0 ? (
                                   <>
-                                    <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
+                                    <span style={{ fontSize:13, color:"var(--text)" }}>{fmtNum(cnt)}</span>
                                     <MiniBar value={cnt} max={max} color={col.color} height={3} />
                                   </>
                                 ) : (
-                                  <span style={{ fontSize:13, color:"#333" }}>—</span>
+                                  <span style={{ fontSize:13, color:"var(--text3)" }}>—</span>
                                 )}
                               </td>
                             );
@@ -1222,7 +1234,7 @@ export default function LidlarPage() {
                                     <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
                                       <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
                                       <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
-                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#fff" }}>{subLeads.length} ta lid</td>
+                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{subLeads.length} ta lid</td>
                                     </tr>
                                   </tbody>
                                 </table>
@@ -1237,12 +1249,12 @@ export default function LidlarPage() {
                   {/* JAMI row */}
                   <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
                     <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
-                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"#9E9E9E", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
                       JAMI
                     </td>
                     {RESPONSIBLE_COLS.map((col) => (
                       <td key={col.key} style={TD}>
-                        <span style={{ fontSize:13, fontWeight:700, color:"#fff" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
+                        <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
                         <MiniBar value={1} max={1} color={col.color} height={3} />
                       </td>
                     ))}
@@ -1283,8 +1295,8 @@ export default function LidlarPage() {
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Vazifalar kesimida</span>
-                <span style={{ fontSize: 12, color: "#555" }}>{taskRows.length} ta xodim</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Vazifalar kesimida</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>{taskRows.length} ta xodim</span>
               </div>
 
               {tasksQ.isLoading ? (
@@ -1328,30 +1340,30 @@ export default function LidlarPage() {
                             <td style={{ ...TD, width: 200 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <AvatarCircle name={r.full_name || "?"} size={34} />
-                                <span style={{ fontSize: 13, color: "#fff", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {r.full_name}
                                 </span>
                               </div>
                             </td>
                             <td style={TD}>
-                              <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.total)}</span>
+                              <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.total)}</span>
                               <MiniBar value={r.total} max={taskMax.total} color="#9E9E9E" />
                             </td>
                             <td style={TD}>
                               {r.in_progress > 0 ? (
                                 <>
-                                  <span style={{ fontSize: 14, color: "#fff" }}>{fmtNum(r.in_progress)}</span>
+                                  <span style={{ fontSize: 14, color: "var(--text)" }}>{fmtNum(r.in_progress)}</span>
                                   <MiniBar value={r.in_progress} max={taskMax.in_progress} color="#FF9800" />
                                 </>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={TD}>
                               {r.completed > 0 ? (
                                 <>
-                                  <span style={{ fontSize: 14, color: "#fff" }}>{fmtNum(r.completed)}</span>
+                                  <span style={{ fontSize: 14, color: "var(--text)" }}>{fmtNum(r.completed)}</span>
                                   <MiniBar value={r.completed} max={taskMax.completed} color="#4CAF50" />
                                 </>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={TD}>
                               {r.overdue > 0 ? (
@@ -1359,7 +1371,7 @@ export default function LidlarPage() {
                                   <span style={{ fontSize: 14, color: "#F44336" }}>{fmtNum(r.overdue)}</span>
                                   <MiniBar value={r.overdue} max={taskMax.overdue} color="#F44336" />
                                 </>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={{ ...TD, textAlign: "center" }}>
                               <ConversionDonut pct={pct} size={38} />
@@ -1370,24 +1382,24 @@ export default function LidlarPage() {
 
                       {/* JAMI row */}
                       <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                        <td style={{ ...TD, color: "#666" }} />
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        <td style={{ ...TD, color: "var(--text3)" }} />
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                           JAMI
                         </td>
                         <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.total)}</span>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(taskTotals.total)}</span>
                           <MiniBar value={1} max={1} color="#9E9E9E" />
                         </td>
                         <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.in_progress)}</span>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(taskTotals.in_progress)}</span>
                           <MiniBar value={1} max={1} color="#FF9800" />
                         </td>
                         <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(taskTotals.completed)}</span>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(taskTotals.completed)}</span>
                           <MiniBar value={1} max={1} color="#4CAF50" />
                         </td>
                         <td style={TD}>
-                          <span style={{ fontSize: 16, fontWeight: 700, color: taskTotals.overdue > 0 ? "#F44336" : "#fff" }}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: taskTotals.overdue > 0 ? "#F44336" : "var(--text)" }}>
                             {fmtNum(taskTotals.overdue)}
                           </span>
                           <MiniBar value={1} max={1} color="#F44336" />
@@ -1431,8 +1443,8 @@ export default function LidlarPage() {
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Manba bo'yicha</span>
-                <span style={{ fontSize: 12, color: "#555" }}>{srcRows.length} ta manba</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Manba bo'yicha</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>{srcRows.length} ta manba</span>
               </div>
               {sourceQ.isLoading ? (
                 <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -1463,37 +1475,37 @@ export default function LidlarPage() {
                               style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
                               onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
                               onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                            <td style={{ ...TD, fontWeight: 600, color: "#fff", fontSize: 13, whiteSpace: "nowrap" }}>
+                            <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>
                               {r.source_name}
                             </td>
                             <td style={TD}>
-                              <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.umumiy_lidlar)}</span>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
                               <MiniBar value={r.umumiy_lidlar} max={srcMaxes.umumiy} color="#2196F3" />
                             </td>
                             <td style={TD}>
                               {r.sifatli_lid > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={srcMaxes.sifatli} color="#00BCD4" /></>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={srcMaxes.sifatli} color="#00BCD4" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={TD}>
                               {r.konsultatsiya_belgilandi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={srcMaxes.konsB} color="#9C27B0" /></>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={srcMaxes.konsB} color="#9C27B0" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={TD}>
                               {r.konsultatsiya_otkazildi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={srcMaxes.konsO} color="#4CAF50" /></>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={srcMaxes.konsO} color="#4CAF50" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={TD}>
                               {r.sifatsiz > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={srcMaxes.sifatsiz} color="#F44336" /></>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={srcMaxes.sifatsiz} color="#F44336" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={TD}>
                               {r.bekor_boldi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={srcMaxes.bekor} color="#FFC107" /></>
-                              ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={srcMaxes.bekor} color="#FFC107" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
                             <td style={{ ...TD, textAlign: "center" }}>
                               <ConversionDonut pct={konv} size={38} />
