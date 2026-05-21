@@ -8,7 +8,6 @@ import {
 import { Topbar } from "@/components/Topbar";
 import {
   getCallStats, getCallList, getCallGlobalStats,
-  syncCalls,
   type CallStatsRow,
 } from "@/lib/api/leads";
 
@@ -34,13 +33,6 @@ function fmtDurMin(secs: number): string {
 }
 
 
-function prevPeriod(from: string, to: string): [string, string] {
-  const f = new Date(from), t = new Date(to);
-  const diff = t.getTime() - f.getTime();
-  const pTo   = new Date(f.getTime() - 24 * 60 * 60 * 1000);
-  const pFrom = new Date(pTo.getTime() - diff);
-  return [localISO(pFrom), localISO(pTo)];
-}
 
 function initials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -125,17 +117,6 @@ function FilterPopover({ startDate, endDate, onStartDate, onEndDate, onClose }: 
 }
 
 // ── Delta badge ───────────────────────────────────────────────────
-function Delta({ curr, prev }: { curr: number; prev: number | undefined }) {
-  if (prev === undefined) return <span style={{ color: "var(--text2)", fontSize: 13 }}>—</span>;
-  const diff = curr - prev;
-  if (diff === 0) return <span style={{ color: "var(--text2)", fontSize: 12 }}>±0</span>;
-  const color = diff > 0 ? "#4CAF50" : "#F44336";
-  return (
-    <span style={{ fontSize: 11.5, fontWeight: 600, color, background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 5, padding: "2px 7px" }}>
-      {diff > 0 ? "+" : ""}{diff}
-    </span>
-  );
-}
 
 // ── Call list sub-table ───────────────────────────────────────────
 const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
@@ -186,8 +167,6 @@ export default function CallStatistikasi() {
   const [endDate,   setEndDate]           = useState(todayISO());
   const [filterOpen, setFilterOpen]       = useState(false);
   const [selectedResp, setSelectedResp]   = useState<{ id: number; name: string } | null>(null);
-  const [syncing, setSyncing] = useState(false);
-
   const statsQ     = useQuery({ queryKey: ["call-stats", startDate, endDate], queryFn: () => getCallStats({ start_date: startDate, end_date: endDate }) });
   const globalQ    = useQuery({ queryKey: ["call-global-stats", startDate, endDate], queryFn: () => getCallGlobalStats({ start_date: startDate, end_date: endDate }) });
   const rows: CallStatsRow[] = statsQ.data ?? [];
@@ -210,12 +189,6 @@ export default function CallStatistikasi() {
 
   const globalStats = globalQ.data;
 
-  async function doSync() {
-    if (syncing) return;
-    setSyncing(true);
-    try { await syncCalls(startDate, endDate); statsQ.refetch(); } finally { setSyncing(false); }
-  }
-
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
 
@@ -226,7 +199,7 @@ export default function CallStatistikasi() {
         actions={
           <div style={{ display: "flex", gap: 8, position: "relative" }}>
             <div style={{ position: "relative" }}>
-              <button onClick={() => setFilterOpen((v) => !v)} style={{ ...btn, color: filterOpen ? "#2196F3" : "var(--text2)", borderColor: filterOpen ? "#2196F3" : "var(--border)" }}>
+              <button onClick={() => setFilterOpen((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: `1px solid ${filterOpen ? "#2196F3" : "var(--border)"}`, background: "var(--bg)", color: filterOpen ? "#2196F3" : "var(--text2)", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
                 <SlidersHorizontal size={14} />Filtrlar
               </button>
               {filterOpen && <FilterPopover startDate={startDate} endDate={endDate} onStartDate={setStartDate} onEndDate={setEndDate} onClose={() => setFilterOpen(false)} />}
