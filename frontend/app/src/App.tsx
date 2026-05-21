@@ -16,7 +16,8 @@ const LoginPage        = lazy(() => import("@/pages/LoginPage"));
 // Marketing / analytics
 const LidlarPage       = lazy(() => import("@/pages/marketing/LidlarPage"));
 const SdelkalarPage    = lazy(() => import("@/pages/marketing/SdelkalarPage"));
-const KampaniyalarPage = lazy(() => import("@/pages/marketing/KampaniyalarPage"));
+const KampaniyalarPage  = lazy(() => import("@/pages/marketing/KampaniyalarPage"));
+const CallStatistikasi  = lazy(() => import("@/pages/marketing/CallStatistikasi"));
 const KunlikPage       = lazy(() => import("@/pages/marketing/KunlikPage"));
 const ByudjetPage      = lazy(() => import("@/pages/marketing/ByudjetPage"));
 
@@ -120,6 +121,11 @@ export default function App() {
         <Route path="/sdelkalar" element={
           <RoleRoute roles={MKT}>
             <S><SdelkalarPage /></S>
+          </RoleRoute>
+        } />
+        <Route path="/call-statistikasi" element={
+          <RoleRoute roles={MKT}>
+            <S><CallStatistikasi /></S>
           </RoleRoute>
         } />
         <Route path="/kampaniyalar" element={

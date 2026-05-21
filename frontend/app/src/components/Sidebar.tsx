@@ -18,6 +18,7 @@ import {
   Award,
   ClipboardCheck,
   PieChart,
+  Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDarkMode } from "@/hooks/useDarkMode";
@@ -36,8 +37,9 @@ type NavItem = {
 
 const MAIN_NAV: NavItem[] = [
   { to: "/lidlar",          label: "Lidlar",          icon: BarChart3,       roles: [...MKT, "hunter"] },
-  { to: "/sdelkalar",       label: "Sdelkalar",       icon: Briefcase,       roles: MKT },
-  { to: "/kampaniyalar",    label: "Kampaniyalar",     icon: TrendingUp,      roles: MKT },
+  { to: "/sdelkalar",          label: "Sdelkalar",          icon: Briefcase,  roles: MKT },
+  { to: "/call-statistikasi",  label: "Call statistikasi",  icon: Phone,      roles: MKT },
+  { to: "/kampaniyalar",       label: "Kampaniyalar",        icon: TrendingUp, roles: MKT },
   { to: "/kunlik-hisobot",  label: "Kunlik hisobot",  icon: LayoutDashboard, roles: MKT },
   { to: "/byudjet",         label: "Byudjet",          icon: DollarSign,      roles: MGMT },
   { to: "/reja",            label: "Reja",             icon: GanttChart,      roles: [...MGMT, "closer", "hunter"] },

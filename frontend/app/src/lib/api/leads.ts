@@ -260,6 +260,28 @@ export type CallStatsRow = {
   avg_duration: number;
   success_calls: number;
   failed_calls: number;
+  outbound_calls: number;
+  inbound_calls: number;
+  calls_with_lead: number;
+  unique_outbound: number;
+  unique_inbound: number;
+  unique_total: number;
+  outbound_duration: number;
+  inbound_duration: number;
+  missed_inbound: number;
+};
+
+export type CallListRow = {
+  id: string;
+  phone_number: string | null;
+  call_type: number | null;
+  duration: number;
+  call_start: string | null;
+  status_code: number | null;
+  status_name: string | null;
+  lead_id: number | null;
+  crm_entity_type: string | null;
+  lead_title: string | null;
 };
 
 export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
@@ -267,6 +289,14 @@ export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" 
     from: filter.start_date,
     to: filter.end_date,
     responsible_id: filter.responsible_id,
+  }, API_URL_CRM);
+}
+
+export function getCallList(responsibleId: number, filter: Pick<DashFilter, "start_date" | "end_date">) {
+  return apiGet<CallListRow[]>("/api/dashboard/call-list", {
+    responsible_id: responsibleId,
+    from: filter.start_date,
+    to: filter.end_date,
   }, API_URL_CRM);
 }
 

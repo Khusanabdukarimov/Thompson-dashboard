@@ -1466,14 +1466,20 @@ router.get('/call-stats', async (req, res) => {
       `SELECT
          c.responsible_id,
          COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
-         COUNT(*)::int                                                           AS total_calls,
-         COALESCE(SUM(c.duration), 0)::int                                      AS total_duration,
-         COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10)), 0)::int AS avg_duration,
-         COUNT(*) FILTER (WHERE c.status_code = 200 OR c.duration >= 10)::int  AS success_calls,
-         COUNT(*) FILTER (WHERE c.status_code != 200 AND c.duration < 10)::int AS failed_calls,
-         COUNT(*) FILTER (WHERE c.call_type = 1)::int                          AS outbound_calls,
-         COUNT(*) FILTER (WHERE c.call_type = 2)::int                          AS inbound_calls,
-         COUNT(*) FILTER (WHERE c.lead_id IS NOT NULL)::int                    AS calls_with_lead
+         COUNT(*)::int                                                                        AS total_calls,
+         COALESCE(SUM(c.duration), 0)::int                                                   AS total_duration,
+         COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10)), 0)::int            AS avg_duration,
+         COUNT(*) FILTER (WHERE c.status_code = 200 OR c.duration >= 10)::int               AS success_calls,
+         COUNT(*) FILTER (WHERE c.status_code != 200 AND c.duration < 10)::int              AS failed_calls,
+         COUNT(*) FILTER (WHERE c.call_type = 1)::int                                       AS outbound_calls,
+         COUNT(*) FILTER (WHERE c.call_type = 2)::int                                       AS inbound_calls,
+         COUNT(*) FILTER (WHERE c.lead_id IS NOT NULL)::int                                 AS calls_with_lead,
+         COUNT(DISTINCT c.phone_number) FILTER (WHERE c.call_type = 1)::int                 AS unique_outbound,
+         COUNT(DISTINCT c.phone_number) FILTER (WHERE c.call_type = 2)::int                 AS unique_inbound,
+         COUNT(DISTINCT c.phone_number)::int                                                 AS unique_total,
+         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 1), 0)::int                   AS outbound_duration,
+         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 2), 0)::int                   AS inbound_duration,
+         COUNT(*) FILTER (WHERE c.call_type = 2 AND c.status_code != 200 AND c.duration < 10)::int AS missed_inbound
        FROM calls c
        LEFT JOIN responsibles r ON r.id = c.responsible_id
        WHERE ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
