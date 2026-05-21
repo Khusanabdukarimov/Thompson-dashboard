@@ -1745,7 +1745,7 @@ function callSourceName(source) {
   return source || "Noma'lum";
 }
 
-function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}) {
+function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeResponsibles = []) {
   const buckets = new Map();
   const missedMap = new Map();
   const outboundMap = buildOutboundMap(rows);
@@ -1869,6 +1869,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}) {
     }
   }
 
+  const seenIds = new Set();
   const responsibles = Array.from(buckets.values())
     .filter((bucket) => bucket.total_calls > 0)
     .map((bucket) => {
@@ -1884,9 +1885,25 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}) {
       delete bucket.outPhones;
       delete bucket.allPhones;
       delete bucket.missedEvents;
+      if (bucket.responsible_id != null) seenIds.add(bucket.responsible_id);
       return bucket;
     })
     .sort((a, b) => b.total_calls - a.total_calls);
+
+  // Append zero-stat rows for active responsibles who had no calls in the period
+  for (const r of activeResponsibles) {
+    if (seenIds.has(r.id)) continue;
+    responsibles.push({
+      responsible_id: r.id,
+      full_name: r.full_name || "Noma'lum",
+      photo_url: r.photo_url || null,
+      total_calls: 0, inbound_calls: 0, outbound_calls: 0, callback_calls: 0,
+      success_calls: 0, failed_calls: 0, ndz_calls: 0,
+      missed_inbound: 0, missed_recalled: 0, missed_unrecalled: 0,
+      total_duration: 0, avg_duration: 0, inbound_duration: 0, outbound_duration: 0,
+      unique_inbound: 0, unique_outbound: 0, unique_total: 0,
+    });
+  }
 
   const failed = ndz + missed;
   const success = Math.max(total - failed, 0);
@@ -1962,25 +1979,33 @@ router.get('/call-stats-full', async (req, res) => {
   const lookupTo = addDaysISO(to, 1) || to || null;
   try {
     await ensureCallsTable();
-    const { rows } = await pool.query(
-      `SELECT
-         c.id, c.responsible_id, c.phone_number, c.call_type, c.duration,
-         c.call_start, c.status_code, c.status_name, c.failed_code,
-         c.call_category, c.lead_id, c.crm_entity_type, c.user_name,
-         r.name AS resp_name, r.last_name AS resp_last_name, r.photo_url,
-         (
-           ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-           AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
-         ) AS in_range
-       FROM calls c
-       LEFT JOIN responsibles r ON r.id = c.responsible_id
-       WHERE c.call_start IS NOT NULL
-         AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-         AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
-       ORDER BY c.call_start DESC`,
-      [from || null, to || null, lookupTo]
-    );
-    res.json(computeCallStatsFull(rows, from, to, filters));
+    const [{ rows }, { rows: activeRows }] = await Promise.all([
+      pool.query(
+        `SELECT
+           c.id, c.responsible_id, c.phone_number, c.call_type, c.duration,
+           c.call_start, c.status_code, c.status_name, c.failed_code,
+           c.call_category, c.lead_id, c.crm_entity_type, c.user_name,
+           r.name AS resp_name, r.last_name AS resp_last_name, r.photo_url,
+           (
+             ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+             AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+           ) AS in_range
+         FROM calls c
+         LEFT JOIN responsibles r ON r.id = c.responsible_id
+         WHERE c.call_start IS NOT NULL
+           AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
+         ORDER BY c.call_start DESC`,
+        [from || null, to || null, lookupTo]
+      ),
+      pool.query(
+        `SELECT id,
+           TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name,
+           photo_url
+         FROM responsibles WHERE active = TRUE ORDER BY name`
+      ),
+    ]);
+    res.json(computeCallStatsFull(rows, from, to, filters, activeRows));
   } catch (err) {
     if (err.code === '42P01') return res.json(computeCallStatsFull([], from, to, filters));
     console.error('[dashboard/call-stats-full]', err.message);
