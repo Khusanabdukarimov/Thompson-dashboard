@@ -1306,6 +1306,18 @@ async function ensureCallsTable() {
       ADD COLUMN IF NOT EXISTS crm_entity_type TEXT,
       ADD COLUMN IF NOT EXISTS user_name       TEXT
   `);
+  // One-time dedup: remove old voximplant records that have a matching crm.activity record
+  // (prevents 2x total_calls when both sync sources ran on same date range)
+  await pool.query(`
+    DELETE FROM calls
+    WHERE id NOT LIKE 'act_%'
+      AND EXISTS (
+        SELECT 1 FROM calls c2
+        WHERE c2.id LIKE 'act_%'
+          AND c2.responsible_id = calls.responsible_id
+          AND ABS(EXTRACT(EPOCH FROM (c2.call_start - calls.call_start))) < 120
+      )
+  `);
 }
 
 async function syncCallsFromBitrix(from, to) {
@@ -1343,6 +1355,14 @@ async function syncCallsFromBitrix(from, to) {
   }
 
   if (!useVoxi) {
+    // Remove old voximplant records for this date range to avoid 2x duplicates
+    await pool.query(
+      `DELETE FROM calls
+       WHERE id NOT LIKE 'act_%'
+         AND ($1::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+         AND ($2::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
+      [from || null, to || null],
+    );
     // Fallback: crm.activity.list (TYPE_ID=2 = calls)
     const filter = { TYPE_ID: 2 };
     if (from) filter['>=START_TIME'] = from;
@@ -1469,27 +1489,27 @@ router.get('/call-stats', async (req, res) => {
          c.responsible_id,
          COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
          r.photo_url,
-         COUNT(*)::int                                                                        AS total_calls,
-         COALESCE(SUM(c.duration), 0)::int                                                   AS total_duration,
-         COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10)), 0)::int            AS avg_duration,
-         COUNT(*) FILTER (WHERE c.status_code = 200 OR c.duration >= 10)::int               AS success_calls,
-         COUNT(*) FILTER (WHERE c.status_code != 200 AND c.duration < 10)::int              AS failed_calls,
-         COUNT(*) FILTER (WHERE c.call_type = 1)::int                                       AS outbound_calls,
-         COUNT(*) FILTER (WHERE c.call_type = 2)::int                                       AS inbound_calls,
+         COUNT(*) FILTER (WHERE c.call_type IN (1,2))::int                                   AS total_calls,
+         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type IN (1,2)), 0)::int              AS total_duration,
+         COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10 AND c.call_type IN (1,2))), 0)::int AS avg_duration,
+         COUNT(*) FILTER (WHERE c.call_type IN (1,2) AND (c.status_code = 200 OR c.duration >= 10))::int AS success_calls,
+         COUNT(*) FILTER (WHERE c.call_type IN (1,2) AND c.status_code != 200 AND c.duration < 10)::int  AS failed_calls,
+         COUNT(*) FILTER (WHERE c.call_type = 2)::int                                       AS outbound_calls,
+         COUNT(*) FILTER (WHERE c.call_type = 1)::int                                       AS inbound_calls,
          COUNT(*) FILTER (WHERE c.lead_id IS NOT NULL)::int                                 AS calls_with_lead,
-         COUNT(DISTINCT c.phone_number) FILTER (WHERE c.call_type = 1)::int                 AS unique_outbound,
-         COUNT(DISTINCT c.phone_number) FILTER (WHERE c.call_type = 2)::int                 AS unique_inbound,
+         COUNT(DISTINCT c.phone_number) FILTER (WHERE c.call_type = 2)::int                 AS unique_outbound,
+         COUNT(DISTINCT c.phone_number) FILTER (WHERE c.call_type = 1)::int                 AS unique_inbound,
          COUNT(DISTINCT c.phone_number)::int                                                 AS unique_total,
-         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 1), 0)::int                   AS outbound_duration,
-         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 2), 0)::int                   AS inbound_duration,
-         COUNT(*) FILTER (WHERE c.call_type = 2 AND c.status_code != 200 AND c.duration < 10)::int AS missed_inbound,
-         -- Обратные: outbound calls to a number that had a missed inbound within 72h before
+         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 2), 0)::int                   AS outbound_duration,
+         COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 1), 0)::int                   AS inbound_duration,
+         COUNT(*) FILTER (WHERE c.call_type = 1 AND c.status_code != 200 AND c.duration < 10)::int AS missed_inbound,
+         -- Обратные: outbound (type=2) calls to a number that had a missed inbound (type=1) within 72h
          COUNT(DISTINCT c.id) FILTER (WHERE
-           c.call_type = 1
+           c.call_type = 2
            AND EXISTS (
              SELECT 1 FROM calls m
              WHERE m.phone_number = c.phone_number
-               AND m.call_type = 2
+               AND m.call_type = 1
                AND m.status_code != 200 AND m.duration < 10
                AND m.call_start < c.call_start
                AND c.call_start - m.call_start <= INTERVAL '72 hours'
@@ -1522,35 +1542,35 @@ router.get('/call-global-stats', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         -- ne_perezvonili: distinct phone numbers with missed inbound but no subsequent outbound within 72h
+         -- ne_perezvonili: distinct phone numbers with missed inbound (type=1) but no outbound (type=2) callback within 72h
          COUNT(DISTINCT m.phone_number) FILTER (WHERE
            NOT EXISTS (
              SELECT 1 FROM calls cb
              WHERE cb.phone_number = m.phone_number
-               AND cb.call_type = 1
+               AND cb.call_type = 2
                AND cb.call_start > m.call_start
                AND cb.call_start - m.call_start <= INTERVAL '72 hours'
            )
          )::int AS ne_perezvonili,
-         -- reaksiya_vaqti: avg seconds between missed inbound and first callback outbound
+         -- reaksiya_vaqti: avg seconds between missed inbound (type=1) and first outbound callback (type=2)
          COALESCE(
            (SELECT ROUND(AVG(EXTRACT(EPOCH FROM (first_cb.call_start - m2.call_start))))::int
             FROM calls m2
             JOIN LATERAL (
               SELECT call_start FROM calls cb2
               WHERE cb2.phone_number = m2.phone_number
-                AND cb2.call_type = 1
+                AND cb2.call_type = 2
                 AND cb2.call_start > m2.call_start
                 AND cb2.call_start - m2.call_start <= INTERVAL '72 hours'
               ORDER BY call_start LIMIT 1
             ) first_cb ON TRUE
-            WHERE m2.call_type = 2 AND m2.status_code != 200 AND m2.duration < 10
+            WHERE m2.call_type = 1 AND m2.status_code != 200 AND m2.duration < 10
               AND ($1::date IS NULL OR (m2.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
               AND ($2::date IS NULL OR (m2.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
            ), 0
          )::int AS reaksiya_vaqti
        FROM calls m
-       WHERE m.call_type = 2 AND m.status_code != 200 AND m.duration < 10
+       WHERE m.call_type = 1 AND m.status_code != 200 AND m.duration < 10
          AND ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
       [from || null, to || null]
@@ -1576,20 +1596,20 @@ router.get('/call-reaction-stats', async (req, res) => {
          COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
          r.photo_url,
          COUNT(*)::int AS missed_calls,
-         -- bez_otveta: missed calls with no outbound callback within 72h
+         -- bez_otveta: missed inbound (type=1) with no outbound (type=2) callback within 72h
          COUNT(*) FILTER (WHERE NOT EXISTS (
            SELECT 1 FROM calls cb
            WHERE cb.phone_number = m.phone_number
-             AND cb.call_type = 1
+             AND cb.call_type = 2
              AND cb.call_start > m.call_start
              AND cb.call_start - m.call_start <= INTERVAL '72 hours'
          ))::int AS bez_otveta,
-         -- avg_response_secs: avg seconds from missed call to first callback (only for answered ones)
+         -- avg_response_secs: avg seconds from missed inbound (type=1) to first outbound callback (type=2)
          COALESCE(ROUND(AVG(
            EXTRACT(EPOCH FROM (
              (SELECT MIN(cb2.call_start) FROM calls cb2
               WHERE cb2.phone_number = m.phone_number
-                AND cb2.call_type = 1
+                AND cb2.call_type = 2
                 AND cb2.call_start > m.call_start
                 AND cb2.call_start - m.call_start <= INTERVAL '72 hours'
              ) - m.call_start
@@ -1597,13 +1617,13 @@ router.get('/call-reaction-stats', async (req, res) => {
          ) FILTER (WHERE EXISTS (
            SELECT 1 FROM calls cb3
            WHERE cb3.phone_number = m.phone_number
-             AND cb3.call_type = 1
+             AND cb3.call_type = 2
              AND cb3.call_start > m.call_start
              AND cb3.call_start - m.call_start <= INTERVAL '72 hours'
          )), 0)::int AS avg_response_secs
        FROM calls m
        LEFT JOIN responsibles r ON r.id = m.responsible_id
-       WHERE m.call_type = 2
+       WHERE m.call_type = 1
          AND m.status_code != 200 AND m.duration < 10
          AND m.responsible_id IS NOT NULL
          AND ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
