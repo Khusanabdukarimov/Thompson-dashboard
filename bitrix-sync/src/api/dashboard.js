@@ -1296,6 +1296,8 @@ async function ensureCallsTable() {
       synced_at        TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Add photo_url to responsibles if missing
+  await pool.query(`ALTER TABLE responsibles ADD COLUMN IF NOT EXISTS photo_url TEXT`);
   // Migrate existing table — add missing columns if needed
   await pool.query(`
     ALTER TABLE calls
@@ -1466,6 +1468,7 @@ router.get('/call-stats', async (req, res) => {
       `SELECT
          c.responsible_id,
          COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
+         r.photo_url,
          COUNT(*)::int                                                                        AS total_calls,
          COALESCE(SUM(c.duration), 0)::int                                                   AS total_duration,
          COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10)), 0)::int            AS avg_duration,
@@ -1479,14 +1482,45 @@ router.get('/call-stats', async (req, res) => {
          COUNT(DISTINCT c.phone_number)::int                                                 AS unique_total,
          COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 1), 0)::int                   AS outbound_duration,
          COALESCE(SUM(c.duration) FILTER (WHERE c.call_type = 2), 0)::int                   AS inbound_duration,
-         COUNT(*) FILTER (WHERE c.call_type = 2 AND c.status_code != 200 AND c.duration < 10)::int AS missed_inbound
+         COUNT(*) FILTER (WHERE c.call_type = 2 AND c.status_code != 200 AND c.duration < 10)::int AS missed_inbound,
+         -- Обратные: outbound calls to a number that had a missed inbound within 72h before
+         COUNT(DISTINCT c.id) FILTER (WHERE
+           c.call_type = 1
+           AND EXISTS (
+             SELECT 1 FROM calls m
+             WHERE m.phone_number = c.phone_number
+               AND m.call_type = 2
+               AND m.status_code != 200 AND m.duration < 10
+               AND m.call_start < c.call_start
+               AND c.call_start - m.call_start <= INTERVAL '72 hours'
+           )
+         )::int AS callback_calls,
+         -- Ne perezvonili per-responsible: missed inbound with no subsequent outbound within 72h
+         COUNT(DISTINCT c2_ne.phone_number)::int AS ne_perezvonili
        FROM calls c
        LEFT JOIN responsibles r ON r.id = c.responsible_id
+       -- for ne_perezvonili: join missed inbound calls for this responsible
+       LEFT JOIN LATERAL (
+         SELECT DISTINCT m_ne.phone_number
+         FROM calls m_ne
+         WHERE m_ne.responsible_id = c.responsible_id
+           AND m_ne.call_type = 2
+           AND m_ne.status_code != 200 AND m_ne.duration < 10
+           AND ($1::date IS NULL OR (m_ne.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($2::date IS NULL OR (m_ne.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+           AND NOT EXISTS (
+             SELECT 1 FROM calls cb
+             WHERE cb.phone_number = m_ne.phone_number
+               AND cb.call_type = 1
+               AND cb.call_start > m_ne.call_start
+               AND cb.call_start - m_ne.call_start <= INTERVAL '72 hours'
+           )
+       ) c2_ne ON TRUE
        WHERE ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          AND ($3::int  IS NULL OR c.responsible_id = $3::int)
          AND c.responsible_id IS NOT NULL
-       GROUP BY c.responsible_id, r.name, r.last_name
+       GROUP BY c.responsible_id, r.name, r.last_name, r.photo_url
        ORDER BY total_calls DESC`,
       [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
     );
@@ -1494,6 +1528,80 @@ router.get('/call-stats', async (req, res) => {
   } catch (err) {
     if (err.code === '42P01') return res.json([]);
     console.error('[dashboard/call-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/call-global-stats
+ * Global call metrics: ne_perezvonili, reaksiya_vaqti (avg response time in secs).
+ */
+router.get('/call-global-stats', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         -- ne_perezvonili: distinct phone numbers with missed inbound but no subsequent outbound within 72h
+         COUNT(DISTINCT m.phone_number) FILTER (WHERE
+           NOT EXISTS (
+             SELECT 1 FROM calls cb
+             WHERE cb.phone_number = m.phone_number
+               AND cb.call_type = 1
+               AND cb.call_start > m.call_start
+               AND cb.call_start - m.call_start <= INTERVAL '72 hours'
+           )
+         )::int AS ne_perezvonili,
+         -- reaksiya_vaqti: avg seconds between missed inbound and first callback outbound
+         COALESCE(
+           (SELECT ROUND(AVG(EXTRACT(EPOCH FROM (first_cb.call_start - m2.call_start))))::int
+            FROM calls m2
+            JOIN LATERAL (
+              SELECT call_start FROM calls cb2
+              WHERE cb2.phone_number = m2.phone_number
+                AND cb2.call_type = 1
+                AND cb2.call_start > m2.call_start
+                AND cb2.call_start - m2.call_start <= INTERVAL '72 hours'
+              ORDER BY call_start LIMIT 1
+            ) first_cb ON TRUE
+            WHERE m2.call_type = 2 AND m2.status_code != 200 AND m2.duration < 10
+              AND ($1::date IS NULL OR (m2.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+              AND ($2::date IS NULL OR (m2.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+           ), 0
+         )::int AS reaksiya_vaqti
+       FROM calls m
+       WHERE m.call_type = 2 AND m.status_code != 200 AND m.duration < 10
+         AND ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+         AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
+      [from || null, to || null]
+    );
+    res.json(rows[0] || { ne_perezvonili: 0, reaksiya_vaqti: 0 });
+  } catch (err) {
+    if (err.code === '42P01') return res.json({ ne_perezvonili: 0, reaksiya_vaqti: 0 });
+    console.error('[dashboard/call-global-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/sync-user-photos
+ * Fetches Bitrix24 user photos and saves to responsibles.photo_url.
+ */
+router.post('/sync-user-photos', async (_req, res) => {
+  try {
+    const { fetchAll } = require('../services/bitrix');
+    const users = await fetchAll('user.get', { ACTIVE: 'Y' });
+    let updated = 0;
+    for (const u of users) {
+      const photoUrl = u.PERSONAL_PHOTO || null;
+      await pool.query(
+        `UPDATE responsibles SET photo_url = $1 WHERE id = $2`,
+        [photoUrl, parseInt(u.ID)]
+      );
+      if (photoUrl) updated++;
+    }
+    res.json({ ok: true, total: users.length, with_photo: updated });
+  } catch (err) {
+    console.error('[dashboard/sync-user-photos]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

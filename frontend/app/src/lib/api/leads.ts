@@ -255,6 +255,7 @@ export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date
 export type CallStatsRow = {
   responsible_id: number;
   full_name: string;
+  photo_url: string | null;
   total_calls: number;
   total_duration: number;
   avg_duration: number;
@@ -269,6 +270,13 @@ export type CallStatsRow = {
   outbound_duration: number;
   inbound_duration: number;
   missed_inbound: number;
+  callback_calls: number;
+  ne_perezvonili: number;
+};
+
+export type CallGlobalStats = {
+  ne_perezvonili: number;
+  reaksiya_vaqti: number;
 };
 
 export type CallListRow = {
@@ -290,6 +298,22 @@ export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" 
     to: filter.end_date,
     responsible_id: filter.responsible_id,
   }, API_URL_CRM);
+}
+
+export function getCallGlobalStats(filter: Pick<DashFilter, "start_date" | "end_date">) {
+  return apiGet<CallGlobalStats>("/api/dashboard/call-global-stats", {
+    from: filter.start_date,
+    to:   filter.end_date,
+  }, API_URL_CRM);
+}
+
+export async function syncUserPhotos(): Promise<{ ok: boolean; total: number; with_photo: number }> {
+  const res = await authedFetch("/api/dashboard/sync-user-photos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  }, API_URL_CRM);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
 }
 
 export function getCallList(responsibleId: number, filter: Pick<DashFilter, "start_date" | "end_date">) {
