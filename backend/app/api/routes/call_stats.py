@@ -182,6 +182,23 @@ def _normalise_activity(records: list[dict]) -> list[dict]:
     return out
 
 
+async def _fetch_active_users() -> list[dict[str, Any]]:
+    """Fetch all active Bitrix24 users for showing zero-call responsibles."""
+    portal, user_id, webhook = _creds()
+    base = f"https://{portal}/rest/{user_id}/{webhook}"
+    async with httpx.AsyncClient() as client:
+        try:
+            return await _paginate(
+                client,
+                f"{base}/user.get",
+                {"FILTER": {"ACTIVE": "Y"}, "start": 0},
+                lambda s: {"FILTER": {"ACTIVE": "Y"}, "start": s},
+            )
+        except Exception as e:
+            log.warning("user.get failed, skipping active-user merge: %s", e)
+            return []
+
+
 async def _fetch_all(date_from: str, date_to: str) -> list[dict[str, Any]]:
     portal, user_id, webhook = _creds()
     base = f"https://{portal}/rest/{user_id}/{webhook}"
@@ -391,6 +408,7 @@ def _compute(
     date_from: str,
     date_to: str,
     lookup_records: Optional[list[dict]] = None,
+    active_users: Optional[list[dict]] = None,
 ) -> CallStatsResult:
     calls = [_Call(r) for r in records]
     lookup_calls = [_Call(r) for r in (lookup_records or records)]
@@ -506,6 +524,7 @@ def _compute(
 
     # ── build per-responsible list ────────────────────────────────────────────
     responsibles: list[ResponsibleCallStats] = []
+    seen_uids: set[int] = set()
     for b in sorted(buckets.values(), key=lambda x: -x["total"]):
         t = b["total"]
         if not t:
@@ -548,6 +567,23 @@ def _compute(
             unique_outbound   = len(b["out_phones"]),
             unique_total      = len(b["all_phones"]),
         ))
+        if b["uid"]:
+            seen_uids.add(b["uid"])
+
+    # Append zero-stat rows for active users who had no calls in the period
+    if active_users:
+        for u in active_users:
+            uid = _to_int(u.get("ID"))
+            if not uid or uid in seen_uids:
+                continue
+            name_parts = [u.get("NAME") or "", u.get("LAST_NAME") or ""]
+            name = " ".join(p for p in name_parts if p).strip() or "Noma'lum"
+            photo = u.get("PERSONAL_PHOTO") or None
+            responsibles.append(ResponsibleCallStats(
+                responsible_id = uid,
+                full_name      = name,
+                photo_url      = photo,
+            ))
 
     def pct(p: int, w: int) -> float:
         return round(p / w * 100, 1) if w else 0.0
@@ -592,17 +628,23 @@ async def call_stats(
     if d_from > d_to:
         raise HTTPException(400, "date_from > date_to")
 
+    lookup_to = d_to + timedelta(days=1)
     try:
-        records = await _fetch_all(str(d_from), str(d_to))
-        lookup_to = d_to + timedelta(days=1)
-        lookup_records = (
-            await _fetch_all(str(d_from), str(lookup_to))
-            if lookup_to != d_to
-            else records
-        )
+        if lookup_to != d_to:
+            records, lookup_records, active_users = await asyncio.gather(
+                _fetch_all(str(d_from), str(d_to)),
+                _fetch_all(str(d_from), str(lookup_to)),
+                _fetch_active_users(),
+            )
+        else:
+            records, active_users = await asyncio.gather(
+                _fetch_all(str(d_from), str(d_to)),
+                _fetch_active_users(),
+            )
+            lookup_records = records
     except RuntimeError as e:
         raise HTTPException(500, str(e))
     except ValueError as e:
         raise HTTPException(502, str(e))
 
-    return _compute(records, str(d_from), str(d_to), lookup_records)
+    return _compute(records, str(d_from), str(d_to), lookup_records, active_users)
