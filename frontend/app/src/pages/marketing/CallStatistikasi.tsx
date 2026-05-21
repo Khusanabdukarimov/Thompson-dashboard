@@ -32,7 +32,10 @@ function fmtDurMin(secs: number): string {
   return frac > 0 ? `${m},${frac} min` : `${m} min`;
 }
 
-
+function fmtPct(pct: number): string {
+  if (pct > 0 && pct < 1) return "<1%";
+  return `${Math.round(pct)}%`;
+}
 
 function initials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -120,8 +123,10 @@ function FilterPopover({ startDate, endDate, onStartDate, onEndDate, onClose }: 
 
 // ── Call list sub-table ───────────────────────────────────────────
 const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
-  1: { label: "Kiruvchi",  color: "#4CAF50" },  // DIRECTION=1 = inbound
-  2: { label: "Chiquvchi", color: "#2196F3" },  // DIRECTION=2 = outbound
+  1: { label: "Chiquvchi", color: "#2196F3" },
+  2: { label: "Kiruvchi",  color: "#4CAF50" },
+  3: { label: "Kiruvchi",  color: "#4CAF50" },
+  4: { label: "Callback",  color: "#607D8B" },
 };
 
 function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter: { start_date?: string; end_date?: string } }) {
@@ -175,6 +180,8 @@ export default function CallStatistikasi() {
 
   const data: PyCallStatsResult | undefined = statsQ.data;
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
+  const failedCalls = data?.failed_calls ?? 0;
+  const ndzCalls = data?.ndz_calls ?? 0;
 
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
@@ -216,9 +223,9 @@ export default function CallStatistikasi() {
             icon={<CheckCircle size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)"
             badge={`${Math.round(data?.success_pct ?? 0)}%`} badgeColor="#4CAF50" />
           <Card label="Muvaffaqiyatsiz" accentColor="#F44336"
-            value={<span style={{ color: "#F44336" }}>{data?.failed_calls ?? 0}</span>}
+            value={<span style={{ color: "#F44336" }}>{failedCalls}</span>}
             icon={<XCircle size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
-            badge={(data?.failed_pct ?? 0) > 0 ? `${Math.round(data!.failed_pct)}%` : undefined} badgeColor="#F44336" />
+            badge={failedCalls > 0 ? fmtPct(data?.failed_pct ?? 0) : undefined} badgeColor="#F44336" />
         </div>
 
         {/* ── Row 2 ── */}
@@ -227,7 +234,7 @@ export default function CallStatistikasi() {
             value={fmtDurMin(data?.avg_duration ?? 0)}
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)" />
           <Card label="NDZ (javob berilmagan)" accentColor="#607D8B"
-            value={<>{data?.failed_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
           <Card label="Propushenniy" accentColor="#FF9800"
             value={<span style={{ color: "#FF9800" }}>{data?.missed_inbound ?? 0} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
@@ -245,7 +252,6 @@ export default function CallStatistikasi() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Xodimlar bo'yicha hisobot</div>
-              <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>{rows.length} xodim • {startDate} — {endDate}</div>
             </div>
             <button title="Export" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", cursor: "pointer" }}><Download size={15} /></button>
           </div>

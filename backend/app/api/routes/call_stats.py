@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import httpx
@@ -29,6 +30,9 @@ _CALLBACK        = 4   # Qayta qo'ng'iroq
 
 _INBOUND_TYPES  = {_INBOUND, _INBOUND_REDIR}
 _OUTBOUND_TYPES = {_OUTBOUND}
+_SUCCESS_CODES  = {"0", "200"}
+_MISSED_CODE    = "304"
+_RECALL_WINDOW  = timedelta(hours=24)
 
 
 # ── Credentials ───────────────────────────────────────────────────────────────
@@ -120,11 +124,13 @@ def _normalise_voximplant(records: list[dict]) -> list[dict]:
             "PORTAL_USER_ID":  r.get("PORTAL_USER_ID"),
             "PORTAL_USER":     r.get("PORTAL_USER"),
             "PHONE_NUMBER":    r.get("PHONE_NUMBER"),
+            "CALL_CATEGORY":   r.get("CALL_CATEGORY"),
             # voximplant: CALL_TYPE 1=outbound, 2=inbound, 3=inbound_redir, 4=callback
             "CALL_TYPE":       r.get("CALL_TYPE"),
             "CALL_DURATION":   r.get("CALL_DURATION"),
-            "CALL_START_TIME": r.get("CALL_START_TIME"),
+            "CALL_START_TIME": r.get("CALL_START_DATE") or r.get("CALL_START_TIME"),
             "CALL_FAILED_CODE":r.get("CALL_FAILED_CODE"),
+            "CALL_FAILED_REASON": r.get("CALL_FAILED_REASON"),
             "CALL_STATUS_CODE":r.get("CALL_STATUS_CODE"),
         })
     return out
@@ -159,13 +165,14 @@ def _normalise_activity(records: list[dict]) -> list[dict]:
         m = _phone_re.search(subj)
         phone = m.group(0) if m else None
 
-        # Status: COMPLETED='Y' → success (map to failed_code=0)
-        failed_code = 0 if r.get("COMPLETED") == "Y" else None
+        # Status: COMPLETED='Y' → success (same meaning as Bitrix CALL_FAILED_CODE=200)
+        failed_code = "200" if r.get("COMPLETED") == "Y" else None
 
         out.append({
             "PORTAL_USER_ID":   r.get("RESPONSIBLE_ID"),
             "PORTAL_USER":      None,
             "PHONE_NUMBER":     phone,
+            "CALL_CATEGORY":    None,
             "CALL_TYPE":        call_type,
             "CALL_DURATION":    duration,
             "CALL_START_TIME":  r.get("START_TIME"),
@@ -246,6 +253,12 @@ def _to_int(v: Any) -> Optional[int]:
         return None
 
 
+def _to_code(v: Any) -> Optional[str]:
+    if v is None or v == "":
+        return None
+    return str(v).strip().upper()
+
+
 def _to_dt(v: Any) -> Optional[datetime]:
     if not v:
         return None
@@ -255,9 +268,18 @@ def _to_dt(v: Any) -> Optional[datetime]:
         return None
 
 
+def _phone_key(phone: Optional[str]) -> Optional[str]:
+    if not phone:
+        return None
+    digits = re.sub(r"\D+", "", phone)
+    if not digits:
+        return None
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
 class _Call:
     __slots__ = (
-        "user_id", "user_name", "phone", "call_type",
+        "user_id", "user_name", "phone", "category", "call_type",
         "duration", "start_time", "failed_code", "status_code",
     )
 
@@ -265,10 +287,11 @@ class _Call:
         self.user_id    = r.get("PORTAL_USER_ID") or None
         self.user_name  = r.get("PORTAL_USER") or "Noma'lum"
         self.phone      = r.get("PHONE_NUMBER") or None
+        self.category   = str(r.get("CALL_CATEGORY") or "").lower()
         self.call_type  = _to_int(r.get("CALL_TYPE"))
         self.duration   = _to_int(r.get("CALL_DURATION")) or 0
         self.start_time = _to_dt(r.get("CALL_START_TIME"))
-        self.failed_code = _to_int(r.get("CALL_FAILED_CODE"))
+        self.failed_code = _to_code(r.get("CALL_FAILED_CODE"))
         self.status_code = _to_int(r.get("CALL_STATUS_CODE"))
 
     @property
@@ -284,14 +307,26 @@ class _Call:
         return self.call_type == _CALLBACK
 
     @property
+    def is_internal(self) -> bool:
+        return self.category == "internal"
+
+    @property
     def is_success(self) -> bool:
         if self.failed_code is not None:
-            return self.failed_code == 0
+            return self.failed_code in _SUCCESS_CODES
         return (self.status_code == 200) or (self.duration >= 10)
 
     @property
     def is_missed(self) -> bool:
-        return self.is_inbound and not self.is_success and self.duration < 10
+        if not self.is_inbound:
+            return False
+        if self.failed_code is not None:
+            return self.failed_code == _MISSED_CODE
+        return not self.is_success and self.duration < 10
+
+    @property
+    def is_ndz(self) -> bool:
+        return self.is_outbound and not self.is_success
 
 
 # ── Output models ─────────────────────────────────────────────────────────────
@@ -308,6 +343,7 @@ class ResponsibleCallStats(BaseModel):
 
     success_calls:    int = 0
     failed_calls:     int = 0
+    ndz_calls:        int = 0
     missed_inbound:   int = 0
 
     total_duration:   int = 0
@@ -331,6 +367,7 @@ class CallStatsResult(BaseModel):
 
     success_calls:  int
     failed_calls:   int
+    ndz_calls:      int
     missed_inbound: int
 
     total_duration: int
@@ -339,7 +376,7 @@ class CallStatsResult(BaseModel):
     success_pct: float
     failed_pct:  float
 
-    ne_perezvonili: int   # missed inbound with no outbound callback within 72h
+    ne_perezvonili: int   # missed inbound with no outbound callback within 24h
     reaksiya_vaqti: int   # avg seconds from missed to first callback
 
     responsibles: list[ResponsibleCallStats]
@@ -347,17 +384,23 @@ class CallStatsResult(BaseModel):
 
 # ── Stats computation ─────────────────────────────────────────────────────────
 
-def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResult:
+def _compute(
+    records: list[dict],
+    date_from: str,
+    date_to: str,
+    lookup_records: Optional[list[dict]] = None,
+) -> CallStatsResult:
     calls = [_Call(r) for r in records]
+    lookup_calls = [_Call(r) for r in (lookup_records or records)]
 
-    total = inbound = outbound = callback_t = success = failed = missed = 0
+    total = inbound = outbound = callback_t = ndz = missed = 0
     total_dur = 0
 
     Bucket = dict[str, Any]
     buckets: dict[str, Bucket] = defaultdict(lambda: {
         "uid": None, "name": "Noma'lum",
         "total": 0, "in": 0, "out": 0, "cb": 0,
-        "succ": 0, "fail": 0, "miss": 0,
+        "ndz": 0, "miss": 0,
         "dur": 0, "in_dur": 0, "out_dur": 0,
         "in_phones": set(), "out_phones": set(), "all_phones": set(),
     })
@@ -367,26 +410,42 @@ def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResu
     # outbound_map[phone] = [outbound_datetime, ...]
     missed_map:   dict[str, list[datetime]] = defaultdict(list)
     outbound_map: dict[str, list[datetime]] = defaultdict(list)
+    no_phone_missed = 0
 
     for c in calls:
+        if c.is_internal:
+            continue
+
+        if c.is_callback_type:
+            callback_t += 1
+            uid = c.user_id or "unknown"
+            b = buckets[uid]
+            if c.user_id:
+                b["uid"] = int(c.user_id)
+            if c.user_name:
+                b["name"] = c.user_name
+            b["cb"] += 1
+
+        if not (c.is_inbound or c.is_outbound):
+            continue
+
         dur = c.duration
         total     += 1
         total_dur += dur
 
         if c.is_inbound:       inbound   += 1
         elif c.is_outbound:    outbound  += 1
-        elif c.is_callback_type: callback_t += 1
 
-        if c.is_success: success += 1
-        else:            failed  += 1
-        if c.is_missed:  missed  += 1
+        if c.is_ndz:     ndz    += 1
+        if c.is_missed:  missed += 1
 
         # ne_perezvonili tracking
-        if c.phone and c.start_time:
-            if c.is_missed:
-                missed_map[c.phone].append(c.start_time)
-            elif c.is_outbound:
-                outbound_map[c.phone].append(c.start_time)
+        phone_key = _phone_key(c.phone)
+        if c.is_missed and c.start_time:
+            if phone_key:
+                missed_map[phone_key].append(c.start_time)
+            else:
+                no_phone_missed += 1
 
         # Per-responsible
         uid = c.user_id or "unknown"
@@ -405,24 +464,31 @@ def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResu
             b["out"]     += 1
             b["out_dur"] += dur
             if c.phone: b["out_phones"].add(c.phone)
-        elif c.is_callback_type:
-            b["cb"] += 1
 
         if c.phone: b["all_phones"].add(c.phone)
 
-        if c.is_success: b["succ"] += 1
-        else:            b["fail"] += 1
-        if c.is_missed:  b["miss"] += 1
+        if c.is_ndz:    b["ndz"]  += 1
+        if c.is_missed: b["miss"] += 1
+
+    for c in lookup_calls:
+        if c.is_internal:
+            continue
+
+        phone_key = _phone_key(c.phone)
+        if phone_key and c.start_time:
+            if c.is_missed:
+                continue
+            if c.is_outbound:
+                outbound_map[phone_key].append(c.start_time)
 
     # ── ne_perezvonili / reaksiya_vaqti ──────────────────────────────────────
-    ne_perezv = 0
+    ne_perezv = no_phone_missed
     resp_times: list[float] = []
-    _72h = timedelta(hours=72)
 
     for phone, missed_times in missed_map.items():
         out_times = sorted(outbound_map.get(phone, []))
         for mt in missed_times:
-            window = mt + _72h
+            window = mt + _RECALL_WINDOW
             callback_dt = next(
                 (ot for ot in out_times if mt < ot <= window), None
             )
@@ -437,6 +503,9 @@ def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResu
     responsibles: list[ResponsibleCallStats] = []
     for b in sorted(buckets.values(), key=lambda x: -x["total"]):
         t = b["total"]
+        if not t:
+            continue
+        b_failed = b["ndz"] + b["miss"]
         responsibles.append(ResponsibleCallStats(
             responsible_id    = b["uid"],
             full_name         = b["name"],
@@ -444,8 +513,9 @@ def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResu
             inbound_calls     = b["in"],
             outbound_calls    = b["out"],
             callback_calls    = b["cb"],
-            success_calls     = b["succ"],
-            failed_calls      = b["fail"],
+            success_calls     = max(t - b_failed, 0),
+            failed_calls      = b_failed,
+            ndz_calls         = b["ndz"],
             missed_inbound    = b["miss"],
             total_duration    = b["dur"],
             avg_duration      = round(b["dur"] / t) if t else 0,
@@ -459,6 +529,9 @@ def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResu
     def pct(p: int, w: int) -> float:
         return round(p / w * 100, 1) if w else 0.0
 
+    failed = ndz + missed
+    success = max(total - failed, 0)
+
     return CallStatsResult(
         date_from      = date_from,
         date_to        = date_to,
@@ -468,6 +541,7 @@ def _compute(records: list[dict], date_from: str, date_to: str) -> CallStatsResu
         callback_calls = callback_t,
         success_calls  = success,
         failed_calls   = failed,
+        ndz_calls      = ndz,
         missed_inbound = missed,
         total_duration = total_dur,
         avg_duration   = round(total_dur / total) if total else 0,
@@ -497,9 +571,15 @@ async def call_stats(
 
     try:
         records = await _fetch_all(str(d_from), str(d_to))
+        lookup_to = d_to + timedelta(days=1)
+        lookup_records = (
+            await _fetch_all(str(d_from), str(lookup_to))
+            if lookup_to != d_to
+            else records
+        )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
     except ValueError as e:
         raise HTTPException(502, str(e))
 
-    return _compute(records, str(d_from), str(d_to))
+    return _compute(records, str(d_from), str(d_to), lookup_records)

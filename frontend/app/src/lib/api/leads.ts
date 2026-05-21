@@ -469,6 +469,7 @@ export type PyResponsibleCallStats = {
   callback_calls:    number;
   success_calls:     number;
   failed_calls:      number;
+  ndz_calls:         number;
   missed_inbound:    number;
   total_duration:    number;
   avg_duration:      number;
@@ -488,6 +489,7 @@ export type PyCallStatsResult = {
   callback_calls: number;
   success_calls:  number;
   failed_calls:   number;
+  ndz_calls:      number;
   missed_inbound: number;
   total_duration: number;
   avg_duration:   number;
