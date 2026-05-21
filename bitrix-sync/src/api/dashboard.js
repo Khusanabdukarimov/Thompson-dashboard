@@ -1445,7 +1445,7 @@ async function syncCallsFromBitrix(from, to) {
       callType      = r.CALL_TYPE       ? parseInt(r.CALL_TYPE)        : null;
       duration      = r.CALL_DURATION   ? parseInt(r.CALL_DURATION)    : 0;
       callStart     = r.CALL_START_DATE || r.CALL_START_TIME || null;
-      statusCode    = r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null;
+      statusCode    = /^\d+$/.test(String(r.CALL_STATUS_CODE || '')) ? parseInt(r.CALL_STATUS_CODE) : null;
       statusName    = r.CALL_STATUS_CODE_NAME || null;
       failedCode    = r.CALL_FAILED_CODE != null && r.CALL_FAILED_CODE !== '' ? String(r.CALL_FAILED_CODE) : null;
       callCategory  = r.CALL_CATEGORY || null;
