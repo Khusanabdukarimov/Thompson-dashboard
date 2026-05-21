@@ -1278,58 +1278,83 @@ router.post('/sync-crm-forms', async (_req, res) => {
   }
 });
 
-// ── Call sync helpers (Bitrix24 crm.activity.list) ────────────────
+// ── Call sync helpers (voximplant.statistic.get) ──────────────────
 async function ensureCallsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS calls (
-      id             TEXT PRIMARY KEY,
-      responsible_id INT,
-      call_start     TIMESTAMPTZ,
-      call_end       TIMESTAMPTZ,
-      duration       INT,
-      direction      INT,
-      completed      BOOLEAN,
-      synced_at      TIMESTAMPTZ DEFAULT NOW()
+      id               TEXT PRIMARY KEY,
+      responsible_id   INT,
+      phone_number     TEXT,
+      call_type        INT,
+      duration         INT,
+      call_start       TIMESTAMPTZ,
+      status_code      INT,
+      status_name      TEXT,
+      lead_id          INT,
+      crm_entity_type  TEXT,
+      user_name        TEXT,
+      synced_at        TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+  // Migrate existing table — add missing columns if needed
+  await pool.query(`
+    ALTER TABLE calls
+      ADD COLUMN IF NOT EXISTS status_name     TEXT,
+      ADD COLUMN IF NOT EXISTS lead_id         INT,
+      ADD COLUMN IF NOT EXISTS crm_entity_type TEXT,
+      ADD COLUMN IF NOT EXISTS user_name       TEXT
   `);
 }
 
 async function syncCallsFromBitrix(from, to) {
   await ensureCallsTable();
   const { fetchAll } = require('../services/bitrix');
-  const filter = { TYPE_ID: 2 };
-  if (from) filter['>=START_TIME'] = from;
-  if (to)   filter['<=START_TIME'] = to;
 
-  const records = await fetchAll('crm.activity.list', filter, [
-    'ID','RESPONSIBLE_ID','START_TIME','END_TIME','COMPLETED','DIRECTION',
+  const filter = {};
+  if (from) filter['>=CALL_START_DATE'] = `${from}T00:00:00`;
+  if (to)   filter['<=CALL_START_DATE'] = `${to}T23:59:59`;
+
+  const records = await fetchAll('voximplant.statistic.get', filter, [
+    'CALL_ID', 'PORTAL_USER_ID', 'PORTAL_USER',
+    'PHONE_NUMBER', 'CALL_TYPE', 'CALL_DURATION',
+    'CALL_START_TIME', 'CALL_STATUS_CODE', 'CALL_STATUS_CODE_NAME',
+    'CRM_ENTITY_ID', 'CRM_ENTITY_TYPE',
   ]);
 
   let upserted = 0;
   for (const r of records) {
-    const startMs  = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
-    const endMs    = r.END_TIME   ? new Date(r.END_TIME).getTime()   : null;
-    const duration = (startMs && endMs && endMs > startMs)
-      ? Math.round((endMs - startMs) / 1000) : 0;
+    const leadId = r.CRM_ENTITY_TYPE === 'LEAD' && r.CRM_ENTITY_ID
+      ? parseInt(r.CRM_ENTITY_ID) : null;
     await pool.query(
-      `INSERT INTO calls (id, responsible_id, call_start, call_end, duration, direction, completed, synced_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+      `INSERT INTO calls (
+         id, responsible_id, phone_number, call_type, duration,
+         call_start, status_code, status_name, lead_id, crm_entity_type,
+         user_name, synced_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
        ON CONFLICT (id) DO UPDATE SET
-         responsible_id = EXCLUDED.responsible_id,
-         call_start     = EXCLUDED.call_start,
-         call_end       = EXCLUDED.call_end,
-         duration       = EXCLUDED.duration,
-         direction      = EXCLUDED.direction,
-         completed      = EXCLUDED.completed,
-         synced_at      = NOW()`,
+         responsible_id  = EXCLUDED.responsible_id,
+         phone_number    = EXCLUDED.phone_number,
+         call_type       = EXCLUDED.call_type,
+         duration        = EXCLUDED.duration,
+         call_start      = EXCLUDED.call_start,
+         status_code     = EXCLUDED.status_code,
+         status_name     = EXCLUDED.status_name,
+         lead_id         = EXCLUDED.lead_id,
+         crm_entity_type = EXCLUDED.crm_entity_type,
+         user_name       = EXCLUDED.user_name,
+         synced_at       = NOW()`,
       [
-        String(r.ID),
-        r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null,
-        r.START_TIME || null,
-        r.END_TIME   || null,
-        duration,
-        r.DIRECTION  ? parseInt(r.DIRECTION) : null,
-        r.COMPLETED === 'Y',
+        String(r.CALL_ID),
+        r.PORTAL_USER_ID  ? parseInt(r.PORTAL_USER_ID) : null,
+        r.PHONE_NUMBER    || null,
+        r.CALL_TYPE       ? parseInt(r.CALL_TYPE)       : null,
+        r.CALL_DURATION   ? parseInt(r.CALL_DURATION)   : 0,
+        r.CALL_START_TIME || null,
+        r.CALL_STATUS_CODE ? parseInt(r.CALL_STATUS_CODE) : null,
+        r.CALL_STATUS_CODE_NAME || null,
+        leadId,
+        r.CRM_ENTITY_TYPE || null,
+        r.PORTAL_USER     || null,
       ]
     );
     upserted++;
@@ -1378,7 +1403,7 @@ router.post('/sync-calls', async (req, res) => {
 
 /**
  * GET /api/dashboard/call-stats
- * Per-responsible call stats. Success = duration >= 10s.
+ * Per-responsible call stats. Success = status_code 200 OR duration >= 10s.
  */
 router.get('/call-stats', async (req, res) => {
   const { from, to, responsible_id } = req.query;
@@ -1387,11 +1412,14 @@ router.get('/call-stats', async (req, res) => {
       `SELECT
          c.responsible_id,
          COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
-         COUNT(*)::int                                                      AS total_calls,
-         COALESCE(SUM(c.duration), 0)::int                                 AS total_duration,
+         COUNT(*)::int                                                           AS total_calls,
+         COALESCE(SUM(c.duration), 0)::int                                      AS total_duration,
          COALESCE(ROUND(AVG(c.duration) FILTER (WHERE c.duration >= 10)), 0)::int AS avg_duration,
-         COUNT(*) FILTER (WHERE c.duration >= 10)::int                     AS success_calls,
-         COUNT(*) FILTER (WHERE c.duration < 10)::int                      AS failed_calls
+         COUNT(*) FILTER (WHERE c.status_code = 200 OR c.duration >= 10)::int  AS success_calls,
+         COUNT(*) FILTER (WHERE c.status_code != 200 AND c.duration < 10)::int AS failed_calls,
+         COUNT(*) FILTER (WHERE c.call_type = 1)::int                          AS outbound_calls,
+         COUNT(*) FILTER (WHERE c.call_type = 2)::int                          AS inbound_calls,
+         COUNT(*) FILTER (WHERE c.lead_id IS NOT NULL)::int                    AS calls_with_lead
        FROM calls c
        LEFT JOIN responsibles r ON r.id = c.responsible_id
        WHERE ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
@@ -1399,13 +1427,44 @@ router.get('/call-stats', async (req, res) => {
          AND ($3::int  IS NULL OR c.responsible_id = $3::int)
          AND c.responsible_id IS NOT NULL
        GROUP BY c.responsible_id, r.name, r.last_name
-       ORDER BY total_duration DESC`,
+       ORDER BY total_calls DESC`,
       [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
     );
     res.json(rows);
   } catch (err) {
     if (err.code === '42P01') return res.json([]);
     console.error('[dashboard/call-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/call-list
+ * Individual calls for a responsible — drill-down.
+ */
+router.get('/call-list', async (req, res) => {
+  const { responsible_id, from, to } = req.query;
+  if (!responsible_id) return res.status(400).json({ error: 'responsible_id required' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         c.id, c.phone_number, c.call_type, c.duration,
+         c.call_start, c.status_code, c.status_name,
+         c.lead_id, c.crm_entity_type,
+         l.title AS lead_title
+       FROM calls c
+       LEFT JOIN leads l ON l.id = c.lead_id
+       WHERE c.responsible_id = $1
+         AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $2::date)
+         AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
+       ORDER BY c.call_start DESC
+       LIMIT 500`,
+      [parseInt(responsible_id), from || null, to || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (err.code === '42P01') return res.json([]);
+    console.error('[dashboard/call-list]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
