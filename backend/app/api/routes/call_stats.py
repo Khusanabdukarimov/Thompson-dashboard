@@ -90,32 +90,149 @@ async def _post(client: httpx.AsyncClient, url: str, body: dict) -> dict:
     raise last
 
 
+async def _paginate(
+    client: httpx.AsyncClient,
+    url: str,
+    first_body: dict[str, Any],
+    make_body: "Callable[[int], dict[str, Any]]",
+) -> list[dict[str, Any]]:
+    """Generic paginator: fetches all pages using `start` offset."""
+    all_records: list[dict] = []
+    data = await _post(client, url, first_body)
+    page: list[dict] = data.get("result") or []
+    all_records.extend(page)
+    total    = int(data.get("total") or 0)
+    next_val = data.get("next")
+    while next_val and len(all_records) < total:
+        await asyncio.sleep(_PAGE_DELAY)
+        data = await _post(client, url, make_body(int(next_val)))
+        page = data.get("result") or []
+        all_records.extend(page)
+        next_val = data.get("next")
+    return all_records
+
+
+def _normalise_voximplant(records: list[dict]) -> list[dict]:
+    """voximplant.statistic.get → canonical record dict."""
+    out = []
+    for r in records:
+        out.append({
+            "PORTAL_USER_ID":  r.get("PORTAL_USER_ID"),
+            "PORTAL_USER":     r.get("PORTAL_USER"),
+            "PHONE_NUMBER":    r.get("PHONE_NUMBER"),
+            # voximplant: CALL_TYPE 1=outbound, 2=inbound, 3=inbound_redir, 4=callback
+            "CALL_TYPE":       r.get("CALL_TYPE"),
+            "CALL_DURATION":   r.get("CALL_DURATION"),
+            "CALL_START_TIME": r.get("CALL_START_TIME"),
+            "CALL_FAILED_CODE":r.get("CALL_FAILED_CODE"),
+            "CALL_STATUS_CODE":r.get("CALL_STATUS_CODE"),
+        })
+    return out
+
+
+def _normalise_activity(records: list[dict]) -> list[dict]:
+    """
+    crm.activity.list (TYPE_ID=2) → canonical record dict.
+
+    crm.activity DIRECTION:  1 = inbound (Kiruvchi),  2 = outbound (Chiquvchi)
+    voximplant   CALL_TYPE:  2 = inbound (Kiruvchi),  1 = outbound (Chiquvchi)
+    → swap 1↔2 so the rest of the pipeline is uniform.
+    """
+    import re
+    _phone_re = re.compile(r"[\d]{6,}")
+
+    out = []
+    for r in records:
+        direction = _to_int(r.get("DIRECTION"))
+        # Remap crm.activity direction → voximplant CALL_TYPE convention
+        call_type = {1: 2, 2: 1}.get(direction)  # swap so 1=outbound, 2=inbound
+
+        # Duration from START_TIME / END_TIME
+        start_ms = _to_dt(r.get("START_TIME"))
+        end_ms   = _to_dt(r.get("END_TIME"))
+        duration = 0
+        if start_ms and end_ms and end_ms > start_ms:
+            duration = int((end_ms - start_ms).total_seconds())
+
+        # Phone from subject e.g. "Исходящий на 998901234567"
+        subj = r.get("SUBJECT") or ""
+        m = _phone_re.search(subj)
+        phone = m.group(0) if m else None
+
+        # Status: COMPLETED='Y' → success (map to failed_code=0)
+        failed_code = 0 if r.get("COMPLETED") == "Y" else None
+
+        out.append({
+            "PORTAL_USER_ID":   r.get("RESPONSIBLE_ID"),
+            "PORTAL_USER":      None,
+            "PHONE_NUMBER":     phone,
+            "CALL_TYPE":        call_type,
+            "CALL_DURATION":    duration,
+            "CALL_START_TIME":  r.get("START_TIME"),
+            "CALL_FAILED_CODE": failed_code,
+            "CALL_STATUS_CODE": 200 if failed_code == 0 else None,
+        })
+    return out
+
+
 async def _fetch_all(date_from: str, date_to: str) -> list[dict[str, Any]]:
     portal, user_id, webhook = _creds()
-    url = f"https://{portal}/rest/{user_id}/{webhook}/voximplant.statistic.get"
-    all_records: list[dict] = []
-    start = 0
+    base = f"https://{portal}/rest/{user_id}/{webhook}"
+
     async with httpx.AsyncClient() as client:
-        while True:
-            data = await _post(client, url, {
-                "FILTER": {
-                    ">=CALL_START_DATE": f"{date_from}T00:00:00",
-                    "<=CALL_START_DATE": f"{date_to}T23:59:59",
-                },
-                "SORT": "CALL_START_DATE", "ORDER": "DESC",
-                "start": start,
+        # ── Try voximplant.statistic.get ─────────────────────────────────────
+        voxi_url = f"{base}/voximplant.statistic.get"
+        voxi_filter = {
+            ">=CALL_START_DATE": f"{date_from}T00:00:00",
+            "<=CALL_START_DATE": f"{date_to}T23:59:59",
+        }
+        use_voxi = True
+        try:
+            test = await _post(client, voxi_url, {
+                "FILTER": voxi_filter, "start": 0,
             })
-            page: list[dict] = data.get("result") or []
-            all_records.extend(page)
-            total    = int(data.get("total") or 0)
-            next_val = data.get("next")
-            log.debug("calls fetch: %d/%d (start=%d)", len(all_records), total, start)
-            if not next_val or len(all_records) >= total:
-                break
-            start = int(next_val)
-            await asyncio.sleep(_PAGE_DELAY)
-    log.info("Fetched %d call records [%s – %s]", len(all_records), date_from, date_to)
-    return all_records
+            if isinstance(test.get("error"), str) and (
+                "scope" in test["error"].lower() or
+                "access" in test["error"].lower()
+            ):
+                use_voxi = False
+                log.info("voximplant scope missing, falling back to crm.activity.list")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                use_voxi = False
+                log.info("voximplant 401/403, falling back to crm.activity.list")
+            else:
+                raise
+
+        if use_voxi:
+            records = await _paginate(
+                client, voxi_url,
+                {"FILTER": voxi_filter, "SORT": "CALL_START_DATE", "ORDER": "DESC", "start": 0},
+                lambda s: {"FILTER": voxi_filter, "SORT": "CALL_START_DATE", "ORDER": "DESC", "start": s},
+            )
+            log.info("voximplant: fetched %d records", len(records))
+            return _normalise_voximplant(records)
+
+        # ── Fallback: crm.activity.list (TYPE_ID=2) ───────────────────────────
+        act_url    = f"{base}/crm.activity.list"
+        act_filter = {
+            "TYPE_ID":       2,
+            ">=START_TIME":  date_from,
+            "<=START_TIME":  date_to,
+        }
+        records = await _paginate(
+            client, act_url,
+            {"FILTER": act_filter,
+             "SELECT": ["ID","RESPONSIBLE_ID","DIRECTION","COMPLETED",
+                        "START_TIME","END_TIME","SUBJECT"],
+             "start": 0},
+            lambda s: {"FILTER": act_filter,
+                       "SELECT": ["ID","RESPONSIBLE_ID","DIRECTION","COMPLETED",
+                                  "START_TIME","END_TIME","SUBJECT"],
+                       "start": s},
+        )
+        log.info("crm.activity fallback: fetched %d records", len(records))
+        return _normalise_activity(records)
 
 
 # ── Domain helpers ────────────────────────────────────────────────────────────
