@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
-  RefreshCw, Search, ChevronLeft, ChevronRight,
+  RefreshCw, Search,
   TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
   ChevronDown, Filter, Users, BarChart2,
 } from "lucide-react";
@@ -11,7 +11,6 @@ import {
   getDealKpiStats, getDealsList, getDealFilterOptions,
   getDealsConversion, getDealsResponsibles,
 } from "@/lib/api/deals";
-import type { DealRow } from "@/lib/api/deals";
 import { getDealCancelReasons } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 
@@ -26,18 +25,6 @@ function fmtMoney(v: number) {
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
   return `$${fmtNum(Math.round(v))}`;
 }
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
-}
-
-// ── Status badge ─────────────────────────────────────────────────
-function StatusBadge({ row }: { row: DealRow }) {
-  if (row.is_won) return <span style={badge("green")}>Sotuv bo'ldi</span>;
-  if (row.is_final) return <span style={badge("red")}>Bekor</span>;
-  return <span style={badge("amber")}>Jarayonda</span>;
-}
-
 function badge(c: "green" | "red" | "amber"): React.CSSProperties {
   const m = {
     green: { bg: "rgba(16,185,129,.12)", color: "#10b981", border: "rgba(16,185,129,.25)" },
@@ -69,17 +56,6 @@ function KpiCard({ label, value, sub, gradient, icon }: {
     </div>
   );
 }
-
-// ── Table styles ─────────────────────────────────────────────────
-const TH: React.CSSProperties = {
-  padding: "10px 12px", fontSize: 11, fontWeight: 600, color: "var(--text3)",
-  textAlign: "left", whiteSpace: "nowrap", background: "var(--bg2)",
-  borderBottom: "1px solid var(--border)", position: "sticky", top: 0,
-};
-const TD: React.CSSProperties = {
-  padding: "9px 12px", fontSize: 12.5, color: "var(--text)",
-  borderBottom: "1px solid var(--border)", whiteSpace: "nowrap",
-};
 
 // ── Colored TH for analytics tables (LidlarPage style) ───────────
 const THc = (color: string, minW = 120): React.CSSProperties => ({
@@ -292,7 +268,6 @@ export default function SdelkalarPage() {
   }, [kpiQ, listQ, convQ, respQ]);
 
   const kpi = kpiQ.data;
-  const totalPages = listQ.data ? Math.ceil(listQ.data.total / LIMIT) : 1;
 
   const activeFilterCount = [
     applied.responsible_id, applied.stage_id, applied.source,
