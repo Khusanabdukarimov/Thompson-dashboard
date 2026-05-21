@@ -271,12 +271,20 @@ export type CallStatsRow = {
   inbound_duration: number;
   missed_inbound: number;
   callback_calls: number;
-  ne_perezvonili: number;
 };
 
 export type CallGlobalStats = {
   ne_perezvonili: number;
   reaksiya_vaqti: number;
+};
+
+export type CallReactionRow = {
+  responsible_id: number;
+  full_name: string;
+  photo_url: string | null;
+  missed_calls: number;
+  bez_otveta: number;
+  avg_response_secs: number;
 };
 
 export type CallListRow = {
@@ -297,6 +305,13 @@ export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" 
     from: filter.start_date,
     to: filter.end_date,
     responsible_id: filter.responsible_id,
+  }, API_URL_CRM);
+}
+
+export function getCallReactionStats(filter: Pick<DashFilter, "start_date" | "end_date">) {
+  return apiGet<CallReactionRow[]>("/api/dashboard/call-reaction-stats", {
+    from: filter.start_date,
+    to:   filter.end_date,
   }, API_URL_CRM);
 }
 

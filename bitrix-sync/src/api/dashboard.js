@@ -1494,28 +1494,9 @@ router.get('/call-stats', async (req, res) => {
                AND m.call_start < c.call_start
                AND c.call_start - m.call_start <= INTERVAL '72 hours'
            )
-         )::int AS callback_calls,
-         -- Ne perezvonili per-responsible: missed inbound with no subsequent outbound within 72h
-         COUNT(DISTINCT c2_ne.phone_number)::int AS ne_perezvonili
+         )::int AS callback_calls
        FROM calls c
        LEFT JOIN responsibles r ON r.id = c.responsible_id
-       -- for ne_perezvonili: join missed inbound calls for this responsible
-       LEFT JOIN LATERAL (
-         SELECT DISTINCT m_ne.phone_number
-         FROM calls m_ne
-         WHERE m_ne.responsible_id = c.responsible_id
-           AND m_ne.call_type = 2
-           AND m_ne.status_code != 200 AND m_ne.duration < 10
-           AND ($1::date IS NULL OR (m_ne.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-           AND ($2::date IS NULL OR (m_ne.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
-           AND NOT EXISTS (
-             SELECT 1 FROM calls cb
-             WHERE cb.phone_number = m_ne.phone_number
-               AND cb.call_type = 1
-               AND cb.call_start > m_ne.call_start
-               AND cb.call_start - m_ne.call_start <= INTERVAL '72 hours'
-           )
-       ) c2_ne ON TRUE
        WHERE ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          AND ($3::int  IS NULL OR c.responsible_id = $3::int)
@@ -1578,6 +1559,63 @@ router.get('/call-global-stats', async (req, res) => {
   } catch (err) {
     if (err.code === '42P01') return res.json({ ne_perezvonili: 0, reaksiya_vaqti: 0 });
     console.error('[dashboard/call-global-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/call-reaction-stats
+ * Per-responsible missed call stats + avg response time.
+ */
+router.get('/call-reaction-stats', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         m.responsible_id,
+         COALESCE(TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')), 'Noma''lum') AS full_name,
+         r.photo_url,
+         COUNT(*)::int AS missed_calls,
+         -- bez_otveta: missed calls with no outbound callback within 72h
+         COUNT(*) FILTER (WHERE NOT EXISTS (
+           SELECT 1 FROM calls cb
+           WHERE cb.phone_number = m.phone_number
+             AND cb.call_type = 1
+             AND cb.call_start > m.call_start
+             AND cb.call_start - m.call_start <= INTERVAL '72 hours'
+         ))::int AS bez_otveta,
+         -- avg_response_secs: avg seconds from missed call to first callback (only for answered ones)
+         COALESCE(ROUND(AVG(
+           EXTRACT(EPOCH FROM (
+             (SELECT MIN(cb2.call_start) FROM calls cb2
+              WHERE cb2.phone_number = m.phone_number
+                AND cb2.call_type = 1
+                AND cb2.call_start > m.call_start
+                AND cb2.call_start - m.call_start <= INTERVAL '72 hours'
+             ) - m.call_start
+           ))
+         ) FILTER (WHERE EXISTS (
+           SELECT 1 FROM calls cb3
+           WHERE cb3.phone_number = m.phone_number
+             AND cb3.call_type = 1
+             AND cb3.call_start > m.call_start
+             AND cb3.call_start - m.call_start <= INTERVAL '72 hours'
+         )), 0)::int AS avg_response_secs
+       FROM calls m
+       LEFT JOIN responsibles r ON r.id = m.responsible_id
+       WHERE m.call_type = 2
+         AND m.status_code != 200 AND m.duration < 10
+         AND m.responsible_id IS NOT NULL
+         AND ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+         AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+       GROUP BY m.responsible_id, r.name, r.last_name, r.photo_url
+       ORDER BY missed_calls DESC`,
+      [from || null, to || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (err.code === '42P01') return res.json([]);
+    console.error('[dashboard/call-reaction-stats]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
