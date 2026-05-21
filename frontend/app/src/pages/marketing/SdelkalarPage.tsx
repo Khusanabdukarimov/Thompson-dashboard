@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { useDarkMode } from "@/hooks/useDarkMode";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   RefreshCw, Search,
@@ -28,21 +29,24 @@ function fmtMoney(v: number) {
 
 
 // ── KPI card ─────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, gradient, icon }: {
+function KpiCard({ label, value, sub, gradient, lightGradient, icon }: {
   label: string; value: string; sub?: string;
-  gradient: string; icon: React.ReactNode;
+  gradient: string; lightGradient: string; icon: React.ReactNode;
 }) {
+  const { theme } = useDarkMode();
+  const isDark = theme === 'dark';
   return (
     <div style={{
-      borderRadius: 12, padding: "16px 18px", background: gradient,
+      borderRadius: 12, padding: "16px 18px", background: isDark ? gradient : lightGradient,
+      border: isDark ? "none" : "1px solid var(--border)",
       display: "flex", flexDirection: "column", gap: 6, minWidth: 0
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,.7)", fontWeight: 500 }}>{label}</span>
-        <span style={{ opacity: .6 }}>{icon}</span>
+        <span style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.7)" : "var(--text3)", fontWeight: 500 }}>{label}</span>
+        <span style={{ opacity: .6, color: isDark ? "#fff" : "var(--text2)" }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>{sub}</div>}
+      <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#fff" : "var(--text)", lineHeight: 1.2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.55)" : "var(--text3)" }}>{sub}</div>}
     </div>
   );
 }
@@ -546,22 +550,28 @@ export default function SdelkalarPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 20 }}>
           <KpiCard label="Jami Sdelkalar" value={fmtNum(kpi?.total ?? 0)}
             sub="Barcha kelishuvlar" gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)"
-            icon={<BarChart2 size={16} color="#fff" />} />
+            lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(59,130,246,0.12))"
+            icon={<BarChart2 size={16} />} />
           <KpiCard label="Yangi Sdelkalar" value={fmtNum(kpi?.yangi ?? 0)}
             sub="Jarayondagi" gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"
-            icon={<TrendingUp size={16} color="#fff" />} />
+            lightGradient="linear-gradient(135deg,rgba(59,130,246,0.07),rgba(99,157,246,0.12))"
+            icon={<TrendingUp size={16} />} />
           <KpiCard label="Sotuv bo'ldi" value={fmtNum(kpi?.sotuv_boldi ?? 0)}
             sub="Muvaffaqiyatli" gradient="linear-gradient(135deg,#065f46,#10b981)"
-            icon={<CheckCircle size={16} color="#fff" />} />
+            lightGradient="linear-gradient(135deg,rgba(4,150,107,0.07),rgba(16,185,129,0.12))"
+            icon={<CheckCircle size={16} />} />
           <KpiCard label="Jami Sotuv" value={fmtMoney(kpi?.jami_sotuv ?? 0)}
             sub="Won sdelkalar daromadi" gradient="linear-gradient(135deg,#047857,#34d399)"
-            icon={<DollarSign size={16} color="#fff" />} />
+            lightGradient="linear-gradient(135deg,rgba(4,120,87,0.07),rgba(52,211,153,0.12))"
+            icon={<DollarSign size={16} />} />
           <KpiCard label="O'rtacha Chek" value={fmtMoney(kpi?.ortacha_chek ?? 0)}
             sub="Won bo'yicha o'rtacha" gradient="linear-gradient(135deg,#92400e,#f59e0b)"
-            icon={<ShoppingCart size={16} color="#fff" />} />
+            lightGradient="linear-gradient(135deg,rgba(146,64,14,0.07),rgba(245,158,11,0.12))"
+            icon={<ShoppingCart size={16} />} />
           <KpiCard label="Konversiya" value={`${kpi?.konversiya ?? 0}%`}
             sub="Won / Jami" gradient="linear-gradient(135deg,#5b21b6,#8b5cf6)"
-            icon={<Percent size={16} color="#fff" />} />
+            lightGradient="linear-gradient(135deg,rgba(91,33,182,0.07),rgba(139,92,246,0.12))"
+            icon={<Percent size={16} />} />
         </div>
 
         {/* ══════════════════════════════════════════════════════════
@@ -570,8 +580,8 @@ export default function SdelkalarPage() {
         <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
             <CheckCircle size={16} style={{ color: "#4CAF50" }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Sdelka va Konversiya</span>
-            <span style={{ fontSize: 12, color: "#555" }}>{convRows.length} ta menejer</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Sdelka va Konversiya</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{convRows.length} ta menejer</span>
           </div>
 
           {convQ.isLoading ? (
@@ -615,25 +625,25 @@ export default function SdelkalarPage() {
                         <td style={TDa}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <AvatarCircle name={r.full_name || "?"} size={34} />
-                            <span style={{ fontSize: 13, color: "#fff", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {r.full_name}
                             </span>
                           </div>
                         </td>
                         <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.total)}</span>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.total)}</span>
                           <MiniBar value={r.total} max={convMax.total} color="#2196F3" />
                         </td>
                         <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.jarayonda)}</span>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.jarayonda)}</span>
                           <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
                         </td>
                         <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sotuv_boldi)}</span>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sotuv_boldi)}</span>
                           <MiniBar value={r.sotuv_boldi} max={convMax.sotuv_boldi} color="#4CAF50" />
                         </td>
                         <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.bekor_boldi)}</span>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span>
                           <MiniBar value={r.bekor_boldi} max={convMax.bekor_boldi} color="#F44336" />
                         </td>
                         <td style={TDa}>
@@ -650,23 +660,23 @@ export default function SdelkalarPage() {
                   {/* JAMI row */}
                   <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
                     <td style={{ ...TDa, color: "#666" }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                       JAMI
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(convTotals.total)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.total)}</span>
                       <MiniBar value={1} max={1} color="#2196F3" />
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(convTotals.jarayonda)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.jarayonda)}</span>
                       <MiniBar value={1} max={1} color="#FF9800" />
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(convTotals.sotuv_boldi)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.sotuv_boldi)}</span>
                       <MiniBar value={1} max={1} color="#4CAF50" />
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(convTotals.bekor_boldi)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.bekor_boldi)}</span>
                       <MiniBar value={1} max={1} color="#F44336" />
                     </td>
                     <td style={TDa}>
@@ -688,9 +698,9 @@ export default function SdelkalarPage() {
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-            <Users size={16} style={{ color: "#9E9E9E" }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Sdelka mas'ullar kesimida</span>
-            <span style={{ fontSize: 12, color: "#555" }}>{dealRespRows.length} ta xodim</span>
+            <Users size={16} style={{ color: "var(--text3)" }} />
+            <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Sdelka mas'ullar kesimida</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{dealRespRows.length} ta xodim</span>
           </div>
 
           {respQ.isLoading ? (
@@ -719,7 +729,7 @@ export default function SdelkalarPage() {
                       <td style={{ ...TDa, width: 180, position: "sticky", left: 44, background: "var(--bg2)", zIndex: 2 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <AvatarCircle name={u.full_name || "?"} size={32} />
-                          <span style={{ fontSize: 13, color: "#fff", fontWeight: 500, whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap" }}>
                             {u.full_name}
                           </span>
                         </div>
@@ -731,11 +741,11 @@ export default function SdelkalarPage() {
                           <td key={col.key} style={{ ...TDa, minWidth: 120 }}>
                             {cnt > 0 ? (
                               <>
-                                <span style={{ fontSize: 13, color: "#fff" }}>{fmtNum(cnt)}</span>
+                                <span style={{ fontSize: 13, color: "var(--text)" }}>{fmtNum(cnt)}</span>
                                 <MiniBar value={cnt} max={max} color={col.color} height={3} />
                               </>
                             ) : (
-                              <span style={{ fontSize: 13, color: "#333" }}>—</span>
+                              <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>
                             )}
                           </td>
                         );
@@ -746,12 +756,12 @@ export default function SdelkalarPage() {
                   {/* JAMI row */}
                   <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
                     <td style={{ ...TDa, position: "sticky", left: 0, background: "var(--bg3)" }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em", position: "sticky", left: 44, background: "var(--bg3)", zIndex: 2 }}>
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", position: "sticky", left: 44, background: "var(--bg3)", zIndex: 2 }}>
                       JAMI
                     </td>
                     {DEAL_STAGE_COLS.map(col => (
                       <td key={col.key} style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
                           {fmtNum(dealRespTotals[col.key] ?? 0)}
                         </span>
                         <MiniBar value={1} max={1} color={col.color} />
@@ -783,7 +793,7 @@ export default function SdelkalarPage() {
                   borderBottom: "1px solid var(--border)",
                   display: "flex", alignItems: "center", justifyContent: "space-between",
                 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>Bekor bo'lish sabablari</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Bekor bo'lish sabablari</span>
                   <span style={{ fontSize: 20, fontWeight: 800, color: "#FFC107" }}>{fmtNum(cancelTotal)}</span>
                 </div>
                 {cancelQ.isLoading ? (
@@ -795,10 +805,10 @@ export default function SdelkalarPage() {
                     {cancelItems.map((r, i) => (
                       <div key={i} style={{ padding: "7px 20px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                          <span style={{ fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                          <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
                             {r.reason}
                           </span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0, marginLeft: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
                             {fmtNum(r.total)}
                           </span>
                         </div>
@@ -827,8 +837,8 @@ export default function SdelkalarPage() {
         <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
             <BarChart2 size={16} style={{ color: "#9C27B0" }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Manba bo'yicha</span>
-            <span style={{ fontSize: 12, color: "#555" }}>{srcStatRows.length} ta manba</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Manba bo'yicha</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{srcStatRows.length} ta manba</span>
           </div>
 
           {sourceStatsQ.isLoading ? (
@@ -863,23 +873,23 @@ export default function SdelkalarPage() {
                       <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
-                      <td style={{ ...TDa, fontSize: 13, color: "#fff", fontWeight: 500 }}>
+                      <td style={{ ...TDa, fontSize: 13, color: "var(--text)", fontWeight: 500 }}>
                         {r.source_name}
                       </td>
                       <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.umumiy)}</span>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy)}</span>
                         <MiniBar value={r.umumiy} max={srcStatMax.umumiy} color="#2196F3" />
                       </td>
                       <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.jarayonda)}</span>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.jarayonda)}</span>
                         <MiniBar value={r.jarayonda} max={srcStatMax.jarayonda} color="#FF9800" />
                       </td>
                       <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.bekor_boldi)}</span>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span>
                         <MiniBar value={r.bekor_boldi} max={srcStatMax.bekor_boldi} color="#F44336" />
                       </td>
                       <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{fmtNum(r.sotuv_boldi)}</span>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sotuv_boldi)}</span>
                         <MiniBar value={r.sotuv_boldi} max={srcStatMax.sotuv_boldi} color="#4CAF50" />
                       </td>
                     </tr>
@@ -888,23 +898,23 @@ export default function SdelkalarPage() {
                   {/* JAMI row */}
                   <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
                     <td style={{ ...TDa, color: "#666" }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                       JAMI
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.umumiy)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.umumiy)}</span>
                       <MiniBar value={1} max={1} color="#2196F3" />
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.jarayonda)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.jarayonda)}</span>
                       <MiniBar value={1} max={1} color="#FF9800" />
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.bekor_boldi)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.bekor_boldi)}</span>
                       <MiniBar value={1} max={1} color="#F44336" />
                     </td>
                     <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmtNum(srcStatTotals.sotuv_boldi)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.sotuv_boldi)}</span>
                       <MiniBar value={1} max={1} color="#4CAF50" />
                     </td>
                   </tr>

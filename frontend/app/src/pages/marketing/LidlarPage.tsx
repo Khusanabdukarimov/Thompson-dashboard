@@ -183,7 +183,7 @@ function UtmTable<T extends Record<string, string | number>>({
                         {name}
                       </a>
                     ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: onRowClick ? "#2196F3" : "#fff", textDecoration: onRowClick ? "underline" : "none" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: onRowClick ? "#2196F3" : "var(--text)", textDecoration: onRowClick ? "underline" : "none" }}>
                         {name}
                         {countKey && cnt > 0 && (
                           <span style={{
@@ -203,10 +203,10 @@ function UtmTable<T extends Record<string, string | number>>({
                       <td key={c.key} style={TD}>
                         {val > 0 ? (
                           <>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{fmtNum(val)}</span>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
                             <MiniBar value={val} max={maxes[c.key]} color={c.color} />
                           </>
-                        ) : <span style={{ fontSize: 13, color: "#333" }}>—</span>}
+                        ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                       </td>
                     );
                   })}
@@ -218,10 +218,10 @@ function UtmTable<T extends Record<string, string | number>>({
             })}
             {/* JAMI */}
             <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-              <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+              <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
               {UTM_COLS_DEF.map(c => (
                 <td key={c.key} style={TD}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{fmtNum(totals[c.key] || 0)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtNum(totals[c.key] || 0)}</span>
                   <MiniBar value={1} max={1} color={c.color} />
                 </td>
               ))}
@@ -501,12 +501,12 @@ export default function LidlarPage() {
               background: "var(--bg2)",
               border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 || mode === 'amocrm' ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
               borderRadius: filterOpen ? "10px 10px 0 0" : 10,
-              padding: "10px 16px", color: "#fff", fontSize: 13, fontWeight: 500,
+              padding: "10px 16px", color: "var(--text)", fontSize: 13, fontWeight: 500,
               cursor: "pointer", textAlign: "left",
             }}
           >
-            <Search size={16} style={{ color: "#9E9E9E", flexShrink: 0 }} />
-            <span style={{ color: "#666", flex: 1 }}>Qidirish va filtrlash…</span>
+            <Search size={16} style={{ color: "var(--text3)", flexShrink: 0 }} />
+            <span style={{ color: "var(--text3)", flex: 1 }}>Qidirish va filtrlash…</span>
             {mode === 'amocrm' && (
               <span style={{
                 background: "rgba(217,119,6,0.15)", color: "#D97706",
@@ -626,7 +626,7 @@ export default function LidlarPage() {
                   {/* Date row */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
                         <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
                       </label>
                       <input
@@ -635,13 +635,13 @@ export default function LidlarPage() {
                         onChange={(e) => setPending((p) => ({ ...p, start_date: e.target.value || undefined }))}
                         style={{
                           width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "#fff", fontSize: 12, padding: "8px 10px",
+                          borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px",
                           outline: "none", boxSizing: "border-box",
                         }}
                       />
                     </div>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
                         <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
                       </label>
                       <input
@@ -650,7 +650,7 @@ export default function LidlarPage() {
                         onChange={(e) => setPending((p) => ({ ...p, end_date: e.target.value || undefined }))}
                         style={{
                           width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "#fff", fontSize: 12, padding: "8px 10px",
+                          borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px",
                           outline: "none", boxSizing: "border-box",
                         }}
                       />
@@ -660,7 +660,7 @@ export default function LidlarPage() {
                   {/* Dropdown filters row */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
                         <Users size={12} />Mas'ul xodim
                       </label>
                       <select
@@ -668,7 +668,7 @@ export default function LidlarPage() {
                         onChange={(e) => setPending((p) => ({ ...p, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}
                         style={{
                           width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: pending.responsible_id ? "#fff" : "#555",
+                          borderRadius: 8, color: "var(--text)",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
                         }}
@@ -680,7 +680,7 @@ export default function LidlarPage() {
                       </select>
                     </div>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
                         <Filter size={12} />Bosqich
                       </label>
                       <select
@@ -688,7 +688,7 @@ export default function LidlarPage() {
                         onChange={(e) => setPending((p) => ({ ...p, stage: e.target.value || undefined }))}
                         style={{
                           width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: pending.stage ? "#fff" : "#555",
+                          borderRadius: 8, color: "var(--text)",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
                         }}
@@ -700,7 +700,7 @@ export default function LidlarPage() {
                       </select>
                     </div>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
                         <TrendingUp size={12} />Manba
                       </label>
                       <select
@@ -708,7 +708,7 @@ export default function LidlarPage() {
                         onChange={(e) => setPending((p) => ({ ...p, source: e.target.value || undefined }))}
                         style={{
                           width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: pending.source ? "#fff" : "#555",
+                          borderRadius: 8, color: "var(--text)",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
                         }}
@@ -730,7 +730,7 @@ export default function LidlarPage() {
                   {/* Facebook Forms filter row */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
                     <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#9E9E9E", marginBottom: 6 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
                         <TrendingUp size={12} />Facebook Forma (UTM bo'yicha)
                       </label>
                       <select
@@ -738,7 +738,7 @@ export default function LidlarPage() {
                         onChange={(e) => setPending((p) => ({ ...p, form_id: e.target.value || undefined }))}
                         style={{
                           width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: pending.form_id ? "#fff" : "#555",
+                          borderRadius: 8, color: "var(--text)",
                           fontSize: 12, padding: "8px 10px", outline: "none",
                           appearance: "none", cursor: "pointer",
                         }}
@@ -1011,7 +1011,7 @@ export default function LidlarPage() {
                                               {lead.title}
                                             </a>
                                           </td>
-                                          <td style={{ ...TD, fontSize: 12, color: "#9E9E9E", whiteSpace: "nowrap" }}>
+                                          <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
                                             {lead.date_create ? new Date(lead.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
                                           </td>
                                           <td style={{ ...TD, fontSize: 12, color: lead.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
@@ -1032,7 +1032,7 @@ export default function LidlarPage() {
                                     })}
                                     <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
                                       <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
-                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
+                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
                                       <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{subLeads.length} ta lid</td>
                                     </tr>
                                   </tbody>
@@ -1097,7 +1097,7 @@ export default function LidlarPage() {
                 style={{
                   paddingLeft:30, paddingRight:12, paddingTop:7, paddingBottom:7,
                   background:"var(--bg)", border:"1px solid var(--border)", borderRadius:8,
-                  color:"#fff", fontSize:12, outline:"none", width:180,
+                  color:"var(--text)", fontSize:12, outline:"none", width:180,
                 }}
               />
             </div>
@@ -1212,7 +1212,7 @@ export default function LidlarPage() {
                                               {lead.title}
                                             </a>
                                           </td>
-                                          <td style={{ ...TD, fontSize: 12, color: "#9E9E9E", whiteSpace: "nowrap" }}>
+                                          <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
                                             {lead.date_create ? new Date(lead.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
                                           </td>
                                           <td style={{ ...TD, fontSize: 12, color: lead.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
@@ -1233,7 +1233,7 @@ export default function LidlarPage() {
                                     })}
                                     <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
                                       <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
-                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
+                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
                                       <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{subLeads.length} ta lid</td>
                                     </tr>
                                   </tbody>
@@ -1518,13 +1518,13 @@ export default function LidlarPage() {
                       })}
                       {/* JAMI row */}
                       <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.umumiy)}</span><MiniBar value={1} max={1} color="#2196F3" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.sifatli)}</span><MiniBar value={1} max={1} color="#00BCD4" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.konsB)}</span><MiniBar value={1} max={1} color="#9C27B0" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.konsO)}</span><MiniBar value={1} max={1} color="#4CAF50" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.sifatsiz)}</span><MiniBar value={1} max={1} color="#F44336" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmtNum(srcTotals.bekor)}</span><MiniBar value={1} max={1} color="#FFC107" /></td>
+                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.umumiy)}</span><MiniBar value={1} max={1} color="#2196F3" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.sifatli)}</span><MiniBar value={1} max={1} color="#00BCD4" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.konsB)}</span><MiniBar value={1} max={1} color="#9C27B0" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.konsO)}</span><MiniBar value={1} max={1} color="#4CAF50" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.sifatsiz)}</span><MiniBar value={1} max={1} color="#F44336" /></td>
+                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.bekor)}</span><MiniBar value={1} max={1} color="#FFC107" /></td>
                         <td style={{ ...TD, textAlign: "center" }}>
                           <ConversionDonut pct={srcTotals.umumiy > 0 ? (srcTotals.konsO / srcTotals.umumiy) * 100 : 0} size={38} />
                         </td>
@@ -1574,7 +1574,7 @@ export default function LidlarPage() {
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
                   <span
-                    style={{ fontSize: 15, fontWeight: 700, color: level === 1 ? "#fff" : "#555", cursor: level > 1 ? "pointer" : "default", whiteSpace: "nowrap" }}
+                    style={{ fontSize: 15, fontWeight: 700, color: level === 1 ? "var(--text)" : "var(--text3)", cursor: level > 1 ? "pointer" : "default", whiteSpace: "nowrap" }}
                     onClick={() => level > 1 && (setSelectedUtmSource(null), setSelectedUtmCampaign(null))}
                   >
                     UTM bo'yicha
@@ -1583,7 +1583,7 @@ export default function LidlarPage() {
                     <>
                       <span style={{ color: "#444" }}>/</span>
                       <span
-                        style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "#fff" : "#555", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
+                        style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "var(--text)" : "var(--text3)", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
                         onClick={() => level === 3 && setSelectedUtmCampaign(null)}
                       >
                         {selectedUtmSource}
@@ -1593,7 +1593,7 @@ export default function LidlarPage() {
                   {level === 3 && (
                     <>
                       <span style={{ color: "#444" }}>/</span>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {selectedUtmCampaign}
                       </span>
                     </>
@@ -1684,7 +1684,7 @@ export default function LidlarPage() {
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 marginBottom: 12,
               }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
                   Qo&apos;ng&apos;iroq davomiyligi
                 </span>
                 <button
@@ -1741,18 +1741,18 @@ export default function LidlarPage() {
                         <tbody>
                           {callRows.map((r, i) => (
                             <tr key={r.responsible_id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                              <td style={{ ...TD, fontWeight: 600, color: "#fff", fontSize: 13 }}>
+                              <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                   <AvatarCircle name={r.full_name} size={28} />
                                   <span style={{ whiteSpace: "nowrap" }}>{r.full_name}</span>
                                 </div>
                               </td>
                               <td style={TD}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{fmtDur(r.total_duration)}</span>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtDur(r.total_duration)}</span>
                                 <MiniBar value={r.total_duration} max={maxDur} color="#2196F3" />
                               </td>
                               <td style={TD}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{fmtAvg(r.avg_duration)}</span>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtAvg(r.avg_duration)}</span>
                               </td>
                               <td style={TD}>
                                 <span style={{ fontSize: 14, fontWeight: 700, color: "#2196F3" }}>{fmtNum(r.total_calls)}</span>
@@ -1761,9 +1761,9 @@ export default function LidlarPage() {
                             </tr>
                           ))}
                           <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                            <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
-                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{fmtDur(totalDuration)}</span></td>
-                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{fmtAvg(avgDurationAll)}</span></td>
+                            <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
+                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtDur(totalDuration)}</span></td>
+                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtAvg(avgDurationAll)}</span></td>
                             <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "#2196F3" }}>{fmtNum(totalCalls)}</span></td>
                           </tr>
                         </tbody>
@@ -1779,7 +1779,7 @@ export default function LidlarPage() {
                       background: "var(--bg2)", borderRadius: 10, padding: "14px 16px",
                       border: `1px solid var(--border)`,
                     }}>
-                      <div style={{ fontSize: 11, color: "#777", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                         {card.label}
                       </div>
                       <div style={{ fontSize: 18, fontWeight: 800, color: card.color }}>
@@ -1824,22 +1824,22 @@ export default function LidlarPage() {
                 borderBottom: "1px solid var(--border)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
               }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{title}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
                 <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
               </div>
               {loading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
               ) : items.length === 0 ? (
-                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
               ) : (
                 <div style={{ padding: "6px 0 10px" }}>
                   {items.map((r, i) => (
                     <div key={i} style={{ padding: "7px 20px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
                           {r.reason}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0, marginLeft: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
                           {fmtNum(r.total)}
                         </span>
                       </div>
