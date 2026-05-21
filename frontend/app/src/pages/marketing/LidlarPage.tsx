@@ -395,6 +395,12 @@ export default function LidlarPage() {
     queryFn: () => getResponsibleLeads(selectedRespConv!.id, appliedWithMode),
     enabled: selectedRespConv !== null,
   });
+  const [selectedRespMasul, setSelectedRespMasul] = useState<{ id: number; name: string } | null>(null);
+  const respLeadsMasulQ = useQuery({
+    queryKey: ["stats/responsible-leads-masul", selectedRespMasul?.id, appliedWithMode],
+    queryFn: () => getResponsibleLeads(selectedRespMasul!.id, appliedWithMode),
+    enabled: selectedRespMasul !== null,
+  });
   const utmCampQ = useQuery({
     queryKey: ["stats/utm-campaign", selectedUtmSource, appliedWithMode],
     queryFn:  () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
@@ -1100,40 +1106,133 @@ export default function LidlarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {byUserFiltered.map((u, i) => (
-                    <tr key={u.responsible_id}
-                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
-                        {String(i + 1).padStart(2, "0")}
-                      </td>
-                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                          <span style={{ fontSize:13, color:"#fff", fontWeight:500, whiteSpace:"nowrap" }}>
-                            {u.full_name || `User ${u.responsible_id}`}
-                          </span>
-                        </div>
-                      </td>
-                      {RESPONSIBLE_COLS.map((col) => {
-                        const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
-                        const max = colMaxes[col.key] ?? 1;
-                        return (
-                          <td key={col.key} style={{ ...TD, minWidth:90 }}>
-                            {cnt > 0 ? (
-                              <>
-                                <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
-                                <MiniBar value={cnt} max={max} color={col.color} height={3} />
-                              </>
-                            ) : (
-                              <span style={{ fontSize:13, color:"#333" }}>—</span>
-                            )}
+                  {byUserFiltered.map((u, i) => {
+                    const isSel = selectedRespMasul?.id === u.responsible_id;
+                    const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
+                    const STAGE_MAP_M: Record<string, { label: string; color: string }> = {
+                      NEW: { label: "Yangi lid", color: "#2196F3" },
+                      IN_PROCESS: { label: "Yangi lid", color: "#2196F3" },
+                      PROCESSED: { label: "Propushenniy", color: "#9E9E9E" },
+                      UC_1KPATX: { label: "Javob bermadi", color: "#FF9800" },
+                      NO_ANSWER: { label: "Javob bermadi", color: "#FF9800" },
+                      UC_Q2U9EL: { label: "Qayta aloqa", color: "#00BCD4" },
+                      CALLBACK: { label: "Qayta aloqa", color: "#00BCD4" },
+                      UC_KXC3ZW: { label: "O'ylab ko'radi", color: "#E91E63" },
+                      THINKING: { label: "O'ylab ko'radi", color: "#E91E63" },
+                      UC_L28G68: { label: "Tashrif belgilandi", color: "#9C27B0" },
+                      CONSULTATION: { label: "Tashrif belgilandi", color: "#9C27B0" },
+                      UC_5G8244: { label: "Kelmadi", color: "#FF00FF" },
+                      NOT_TRANSFERRED: { label: "Kelmadi", color: "#FF00FF" },
+                      JUNK: { label: "Sandiq", color: "#42A5F5" },
+                      ARCHIVE: { label: "Sandiq", color: "#42A5F5" },
+                      UC_F8K4GI: { label: "Sifatsiz", color: "#F44336" },
+                      UC_NAZK5J: { label: "Bekor bo'ldi", color: "#FFC107" },
+                      RECYCLED: { label: "Bekor bo'ldi", color: "#FFC107" },
+                      CONVERTED_CONSULT: { label: "Tashrif buyurdi", color: "#4CAF50" },
+                      CONVERTED: { label: "Tashrif buyurdi", color: "#4CAF50" },
+                    };
+                    const colCount = 2 + RESPONSIBLE_COLS.length;
+                    return (
+                      <>
+                        <tr key={u.responsible_id}
+                            style={{ background: isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                            onClick={() => setSelectedRespMasul(isSel ? null : { id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` })}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                          <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
+                            {String(i + 1).padStart(2, "0")}
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                          <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                              <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
+                              <span style={{ fontSize:13, color: isSel ? "#2196F3" : "#fff", fontWeight:500, whiteSpace:"nowrap" }}>
+                                {u.full_name || `User ${u.responsible_id}`}
+                              </span>
+                            </div>
+                          </td>
+                          {RESPONSIBLE_COLS.map((col) => {
+                            const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
+                            const max = colMaxes[col.key] ?? 1;
+                            return (
+                              <td key={col.key} style={{ ...TD, minWidth:90 }}>
+                                {cnt > 0 ? (
+                                  <>
+                                    <span style={{ fontSize:13, color:"#fff" }}>{fmtNum(cnt)}</span>
+                                    <MiniBar value={cnt} max={max} color={col.color} height={3} />
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize:13, color:"#333" }}>—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        {isSel && (
+                          <tr key={`sub-masul-${u.responsible_id}`}>
+                            <td colSpan={colCount} style={{ padding: 0, background: "rgba(33,150,243,0.04)", borderBottom: "1px solid var(--border)" }}>
+                              {respLeadsMasulQ.isLoading ? (
+                                <div style={{ padding: "14px 20px", color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                              ) : subLeads.length === 0 ? (
+                                <div style={{ padding: "14px 20px", color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+                              ) : (
+                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                  <thead>
+                                    <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                      <th style={{ ...TH("#555", 40), paddingLeft: 32 }}>#</th>
+                                      <th style={TH("#9E9E9E", 260)}>LID</th>
+                                      <th style={TH("#2196F3", 90)}>SANA</th>
+                                      <th style={TH("#9C27B0", 130)}>TASHRIF SANASI</th>
+                                      <th style={TH("#FF9800", 190)}>BOSQICH</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {subLeads.map((lead, li) => {
+                                      const stage = STAGE_MAP_M[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                      return (
+                                        <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
+                                          <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>
+                                            {String(li + 1).padStart(2, "0")}
+                                          </td>
+                                          <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
+                                               target="_blank" rel="noopener noreferrer"
+                                               style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
+                                              {lead.title}
+                                            </a>
+                                          </td>
+                                          <td style={{ ...TD, fontSize: 12, color: "#9E9E9E", whiteSpace: "nowrap" }}>
+                                            {lead.date_create ? new Date(lead.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
+                                          </td>
+                                          <td style={{ ...TD, fontSize: 12, color: lead.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
+                                            {lead.tashrif_sanasi ? new Date(lead.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
+                                          </td>
+                                          <td style={TD}>
+                                            <span style={{
+                                              display: "inline-block", padding: "3px 10px", borderRadius: 20,
+                                              fontSize: 11, fontWeight: 600,
+                                              background: `${stage.color}22`, border: `1px solid ${stage.color}55`, color: stage.color,
+                                              whiteSpace: "nowrap",
+                                            }}>
+                                              {stage.label}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                    <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
+                                      <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
+                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#9E9E9E", textTransform: "uppercase" }}>JAMI</td>
+                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "#fff" }}>{subLeads.length} ta lid</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
 
                   {/* JAMI row */}
                   <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
