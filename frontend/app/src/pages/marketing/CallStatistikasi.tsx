@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
@@ -136,8 +136,8 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
   const calls = q.data ?? [];
   if (!calls.length) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
   return (
-    <div style={{ maxHeight: "min(40vh, 320px)", overflow: "auto", borderTop: "1px solid var(--border)" }}>
-      <table style={{ width: "100%", minWidth: 920, borderCollapse: "collapse", fontSize: 12.5 }}>
+    <div style={{ maxHeight: "min(64vh, 640px)", overflow: "auto", overscrollBehavior: "contain", borderTop: "1px solid var(--border)" }}>
+      <table style={{ width: "100%", minWidth: 1080, borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
           <tr style={{ background: "rgba(33,150,243,0.05)" }}>
             {["#","Telefon","Turi","Davomiylik","Sana va vaqt","Status","Lead"].map((h) => (
@@ -173,6 +173,7 @@ export default function CallStatistikasi() {
   const [endDate,   setEndDate]         = useState(todayISO());
   const [filterOpen, setFilterOpen]     = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
 
   const statsQ = useQuery({
     queryKey: ["py-call-stats", startDate, endDate],
@@ -183,6 +184,15 @@ export default function CallStatistikasi() {
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
   const failedCalls = data?.failed_calls ?? 0;
   const ndzCalls = data?.ndz_calls ?? 0;
+  const selectedRow = selectedResp ? rows.find((u, idx) => (u.responsible_id ?? idx) === selectedResp.id) : null;
+
+  useEffect(() => {
+    if (!selectedResp) return;
+    const t = window.setTimeout(() => {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [selectedResp?.id]);
 
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
@@ -294,7 +304,7 @@ export default function CallStatistikasi() {
                     const uid    = u.responsible_id ?? idx;
                     const isSel  = selectedResp?.id === uid;
                     return (
-                      <>
+                      <Fragment key={uid}>
                         <tr key={uid} style={{ background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)", cursor: "pointer" }}
                           onClick={() => setSelectedResp(isSel ? null : { id: uid, name: u.full_name })}>
                           <td style={TD({ textAlign: "left" })}>
@@ -320,19 +330,7 @@ export default function CallStatistikasi() {
                           <td style={TD({ color: "#4CAF50", fontWeight: 700 })}>{u.missed_recalled}</td>
                           <td style={TD({ color: "#F44336", fontWeight: 700 })}>{u.missed_unrecalled}</td>
                         </tr>
-                        {isSel && u.responsible_id != null && (
-                          <tr key={`sub-${uid}`}>
-                            <td colSpan={13} style={{ padding: 0, background: "rgba(33,150,243,0.03)" }}>
-                              <div style={{ borderTop: "1.5px solid rgba(33,150,243,0.2)" }}>
-                                <div style={{ padding: "10px 18px", background: "rgba(33,150,243,0.06)", fontSize: 12.5, fontWeight: 600, color: "#2196F3" }}>
-                                  {u.full_name} — qo'ng'iroqlar ro'yxati
-                                </div>
-                                <CallSubTable responsibleId={u.responsible_id} filter={{ start_date: startDate, end_date: endDate }} />
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -340,6 +338,28 @@ export default function CallStatistikasi() {
             </div>
           )}
         </div>
+
+        {selectedRow?.responsible_id != null && (
+          <div ref={detailRef} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", scrollMarginTop: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: "1px solid var(--border)", background: "rgba(33,150,243,0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <Avatar name={selectedRow.full_name} photoUrl={selectedRow.photo_url} id={selectedRow.responsible_id} size={32} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {selectedRow.full_name} — qo'ng'iroqlar ro'yxati
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text2)" }}>
+                    ID: {selectedRow.responsible_id}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedResp(null)} style={{ border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", borderRadius: 8, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
+                Yopish
+              </button>
+            </div>
+            <CallSubTable responsibleId={selectedRow.responsible_id} filter={{ start_date: startDate, end_date: endDate }} />
+          </div>
+        )}
 
       </div>
     </div>
