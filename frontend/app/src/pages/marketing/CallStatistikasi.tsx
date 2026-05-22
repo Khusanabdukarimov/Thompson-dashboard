@@ -64,6 +64,14 @@ function endOfQuarter(date: Date) {
   return new Date(start.getFullYear(), start.getMonth() + 3, 0);
 }
 
+function startOfYear(date: Date) {
+  return new Date(date.getFullYear(), 0, 1);
+}
+
+function endOfYear(date: Date) {
+  return new Date(date.getFullYear(), 11, 31);
+}
+
 function formatInputDate(iso: string) {
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
@@ -208,49 +216,51 @@ function DateRangePicker({ startDate, endDate, onChange }: {
   endDate: string;
   onChange: (range: { start_date: string; end_date: string }) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [rangeMode, setRangeMode] = useState<RangeMode>("day");
   const [pendingStart, setPendingStart] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(parseISODate(startDate || todayISO())));
+  const rootRef = useRef<HTMLDivElement>(null);
   const selectedStart = startDate <= endDate ? startDate : endDate;
   const selectedEnd = startDate <= endDate ? endDate : startDate;
   const monthsToShow = Math.min(18, Math.max(3, monthDiff(startOfMonth(parseISODate(selectedStart)), startOfMonth(parseISODate(selectedEnd))) + 2));
   const months = Array.from({ length: monthsToShow }, (_, i) => addMonths(viewMonth, i));
 
-  function applyPreset(days: number) {
-    const end = todayISO();
-    const start = daysAgoISO(days);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutside);
+    return () => document.removeEventListener("mousedown", closeOnOutside);
+  }, [open]);
+
+  function applyRange(start: Date, end: Date, close = false) {
+    const startIso = localISO(start);
+    const endIso = localISO(end);
     setPendingStart(null);
-    setViewMonth(startOfMonth(parseISODate(start)));
-    onChange({ start_date: start, end_date: end });
+    setViewMonth(startOfMonth(start));
+    onChange(startIso <= endIso ? { start_date: startIso, end_date: endIso } : { start_date: endIso, end_date: startIso });
+    if (close) setOpen(false);
   }
 
   function applyDate(iso: string) {
     const clicked = parseISODate(iso);
 
     if (rangeMode === "week") {
-      const start = localISO(startOfWeek(clicked));
-      const end = localISO(endOfWeek(clicked));
-      setPendingStart(null);
-      onChange({ start_date: start, end_date: end });
+      applyRange(startOfWeek(clicked), endOfWeek(clicked), true);
       return;
     }
     if (rangeMode === "month") {
-      const start = localISO(startOfMonth(clicked));
-      const end = localISO(endOfMonth(clicked));
-      setPendingStart(null);
-      onChange({ start_date: start, end_date: end });
+      applyRange(startOfMonth(clicked), endOfMonth(clicked), true);
       return;
     }
     if (rangeMode === "quarter") {
-      const start = localISO(startOfQuarter(clicked));
-      const end = localISO(endOfQuarter(clicked));
-      setPendingStart(null);
-      onChange({ start_date: start, end_date: end });
+      applyRange(startOfQuarter(clicked), endOfQuarter(clicked), true);
       return;
     }
     if (rangeMode === "year") {
-      setPendingStart(null);
-      onChange({ start_date: localISO(new Date(clicked.getFullYear(), 0, 1)), end_date: localISO(new Date(clicked.getFullYear(), 11, 31)) });
+      applyRange(startOfYear(clicked), endOfYear(clicked), true);
       return;
     }
 
@@ -264,6 +274,7 @@ function DateRangePicker({ startDate, endDate, onChange }: {
     const end = pendingStart <= iso ? iso : pendingStart;
     setPendingStart(null);
     onChange({ start_date: start, end_date: end });
+    setOpen(false);
   }
 
   function renderMonth(month: Date) {
@@ -321,70 +332,85 @@ function DateRangePicker({ startDate, endDate, onChange }: {
     );
   }
 
+  const quickRanges = [
+    { label: "Bugun", start: new Date(), end: new Date() },
+    { label: "Kecha", start: addDays(new Date(), -1), end: addDays(new Date(), -1) },
+    { label: "Bu hafta", start: startOfWeek(new Date()), end: new Date() },
+    { label: "O'tgan hafta", start: addDays(startOfWeek(new Date()), -7), end: addDays(startOfWeek(new Date()), -1) },
+    { label: "Bu oy", start: startOfMonth(new Date()), end: new Date() },
+    { label: "O'tgan oy", start: startOfMonth(addMonths(new Date(), -1)), end: endOfMonth(addMonths(new Date(), -1)) },
+  ];
+
   return (
-    <div style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg2)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 11px", color: "var(--text)" }}>
+    <div ref={rootRef} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((v) => !v);
+          setViewMonth(startOfMonth(parseISODate(selectedStart)));
+        }}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px", borderRadius: 5, border: `1px solid ${open ? "#2196F3" : "transparent"}`, background: "var(--bg2)", color: "var(--text)", cursor: "pointer" }}
+      >
         <span style={{ fontSize: 13, fontWeight: 700 }}>{formatInputDate(selectedStart)} - {formatInputDate(selectedEnd)}</span>
-        <CalendarDays size={15} color="var(--text2)" />
-      </div>
+        <CalendarDays size={16} color={open ? "#2196F3" : "var(--text2)"} />
+      </button>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-        {[
-          { id: "day", label: "Kun" },
-          { id: "week", label: "Hafta" },
-          { id: "month", label: "Oy" },
-          { id: "quarter", label: "Kvartal" },
-          { id: "year", label: "Yil" },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => {
-              setRangeMode(item.id as RangeMode);
-              setPendingStart(null);
-            }}
-            style={{
-              border: 0,
-              borderBottom: rangeMode === item.id ? "2px solid #2196F3" : "2px solid transparent",
-              background: rangeMode === item.id ? "rgba(33,150,243,0.10)" : "transparent",
-              color: rangeMode === item.id ? "#2196F3" : "var(--text2)",
-              padding: "8px 0 7px",
-              fontSize: 11.5,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 20, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", boxShadow: "0 18px 42px rgba(0,0,0,0.34)", overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 10, borderBottom: "1px solid var(--border)" }}>
+            {quickRanges.map((p) => (
+              <button key={p.label} type="button" onClick={() => applyRange(p.start, p.end, true)} style={{ border: "1px solid var(--border)", borderRadius: 5, background: "var(--bg2)", color: "var(--text2)", padding: "7px 4px", fontSize: 11.5, cursor: "pointer" }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, padding: "8px 10px" }}>
-        {[
-          { label: "7 kun", days: 7 },
-          { label: "30 kun", days: 30 },
-          { label: "90 kun", days: 90 },
-          { label: "365 kun", days: 365 },
-        ].map((p) => (
-          <button key={p.label} type="button" onClick={() => applyPreset(p.days)} style={{ border: 0, borderRadius: 5, background: "rgba(255,255,255,0.04)", color: "var(--text2)", padding: "6px 2px", fontSize: 11.5, cursor: "pointer" }}>
-            {p.label}
-          </button>
-        ))}
-      </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", borderBottom: "1px solid var(--border)" }}>
+            {[
+              { id: "day", label: "Kun" },
+              { id: "week", label: "Hafta" },
+              { id: "month", label: "Oy" },
+              { id: "quarter", label: "Kvartal" },
+              { id: "year", label: "Yil" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setRangeMode(item.id as RangeMode);
+                  setPendingStart(null);
+                }}
+                style={{
+                  border: 0,
+                  borderBottom: rangeMode === item.id ? "2px solid #2196F3" : "2px solid transparent",
+                  background: rangeMode === item.id ? "rgba(33,150,243,0.10)" : "transparent",
+                  color: rangeMode === item.id ? "#2196F3" : "var(--text2)",
+                  padding: "8px 0 7px",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px 7px" }}>
-        <button type="button" aria-label="Oldingi oy" onClick={() => setViewMonth((m) => addMonths(m, -1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
-          <ChevronLeft size={15} />
-        </button>
-        <button type="button" aria-label="Keyingi oy" onClick={() => setViewMonth((m) => addMonths(m, 1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
-          <ChevronRight size={15} />
-        </button>
-        <span style={{ color: "var(--text3)", fontSize: 11.5 }}>{rangeMode === "day" && pendingStart ? "Tugash sanasini tanlang" : "Oraliqni belgilang"}</span>
-      </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: "1px solid var(--border)" }}>
+            <button type="button" aria-label="Oldingi oy" onClick={() => setViewMonth((m) => addMonths(m, -1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
+              <ChevronLeft size={15} />
+            </button>
+            <button type="button" aria-label="Keyingi oy" onClick={() => setViewMonth((m) => addMonths(m, 1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
+              <ChevronRight size={15} />
+            </button>
+            <span style={{ color: "var(--text3)", fontSize: 11.5 }}>{rangeMode === "day" && pendingStart ? "Tugash sanasini tanlang" : "Oraliqni belgilang"}</span>
+          </div>
 
-      <div style={{ maxHeight: 236, overflowY: "auto", padding: "0 10px 8px", borderTop: "1px solid var(--border)" }}>
-        {months.map(renderMonth)}
-      </div>
+          <div style={{ maxHeight: 300, overflowY: "auto", padding: "8px 10px 10px" }}>
+            {months.map(renderMonth)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
