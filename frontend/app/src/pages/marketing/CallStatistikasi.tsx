@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
   Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
-  SlidersHorizontal, Download, PhoneOff, X, CalendarDays,
+  SlidersHorizontal, Download, PhoneOff, X, CalendarDays, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
@@ -17,6 +17,62 @@ const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayISO  = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+const MONTH_NAMES = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+const WEEK_DAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
+
+function parseISODate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return new Date();
+  return new Date(y, m - 1, d);
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function startOfWeek(date: Date) {
+  const d = new Date(date);
+  const day = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - day);
+  return d;
+}
+
+function endOfWeek(date: Date) {
+  return addDays(startOfWeek(date), 6);
+}
+
+function startOfQuarter(date: Date) {
+  return new Date(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
+}
+
+function endOfQuarter(date: Date) {
+  const start = startOfQuarter(date);
+  return new Date(start.getFullYear(), start.getMonth() + 3, 0);
+}
+
+function formatInputDate(iso: string) {
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}.${m}.${y}`;
+}
+
+function monthDiff(a: Date, b: Date) {
+  return (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
+}
 
 function fmtDur(secs: number): string {
   if (!secs) return "00:00:00";
@@ -103,20 +159,6 @@ function toApiFilter(filter: CallFilterState): CallDashboardFilter {
   };
 }
 
-function shortDate(iso: string) {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-}
-
-function filterDateLabel(filter: CallFilterState) {
-  if (filter.start_date === todayISO() && filter.end_date === todayISO()) {
-    return `Bugun, ${shortDate(filter.end_date)}`;
-  }
-  if (filter.start_date === filter.end_date) return shortDate(filter.end_date);
-  return `${shortDate(filter.start_date)} - ${shortDate(filter.end_date)}`;
-}
-
 function activeFilterCount(filter: CallFilterState) {
   return [
     filter.responsible_id !== "all",
@@ -158,6 +200,195 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
   );
 }
 
+// ── Date range picker ─────────────────────────────────────────────
+type RangeMode = "day" | "week" | "month" | "quarter" | "year";
+
+function DateRangePicker({ startDate, endDate, onChange }: {
+  startDate: string;
+  endDate: string;
+  onChange: (range: { start_date: string; end_date: string }) => void;
+}) {
+  const [rangeMode, setRangeMode] = useState<RangeMode>("day");
+  const [pendingStart, setPendingStart] = useState<string | null>(null);
+  const [viewMonth, setViewMonth] = useState(() => startOfMonth(parseISODate(startDate || todayISO())));
+  const selectedStart = startDate <= endDate ? startDate : endDate;
+  const selectedEnd = startDate <= endDate ? endDate : startDate;
+  const monthsToShow = Math.min(18, Math.max(3, monthDiff(startOfMonth(parseISODate(selectedStart)), startOfMonth(parseISODate(selectedEnd))) + 2));
+  const months = Array.from({ length: monthsToShow }, (_, i) => addMonths(viewMonth, i));
+
+  function applyPreset(days: number) {
+    const end = todayISO();
+    const start = daysAgoISO(days);
+    setPendingStart(null);
+    setViewMonth(startOfMonth(parseISODate(start)));
+    onChange({ start_date: start, end_date: end });
+  }
+
+  function applyDate(iso: string) {
+    const clicked = parseISODate(iso);
+
+    if (rangeMode === "week") {
+      const start = localISO(startOfWeek(clicked));
+      const end = localISO(endOfWeek(clicked));
+      setPendingStart(null);
+      onChange({ start_date: start, end_date: end });
+      return;
+    }
+    if (rangeMode === "month") {
+      const start = localISO(startOfMonth(clicked));
+      const end = localISO(endOfMonth(clicked));
+      setPendingStart(null);
+      onChange({ start_date: start, end_date: end });
+      return;
+    }
+    if (rangeMode === "quarter") {
+      const start = localISO(startOfQuarter(clicked));
+      const end = localISO(endOfQuarter(clicked));
+      setPendingStart(null);
+      onChange({ start_date: start, end_date: end });
+      return;
+    }
+    if (rangeMode === "year") {
+      setPendingStart(null);
+      onChange({ start_date: localISO(new Date(clicked.getFullYear(), 0, 1)), end_date: localISO(new Date(clicked.getFullYear(), 11, 31)) });
+      return;
+    }
+
+    if (!pendingStart) {
+      setPendingStart(iso);
+      onChange({ start_date: iso, end_date: iso });
+      return;
+    }
+
+    const start = pendingStart <= iso ? pendingStart : iso;
+    const end = pendingStart <= iso ? iso : pendingStart;
+    setPendingStart(null);
+    onChange({ start_date: start, end_date: end });
+  }
+
+  function renderMonth(month: Date) {
+    const first = startOfMonth(month);
+    const last = endOfMonth(month);
+    const leading = (first.getDay() + 6) % 7;
+    const days = Array.from({ length: last.getDate() }, (_, i) => localISO(new Date(month.getFullYear(), month.getMonth(), i + 1)));
+    const cells: (string | null)[] = [
+      ...Array.from({ length: leading }, () => null),
+      ...days,
+    ];
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    return (
+      <div key={`${month.getFullYear()}-${month.getMonth()}`} style={{ paddingBottom: 10 }}>
+        <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, margin: "5px 0 8px" }}>
+          {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 5 }}>
+          {WEEK_DAYS.map((d) => (
+            <div key={d} style={{ textAlign: "center", color: "var(--text3)", fontSize: 10.5, fontWeight: 700 }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {cells.map((iso, idx) => {
+            if (!iso) return <div key={`empty-${idx}`} style={{ height: 30 }} />;
+            const isStart = iso === selectedStart;
+            const isEnd = iso === selectedEnd;
+            const inRange = iso >= selectedStart && iso <= selectedEnd;
+            const isToday = iso === todayISO();
+            const dayOfWeek = parseISODate(iso).getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            return (
+              <button
+                key={iso}
+                type="button"
+                onClick={() => applyDate(iso)}
+                style={{
+                  height: 30,
+                  border: `1px solid ${isStart || isEnd ? "#2196F3" : isToday ? "rgba(33,150,243,0.45)" : "transparent"}`,
+                  borderRadius: isStart || isEnd ? 6 : 4,
+                  background: isStart || isEnd ? "#2196F3" : inRange ? "rgba(33,150,243,0.18)" : "transparent",
+                  color: isStart || isEnd ? "#fff" : isWeekend ? "#ff665c" : "var(--text)",
+                  fontSize: 12,
+                  fontWeight: isStart || isEnd || isToday ? 800 : 500,
+                  cursor: "pointer",
+                }}
+              >
+                {Number(iso.slice(-2))}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg2)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 11px", color: "var(--text)" }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{formatInputDate(selectedStart)} - {formatInputDate(selectedEnd)}</span>
+        <CalendarDays size={15} color="var(--text2)" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+        {[
+          { id: "day", label: "Kun" },
+          { id: "week", label: "Hafta" },
+          { id: "month", label: "Oy" },
+          { id: "quarter", label: "Kvartal" },
+          { id: "year", label: "Yil" },
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              setRangeMode(item.id as RangeMode);
+              setPendingStart(null);
+            }}
+            style={{
+              border: 0,
+              borderBottom: rangeMode === item.id ? "2px solid #2196F3" : "2px solid transparent",
+              background: rangeMode === item.id ? "rgba(33,150,243,0.10)" : "transparent",
+              color: rangeMode === item.id ? "#2196F3" : "var(--text2)",
+              padding: "8px 0 7px",
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, padding: "8px 10px" }}>
+        {[
+          { label: "7 kun", days: 7 },
+          { label: "30 kun", days: 30 },
+          { label: "90 kun", days: 90 },
+          { label: "365 kun", days: 365 },
+        ].map((p) => (
+          <button key={p.label} type="button" onClick={() => applyPreset(p.days)} style={{ border: 0, borderRadius: 5, background: "rgba(255,255,255,0.04)", color: "var(--text2)", padding: "6px 2px", fontSize: 11.5, cursor: "pointer" }}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px 7px" }}>
+        <button type="button" aria-label="Oldingi oy" onClick={() => setViewMonth((m) => addMonths(m, -1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
+          <ChevronLeft size={15} />
+        </button>
+        <button type="button" aria-label="Keyingi oy" onClick={() => setViewMonth((m) => addMonths(m, 1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
+          <ChevronRight size={15} />
+        </button>
+        <span style={{ color: "var(--text3)", fontSize: 11.5 }}>{rangeMode === "day" && pendingStart ? "Tugash sanasini tanlang" : "Oraliqni belgilang"}</span>
+      </div>
+
+      <div style={{ maxHeight: 236, overflowY: "auto", padding: "0 10px 8px", borderTop: "1px solid var(--border)" }}>
+        {months.map(renderMonth)}
+      </div>
+    </div>
+  );
+}
+
 // ── Filter drawer ─────────────────────────────────────────────────
 function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply, onReset, onClose }: {
   open: boolean;
@@ -189,7 +420,6 @@ function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply,
     color: "var(--text2)",
   };
   const update = (patch: Partial<CallFilterState>) => onChange({ ...value, ...patch });
-  const preset = (days: number) => update({ end_date: todayISO(), start_date: daysAgoISO(days) });
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 500 }}>
@@ -202,30 +432,12 @@ function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply,
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 24px 110px", display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px", borderRadius: 5, background: "var(--bg2)", color: "var(--text)" }}>
-            <span style={{ fontSize: 13 }}>{filterDateLabel(value)}</span>
-            <CalendarDays size={16} color="var(--text2)" />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-            <label style={labelStyle}>
-              Dan
-              <input type="date" value={value.start_date} onChange={(e) => update({ start_date: e.target.value })} style={inputStyle} />
-            </label>
-            <label style={labelStyle}>
-              Gacha
-              <input type="date" value={value.end_date} onChange={(e) => update({ end_date: e.target.value })} style={inputStyle} />
-            </label>
-          </div>
-
-          <div style={{ display: "flex", gap: 6 }}>
-            {[{ label: "Bugun", days: 0 }, { label: "7 kun", days: 7 }, { label: "30 kun", days: 30 }].map(({ label, days }) => (
-              <button key={label} onClick={() => preset(days)} style={{ flex: 1, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", borderRadius: 6, padding: "7px 6px", fontSize: 12, cursor: "pointer" }}>
-                {label}
-              </button>
-            ))}
-          </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 142px", display: "flex", flexDirection: "column", gap: 13 }}>
+          <DateRangePicker
+            startDate={value.start_date}
+            endDate={value.end_date}
+            onChange={(range) => update(range)}
+          />
 
           <label style={labelStyle}>
             Xodim
@@ -273,10 +485,10 @@ function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply,
             <ChevronDown size={16} color="var(--text2)" />
           </div>
 
-          <div style={{ color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroq davomiyligi, sek</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, overflow: "hidden", borderRadius: 4 }}>
-            <input type="number" min={0} value={value.duration_from} onChange={(e) => update({ duration_from: e.target.value })} placeholder="ot 0" style={{ ...inputStyle, borderRadius: 0 }} />
-            <input type="number" min={0} value={value.duration_to} onChange={(e) => update({ duration_to: e.target.value })} placeholder="do ∞" style={{ ...inputStyle, borderRadius: 0 }} />
+          <div style={{ color: "var(--text2)", fontSize: 13, marginTop: -2 }}>Qo'ng'iroq davomiyligi, sek</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, overflow: "hidden", borderRadius: 4, border: "1px solid transparent", marginBottom: 12 }}>
+            <input type="number" min={0} value={value.duration_from} onChange={(e) => update({ duration_from: e.target.value })} placeholder="dan 0" style={{ ...inputStyle, borderRadius: 0, border: 0 }} />
+            <input type="number" min={0} value={value.duration_to} onChange={(e) => update({ duration_to: e.target.value })} placeholder="gacha ∞" style={{ ...inputStyle, borderRadius: 0, border: 0 }} />
           </div>
         </div>
 
