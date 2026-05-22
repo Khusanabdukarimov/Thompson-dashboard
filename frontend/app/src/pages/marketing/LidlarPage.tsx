@@ -1190,9 +1190,11 @@ export default function LidlarPage() {
                             <td style={{ ...TD, width: 200 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <AvatarCircle name={r.full_name || "?"} size={34} />
-                                <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
+                                   target="_blank" rel="noopener noreferrer"
+                                   style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>
                                   {r.full_name}
-                                </span>
+                                </a>
                               </div>
                             </td>
                             <td style={TD}>
@@ -1290,6 +1292,7 @@ export default function LidlarPage() {
             grandTotal: number,
             barColor: string,
             loading: boolean,
+            stageId: string,
           ) => (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
               <div style={{
@@ -1298,7 +1301,14 @@ export default function LidlarPage() {
                 display: "flex", alignItems: "center", justifyContent: "space-between",
               }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
-                <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
+                  <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
+                     target="_blank" rel="noopener noreferrer"
+                     style={{ fontSize: 11, color: "#2196F3", background: "rgba(33,150,243,0.1)", border: "1px solid rgba(33,150,243,0.3)", borderRadius: 6, padding: "3px 8px", textDecoration: "none", whiteSpace: "nowrap" }}>
+                    Bitrix24 ↗
+                  </a>
+                </div>
               </div>
               {loading ? (
                 <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -1309,12 +1319,19 @@ export default function LidlarPage() {
                   {items.map((r, i) => (
                     <div key={i} style={{ padding: "7px 20px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                           {r.reason}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
-                          {fmtNum(r.total)}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                            {fmtNum(r.total)}
+                          </span>
+                          <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
+                             target="_blank" rel="noopener noreferrer"
+                             style={{ fontSize: 10, color: "#2196F3", background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.25)", borderRadius: 4, padding: "2px 6px", textDecoration: "none" }}>
+                            ↗
+                          </a>
+                        </div>
                       </div>
                       <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
                         <div style={{
@@ -1334,8 +1351,8 @@ export default function LidlarPage() {
 
           return (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading)}
-              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading)}
+              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading, "UC_NAZK5J")}
+              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading,   "UC_F8K4GI")}
             </div>
           );
         })()}
@@ -1527,10 +1544,11 @@ export default function LidlarPage() {
                               <td style={TD}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                   <AvatarCircle name={rr.full_name || "?"} size={30} />
+                                  <span style={{ fontSize: 13, color: "var(--text)", whiteSpace: "nowrap", fontWeight: 500 }}>{rr.full_name}</span>
                                   <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${rr.responsible_id}`}
                                      target="_blank" rel="noopener noreferrer"
-                                     style={{ fontSize: 13, color: "var(--text)", textDecoration: "none", whiteSpace: "nowrap", fontWeight: 500 }}>
-                                    {rr.full_name}
+                                     style={{ fontSize: 10, color: "#2196F3", background: "rgba(33,150,243,0.1)", border: "1px solid rgba(33,150,243,0.3)", borderRadius: 5, padding: "2px 7px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                    ↗ Bitrix24
                                   </a>
                                 </div>
                               </td>
