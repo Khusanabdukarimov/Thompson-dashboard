@@ -1215,6 +1215,49 @@ router.get('/source-stats', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/form-stats
+ * Leads grouped by web_form_id (direct DB field), joined with crm_forms for name.
+ * Params: from, to, responsible_id, mode
+ */
+router.get('/form-stats', async (req, res) => {
+  const { from, to, responsible_id, mode } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         l.web_form_id,
+         COALESCE(cf.form_name, 'Noma''lum') AS form_name,
+         COUNT(*)::int AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       LEFT JOIN crm_forms cf ON cf.form_id = l.web_form_id::text
+       WHERE l.web_form_id IS NOT NULL AND TRIM(l.web_form_id::text) != ''
+         AND ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         ${leadModeClause(mode)}
+       GROUP BY l.web_form_id, cf.form_name
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/form-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/dashboard/sync-crm-forms
  * Fetches CRM forms from Bitrix24 and upserts into crm_forms table.
  */
