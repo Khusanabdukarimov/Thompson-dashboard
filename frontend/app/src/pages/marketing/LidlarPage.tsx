@@ -11,9 +11,9 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
-  getSourceStats, getUtmStats, getResponsibleLeads,
+  getSourceStats, getUtmStats, getUtmCampaignStats, getResponsibleLeads,
   type DashFilter,
-  type SourceStatsRow, type UtmStatRow, type ResponsibleLeadRow,
+  type SourceStatsRow, type UtmStatRow, type UtmCampaignRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -373,6 +373,12 @@ export default function LidlarPage() {
     queryKey: ["stats/responsible-leads-masul", selectedRespMasul?.id, appliedWithMode],
     queryFn: () => getResponsibleLeads(selectedRespMasul!.id, appliedWithMode),
     enabled: selectedRespMasul !== null,
+  });
+  const [selectedUtmSource, setSelectedUtmSource] = useState<string | null>(null);
+  const utmCampaignQ = useQuery({
+    queryKey: ["stats/utm-campaigns", selectedUtmSource, appliedWithMode],
+    queryFn: () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
+    enabled: selectedUtmSource !== null,
   });
 
   const header       = statsQ.data?.header;
@@ -843,7 +849,7 @@ export default function LidlarPage() {
                                             <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
                                                target="_blank" rel="noopener noreferrer"
                                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title}
+                                              {lead.title || `Lid #${lead.id}`}
                                             </a>
                                           </td>
                                           <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
@@ -1047,7 +1053,7 @@ export default function LidlarPage() {
                                             <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
                                                target="_blank" rel="noopener noreferrer"
                                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title}
+                                              {lead.title || `Lid #${lead.id}`}
                                             </a>
                                           </td>
                                           <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
@@ -1329,7 +1335,7 @@ export default function LidlarPage() {
         })()}
 
         {/* ══════════════════════════════════════════════════════════
-            UTM bo'yicha table
+            UTM bo'yicha table (expandable → campaigns)
         ══════════════════════════════════════════════════════════ */}
         {(() => {
           const utmRows: UtmStatRow[] = utmStatsQ.data ?? [];
@@ -1342,11 +1348,17 @@ export default function LidlarPage() {
             return acc;
           }, {} as Record<string, number>);
 
+          const campRows: UtmCampaignRow[] = selectedUtmSource !== null ? (utmCampaignQ.data ?? []) : [];
+          const campMaxes: Record<string, number> = {};
+          for (const c of UTM_COLS_DEF)
+            campMaxes[c.key] = Math.max(1, ...campRows.map(r => Number(r[c.key as keyof UtmCampaignRow]) || 0));
+
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
               <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>UTM bo'yicha</span>
                 <span style={{ fontSize: 12, color: "var(--text3)" }}>{utmRows.length} ta manba</span>
+                <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 4 }}>· satr bosing → kampaniyalar</span>
               </div>
               {utmStatsQ.isLoading ? (
                 <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -1366,31 +1378,97 @@ export default function LidlarPage() {
                       {utmRows.map((r, i) => {
                         const total = r.umumiy_lidlar;
                         const konv = total > 0 ? (r.konsultatsiya_otkazildi / total) * 100 : 0;
+                        const isSelected = selectedUtmSource === r.utm_source;
                         return (
-                          <tr key={r.utm_source}
-                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                              onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                            <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", color: "var(--text)" }}>
-                              {r.utm_source || "—"}
-                            </td>
-                            {UTM_COLS_DEF.map(c => {
-                              const val = Number(r[c.key as keyof UtmStatRow]) || 0;
-                              return (
-                                <td key={c.key} style={TD}>
-                                  {val > 0 ? (
-                                    <>
-                                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
-                                      <MiniBar value={val} max={maxes[c.key]} color={c.color} />
-                                    </>
-                                  ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                          <>
+                            <tr key={r.utm_source}
+                                style={{ background: isSelected ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                                onClick={() => setSelectedUtmSource(isSelected ? null : r.utm_source)}
+                                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = isSelected ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <ChevronDown size={13} style={{ color: "#9E9E9E", transform: isSelected ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+                                  <span style={{ color: isSelected ? "#2196F3" : "var(--text)" }}>{r.utm_source || "(manbasiz)"}</span>
+                                  {r.campaign_count > 0 && (
+                                    <span style={{ fontSize: 10, background: "rgba(33,150,243,0.12)", color: "#2196F3", borderRadius: 8, padding: "1px 6px" }}>{r.campaign_count} kampaniya</span>
+                                  )}
+                                </div>
+                              </td>
+                              {UTM_COLS_DEF.map(c => {
+                                const val = Number(r[c.key as keyof UtmStatRow]) || 0;
+                                return (
+                                  <td key={c.key} style={TD}>
+                                    {val > 0 ? (
+                                      <>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
+                                        <MiniBar value={val} max={maxes[c.key]} color={c.color} />
+                                      </>
+                                    ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                                  </td>
+                                );
+                              })}
+                              <td style={{ ...TD, textAlign: "center" }}>
+                                <ConversionDonut pct={konv} size={38} />
+                              </td>
+                            </tr>
+                            {isSelected && (
+                              <tr key={`utm-camp-${r.utm_source}`}>
+                                <td colSpan={UTM_COLS_DEF.length + 2} style={{ padding: 0, background: "rgba(33,150,243,0.04)", borderBottom: "1px solid var(--border)" }}>
+                                  {utmCampaignQ.isLoading ? (
+                                    <div style={{ padding: "14px 24px", color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                                  ) : campRows.length === 0 ? (
+                                    <div style={{ padding: "14px 24px", color: "#555", fontSize: 13 }}>Kampaniyalar topilmadi</div>
+                                  ) : (
+                                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                      <thead>
+                                        <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                          <th style={{ ...TH("#555", 32), paddingLeft: 28 }}>#</th>
+                                          <th style={TH("#9E9E9E", 240)}>KAMPANIYA</th>
+                                          {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
+                                          <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {campRows.map((cr, ci) => {
+                                          const campKonv = cr.umumiy_lidlar > 0 ? (cr.konsultatsiya_otkazildi / cr.umumiy_lidlar) * 100 : 0;
+                                          return (
+                                            <tr key={cr.utm_campaign} style={{ background: ci % 2 === 0 ? "transparent" : "rgba(0,0,0,0.1)" }}>
+                                              <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 28 }}>{String(ci + 1).padStart(2, "0")}</td>
+                                              <td style={{ ...TD, fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                {cr.utm_campaign || "(kampaniyasiz)"}
+                                              </td>
+                                              {UTM_COLS_DEF.map(c => {
+                                                const val = Number(cr[c.key as keyof UtmCampaignRow]) || 0;
+                                                return (
+                                                  <td key={c.key} style={TD}>
+                                                    {val > 0 ? (
+                                                      <>
+                                                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
+                                                        <MiniBar value={val} max={campMaxes[c.key]} color={c.color} height={3} />
+                                                      </>
+                                                    ) : <span style={{ fontSize: 12, color: "var(--text3)" }}>—</span>}
+                                                  </td>
+                                                );
+                                              })}
+                                              <td style={{ ...TD, textAlign: "center" }}>
+                                                <ConversionDonut pct={campKonv} size={36} />
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                        <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
+                                          <td style={{ ...TD, paddingLeft: 28, color: "#666" }} />
+                                          <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
+                                          <td colSpan={UTM_COLS_DEF.length + 1} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{campRows.length} ta kampaniya</td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  )}
                                 </td>
-                              );
-                            })}
-                            <td style={{ ...TD, textAlign: "center" }}>
-                              <ConversionDonut pct={konv} size={38} />
-                            </td>
-                          </tr>
+                              </tr>
+                            )}
+                          </>
                         );
                       })}
                       <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
