@@ -18,6 +18,7 @@ const localISO = (d: Date) =>
 const todayISO  = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 const MONTH_NAMES = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+const MONTH_SHORT_NAMES = ["Yan", "Fev", "Mar", "Apr", "May", "Iyn", "Iyl", "Avg", "Sen", "Okt", "Noy", "Dek"];
 const WEEK_DAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
 
 function parseISODate(iso: string) {
@@ -221,18 +222,37 @@ function DateRangePicker({ startDate, endDate, onChange }: {
   const [pendingStart, setPendingStart] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(parseISODate(startDate || todayISO())));
   const rootRef = useRef<HTMLDivElement>(null);
+  const [popoverPosition, setPopoverPosition] = useState({ top: 96, left: 24, width: 520 });
   const selectedStart = startDate <= endDate ? startDate : endDate;
   const selectedEnd = startDate <= endDate ? endDate : startDate;
-  const monthsToShow = Math.min(18, Math.max(3, monthDiff(startOfMonth(parseISODate(selectedStart)), startOfMonth(parseISODate(selectedEnd))) + 2));
+  const monthsToShow = Math.min(12, Math.max(3, monthDiff(startOfMonth(parseISODate(selectedStart)), startOfMonth(parseISODate(selectedEnd))) + 2));
   const months = Array.from({ length: monthsToShow }, (_, i) => addMonths(viewMonth, i));
+
+  function updatePopoverPosition() {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(540, Math.max(320, window.innerWidth - 24));
+    const height = Math.min(520, window.innerHeight - 24);
+    const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+    const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - height - 12));
+    setPopoverPosition({ top, left, width });
+  }
 
   useEffect(() => {
     if (!open) return;
+    updatePopoverPosition();
     const closeOnOutside = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
+    const reposition = () => updatePopoverPosition();
     document.addEventListener("mousedown", closeOnOutside);
-    return () => document.removeEventListener("mousedown", closeOnOutside);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutside);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
   }, [open]);
 
   function applyRange(start: Date, end: Date, close = false) {
@@ -332,6 +352,94 @@ function DateRangePicker({ startDate, endDate, onChange }: {
     );
   }
 
+  function selectionStyle(active: boolean, soft = false): React.CSSProperties {
+    return {
+      border: `1px solid ${active ? "#2196F3" : soft ? "rgba(33,150,243,0.26)" : "transparent"}`,
+      borderRadius: 6,
+      background: active ? "rgba(33,150,243,0.28)" : soft ? "rgba(255,255,255,0.06)" : "transparent",
+      color: active ? "#2196F3" : "var(--text)",
+      fontSize: 13,
+      fontWeight: active ? 800 : 500,
+      cursor: "pointer",
+    };
+  }
+
+  function renderMonthPicker() {
+    const baseYear = parseISODate(selectedStart).getFullYear() - 2;
+    const years = Array.from({ length: 8 }, (_, i) => baseYear + i);
+    return (
+      <div style={{ maxHeight: 360, overflowY: "auto", padding: "10px 12px" }}>
+        {years.map((year) => (
+          <div key={year} style={{ display: "grid", gridTemplateColumns: "56px repeat(3, 1fr)", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <div style={{ color: "var(--text3)", fontSize: 18, fontWeight: 600 }}>{year}</div>
+            {MONTH_SHORT_NAMES.map((name, monthIndex) => {
+              const start = startOfMonth(new Date(year, monthIndex, 1));
+              const end = endOfMonth(start);
+              const startIso = localISO(start);
+              const endIso = localISO(end);
+              const active = selectedStart >= startIso && selectedEnd <= endIso;
+              return (
+                <button key={`${year}-${name}`} type="button" onClick={() => applyRange(start, end, true)} style={{ ...selectionStyle(active), height: 36 }}>
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderQuarterPicker() {
+    const baseYear = parseISODate(selectedStart).getFullYear() - 2;
+    const years = Array.from({ length: 10 }, (_, i) => baseYear + i);
+    return (
+      <div style={{ maxHeight: 360, overflowY: "auto", padding: "10px 12px" }}>
+        {years.map((year) => (
+          <div key={year} style={{ display: "grid", gridTemplateColumns: "56px repeat(4, 1fr)", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <div style={{ color: "var(--text3)", fontSize: 18, fontWeight: 600 }}>{year}</div>
+            {[0, 1, 2, 3].map((quarter) => {
+              const anchor = new Date(year, quarter * 3, 1);
+              const start = startOfQuarter(anchor);
+              const end = endOfQuarter(anchor);
+              const startIso = localISO(start);
+              const endIso = localISO(end);
+              const active = selectedStart >= startIso && selectedEnd <= endIso;
+              return (
+                <button key={`${year}-q${quarter + 1}`} type="button" onClick={() => applyRange(start, end, true)} style={{ ...selectionStyle(active), height: 36 }}>
+                  Q{quarter + 1}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderYearPicker() {
+    const baseYear = parseISODate(selectedStart).getFullYear() - 2;
+    const years = Array.from({ length: 36 }, (_, i) => baseYear + i);
+    return (
+      <div style={{ maxHeight: 360, overflowY: "auto", padding: "10px 12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+          {years.map((year) => {
+            const start = startOfYear(new Date(year, 0, 1));
+            const end = endOfYear(start);
+            const startIso = localISO(start);
+            const endIso = localISO(end);
+            const active = selectedStart >= startIso && selectedEnd <= endIso;
+            return (
+              <button key={year} type="button" onClick={() => applyRange(start, end, true)} style={{ ...selectionStyle(active), height: 40 }}>
+                {year}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   const quickRanges = [
     { label: "Bugun", start: new Date(), end: new Date() },
     { label: "Kecha", start: addDays(new Date(), -1), end: addDays(new Date(), -1) },
@@ -356,15 +464,7 @@ function DateRangePicker({ startDate, endDate, onChange }: {
       </button>
 
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 20, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", boxShadow: "0 18px 42px rgba(0,0,0,0.34)", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 10, borderBottom: "1px solid var(--border)" }}>
-            {quickRanges.map((p) => (
-              <button key={p.label} type="button" onClick={() => applyRange(p.start, p.end, true)} style={{ border: "1px solid var(--border)", borderRadius: 5, background: "var(--bg2)", color: "var(--text2)", padding: "7px 4px", fontSize: 11.5, cursor: "pointer" }}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-
+        <div style={{ position: "fixed", top: popoverPosition.top, left: popoverPosition.left, width: popoverPosition.width, zIndex: 800, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", boxShadow: "0 18px 42px rgba(0,0,0,0.34)", overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", borderBottom: "1px solid var(--border)" }}>
             {[
               { id: "day", label: "Kun" },
@@ -396,18 +496,41 @@ function DateRangePicker({ startDate, endDate, onChange }: {
             ))}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: "1px solid var(--border)" }}>
-            <button type="button" aria-label="Oldingi oy" onClick={() => setViewMonth((m) => addMonths(m, -1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
-              <ChevronLeft size={15} />
-            </button>
-            <button type="button" aria-label="Keyingi oy" onClick={() => setViewMonth((m) => addMonths(m, 1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
-              <ChevronRight size={15} />
-            </button>
-            <span style={{ color: "var(--text3)", fontSize: 11.5 }}>{rangeMode === "day" && pendingStart ? "Tugash sanasini tanlang" : "Oraliqni belgilang"}</span>
-          </div>
+          <div style={{ display: "grid", gridTemplateColumns: `${popoverPosition.width < 420 ? 104 : 124}px 1fr`, minHeight: 360 }}>
+            <div style={{ borderRight: "1px solid var(--border)", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 4, background: "rgba(255,255,255,0.02)" }}>
+              {quickRanges.map((p) => {
+                const startIso = localISO(p.start);
+                const endIso = localISO(p.end);
+                const active = selectedStart === startIso && selectedEnd === endIso;
+                return (
+                  <button key={p.label} type="button" onClick={() => applyRange(p.start, p.end, true)} style={{ border: 0, borderRadius: 5, background: active ? "rgba(33,150,243,0.18)" : "transparent", color: active ? "#2196F3" : "var(--text2)", padding: "8px 8px", fontSize: 12.5, fontWeight: active ? 800 : 500, textAlign: "left", cursor: "pointer" }}>
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
 
-          <div style={{ maxHeight: 300, overflowY: "auto", padding: "8px 10px 10px" }}>
-            {months.map(renderMonth)}
+            <div style={{ minWidth: 0 }}>
+              {(rangeMode === "day" || rangeMode === "week") && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: "1px solid var(--border)" }}>
+                    <button type="button" aria-label="Oldingi oy" onClick={() => setViewMonth((m) => addMonths(m, -1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
+                      <ChevronLeft size={15} />
+                    </button>
+                    <button type="button" aria-label="Keyingi oy" onClick={() => setViewMonth((m) => addMonths(m, 1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
+                      <ChevronRight size={15} />
+                    </button>
+                    <span style={{ color: "var(--text3)", fontSize: 11.5 }}>{rangeMode === "day" && pendingStart ? "Tugash sanasini tanlang" : "Oraliqni belgilang"}</span>
+                  </div>
+                  <div style={{ maxHeight: 360, overflowY: "auto", padding: "8px 10px 10px" }}>
+                    {months.map(renderMonth)}
+                  </div>
+                </>
+              )}
+              {rangeMode === "month" && renderMonthPicker()}
+              {rangeMode === "quarter" && renderQuarterPicker()}
+              {rangeMode === "year" && renderYearPicker()}
+            </div>
           </div>
         </div>
       )}
