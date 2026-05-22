@@ -11,9 +11,9 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
-  getSourceStats, getUtmStats, getUtmCampaignStats, getResponsibleLeads,
+  getSourceStats, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
-  type SourceStatsRow, type UtmStatRow, type UtmCampaignRow, type ResponsibleLeadRow,
+  type SourceStatsRow, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -379,6 +379,12 @@ export default function LidlarPage() {
     queryKey: ["stats/utm-campaigns", selectedUtmSource, appliedWithMode],
     queryFn: () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
     enabled: selectedUtmSource !== null,
+  });
+  const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<{ source: string; campaign: string } | null>(null);
+  const utmRespQ = useQuery({
+    queryKey: ["stats/utm-responsibles", selectedUtmCampaign, appliedWithMode],
+    queryFn: () => getUtmResponsibleStats(selectedUtmCampaign!.source, selectedUtmCampaign!.campaign, appliedWithMode),
+    enabled: selectedUtmCampaign !== null,
   });
 
   const header       = statsQ.data?.header;
@@ -1352,6 +1358,10 @@ export default function LidlarPage() {
           const campMaxes: Record<string, number> = {};
           for (const c of UTM_COLS_DEF)
             campMaxes[c.key] = Math.max(1, ...campRows.map(r => Number(r[c.key as keyof UtmCampaignRow]) || 0));
+          const utmRespRows: UtmResponsibleRow[] = selectedUtmCampaign !== null ? (utmRespQ.data ?? []) : [];
+          const utmRespMaxes: Record<string, number> = {};
+          for (const c of UTM_COLS_DEF)
+            utmRespMaxes[c.key] = Math.max(1, ...utmRespRows.map(r => Number(r[c.key as keyof UtmResponsibleRow]) || 0));
 
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
@@ -1432,29 +1442,101 @@ export default function LidlarPage() {
                                       <tbody>
                                         {campRows.map((cr, ci) => {
                                           const campKonv = cr.umumiy_lidlar > 0 ? (cr.konsultatsiya_otkazildi / cr.umumiy_lidlar) * 100 : 0;
+                                          const isCampSel = selectedUtmCampaign?.source === r.utm_source && selectedUtmCampaign?.campaign === cr.utm_campaign;
                                           return (
-                                            <tr key={cr.utm_campaign} style={{ background: ci % 2 === 0 ? "transparent" : "rgba(0,0,0,0.1)" }}>
-                                              <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 28 }}>{String(ci + 1).padStart(2, "0")}</td>
-                                              <td style={{ ...TD, fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }}>
-                                                {cr.utm_campaign || "(kampaniyasiz)"}
-                                              </td>
-                                              {UTM_COLS_DEF.map(c => {
-                                                const val = Number(cr[c.key as keyof UtmCampaignRow]) || 0;
-                                                return (
-                                                  <td key={c.key} style={TD}>
-                                                    {val > 0 ? (
-                                                      <>
-                                                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
-                                                        <MiniBar value={val} max={campMaxes[c.key]} color={c.color} height={3} />
-                                                      </>
-                                                    ) : <span style={{ fontSize: 12, color: "var(--text3)" }}>—</span>}
+                                            <>
+                                              <tr key={cr.utm_campaign}
+                                                  style={{ background: isCampSel ? "rgba(33,150,243,0.12)" : ci % 2 === 0 ? "transparent" : "rgba(0,0,0,0.1)", cursor: "pointer" }}
+                                                  onClick={() => setSelectedUtmCampaign(isCampSel ? null : { source: r.utm_source, campaign: cr.utm_campaign })}
+                                                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(33,150,243,0.08)")}
+                                                  onMouseLeave={e => (e.currentTarget.style.background = isCampSel ? "rgba(33,150,243,0.12)" : ci % 2 === 0 ? "transparent" : "rgba(0,0,0,0.1)")}>
+                                                <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 28 }}>{String(ci + 1).padStart(2, "0")}</td>
+                                                <td style={{ ...TD, fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                                    <ChevronDown size={12} style={{ color: "#9E9E9E", flexShrink: 0, transform: isCampSel ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                                                    <span style={{ color: isCampSel ? "#2196F3" : "var(--text)" }}>{cr.utm_campaign || "(kampaniyasiz)"}</span>
+                                                    {cr.responsible_count > 0 && (
+                                                      <span style={{ fontSize: 10, background: "rgba(33,150,243,0.1)", color: "#2196F3", borderRadius: 6, padding: "1px 5px" }}>{cr.responsible_count} mas'ul</span>
+                                                    )}
+                                                  </div>
+                                                </td>
+                                                {UTM_COLS_DEF.map(c => {
+                                                  const val = Number(cr[c.key as keyof UtmCampaignRow]) || 0;
+                                                  return (
+                                                    <td key={c.key} style={TD}>
+                                                      {val > 0 ? (
+                                                        <>
+                                                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
+                                                          <MiniBar value={val} max={campMaxes[c.key]} color={c.color} height={3} />
+                                                        </>
+                                                      ) : <span style={{ fontSize: 12, color: "var(--text3)" }}>—</span>}
+                                                    </td>
+                                                  );
+                                                })}
+                                                <td style={{ ...TD, textAlign: "center" }}>
+                                                  <ConversionDonut pct={campKonv} size={36} />
+                                                </td>
+                                              </tr>
+                                              {isCampSel && (
+                                                <tr key={`utm-resp-${r.utm_source}-${cr.utm_campaign}`}>
+                                                  <td colSpan={UTM_COLS_DEF.length + 3} style={{ padding: 0, background: "rgba(33,150,243,0.03)", borderBottom: "1px solid var(--border)" }}>
+                                                    {utmRespQ.isLoading ? (
+                                                      <div style={{ padding: "12px 48px", color: "#666", fontSize: 12 }}>Yuklanmoqda…</div>
+                                                    ) : utmRespRows.length === 0 ? (
+                                                      <div style={{ padding: "12px 48px", color: "#555", fontSize: 12 }}>Mas'ullar topilmadi</div>
+                                                    ) : (
+                                                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                                        <thead>
+                                                          <tr style={{ background: "rgba(33,150,243,0.04)" }}>
+                                                            <th style={{ ...TH("#555", 28), paddingLeft: 48 }}>#</th>
+                                                            <th style={TH("#9E9E9E", 200)}>MAS'UL</th>
+                                                            {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
+                                                            <th style={{ ...TH("#4CAF50", 72), textAlign: "center" }}>KONVERSIYA</th>
+                                                          </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                          {utmRespRows.map((rr, ri) => {
+                                                            const rKonv = rr.umumiy_lidlar > 0 ? (rr.konsultatsiya_otkazildi / rr.umumiy_lidlar) * 100 : 0;
+                                                            return (
+                                                              <tr key={rr.responsible_id} style={{ background: ri % 2 === 0 ? "transparent" : "rgba(0,0,0,0.08)" }}>
+                                                                <td style={{ ...TD, color: "#555", fontSize: 11, paddingLeft: 48 }}>{String(ri + 1).padStart(2, "0")}</td>
+                                                                <td style={{ ...TD }}>
+                                                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                                    <AvatarCircle name={rr.full_name || "?"} size={26} />
+                                                                    <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${rr.responsible_id}`}
+                                                                       target="_blank" rel="noopener noreferrer"
+                                                                       style={{ fontSize: 12, color: "var(--text)", textDecoration: "none", whiteSpace: "nowrap" }}
+                                                                       onClick={e => e.stopPropagation()}>
+                                                                      {rr.full_name}
+                                                                    </a>
+                                                                  </div>
+                                                                </td>
+                                                                {UTM_COLS_DEF.map(c => {
+                                                                  const val = Number(rr[c.key as keyof UtmResponsibleRow]) || 0;
+                                                                  return (
+                                                                    <td key={c.key} style={TD}>
+                                                                      {val > 0 ? (
+                                                                        <>
+                                                                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
+                                                                          <MiniBar value={val} max={utmRespMaxes[c.key]} color={c.color} height={2} />
+                                                                        </>
+                                                                      ) : <span style={{ fontSize: 11, color: "var(--text3)" }}>—</span>}
+                                                                    </td>
+                                                                  );
+                                                                })}
+                                                                <td style={{ ...TD, textAlign: "center" }}>
+                                                                  <ConversionDonut pct={rKonv} size={32} />
+                                                                </td>
+                                                              </tr>
+                                                            );
+                                                          })}
+                                                        </tbody>
+                                                      </table>
+                                                    )}
                                                   </td>
-                                                );
-                                              })}
-                                              <td style={{ ...TD, textAlign: "center" }}>
-                                                <ConversionDonut pct={campKonv} size={36} />
-                                              </td>
-                                            </tr>
+                                                </tr>
+                                              )}
+                                            </>
                                           );
                                         })}
                                         <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
