@@ -316,7 +316,7 @@ export default function LidlarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
-  const [mode, setMode] = useState<'default' | 'amocrm'>('default');
+  const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
 
   const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
 
@@ -455,7 +455,7 @@ export default function LidlarPage() {
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
               background: "var(--bg2)",
-              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 || mode === 'amocrm' ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
+              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 || mode !== 'default' ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
               borderRadius: filterOpen ? "10px 10px 0 0" : 10,
               padding: "10px 16px", color: "var(--text)", fontSize: 13, fontWeight: 500,
               cursor: "pointer", textAlign: "left",
@@ -464,13 +464,10 @@ export default function LidlarPage() {
             <Search size={16} style={{ color: "var(--text3)", flexShrink: 0 }} />
             <span style={{ color: "var(--text3)", flex: 1 }}>Qidirish va filtrlash…</span>
             {mode === 'amocrm' && (
-              <span style={{
-                background: "rgba(217,119,6,0.15)", color: "#D97706",
-                border: "1px solid rgba(217,119,6,0.4)",
-                borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700,
-              }}>
-                AmoCRM
-              </span>
+              <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>AmoCRM</span>
+            )}
+            {mode === 'bitrix24' && (
+              <span style={{ background: "rgba(33,150,243,0.15)", color: "#2196F3", border: "1px solid rgba(33,150,243,0.4)", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>Bitrix24</span>
             )}
             {activeCount > 0 && (
               <span style={{
@@ -586,10 +583,10 @@ export default function LidlarPage() {
                   />
                 </div>
 
-                {/* Bottom row: mode toggle + Bitrix24 link */}
+                {/* Bottom row: mode toggle buttons */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => { setMode('default'); setApplied(p => p); }}
+                    <button onClick={() => setMode('default')}
                       style={{
                         background: mode === 'default' ? "rgba(33,150,243,0.1)" : "transparent",
                         border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
@@ -598,7 +595,16 @@ export default function LidlarPage() {
                       }}>
                       Barcha lidlar
                     </button>
-                    <button onClick={() => { setMode('amocrm'); setApplied(p => p); }}
+                    <button onClick={() => setMode('bitrix24')}
+                      style={{
+                        background: mode === 'bitrix24' ? "rgba(33,150,243,0.1)" : "transparent",
+                        border: `1px solid ${mode === 'bitrix24' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
+                        color: mode === 'bitrix24' ? "#2196F3" : "var(--text3)",
+                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      Bitrix24
+                    </button>
+                    <button onClick={() => setMode('amocrm')}
                       style={{
                         background: mode === 'amocrm' ? "rgba(217,119,6,0.1)" : "transparent",
                         border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
@@ -608,23 +614,12 @@ export default function LidlarPage() {
                       AmoCRM
                     </button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {activeCount > 0 && (
-                      <button onClick={() => { setApplied(getDefaultFilter()); setMode('default'); }}
-                        style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>
-                        Tozalash
-                      </button>
-                    )}
-                    <a href="https://mountain.bitrix24.kz/crm/lead/list/" target="_blank" rel="noopener noreferrer"
-                      style={{
-                        display: "inline-flex", alignItems: "center", gap: 5,
-                        background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.3)",
-                        color: "#2196F3", borderRadius: 8, padding: "6px 14px",
-                        fontSize: 12, fontWeight: 600, textDecoration: "none",
-                      }}>
-                      Bitrix24 ↗
-                    </a>
-                  </div>
+                  {(activeCount > 0 || mode !== 'default') && (
+                    <button onClick={() => { setApplied(getDefaultFilter()); setMode('default'); }}
+                      style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>
+                      Tozalash
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -681,7 +676,7 @@ export default function LidlarPage() {
             {/* Row 2 — Voronka (3 cols) + Sifatsiz/Bekor (1 col, aligned with Konsultatsiyalar) */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
               {/* Voronka — spans first 3 columns */}
-              <div style={{ gridColumn:"1 / 4", background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
+              <div style={{ gridColumn:"1 / 4", background: isDark ? "linear-gradient(135deg,#0a1628,#0d2240)" : "linear-gradient(135deg,rgba(33,150,243,0.06),rgba(0,188,212,0.04))", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
                   <Filter size={15} style={{ color:"var(--text3)" }} />
                   <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>Voronka samaradorligi</span>

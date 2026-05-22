@@ -67,7 +67,7 @@ export type DashFilter = {
   stages?: string[];
   sources?: string[];
   form_ids?: string[];
-  mode?: 'default' | 'amocrm';
+  mode?: 'default' | 'amocrm' | 'bitrix24';
 };
 
 export type FilterOptions = {

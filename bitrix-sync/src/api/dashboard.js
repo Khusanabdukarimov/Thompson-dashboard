@@ -8,7 +8,9 @@ const router = Router();
 // ── Mode-aware SQL helpers ─────────────────────────────────────────
 
 function leadModeClause(mode) {
-  return mode === 'amocrm' ? `AND l.source_id = 'UC_1WUFJB'` : ``;
+  if (mode === 'amocrm')   return `AND l.source_id = 'UC_1WUFJB'`;
+  if (mode === 'bitrix24') return `AND (l.source_id IS NULL OR l.source_id != 'UC_1WUFJB')`;
+  return '';
 }
 
 function leadDateCond(_mode, p1, p2) {
@@ -17,7 +19,7 @@ function leadDateCond(_mode, p1, p2) {
 
 function leadSrcCond(mode, pi) {
   const col = mode === 'amocrm' ? 'l.uf_filial' : 'l.source_id';
-  return `($${pi}::text IS NULL OR ${col} = ANY(string_to_array($${pi}, ',')))`;
+  return `($${pi}::text IS NULL OR ${col}::text = ANY(string_to_array($${pi}, ',')))`;
 }
 
 function dealModeClause(mode) {
