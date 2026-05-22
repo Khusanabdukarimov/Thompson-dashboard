@@ -105,7 +105,7 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
   );
 }
 
-// ── UTM shared column definitions ────────────────────────────────
+// ── Shared funnel column definitions ─────────────────────────────
 const UTM_COLS_DEF = [
   { key: "umumiy_lidlar"            as const, label: "UMUMIY LIDLAR",             color: "#2196F3" },
   { key: "jarayonda"                as const, label: "JARAYONDA",                 color: "#FF9800" },
@@ -116,125 +116,6 @@ const UTM_COLS_DEF = [
   { key: "bekor_boldi"              as const, label: "BEKOR BO'LDI",              color: "#FFC107" },
 ] as const;
 
-function UtmTable<T extends Record<string, string | number>>({
-  rows,
-  nameKey,
-  nameLabel,
-  onRowClick,
-  loading,
-  countKey,
-  countLabel,
-  getBitrixUrl,
-}: {
-  rows: T[];
-  nameKey: keyof T;
-  nameLabel: string;
-  onRowClick?: (row: T) => void;
-  loading: boolean;
-  countKey?: keyof T;
-  countLabel?: string;
-  getBitrixUrl?: (row: T) => string;
-}) {
-  const maxes: Record<string, number> = {};
-  for (const c of UTM_COLS_DEF)
-    maxes[c.key] = Math.max(1, ...rows.map(r => Number(r[c.key]) || 0));
-
-  const totals = rows.reduce((acc, r) => {
-    for (const c of UTM_COLS_DEF)
-      acc[c.key] = (acc[c.key] || 0) + (Number(r[c.key]) || 0);
-    return acc;
-  }, {} as Record<string, number>);
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      {loading ? (
-        <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-      ) : rows.length === 0 ? (
-        <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-          <thead>
-            <tr>
-              <th style={TH("#9E9E9E", 200)}>{nameLabel}</th>
-              {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
-              <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => {
-              const total = Number(r.umumiy_lidlar) || 0;
-              const otkazildi = Number(r.konsultatsiya_otkazildi) || 0;
-              const konv = total > 0 ? (otkazildi / total) * 100 : 0;
-              const name = String(r[nameKey]);
-              const cnt = countKey ? Number(r[countKey]) || 0 : 0;
-              return (
-                <tr key={name + i}
-                    style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", cursor: onRowClick ? "pointer" : "default" }}
-                    onClick={() => onRowClick?.(r)}
-                    onMouseEnter={e => { if (onRowClick) e.currentTarget.style.background = "var(--bg3)"; }}
-                    onMouseLeave={e => { if (onRowClick) e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
-                  <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
-                    {getBitrixUrl ? (
-                      <a
-                        href={getBitrixUrl(r)}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#2196F3", textDecoration: "underline" }}
-                      >
-                        {name}
-                      </a>
-                    ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: onRowClick ? "#2196F3" : "var(--text)", textDecoration: onRowClick ? "underline" : "none" }}>
-                        {name}
-                        {countKey && cnt > 0 && (
-                          <span style={{
-                            fontSize: 10, color: "#888", fontWeight: 500,
-                            background: "var(--bg3)", border: "1px solid var(--border)",
-                            padding: "1px 7px", borderRadius: 10, flexShrink: 0,
-                          }}>
-                            {cnt} {countLabel}
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </td>
-                  {UTM_COLS_DEF.map(c => {
-                    const val = Number(r[c.key]) || 0;
-                    return (
-                      <td key={c.key} style={TD}>
-                        {val > 0 ? (
-                          <>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
-                            <MiniBar value={val} max={maxes[c.key]} color={c.color} />
-                          </>
-                        ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                      </td>
-                    );
-                  })}
-                  <td style={{ ...TD, textAlign: "center" }}>
-                    <ConversionDonut pct={konv} size={38} />
-                  </td>
-                </tr>
-              );
-            })}
-            {/* JAMI */}
-            <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-              <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
-              {UTM_COLS_DEF.map(c => (
-                <td key={c.key} style={TD}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtNum(totals[c.key] || 0)}</span>
-                  <MiniBar value={1} max={1} color={c.color} />
-                </td>
-              ))}
-              <td style={{ ...TD, textAlign: "center" }}>
-                <ConversionDonut pct={(totals.umumiy_lidlar || 0) > 0 ? ((totals.konsultatsiya_otkazildi || 0) / (totals.umumiy_lidlar || 0)) * 100 : 0} size={38} />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
 
 // ── Sparkline ─────────────────────────────────────────────────────
 // Catmull-Rom → cubic Bézier smooth path
