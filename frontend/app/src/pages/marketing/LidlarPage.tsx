@@ -1419,6 +1419,182 @@ export default function LidlarPage() {
         })()}
 
         {/* ══════════════════════════════════════════════════════════
+            Bekor bo'lish va Sifatsiz sabablari (side-by-side)
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const cancelItems = (cancelQ.data?.items ?? []).map((r) => ({
+            ...r,
+            total: parseInt(String(r.total), 10) || 0,
+          }));
+          const junkItems = (junkQ.data?.items ?? []).map((r) => ({
+            ...r,
+            total: parseInt(String(r.total), 10) || 0,
+          }));
+          const cancelMax   = Math.max(1, ...cancelItems.map((r) => r.total));
+          const junkMax     = Math.max(1, ...junkItems.map((r) => r.total));
+          const cancelTotal = cancelItems.reduce((s, r) => s + r.total, 0);
+          const junkTotal   = junkItems.reduce((s, r) => s + r.total, 0);
+
+          const renderTable = (
+            title: string,
+            items: { reason: string; total: number }[],
+            max: number,
+            grandTotal: number,
+            barColor: string,
+            loading: boolean,
+          ) => (
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{
+                padding: "14px 20px 12px",
+                borderBottom: "1px solid var(--border)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
+              </div>
+              {loading ? (
+                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : items.length === 0 ? (
+                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
+              ) : (
+                <div style={{ padding: "6px 0 10px" }}>
+                  {items.map((r, i) => (
+                    <div key={i} style={{ padding: "7px 20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                          {r.reason}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
+                          {fmtNum(r.total)}
+                        </span>
+                      </div>
+                      <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%",
+                          width: `${(r.total / max) * 100}%`,
+                          background: barColor,
+                          borderRadius: 2,
+                          transition: "width 0.3s",
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading)}
+              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading)}
+            </div>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════
+            UTM bo'yicha (3-level drill-down)
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          const utmRows:  UtmStatRow[]       = utmQ.data      ?? [];
+          const campRows: UtmCampaignRow[]   = utmCampQ.data  ?? [];
+          const respRows: UtmResponsibleRow[] = utmRespQ.data ?? [];
+
+          const level = selectedUtmCampaign !== null ? 3
+                      : selectedUtmSource   !== null ? 2 : 1;
+
+          const backClick = () => {
+            if (level === 3) { setSelectedUtmCampaign(null); }
+            else             { setSelectedUtmSource(null); setSelectedUtmCampaign(null); }
+          };
+
+          return (
+            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+              {/* Breadcrumb header */}
+              <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                {level > 1 && (
+                  <button
+                    onClick={backClick}
+                    style={{
+                      background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
+                      color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px",
+                      cursor: "pointer", flexShrink: 0,
+                    }}
+                  >
+                    ← Orqaga
+                  </button>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
+                  <span
+                    style={{ fontSize: 15, fontWeight: 700, color: level === 1 ? "var(--text)" : "var(--text3)", cursor: level > 1 ? "pointer" : "default", whiteSpace: "nowrap" }}
+                    onClick={() => level > 1 && (setSelectedUtmSource(null), setSelectedUtmCampaign(null))}
+                  >
+                    UTM bo'yicha
+                  </span>
+                  {level >= 2 && (
+                    <>
+                      <span style={{ color: "#444" }}>/</span>
+                      <span
+                        style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "var(--text)" : "var(--text3)", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
+                        onClick={() => level === 3 && setSelectedUtmCampaign(null)}
+                      >
+                        {selectedUtmSource}
+                      </span>
+                    </>
+                  )}
+                  {level === 3 && (
+                    <>
+                      <span style={{ color: "#444" }}>/</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {selectedUtmCampaign}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <span style={{ fontSize: 12, color: "#555", flexShrink: 0 }}>
+                  {level === 1 && `${utmRows.length} ta manba`}
+                  {level === 2 && `${campRows.length} ta kampaniya`}
+                  {level === 3 && `${respRows.length} ta mas'ul`}
+                </span>
+              </div>
+
+              {/* Body */}
+              {level === 1 && (
+                <UtmTable<UtmStatRow>
+                  rows={utmRows}
+                  nameKey="utm_source"
+                  nameLabel="UTM - SOURCE"
+                  onRowClick={(r) => { setSelectedUtmSource(r.utm_source); setSelectedUtmCampaign(null); }}
+                  loading={utmQ.isLoading}
+                  countKey="campaign_count"
+                  countLabel="kampaniya"
+                />
+              )}
+              {level === 2 && (
+                <UtmTable<UtmCampaignRow>
+                  rows={campRows}
+                  nameKey="utm_campaign"
+                  nameLabel="UTM - CAMPAIGN"
+                  onRowClick={(r) => setSelectedUtmCampaign(r.utm_campaign)}
+                  loading={utmCampQ.isLoading}
+                  countKey="responsible_count"
+                  countLabel="mas'ul"
+                />
+              )}
+              {level === 3 && (
+                <UtmTable<UtmResponsibleRow>
+                  rows={respRows}
+                  nameKey="full_name"
+                  nameLabel="MAS'UL"
+                  loading={utmRespQ.isLoading}
+                  getBitrixUrl={(r) => `https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
+                />
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════
             Manba bo'yicha table
         ══════════════════════════════════════════════════════════ */}
         {(() => {
@@ -1538,182 +1714,6 @@ export default function LidlarPage() {
                   </table>
                 </div>
               )}
-            </div>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════════════════
-            UTM bo'yicha (3-level drill-down)
-        ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          const utmRows:  UtmStatRow[]       = utmQ.data      ?? [];
-          const campRows: UtmCampaignRow[]   = utmCampQ.data  ?? [];
-          const respRows: UtmResponsibleRow[] = utmRespQ.data ?? [];
-
-          const level = selectedUtmCampaign !== null ? 3
-                      : selectedUtmSource   !== null ? 2 : 1;
-
-          const backClick = () => {
-            if (level === 3) { setSelectedUtmCampaign(null); }
-            else             { setSelectedUtmSource(null); setSelectedUtmCampaign(null); }
-          };
-
-          return (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              {/* Breadcrumb header */}
-              <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                {level > 1 && (
-                  <button
-                    onClick={backClick}
-                    style={{
-                      background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
-                      color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px",
-                      cursor: "pointer", flexShrink: 0,
-                    }}
-                  >
-                    ← Orqaga
-                  </button>
-                )}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
-                  <span
-                    style={{ fontSize: 15, fontWeight: 700, color: level === 1 ? "var(--text)" : "var(--text3)", cursor: level > 1 ? "pointer" : "default", whiteSpace: "nowrap" }}
-                    onClick={() => level > 1 && (setSelectedUtmSource(null), setSelectedUtmCampaign(null))}
-                  >
-                    UTM bo'yicha
-                  </span>
-                  {level >= 2 && (
-                    <>
-                      <span style={{ color: "#444" }}>/</span>
-                      <span
-                        style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "var(--text)" : "var(--text3)", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
-                        onClick={() => level === 3 && setSelectedUtmCampaign(null)}
-                      >
-                        {selectedUtmSource}
-                      </span>
-                    </>
-                  )}
-                  {level === 3 && (
-                    <>
-                      <span style={{ color: "#444" }}>/</span>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {selectedUtmCampaign}
-                      </span>
-                    </>
-                  )}
-                </div>
-                <span style={{ fontSize: 12, color: "#555", flexShrink: 0 }}>
-                  {level === 1 && `${utmRows.length} ta manba`}
-                  {level === 2 && `${campRows.length} ta kampaniya`}
-                  {level === 3 && `${respRows.length} ta mas'ul`}
-                </span>
-              </div>
-
-              {/* Body */}
-              {level === 1 && (
-                <UtmTable<UtmStatRow>
-                  rows={utmRows}
-                  nameKey="utm_source"
-                  nameLabel="UTM - SOURCE"
-                  onRowClick={(r) => { setSelectedUtmSource(r.utm_source); setSelectedUtmCampaign(null); }}
-                  loading={utmQ.isLoading}
-                  countKey="campaign_count"
-                  countLabel="kampaniya"
-                />
-              )}
-              {level === 2 && (
-                <UtmTable<UtmCampaignRow>
-                  rows={campRows}
-                  nameKey="utm_campaign"
-                  nameLabel="UTM - CAMPAIGN"
-                  onRowClick={(r) => setSelectedUtmCampaign(r.utm_campaign)}
-                  loading={utmCampQ.isLoading}
-                  countKey="responsible_count"
-                  countLabel="mas'ul"
-                />
-              )}
-              {level === 3 && (
-                <UtmTable<UtmResponsibleRow>
-                  rows={respRows}
-                  nameKey="full_name"
-                  nameLabel="MAS'UL"
-                  loading={utmRespQ.isLoading}
-                  getBitrixUrl={(r) => `https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
-                />
-              )}
-            </div>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════════════════
-            Bekor bo'lish va Sifatsiz sabablari (side-by-side)
-        ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          const cancelItems = (cancelQ.data?.items ?? []).map((r) => ({
-            ...r,
-            total: parseInt(String(r.total), 10) || 0,
-          }));
-          const junkItems = (junkQ.data?.items ?? []).map((r) => ({
-            ...r,
-            total: parseInt(String(r.total), 10) || 0,
-          }));
-          const cancelMax   = Math.max(1, ...cancelItems.map((r) => r.total));
-          const junkMax     = Math.max(1, ...junkItems.map((r) => r.total));
-          const cancelTotal = cancelItems.reduce((s, r) => s + r.total, 0);
-          const junkTotal   = junkItems.reduce((s, r) => s + r.total, 0);
-
-          const renderTable = (
-            title: string,
-            items: { reason: string; total: number }[],
-            max: number,
-            grandTotal: number,
-            barColor: string,
-            loading: boolean,
-          ) => (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
-              <div style={{
-                padding: "14px 20px 12px",
-                borderBottom: "1px solid var(--border)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
-                <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
-              </div>
-              {loading ? (
-                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : items.length === 0 ? (
-                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
-              ) : (
-                <div style={{ padding: "6px 0 10px" }}>
-                  {items.map((r, i) => (
-                    <div key={i} style={{ padding: "7px 20px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
-                          {r.reason}
-                        </span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
-                          {fmtNum(r.total)}
-                        </span>
-                      </div>
-                      <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%",
-                          width: `${(r.total / max) * 100}%`,
-                          background: barColor,
-                          borderRadius: 2,
-                          transition: "width 0.3s",
-                        }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-
-          return (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading)}
-              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading)}
             </div>
           );
         })()}
