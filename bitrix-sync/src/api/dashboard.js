@@ -17,7 +17,7 @@ function leadDateCond(_mode, p1, p2) {
 
 function leadSrcCond(mode, pi) {
   const col = mode === 'amocrm' ? 'l.uf_filial' : 'l.source_id';
-  return `($${pi}::text IS NULL OR ${col} = $${pi}::text)`;
+  return `($${pi}::text IS NULL OR ${col} = ANY(string_to_array($${pi}, ',')))`;
 }
 
 function dealModeClause(mode) {
@@ -26,13 +26,13 @@ function dealModeClause(mode) {
 
 function dealSrcCond(mode, pi) {
   if (mode === 'amocrm') {
-    return `($${pi}::text IS NULL OR EXISTS (
+    return `EXISTS (
       SELECT 1 FROM lead_phones lp
       JOIN leads l ON l.id = lp.lead_id
-      WHERE lp.phone = ph.phone AND l.uf_filial = $${pi}::text
-    ))`;
+      WHERE lp.phone = ph.phone AND l.uf_filial = ANY(string_to_array($${pi}, ','))
+    )`;
   } else {
-    return `($${pi}::text IS NULL OR d.source_id = $${pi}::text)`;
+    return `d.source_id = ANY(string_to_array($${pi}, ','))`;
   }
 }
 
@@ -338,11 +338,7 @@ router.get('/tasks-summary', async (req, res) => {
  */
 router.get('/cancel-reasons', async (req, res) => {
   const { from, to, responsible_id, mode } = req.query;
-  const params = [
-    from || null,
-    to || null,
-    responsible_id ? parseInt(responsible_id) : null,
-  ];
+  const params = [from || null, to || null, responsible_id || null];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -351,7 +347,7 @@ router.get('/cancel-reasons', async (req, res) => {
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_NAZK5J'
        WHERE ${leadDateCond(mode, 1, 2)}
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY l.uf_cancel_reason
        ORDER BY total DESC`,
@@ -371,11 +367,7 @@ router.get('/cancel-reasons', async (req, res) => {
  */
 router.get('/junk-reasons', async (req, res) => {
   const { from, to, responsible_id, mode } = req.query;
-  const params = [
-    from || null,
-    to || null,
-    responsible_id ? parseInt(responsible_id) : null,
-  ];
+  const params = [from || null, to || null, responsible_id || null];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -384,7 +376,7 @@ router.get('/junk-reasons', async (req, res) => {
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_F8K4GI'
        WHERE ${leadDateCond(mode, 1, 2)}
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY l.uf_junk_reason
        ORDER BY total DESC`,
@@ -487,20 +479,9 @@ router.get('/deals-stats', async (req, res) => {
   const extra = [];
   const params = [from || null, to || null];
   let pi = 3;
-  if (responsible_id) { extra.push(`AND d.responsible_id = $${pi++}`); params.push(parseInt(responsible_id)); }
-  if (stage_id)       { extra.push(`AND d.stage_id = $${pi++}`);       params.push(parseInt(stage_id)); }
-  
-  if (source === '__none__') {
-    if (mode === 'amocrm') {
-      extra.push(`AND NOT EXISTS (
-        SELECT 1 FROM lead_phones lp
-        JOIN leads l ON l.id = lp.lead_id
-        WHERE lp.phone = ph.phone AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
-      )`);
-    } else {
-      extra.push(`AND (d.source_id IS NULL OR d.source_id = '')`);
-    }
-  } else if (source) {
+  if (responsible_id) { extra.push(`AND d.responsible_id::text = ANY(string_to_array($${pi++}, ','))`); params.push(responsible_id); }
+  if (stage_id)       { extra.push(`AND d.stage_id::text = ANY(string_to_array($${pi++}, ','))`);       params.push(stage_id); }
+  if (source) {
     extra.push(`AND ${dealSrcCond(mode, pi++)}`);
     params.push(source);
   }
@@ -554,20 +535,9 @@ router.get('/deals-list', async (req, res) => {
   const baseParams = [from || null, to || null];
   let pi = 3;
   const extra = [];
-  if (responsible_id) { extra.push(`d.responsible_id = $${pi++}`); baseParams.push(parseInt(responsible_id)); }
-  if (stage_id)       { extra.push(`d.stage_id = $${pi++}`);       baseParams.push(parseInt(stage_id)); }
-  
-  if (source === '__none__') {
-    if (mode === 'amocrm') {
-      extra.push(`NOT EXISTS (
-        SELECT 1 FROM lead_phones lp
-        JOIN leads l ON l.id = lp.lead_id
-        WHERE lp.phone = ph.phone AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
-      )`);
-    } else {
-      extra.push(`(d.source_id IS NULL OR d.source_id = '')`);
-    }
-  } else if (source) {
+  if (responsible_id) { extra.push(`d.responsible_id::text = ANY(string_to_array($${pi++}, ','))`); baseParams.push(responsible_id); }
+  if (stage_id)       { extra.push(`d.stage_id::text = ANY(string_to_array($${pi++}, ','))`);       baseParams.push(stage_id); }
+  if (source) {
     extra.push(dealSrcCond(mode, pi++));
     baseParams.push(source);
   }
@@ -759,17 +729,17 @@ router.get('/amocrm-sources', async (_req, res) => {
 router.get('/lead-stats', async (req, res) => {
   const { from, to, responsible_id, stage, source, mode } = req.query;
 
-  const statsParams  = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
-  const funnelParams = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, source || null];
+  const statsParams  = [from || null, to || null, responsible_id || null, stage || null, source || null];
+  const funnelParams = [from || null, to || null, responsible_id || null, source || null];
 
   const statsWhere = `${leadDateCond(mode, 1, 2)}
-      AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-      AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+      AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+      AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
       AND ${leadSrcCond(mode, 5)}
       ${leadModeClause(mode)}`;
 
   const funnelJoin = `${leadDateCond(mode, 1, 2)}
-      AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+      AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
       AND ${leadSrcCond(mode, 4)}
       ${leadModeClause(mode)}`;
 
@@ -826,7 +796,7 @@ router.get('/lead-stats', async (req, res) => {
  */
 router.get('/lead-responsibles', async (req, res) => {
   const { from, to, responsible_id, stage, source, mode } = req.query;
-  const params = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null];
 
   try {
     const { rows } = await pool.query(
@@ -835,8 +805,8 @@ router.get('/lead-responsibles', async (req, res) => {
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
-           AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-           AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
            ${leadModeClause(mode)}
        )
@@ -877,7 +847,7 @@ router.get('/lead-responsibles', async (req, res) => {
  */
 router.get('/lead-conversion', async (req, res) => {
   const { from, to, responsible_id, stage, source, mode } = req.query;
-  const params = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null];
 
   try {
     const { rows } = await pool.query(
@@ -886,8 +856,8 @@ router.get('/lead-conversion', async (req, res) => {
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
-           AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-           AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
            ${leadModeClause(mode)}
        )
@@ -1198,11 +1168,11 @@ router.get('/source-stats', async (req, res) => {
        LEFT JOIN stages s ON s.id = l.stage_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY COALESCE(l.source_id, 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+      [from || null, to || null, responsible_id || null]
     );
     res.json(rows.map(r => ({
       ...r,
@@ -1244,11 +1214,11 @@ router.get('/form-stats', async (req, res) => {
        WHERE l.web_form_id IS NOT NULL AND TRIM(l.web_form_id::text) != ''
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY l.web_form_id, cf.form_name
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+      [from || null, to || null, responsible_id || null]
     );
     res.json(rows);
   } catch (err) {

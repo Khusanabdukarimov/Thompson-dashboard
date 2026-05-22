@@ -63,10 +63,10 @@ export type ResponsiblesStatsResponse = {
 export type DashFilter = {
   start_date?: string;
   end_date?: string;
-  responsible_id?: number;
-  stage?: string;
-  source?: string;
-  form_id?: string;
+  responsible_ids?: number[];
+  stages?: string[];
+  sources?: string[];
+  form_ids?: string[];
   mode?: 'default' | 'amocrm';
 };
 
@@ -81,9 +81,9 @@ export function getDashboardStats(filter: DashFilter) {
   return apiGet<DashboardStatsResponse>("/api/dashboard/lead-stats", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
-    stage: filter.stage,
-    source: filter.source,
+    responsible_id: filter.responsible_ids?.join(','),
+    stage: filter.stages?.join(','),
+    source: filter.sources?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -92,9 +92,9 @@ export function getResponsiblesStats(filter: DashFilter) {
   return apiGet<ResponsiblesStatsResponse>("/api/dashboard/lead-responsibles", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
-    stage: filter.stage,
-    source: filter.source,
+    responsible_id: filter.responsible_ids?.join(','),
+    stage: filter.stages?.join(','),
+    source: filter.sources?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -114,9 +114,9 @@ export function getConversionStats(filter: DashFilter) {
   return apiGet<ConversionStatsResponse>("/api/dashboard/lead-conversion", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
-    stage: filter.stage,
-    source: filter.source,
+    responsible_id: filter.responsible_ids?.join(','),
+    stage: filter.stages?.join(','),
+    source: filter.sources?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -148,20 +148,20 @@ export type ReasonsResponse = {
   items: { reason: string; total: number }[];
 };
 
-export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
+export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "mode">) {
   return apiGet<ReasonsResponse>("/api/dashboard/cancel-reasons", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
+    responsible_id: filter.responsible_ids?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
 
-export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
+export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "mode">) {
   return apiGet<ReasonsResponse>("/api/dashboard/junk-reasons", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
+    responsible_id: filter.responsible_ids?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -182,12 +182,12 @@ export type UtmStatRow = {
   campaign_count: number;
 };
 
-export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "mode" | "form_id">) {
+export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "mode" | "form_ids">) {
   return apiGet<UtmStatRow[]>("/api/dashboard/utm-stats", {
     from: filter.start_date,
     to:   filter.end_date,
     mode: filter.mode,
-    form_id: filter.form_id,
+    form_id: filter.form_ids?.join(','),
   }, API_URL_CRM);
 }
 
@@ -243,11 +243,11 @@ export type FormStatsRow = {
   bekor_boldi: number;
 };
 
-export function getFormStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
+export function getFormStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "mode">) {
   return apiGet<FormStatsRow[]>("/api/dashboard/form-stats", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
+    responsible_id: filter.responsible_ids?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -264,11 +264,11 @@ export type SourceStatsRow = {
   bekor_boldi: number;
 };
 
-export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id" | "mode">) {
+export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "mode">) {
   return apiGet<SourceStatsRow[]>("/api/dashboard/source-stats", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
+    responsible_id: filter.responsible_ids?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -356,11 +356,11 @@ export function getCallFilterOptions() {
   return apiGet<CallFilterOptions>("/api/dashboard/call-filter-options", {}, API_URL_CRM);
 }
 
-export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
+export function getCallStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids">) {
   return apiGet<CallStatsRow[]>("/api/dashboard/call-stats", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
+    responsible_id: filter.responsible_ids?.join(','),
   }, API_URL_CRM);
 }
 
@@ -437,11 +437,11 @@ export function getResponsibleLeads(
   }, API_URL_CRM);
 }
 
-export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_id">) {
+export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids">) {
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,
     to: filter.end_date,
-    responsible_id: filter.responsible_id,
+    responsible_id: filter.responsible_ids?.join(','),
   }, API_URL_CRM);
 }
 

@@ -26,6 +26,93 @@ const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() 
 
 const getDefaultFilter = (): DashFilter => ({});
 
+// ── MultiSelect dropdown component ───────────────────────────────
+function MultiSelect({
+  label, icon, options, values, onChange, loading,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  options: { value: string; label: string }[];
+  values: string[];
+  onChange: (v: string[]) => void;
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const toggle = (v: string) => {
+    onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
+  };
+
+  const displayLabel = values.length === 0
+    ? "Barchasi"
+    : values.length === 1
+      ? (options.find(o => o.value === values[0])?.label ?? values[0]).slice(0, 22)
+      : `${values.length} ta tanlangan`;
+
+  return (
+    <div ref={ref} style={{ flex: 1, minWidth: 0, position: "relative" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
+        {icon}{label}
+      </label>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "var(--bg)", border: `1px solid ${values.length > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
+          borderRadius: 8, color: values.length > 0 ? "#2196F3" : "var(--text3)",
+          fontSize: 12, padding: "8px 10px", cursor: "pointer", boxSizing: "border-box",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {loading ? "Yuklanmoqda…" : displayLabel}
+        </span>
+        <ChevronDown size={12} style={{ flexShrink: 0, marginLeft: 4, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 400,
+          background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4,
+        }}>
+          {values.length > 0 && (
+            <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
+              <button type="button" onClick={() => onChange([])}
+                style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                Hammasini olib tashlash
+              </button>
+            </div>
+          )}
+          {options.map(o => {
+            const checked = values.includes(o.value);
+            return (
+              <label key={o.value}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", background: checked ? "rgba(33,150,243,0.08)" : "transparent" }}
+                onMouseEnter={e => { if (!checked) (e.currentTarget as HTMLElement).style.background = "var(--bg3)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = checked ? "rgba(33,150,243,0.08)" : "transparent"; }}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} style={{ accentColor: "#2196F3", flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {o.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Responsible table column definitions ─────────────────────────
 const RESPONSIBLE_COLS = [
   { key: "qongiroqlar",             label: "Qo'ng'iroqlar",            color: "#9E9E9E" },
@@ -231,8 +318,7 @@ export default function LidlarPage() {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<'default' | 'amocrm'>('default');
 
-  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v3", getDefaultFilter());
-  const [pending, setPending] = useState<DashFilter>(applied);
+  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -258,13 +344,12 @@ export default function LidlarPage() {
     enabled: mode === 'amocrm',
   });
 
-  const def = getDefaultFilter();
   const activeCount = [
-    applied.responsible_id != null,
-    applied.stage != null,
-    applied.source != null,
-    applied.form_id != null,
-    applied.start_date !== def.start_date || applied.end_date !== def.end_date,
+    (applied.responsible_ids?.length ?? 0) > 0,
+    (applied.stages?.length ?? 0) > 0,
+    (applied.sources?.length ?? 0) > 0,
+    (applied.form_ids?.length ?? 0) > 0,
+    applied.start_date != null || applied.end_date != null,
   ].filter(Boolean).length;
 
   const appliedWithMode = { ...applied, mode };
@@ -366,7 +451,7 @@ export default function LidlarPage() {
         <div ref={filterRef} style={{ position: "relative", marginBottom: 20 }}>
           {/* Trigger button */}
           <button
-            onClick={() => { setPending({ ...applied }); setFilterOpen((o) => !o); }}
+            onClick={() => setFilterOpen((o) => !o)}
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
               background: "var(--bg2)",
@@ -409,247 +494,138 @@ export default function LidlarPage() {
               background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none",
               borderRadius: "0 0 12px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
             }}>
-              <div style={{ display: "flex" }}>
-                {/* Left sidebar — presets */}
-                <div style={{
-                  width: "26%", borderRight: "1px solid var(--border)",
-                  padding: "16px 12px", flexShrink: 0,
-                }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                    Saqlangan filtrlar
+              <div style={{ padding: "16px 20px" }}>
+                {/* Quick date presets */}
+                {(() => {
+                  const presets = [
+                    { label: "Bugun",    start: todayISO(),    end: todayISO() },
+                    { label: "7 kun",    start: daysAgoISO(7), end: todayISO() },
+                    { label: "30 kun",   start: daysAgoISO(30),end: todayISO() },
+                    { label: "90 kun",   start: daysAgoISO(90),end: todayISO() },
+                    { label: "Barchasi", start: "",             end: "" },
+                  ];
+                  return (
+                    <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                      {presets.map((p) => {
+                        const active = applied.start_date === (p.start || undefined) && applied.end_date === (p.end || undefined);
+                        return (
+                          <button key={p.label}
+                            onClick={() => setApplied((prev) => ({ ...prev, start_date: p.start || undefined, end_date: p.end || undefined }))}
+                            style={{
+                              background: active ? "#2196F3" : "var(--bg3)",
+                              border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
+                              color: active ? "#fff" : "#9E9E9E",
+                              borderRadius: 20, padding: "5px 14px",
+                              fontSize: 12, fontWeight: active ? 600 : 400,
+                              cursor: "pointer", transition: "all 0.15s",
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Date row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
+                      <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
+                    </label>
+                    <input type="date" value={applied.start_date ?? ""}
+                      onChange={(e) => setApplied((p) => ({ ...p, start_date: e.target.value || undefined }))}
+                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
+                    />
                   </div>
-                  <button
-                    onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setMode('default'); }}
-                    style={{
-                      width: "100%", textAlign: "left",
-                      background: mode === 'default' ? "rgba(33,150,243,0.08)" : "transparent",
-                      border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.3)" : "var(--border)"}`,
-                      borderRadius: 8,
-                      color: mode === 'default' ? "#2196F3" : "var(--text2)",
-                      fontSize: 12, fontWeight: 600,
-                      padding: "8px 12px", cursor: "pointer", marginBottom: 6,
-                    }}
-                  >
-                    Barcha lidlar
-                  </button>
-                  <button
-                    onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setMode('amocrm'); }}
-                    style={{
-                      width: "100%", textAlign: "left",
-                      background: mode === 'amocrm' ? "rgba(217,119,6,0.10)" : "transparent",
-                      border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
-                      borderRadius: 8,
-                      color: mode === 'amocrm' ? "#D97706" : "var(--text2)",
-                      fontSize: 12, fontWeight: 600,
-                      padding: "8px 12px", cursor: "pointer", marginBottom: 8,
-                    }}
-                  >
-                    AmoCRM
-                  </button>
-                  <div style={{
-                    border: "1px dashed var(--border)", borderRadius: 8,
-                    padding: "12px 10px", color: "#444", fontSize: 11, textAlign: "center",
-                  }}>
-                    Saqlangan filtr yo'q
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
+                      <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
+                    </label>
+                    <input type="date" value={applied.end_date ?? ""}
+                      onChange={(e) => setApplied((p) => ({ ...p, end_date: e.target.value || undefined }))}
+                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
+                    />
                   </div>
                 </div>
 
-                {/* Right form */}
-                <div style={{ flex: 1, padding: "16px 20px" }}>
-                  {/* Quick date presets */}
-                  {(() => {
-                    const presets = [
-                      { label: "Bugun",   start: todayISO(),       end: todayISO() },
-                      { label: "7 kun",   start: daysAgoISO(7),    end: todayISO() },
-                      { label: "30 kun",  start: daysAgoISO(30),   end: todayISO() },
-                      { label: "90 kun",  start: daysAgoISO(90),   end: todayISO() },
-                      { label: "Barchasi", start: "",               end: "" },
-                    ];
-                    return (
-                      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-                        {presets.map((p) => {
-                          const active = pending.start_date === (p.start || undefined) && pending.end_date === (p.end || undefined);
-                          return (
-                            <button
-                              key={p.label}
-                              onClick={() => setPending((prev) => ({
-                                ...prev,
-                                start_date: p.start || undefined,
-                                end_date:   p.end   || undefined,
-                              }))}
-                              style={{
-                                background: active ? "#2196F3" : "var(--bg3)",
-                                border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
-                                color: active ? "#fff" : "#9E9E9E",
-                                borderRadius: 20, padding: "5px 14px",
-                                fontSize: 12, fontWeight: active ? 600 : 400,
-                                cursor: "pointer", transition: "all 0.15s",
-                              }}
-                            >
-                              {p.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                {/* MultiSelect filters row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <MultiSelect
+                    label="Mas'ul xodim" icon={<Users size={12} />}
+                    options={(filterOpts?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
+                    values={(applied.responsible_ids ?? []).map(String)}
+                    onChange={(vals) => setApplied(p => ({ ...p, responsible_ids: vals.map(Number) }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Bosqich" icon={<Filter size={12} />}
+                    options={(filterOpts?.stages ?? []).map(s => ({ value: s.bitrix_id, label: s.name }))}
+                    values={applied.stages ?? []}
+                    onChange={(vals) => setApplied(p => ({ ...p, stages: vals.length ? vals : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Manba" icon={<TrendingUp size={12} />}
+                    options={mode === 'amocrm'
+                      ? (amocrmSrcQ.data ?? []).map(s => ({ value: s, label: s }))
+                      : (filterOpts?.sources ?? []).map(s => ({ value: s.id, label: s.name }))}
+                    values={applied.sources ?? []}
+                    onChange={(vals) => setApplied(p => ({ ...p, sources: vals.length ? vals : undefined }))}
+                    loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
+                  />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16 }}>
+                  <MultiSelect
+                    label="Forma bo'yicha" icon={<TrendingUp size={12} />}
+                    options={(filterOpts?.forms ?? []).map(f => ({ value: f.id, label: `${f.name} (${f.count} lid)` }))}
+                    values={applied.form_ids ?? []}
+                    onChange={(vals) => setApplied(p => ({ ...p, form_ids: vals.length ? vals : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                </div>
 
-                  {/* Date row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
-                      </label>
-                      <input
-                        type="date"
-                        value={pending.start_date ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, start_date: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px",
-                          outline: "none", boxSizing: "border-box",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
-                      </label>
-                      <input
-                        type="date"
-                        value={pending.end_date ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, end_date: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px",
-                          outline: "none", boxSizing: "border-box",
-                        }}
-                      />
-                    </div>
+                {/* Bottom row: mode toggle + Bitrix24 link */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => { setMode('default'); setApplied(p => p); }}
+                      style={{
+                        background: mode === 'default' ? "rgba(33,150,243,0.1)" : "transparent",
+                        border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
+                        color: mode === 'default' ? "#2196F3" : "var(--text3)",
+                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      Barcha lidlar
+                    </button>
+                    <button onClick={() => { setMode('amocrm'); setApplied(p => p); }}
+                      style={{
+                        background: mode === 'amocrm' ? "rgba(217,119,6,0.1)" : "transparent",
+                        border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
+                        color: mode === 'amocrm' ? "#D97706" : "var(--text3)",
+                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      AmoCRM
+                    </button>
                   </div>
-
-                  {/* Dropdown filters row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Users size={12} />Mas'ul xodim
-                      </label>
-                      <select
-                        value={pending.responsible_id ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barchasi</option>
-                        {filterOpts?.responsibles.map((r) => (
-                          <option key={r.id} value={r.id}>{r.full_name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Filter size={12} />Bosqich
-                      </label>
-                      <select
-                        value={pending.stage ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, stage: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barchasi</option>
-                        {filterOpts?.stages.map((s) => (
-                          <option key={s.bitrix_id} value={s.bitrix_id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <TrendingUp size={12} />Manba
-                      </label>
-                      <select
-                        value={pending.source ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, source: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barchasi</option>
-                        {mode === 'amocrm'
-                          ? amocrmSrcQ.isLoading
-                            ? <option disabled>Yuklanmoqda…</option>
-                            : (amocrmSrcQ.data ?? []).map((s) => (
-                                <option key={s} value={s}>{s}</option>
-                              ))
-                          : filterOpts?.sources.map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))
-                        }
-                      </select>
-                    </div>
-                  </div>
-                  {/* Facebook Forms filter row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <TrendingUp size={12} />Forma bo'yicha
-                      </label>
-                      <select
-                        value={pending.form_id ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, form_id: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barcha formalar</option>
-                        {filterOptsQ.isLoading
-                          ? <option disabled>Yuklanmoqda…</option>
-                          : (filterOpts?.forms ?? []).map((f) => (
-                              <option key={f.id} value={f.id}>{f.name} ({f.count} lid)</option>
-                            ))
-                        }
-                      </select>
-                    </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {activeCount > 0 && (
+                      <button onClick={() => { setApplied(getDefaultFilter()); setMode('default'); }}
+                        style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>
+                        Tozalash
+                      </button>
+                    )}
+                    <a href="https://mountain.bitrix24.kz/crm/lead/list/" target="_blank" rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.3)",
+                        color: "#2196F3", borderRadius: 8, padding: "6px 14px",
+                        fontSize: 12, fontWeight: 600, textDecoration: "none",
+                      }}>
+                      Bitrix24 ↗
+                    </a>
                   </div>
                 </div>
-              </div>
-
-              {/* Bottom action bar */}
-              <div style={{
-                display: "flex", justifyContent: "flex-end", gap: 10,
-                padding: "12px 20px", borderTop: "1px solid var(--border)",
-              }}>
-                <button
-                  onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setFilterOpen(false); }}
-                  style={{
-                    background: "var(--bg3)", border: "1px solid var(--border)", color: "#9E9E9E",
-                    borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 500, cursor: "pointer",
-                  }}
-                >
-                  Tozalash
-                </button>
-                <button
-                  onClick={() => { setApplied({ ...pending }); setFilterOpen(false); }}
-                  style={{
-                    background: "#2196F3", border: "none", color: "#fff",
-                    borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}
-                >
-                  Topish
-                </button>
               </div>
             </div>
           )}
