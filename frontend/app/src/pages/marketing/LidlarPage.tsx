@@ -11,9 +11,9 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats,
-  getSourceStats, getCallStats, syncCalls, getResponsibleLeads,
+  getSourceStats, getResponsibleLeads,
   type DashFilter, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow,
-  type SourceStatsRow, type CallStatsRow, type ResponsibleLeadRow,
+  type SourceStatsRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -395,9 +395,6 @@ export default function LidlarPage() {
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
-  const callQ       = useQuery({ queryKey: ["stats/call-stats", applied.start_date, applied.end_date, applied.responsible_id], queryFn: () => getCallStats({ start_date: applied.start_date, end_date: applied.end_date, responsible_id: applied.responsible_id }) });
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
   const utmQ        = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const [selectedUtmSource,   setSelectedUtmSource]   = useState<string | null>(null);
   const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string | null>(null);
@@ -488,7 +485,7 @@ export default function LidlarPage() {
       <Topbar
         title="Lidlar analitika"
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); callQ.refetch(); utmQ.refetch(); }}>
+          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); utmQ.refetch(); }}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
@@ -1643,157 +1640,6 @@ export default function LidlarPage() {
                   getBitrixUrl={(r) => `https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
                 />
               )}
-            </div>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════════════════
-            Qo'ng'iroq davomiyligi (Call Duration)
-        ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          const callRows: CallStatsRow[] = callQ.data ?? [];
-          const totalCalls    = callRows.reduce((s, r) => s + r.total_calls, 0);
-          const totalDuration = callRows.reduce((s, r) => s + r.total_duration, 0);
-          const totalSuccess  = callRows.reduce((s, r) => s + r.success_calls, 0);
-          const totalFailed   = callRows.reduce((s, r) => s + r.failed_calls, 0);
-          const avgDurationAll = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
-          const successPct = totalCalls > 0 ? Math.round((totalSuccess / totalCalls) * 100) : 0;
-          const failedPct  = totalCalls > 0 ? Math.round((totalFailed  / totalCalls) * 100) : 0;
-          const maxDur     = Math.max(1, ...callRows.map(r => r.total_duration));
-
-          const fmtDur = (secs: number) => {
-            const h = Math.floor(secs / 3600);
-            const m = Math.floor((secs % 3600) / 60);
-            if (h > 0) return `${h} soat ${m} min`;
-            return `${m} min`;
-          };
-          const fmtAvg = (secs: number) => {
-            const m = Math.floor(secs / 60);
-            const s = secs % 60;
-            return `${m} min ${s} sek`;
-          };
-
-          const kpiCards = [
-            { label: "Qo'ng'iroqlar soni",   value: fmtNum(totalCalls),    color: "#2196F3" },
-            { label: "O'rtacha vaqt",         value: fmtAvg(avgDurationAll), color: "#9C27B0" },
-            { label: "Muvaffaqiyatli %",      value: `${successPct}%`,       color: "#4CAF50" },
-            { label: "Muvaffaqiyatsiz %",     value: `${failedPct}%`,        color: "#F44336" },
-            { label: "Muvaffaqiyatli soni",   value: fmtNum(totalSuccess),   color: "#4CAF50" },
-            { label: "Muvaffaqiyatsiz soni",  value: fmtNum(totalFailed),    color: "#F44336" },
-          ];
-
-          return (
-            <div style={{ marginBottom: 24 }}>
-              {/* Header */}
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                marginBottom: 12,
-              }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-                  Qo&apos;ng&apos;iroq davomiyligi
-                </span>
-                <button
-                  disabled={syncing}
-                  onClick={async () => {
-                    setSyncing(true);
-                    setSyncResult(null);
-                    try {
-                      const r = await syncCalls(applied.start_date, applied.end_date);
-                      setSyncResult(`${r.synced} ta qo'ng'iroq yuklandi`);
-                      callQ.refetch();
-                    } catch (e) {
-                      setSyncResult("Xatolik: " + (e as Error).message);
-                    } finally {
-                      setSyncing(false);
-                    }
-                  }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6,
-                    background: syncing ? "var(--bg3)" : "rgba(33,150,243,0.15)",
-                    color: syncing ? "#666" : "#2196F3",
-                    border: "1px solid rgba(33,150,243,0.3)",
-                    borderRadius: 8, padding: "6px 14px", fontSize: 12,
-                    fontWeight: 600, cursor: syncing ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {syncing ? "Yuklanmoqda…" : "Zvonkolarni yuklash"}
-                </button>
-              </div>
-              {syncResult && (
-                <div style={{ fontSize: 12, color: "#4CAF50", marginBottom: 10 }}>{syncResult}</div>
-              )}
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16 }}>
-                {/* Left: per-responsible table */}
-                <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
-                  {callQ.isLoading ? (
-                    <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-                  ) : callRows.length === 0 ? (
-                    <div style={{ padding: 24, color: "#555", fontSize: 13 }}>
-                      Ma&apos;lumot yo&apos;q — avval &quot;Zvonkolarni yuklash&quot; ni bosing
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                          <tr>
-                            <th style={TH("#9E9E9E", 180)}>MAS&apos;UL</th>
-                            <th style={TH("#2196F3")}>UMUMIY DAVOMIYLIK</th>
-                            <th style={TH("#9C27B0")}>O&apos;RTACHA VAQT</th>
-                            <th style={TH("#2196F3")}>QO&apos;NG&apos;IROQLAR</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {callRows.map((r, i) => (
-                            <tr key={r.responsible_id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                              <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <AvatarCircle name={r.full_name} size={28} />
-                                  <span style={{ whiteSpace: "nowrap" }}>{r.full_name}</span>
-                                </div>
-                              </td>
-                              <td style={TD}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtDur(r.total_duration)}</span>
-                                <MiniBar value={r.total_duration} max={maxDur} color="#2196F3" />
-                              </td>
-                              <td style={TD}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtAvg(r.avg_duration)}</span>
-                              </td>
-                              <td style={TD}>
-                                <span style={{ fontSize: 14, fontWeight: 700, color: "#2196F3" }}>{fmtNum(r.total_calls)}</span>
-                                <MiniBar value={r.total_calls} max={Math.max(1, ...callRows.map(x => x.total_calls))} color="#2196F3" />
-                              </td>
-                            </tr>
-                          ))}
-                          <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                            <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
-                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtDur(totalDuration)}</span></td>
-                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtAvg(avgDurationAll)}</span></td>
-                            <td style={TD}><span style={{ fontSize: 14, fontWeight: 700, color: "#2196F3" }}>{fmtNum(totalCalls)}</span></td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right: KPI cards */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignContent: "start" }}>
-                  {kpiCards.map((card) => (
-                    <div key={card.label} style={{
-                      background: "var(--bg2)", borderRadius: 10, padding: "14px 16px",
-                      border: `1px solid var(--border)`,
-                    }}>
-                      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        {card.label}
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: card.color }}>
-                        {card.value}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           );
         })()}
