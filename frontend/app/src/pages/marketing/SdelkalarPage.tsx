@@ -202,7 +202,7 @@ const DEAL_STAGE_COLS = [
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
-  const [mode, setMode] = useState<'default' | 'amocrm'>('default');
+  const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
 
   const [filter, setFilter] = useState({
     from: daysAgoISO(365), to: todayISO(),
@@ -394,6 +394,18 @@ export default function SdelkalarPage() {
                 Barcha sdelkalar
               </button>
               <button
+                onClick={() => { clearFilter(); setMode('bitrix24'); }}
+                style={{
+                  border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
+                  padding: "5px 12px", cursor: "pointer",
+                  background: mode === 'bitrix24' ? "#22c55e" : "transparent",
+                  color: mode === 'bitrix24' ? "#fff" : "var(--text2)",
+                  transition: "all 0.2s"
+                }}
+              >
+                Bitrix24
+              </button>
+              <button
                 onClick={() => { clearFilter(); setMode('amocrm'); }}
                 style={{
                   border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
@@ -427,6 +439,9 @@ export default function SdelkalarPage() {
             <span style={{ fontSize: 12.5, color: "var(--text3)", flex: 1 }}>
               {`Filtr: ${filter.from} → ${filter.to}${activeFilterCount > 0 ? ` · ${activeFilterCount} ta qo'shimcha` : ""}`}
             </span>
+            {mode === 'bitrix24' && (
+              <span style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700, marginRight: 6 }}>Bitrix24</span>
+            )}
             {mode === 'amocrm' && (
               <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700, marginRight: 6 }}>AmoCRM</span>
             )}
@@ -486,20 +501,18 @@ export default function SdelkalarPage() {
                     style={{ background: mode === 'default' ? "rgba(59,130,246,0.1)" : "transparent", border: `1px solid ${mode === 'default' ? "rgba(59,130,246,0.4)" : "var(--border)"}`, color: mode === 'default' ? "#3b82f6" : "var(--text3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                     Barcha sdelkalar
                   </button>
+                  <button onClick={() => { clearFilter(); setMode('bitrix24'); }}
+                    style={{ background: mode === 'bitrix24' ? "rgba(34,197,94,0.1)" : "transparent", border: `1px solid ${mode === 'bitrix24' ? "rgba(34,197,94,0.4)" : "var(--border)"}`, color: mode === 'bitrix24' ? "#22c55e" : "var(--text3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    Bitrix24
+                  </button>
                   <button onClick={() => { clearFilter(); setMode('amocrm'); }}
                     style={{ background: mode === 'amocrm' ? "rgba(217,119,6,0.1)" : "transparent", border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`, color: mode === 'amocrm' ? "#D97706" : "var(--text3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                     AmoCRM
                   </button>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {activeFilterCount > 0 && (
-                    <button onClick={clearFilter} style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
-                  )}
-                  <a href="https://mountain.bitrix24.kz/crm/deal/list/" target="_blank" rel="noopener noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.3)", color: "#3b82f6", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>
-                    Bitrix24 ↗
-                  </a>
-                </div>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilter} style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
+                )}
               </div>
             </div>
           )}

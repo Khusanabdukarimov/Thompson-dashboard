@@ -11,9 +11,9 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
-  getSourceStats, getFormStats, getResponsibleLeads,
+  getSourceStats, getUtmStats, getResponsibleLeads,
   type DashFilter,
-  type SourceStatsRow, type FormStatsRow, type ResponsibleLeadRow,
+  type SourceStatsRow, type UtmStatRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -361,7 +361,7 @@ export default function LidlarPage() {
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
-  const formStatsQ  = useQuery({ queryKey: ["stats/form-stats", appliedWithMode], queryFn: () => getFormStats(appliedWithMode) });
+  const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
   const respLeadsConvQ = useQuery({
     queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
@@ -439,7 +439,7 @@ export default function LidlarPage() {
       <Topbar
         title="Lidlar analitika"
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); formStatsQ.refetch(); }}>
+          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); utmStatsQ.refetch(); }}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
@@ -573,16 +573,6 @@ export default function LidlarPage() {
                     loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
                   />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16 }}>
-                  <MultiSelect
-                    label="Forma bo'yicha" icon={<TrendingUp size={12} />}
-                    options={(filterOpts?.forms ?? []).map(f => ({ value: f.id, label: `${f.name} (${f.count} lid)` }))}
-                    values={applied.form_ids ?? []}
-                    onChange={(vals) => setApplied(p => ({ ...p, form_ids: vals.length ? vals : undefined }))}
-                    loading={filterOptsQ.isLoading}
-                  />
-                </div>
-
                 {/* Bottom row: mode toggle buttons */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", gap: 6 }}>
@@ -1339,53 +1329,53 @@ export default function LidlarPage() {
         })()}
 
         {/* ══════════════════════════════════════════════════════════
-            Forma bo'yicha table (DB-based: leads.web_form_id)
+            UTM bo'yicha table
         ══════════════════════════════════════════════════════════ */}
         {(() => {
-          const formRows: FormStatsRow[] = formStatsQ.data ?? [];
+          const utmRows: UtmStatRow[] = utmStatsQ.data ?? [];
           const maxes: Record<string, number> = {};
           for (const c of UTM_COLS_DEF)
-            maxes[c.key] = Math.max(1, ...formRows.map(r => Number(r[c.key as keyof FormStatsRow]) || 0));
-          const totals = formRows.reduce((acc, r) => {
+            maxes[c.key] = Math.max(1, ...utmRows.map(r => Number(r[c.key as keyof UtmStatRow]) || 0));
+          const totals = utmRows.reduce((acc, r) => {
             for (const c of UTM_COLS_DEF)
-              acc[c.key] = (acc[c.key] || 0) + (Number(r[c.key as keyof FormStatsRow]) || 0);
+              acc[c.key] = (acc[c.key] || 0) + (Number(r[c.key as keyof UtmStatRow]) || 0);
             return acc;
           }, {} as Record<string, number>);
 
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
               <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Forma bo'yicha</span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>{formRows.length} ta forma</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>UTM bo'yicha</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>{utmRows.length} ta manba</span>
               </div>
-              {formStatsQ.isLoading ? (
+              {utmStatsQ.isLoading ? (
                 <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : formRows.length === 0 ? (
+              ) : utmRows.length === 0 ? (
                 <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
                     <thead>
                       <tr>
-                        <th style={TH("#9E9E9E", 200)}>FORMA</th>
+                        <th style={TH("#9E9E9E", 200)}>UTM MANBA</th>
                         {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
                         <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {formRows.map((r, i) => {
+                      {utmRows.map((r, i) => {
                         const total = r.umumiy_lidlar;
                         const konv = total > 0 ? (r.konsultatsiya_otkazildi / total) * 100 : 0;
                         return (
-                          <tr key={r.web_form_id}
+                          <tr key={r.utm_source}
                               style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
                               onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
                               onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
                             <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", color: "var(--text)" }}>
-                              {r.form_name}
+                              {r.utm_source || "—"}
                             </td>
                             {UTM_COLS_DEF.map(c => {
-                              const val = Number(r[c.key as keyof FormStatsRow]) || 0;
+                              const val = Number(r[c.key as keyof UtmStatRow]) || 0;
                               return (
                                 <td key={c.key} style={TD}>
                                   {val > 0 ? (

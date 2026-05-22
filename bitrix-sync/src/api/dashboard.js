@@ -23,7 +23,9 @@ function leadSrcCond(mode, pi) {
 }
 
 function dealModeClause(mode) {
-  return mode === 'amocrm' ? `AND d.source_id = 'UC_1WUFJB'` : ``;
+  if (mode === 'amocrm')   return `AND d.source_id = 'UC_1WUFJB'`;
+  if (mode === 'bitrix24') return `AND (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')`;
+  return '';
 }
 
 function dealSrcCond(mode, pi) {
