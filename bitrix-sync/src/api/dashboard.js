@@ -763,7 +763,11 @@ router.get('/lead-stats', async (req, res) => {
            ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0)
              FILTER (WHERE NOT s.is_final), 1)                                                AS avg_age_days,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_bekor_count,
-           (COUNT(*) - COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK')))::int   AS sifatli_lid_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
+             'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+             'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+             'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+           ))::int AS sifatli_lid_count,
            COUNT(l.id) FILTER (WHERE l.uf_tashrif_sanasi IS NOT NULL AND l.uf_tashrif_sanasi != '' AND l.uf_tashrif_sanasi != 'false')::int AS konsultatsiya_belgilandi_count,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int  AS konsultatsiya_otkazildi_count,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS muvaffaqiyatsiz_count
@@ -1030,9 +1034,11 @@ router.get('/utm-campaign-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1067,9 +1073,11 @@ router.get('/utm-responsible-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1108,9 +1116,11 @@ router.get('/utm-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1161,9 +1171,11 @@ router.get('/source-stats', async (req, res) => {
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244',
            'IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1205,9 +1217,11 @@ router.get('/form-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
