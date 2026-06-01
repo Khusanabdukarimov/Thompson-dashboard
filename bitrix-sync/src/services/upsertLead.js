@@ -71,12 +71,13 @@ async function upsertLead(r, client) {
        utm_source, utm_medium, utm_campaign, utm_content, utm_term,
        uf_segment, uf_filial, uf_service, uf_activity, uf_with_whom,
        uf_tashrif_sanasi,
+       uf_amo_date,
        uf_cancel_reason, uf_junk_reason,
        name, last_name, title,
        web_form_id,
        date_create, date_modify, synced_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW()
      )
      ON CONFLICT (id) DO UPDATE SET
        responsible_id    = EXCLUDED.responsible_id,
@@ -94,6 +95,7 @@ async function upsertLead(r, client) {
        uf_activity       = EXCLUDED.uf_activity,
        uf_with_whom      = EXCLUDED.uf_with_whom,
        uf_tashrif_sanasi = EXCLUDED.uf_tashrif_sanasi,
+       uf_amo_date       = EXCLUDED.uf_amo_date,
        uf_cancel_reason  = EXCLUDED.uf_cancel_reason,
        uf_junk_reason    = EXCLUDED.uf_junk_reason,
        name             = EXCLUDED.name,
@@ -120,6 +122,7 @@ async function upsertLead(r, client) {
       ufVal(r.UF_CRM_1775825155935),
       ufVal(r.UF_CRM_1770281264686),
       ufVal(r.UF_CRM_1770693781846),
+      r.SOURCE_ID === 'UC_1WUFJB' ? parseDate(r.UF_CRM_1778310745831) : null,
       ufEnum(r.UF_CRM_1770976355232, CANCEL_REASON_MAP),
       ufEnum(r.UF_CRM_1770282341169, JUNK_REASON_MAP),
       r.NAME || null,

@@ -58,6 +58,10 @@ app.get('/health', async (req, res) => {
 
 app.listen(PORT, () => {
   startCallsAutoSync();
+  pool.query(`
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
+  `).catch(err => console.error('[startup] leads migration failed:', err.message));
   console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);

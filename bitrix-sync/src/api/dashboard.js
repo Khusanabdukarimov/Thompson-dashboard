@@ -13,8 +13,9 @@ function leadModeClause(mode) {
   return '';
 }
 
-function leadDateCond(_mode, p1, p2) {
-  return `($${p1}::date IS NULL OR l.date_create::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR l.date_create::date <= $${p2}::date)`;
+function leadDateCond(mode, p1, p2) {
+  const col = mode === 'amocrm' ? 'COALESCE(l.uf_amo_date, l.date_create)' : 'l.date_create';
+  return `($${p1}::date IS NULL OR ${col}::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR ${col}::date <= $${p2}::date)`;
 }
 
 function leadSrcCond(mode, pi) {
