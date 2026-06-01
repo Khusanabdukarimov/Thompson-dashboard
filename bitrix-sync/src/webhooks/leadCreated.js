@@ -38,14 +38,14 @@ async function leadCreated(req, res) {
     // Distribute to responsible — only when:
     //   1. Not an amoCRM lead
     //   2. Not a Qo'ng'iroq (Calls) stage
-    //   3. Stage is NEW (Yangi lid)
-    //   4. ASSIGNED_BY_ID equals the main responsible (env MAIN_RESPONSIBLE_ID)
+    //   3. ASSIGNED_BY_ID equals the main responsible (env MAIN_RESPONSIBLE_ID)
+    // Note: no stage check — by the time we fetch the lead from Bitrix24,
+    // it may have already auto-transitioned out of NEW.
     const mainResponsibleId = parseInt(process.env.MAIN_RESPONSIBLE_ID || '1', 10);
     const isAmoCRM          = raw.SOURCE_ID === 'UC_1WUFJB';
     const isCallsStage      = raw.STATUS_ID === 'CALLS' || raw.STATUS_ID === 'UC_K0PWSA';
-    const isNewStage        = raw.STATUS_ID === 'NEW';
     const isMainResponsible = parseInt(raw.ASSIGNED_BY_ID, 10) === mainResponsibleId;
-    if (!isAmoCRM && !isCallsStage && isNewStage && isMainResponsible) {
+    if (!isAmoCRM && !isCallsStage && isMainResponsible) {
       const assignedTo = await distributeLead(entityId);
       if (assignedTo) {
         console.log(`[leadCreated] Lead ${entityId} distributed to responsible ${assignedTo}`);
