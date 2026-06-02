@@ -14,6 +14,30 @@ router.post('/sync-stages', async (_req, res) => {
   }
 });
 
+// GET /api/reja/debug-stages  — show current stages table state
+router.get('/debug-stages', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT s.bitrix_id, s.name, s.is_won, s.is_final,
+             COUNT(d.id)::int AS deal_count
+      FROM stages s
+      LEFT JOIN deals d ON d.stage_id = s.id
+      WHERE s.entity = 'deal'
+      GROUP BY s.id, s.bitrix_id, s.name, s.is_won, s.is_final
+      ORDER BY deal_count DESC
+    `);
+    const won = rows.filter(r => r.is_won);
+    const notWon = rows.filter(r => !r.is_won);
+    res.json({
+      total_stages: rows.length,
+      won_stages: won,
+      not_won_stages: notWon,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Schema (runs once at module load via index.js startup hook) ────
 async function ensureSchema() {
   await pool.query(`
