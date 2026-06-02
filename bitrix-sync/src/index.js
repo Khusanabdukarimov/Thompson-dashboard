@@ -68,9 +68,9 @@ Promise.all([
   `).catch(err => console.error('[startup] leads/deals migration failed:', err.message)),
   pool.query(`
     UPDATE stages SET is_won = TRUE, is_final = TRUE
-      WHERE entity = 'deal' AND bitrix_id LIKE '%:WON';
+      WHERE entity = 'deal' AND (bitrix_id = 'WON' OR bitrix_id LIKE '%:WON');
     UPDATE stages SET is_final = TRUE
-      WHERE entity = 'deal' AND bitrix_id LIKE '%:LOSE';
+      WHERE entity = 'deal' AND (bitrix_id = 'LOSE' OR bitrix_id LIKE '%:LOSE');
   `).catch(err => console.error('[startup] stages restore migration failed:', err.message)),
   rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
 ]).then(() => {

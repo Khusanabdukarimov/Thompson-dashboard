@@ -28,7 +28,7 @@ async function resolve(entity, bitrixId, semanticId) {
 
   // Use STAGE_SEMANTIC_ID when available ('S' = won, 'F' = fail/lost).
   // Fall back to name-pattern detection for stages synced without semantic info.
-  const suffix   = bitrixId.includes(':') ? bitrixId.split(':').pop().toUpperCase() : '';
+  const suffix   = bitrixId.includes(':') ? bitrixId.split(':').pop().toUpperCase() : bitrixId.toUpperCase();
   const isWon    = semanticId === 'S' || suffix === 'WON';
   const isFinal  = isWon || semanticId === 'F' || suffix === 'LOSE';
 
