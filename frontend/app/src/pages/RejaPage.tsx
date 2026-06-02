@@ -376,13 +376,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
               {showAll ? 'Barcha xodimlar' : `Tayinlangan xodimlar (${assignedEmployees.length})`}
             </div>
-            {/* Tahrirlash toggle */}
-            <button
-              onClick={() => setShowAll(v => !v)}
-              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 8, border: '1px solid var(--border)', background: showAll ? 'rgba(37,99,235,0.1)' : 'var(--bg2)', color: showAll ? '#2563eb' : 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-            >
-              {showAll ? 'Yopish' : 'Tahrirlash'}
-            </button>
             {/* Xodim qo'shish — dropdown of unassigned */}
             <div ref={addRef} style={{ position: 'relative' }}>
               <button
@@ -428,6 +421,16 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 style={{ paddingLeft: 30, paddingRight: 12, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }}
               />
             </div>
+            {/* Pencil — toggle edit mode */}
+            <button
+              onClick={() => setShowAll(v => !v)}
+              title={showAll ? 'Tahrirlashni yopish' : 'Tahrirlash'}
+              style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.12)' : 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15.529 2.857l-1.403-1.404c-0.565-0.566-1.555-0.566-2.122 0l-9.057 9.058-1.722 5.288 5.248-1.765 9.055-9.056c0.586-0.584 0.586-1.536 0.001-2.121zM3.094 13.294l0.645-1.979 1.934 1.935-1.963 0.66-0.616-0.616zM4.355 10.518l5.493-5.493 2.111 2.11-5.494 5.494-2.11-2.111zM10.555 4.317l0.729-0.729 2.111 2.11-0.729 0.729-2.111-2.11zM14.822 4.271l-0.72 0.72-2.111-2.11 0.72-0.721c0.189-0.189 0.518-0.189 0.707 0l1.403 1.404c0.196 0.196 0.196 0.512 0.001 0.707z" fill={showAll ? '#2563eb' : 'var(--text2)'} />
+              </svg>
+            </button>
             <button
               onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
               style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
@@ -550,7 +553,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 <span style={{ fontSize: 13, fontWeight: 500, color: emp.active ? '#16a34a' : '#d97706', flex: 1 }}>
                   {emp.active ? 'Active' : 'On leave'}
                 </span>
-                {!showAll && (
+                {showAll && (
                   <button
                     type="button"
                     title="Olib tashlash"
