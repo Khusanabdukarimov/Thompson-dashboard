@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, Trash2, ChevronDown, Scale, CheckCircle2, BarChart3, X } from 'lucide-react';
+import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, X } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, createRejaPlan, updateRejaPlan, deleteRejaPlan,
@@ -70,77 +70,6 @@ function avatarColor(name: string): string {
 function initials(name: string): string {
   const p = name.trim().split(/\s+/).filter(Boolean);
   return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (p[0]?.[0] ?? '?').toUpperCase();
-}
-
-// ── Plan dropdown ──────────────────────────────────────────────────
-
-function PlanDropdown({ plans, selected, onSelect, onCreateClick }: {
-  plans: RejaPlan[];
-  selected: RejaPlan | null;
-  onSelect: (p: RejaPlan) => void;
-  onCreateClick: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const fn = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', fn);
-    return () => document.removeEventListener('mousedown', fn);
-  }, []);
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-          borderRadius: 8, border: `1px solid ${open ? '#2563eb' : 'var(--border)'}`,
-          background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600,
-          cursor: 'pointer', minWidth: 200,
-        }}
-      >
-        <span style={{ flex: 1, textAlign: 'left' }}>{selected ? periodLabel(selected) : 'Reja tanlang…'}</span>
-        <ChevronDown size={14} color="var(--text3)" />
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200, minWidth: 240,
-          background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', overflow: 'hidden',
-        }}>
-          {plans.length === 0 && (
-            <div style={{ padding: '12px 14px', color: 'var(--text3)', fontSize: 12 }}>Rejalar mavjud emas</div>
-          )}
-          {plans.map(p => (
-            <div
-              key={p.id}
-              onClick={() => { onSelect(p); setOpen(false); }}
-              style={{
-                padding: '10px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                background: selected?.id === p.id ? 'rgba(37,99,235,0.1)' : 'transparent',
-                color: selected?.id === p.id ? '#2563eb' : 'var(--text)',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              <div>{periodLabel(p)}</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                {CURRENCY_SIGN}{fmtUZS(p.total_target)} · {p.employee_count} xodim
-              </div>
-            </div>
-          ))}
-          <div
-            onClick={() => { setOpen(false); onCreateClick(); }}
-            style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <Plus size={14} /> Yangi reja
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── Create plan modal ──────────────────────────────────────────────
@@ -792,12 +721,21 @@ export default function RejaPage() {
         title="Savdo Boshqaruvi"
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <PlanDropdown
-              plans={plans}
-              selected={selectedPlan}
-              onSelect={p => setSelectedPlan(p)}
-              onCreateClick={() => setShowCreate(true)}
-            />
+            <select
+              value={selectedPlan?.id ?? ''}
+              onChange={e => {
+                const p = plans.find(pl => pl.id === Number(e.target.value));
+                if (p) setSelectedPlan(p);
+              }}
+              style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 200, outline: 'none' }}
+            >
+              {plans.length === 0 && <option value="">Rejalar yo'q</option>}
+              {plans.map(p => (
+                <option key={p.id} value={p.id}>
+                  {periodLabel(p)} — ${fmtUZS(p.total_target)}
+                </option>
+              ))}
+            </select>
             <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <Plus size={14} /> Yangi reja
             </button>
