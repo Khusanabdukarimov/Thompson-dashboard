@@ -1,11 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, X } from 'lucide-react';
+import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, createRejaPlan, updateRejaPlan, deleteRejaPlan,
   getRejaDistribution, saveRejaDistribution, getRejaProgress, listAllResponsibles,
-  type RejaPlan, type PeriodType, type RejaEmployee,
+  type RejaPlan, type RejaEmployee,
 } from '@/lib/api/reja';
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -48,13 +48,6 @@ function monthStartEnd(year: number, month: number) {
   };
 }
 
-function quarterStartEnd(year: number, quarter: number) {
-  const m = (quarter - 1) * 3;
-  return {
-    start: localISO(new Date(year, m, 1)),
-    end:   localISO(new Date(year, m + 3, 0)),
-  };
-}
 
 const AVATAR_COLORS = [
   '#2196F3','#E91E63','#9C27B0','#00BCD4','#FF9800',
@@ -73,104 +66,6 @@ function initials(name: string): string {
 }
 
 // ── Create plan modal ──────────────────────────────────────────────
-
-function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: RejaPlan) => void }) {
-  const now = new Date();
-  const [periodType, setPeriodType] = useState<PeriodType>('monthly');
-  const [year,    setYear]    = useState(now.getFullYear());
-  const [month,   setMonth]   = useState(now.getMonth());
-  const [quarter, setQuarter] = useState(Math.floor(now.getMonth() / 3) + 1);
-  const [totalTarget, setTotalTarget] = useState('');
-  const [name, setName] = useState('');
-  const qc = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: createRejaPlan,
-    onSuccess: (plan) => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onCreated(plan); },
-  });
-
-  function handleSubmit(e: { preventDefault(): void }) {
-    e.preventDefault();
-    const { start, end } = periodType === 'monthly'
-      ? monthStartEnd(year, month)
-      : quarterStartEnd(year, quarter);
-    mutation.mutate({ name: name || undefined, period_type: periodType, period_start: start, period_end: end, total_target: parseNum(totalTarget) });
-  }
-
-  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box' };
-  const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5, display: 'block' };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <button onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', border: 0, cursor: 'default' }} />
-      <form onSubmit={handleSubmit} style={{ position: 'relative', background: 'var(--bg)', borderRadius: 14, padding: '28px', width: 420, boxShadow: '0 20px 48px rgba(0,0,0,0.3)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Yangi reja yaratish</div>
-          <button type="button" onClick={onClose} style={{ border: 0, background: 'transparent', color: 'var(--text2)', cursor: 'pointer', padding: 4 }}><X size={18} /></button>
-        </div>
-
-        <div>
-          <span style={lbl}>Davr turi</span>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {(['monthly', 'quarterly'] as PeriodType[]).map(t => (
-              <button key={t} type="button" onClick={() => setPeriodType(t)} style={{ padding: '9px 0', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1px solid ${periodType === t ? '#2563eb' : 'var(--border)'}`, background: periodType === t ? 'rgba(37,99,235,0.1)' : 'var(--bg3)', color: periodType === t ? '#2563eb' : 'var(--text2)' }}>
-                {t === 'monthly' ? 'Oylik' : 'Kvartal'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <span style={lbl}>Yil</span>
-          <select value={year} onChange={e => setYear(+e.target.value)} style={inp}>
-            {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-
-        {periodType === 'monthly' ? (
-          <div>
-            <span style={lbl}>Oy</span>
-            <select value={month} onChange={e => setMonth(+e.target.value)} style={inp}>
-              {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-          </div>
-        ) : (
-          <div>
-            <span style={lbl}>Kvartal</span>
-            <select value={quarter} onChange={e => setQuarter(+e.target.value)} style={inp}>
-              {[1,2,3,4].map(q => <option key={q} value={q}>{q}-kvartal</option>)}
-            </select>
-          </div>
-        )}
-
-        <div>
-          <span style={lbl}>Umumiy maqsad ({CURRENCY})</span>
-          <input style={inp} type="text" placeholder="500,000,000" value={totalTarget} onChange={e => setTotalTarget(e.target.value)} required />
-        </div>
-
-        <div>
-          <span style={lbl}>Nom (ixtiyoriy)</span>
-          <input style={inp} type="text" placeholder="Savdo rejasi…" value={name} onChange={e => setName(e.target.value)} />
-        </div>
-
-        {mutation.isError && (
-          <div style={{ fontSize: 12, color: '#ef4444', background: '#ef444414', borderRadius: 6, padding: '8px 10px' }}>
-            Xatolik: {(mutation.error as Error).message}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid var(--border)', background: 'var(--bg2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Bekor</button>
-          <button type="submit" disabled={mutation.isPending} style={{ flex: 2, padding: '10px', border: 0, background: '#1d4ed8', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: mutation.isPending ? 0.7 : 1 }}>
-            {mutation.isPending ? 'Saqlanmoqda…' : 'Yaratish'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-
 
 // ── Distribution view ──────────────────────────────────────────────
 
@@ -752,15 +647,47 @@ function ProgressView({ planId }: { planId: number }) {
 // ── Page root ──────────────────────────────────────────────────────
 
 export default function RejaPage() {
+  const now = new Date();
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
-  const [showCreate,   setShowCreate]   = useState(false);
+  const [selYear,  setSelYear]  = useState(now.getFullYear());
+  const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
+  const qc = useQueryClient();
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
 
+  // Auto-select first plan and sync year/month from it
   useEffect(() => {
-    if (!selectedPlan && plans.length > 0) setSelectedPlan(plans[0]);
+    if (!selectedPlan && plans.length > 0) {
+      const p = plans[0];
+      setSelectedPlan(p);
+      const d = new Date(p.period_start + 'T00:00:00');
+      setSelYear(d.getFullYear());
+      setSelMonth(d.getMonth() + 1);
+    }
   }, [plans, selectedPlan]);
+
+  // When year/month dropdowns change, find matching plan
+  useEffect(() => {
+    const prefix = `${selYear}-${String(selMonth).padStart(2, '0')}`;
+    const match = plans.find(p => p.period_start.startsWith(prefix));
+    if (match && match.id !== selectedPlan?.id) setSelectedPlan(match);
+    else if (!match && plans.length > 0) setSelectedPlan(null);
+  }, [selYear, selMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const createMutation = useMutation({
+    mutationFn: () => {
+      const { start, end } = monthStartEnd(selYear, selMonth - 1); // monthStartEnd uses 0-based month
+      return createRejaPlan({ period_type: 'monthly', period_start: start, period_end: end, total_target: 0 });
+    },
+    onSuccess: (plan) => {
+      qc.invalidateQueries({ queryKey: ['reja/plans'] });
+      setSelectedPlan(plan);
+    },
+  });
+
+  // Year range: 2020 → 2090
+  const YEARS = Array.from({ length: 2090 - 2020 + 1 }, (_, i) => 2020 + i);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden', background: 'var(--bg2)' }}>
@@ -772,7 +699,11 @@ export default function RejaPage() {
               value={selectedPlan?.id ?? ''}
               onChange={e => {
                 const p = plans.find(pl => pl.id === Number(e.target.value));
-                if (p) setSelectedPlan(p);
+                if (!p) return;
+                setSelectedPlan(p);
+                const d = new Date(p.period_start + 'T00:00:00');
+                setSelYear(d.getFullYear());
+                setSelMonth(d.getMonth() + 1);
               }}
               style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 200, outline: 'none' }}
             >
@@ -783,20 +714,58 @@ export default function RejaPage() {
                 </option>
               ))}
             </select>
-            <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Plus size={14} /> Yangi reja
+            <button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: createMutation.isPending ? 0.7 : 1 }}
+            >
+              <Plus size={14} /> {createMutation.isPending ? 'Yaratilmoqda…' : 'Yangi reja'}
             </button>
           </div>
         }
       />
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {/* Year / Month selector — always visible */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 24px 0' }}>
+          <select
+            value={selYear}
+            onChange={e => setSelYear(Number(e.target.value))}
+            style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+          >
+            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select
+            value={selMonth}
+            onChange={e => setSelMonth(Number(e.target.value))}
+            style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+          >
+            {MONTH_NAMES.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
+          </select>
+          {!selectedPlan && (
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+              Bu davr uchun reja yo'q —{' '}
+              <button
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending}
+                style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+              >
+                yaratish
+              </button>
+            </span>
+          )}
+        </div>
+
         {!selectedPlan ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60%', gap: 16, color: 'var(--text3)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50%', gap: 16, color: 'var(--text3)' }}>
             <BarChart3 size={48} strokeWidth={1} />
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>Hali reja yaratilmagan</div>
-            <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              <Plus size={15} /> Birinchi rejani yarating
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>{MONTH_NAMES[selMonth - 1]} {selYear} uchun reja mavjud emas</div>
+            <button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            >
+              <Plus size={15} /> Reja yaratish
             </button>
           </div>
         ) : (
@@ -806,13 +775,6 @@ export default function RejaPage() {
           </>
         )}
       </div>
-
-      {showCreate && (
-        <CreatePlanModal
-          onClose={() => setShowCreate(false)}
-          onCreated={plan => { setSelectedPlan(plan); setShowCreate(false); }}
-        />
-      )}
     </div>
   );
 }
