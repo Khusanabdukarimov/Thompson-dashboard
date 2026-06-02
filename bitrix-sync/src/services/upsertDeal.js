@@ -41,7 +41,7 @@ function parseDate(s) {
 async function upsertDeal(r, client) {
   const db = client || pool;
 
-  const stageId = await stageResolver.resolve('deal', r.STAGE_ID);
+  const stageId = await stageResolver.resolve('deal', r.STAGE_ID, r.STAGE_SEMANTIC_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
   const contactId = r.CONTACT_ID ? parseInt(r.CONTACT_ID) : null;
 

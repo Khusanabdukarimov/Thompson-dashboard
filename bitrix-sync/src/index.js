@@ -16,6 +16,7 @@ const dashboardRouter                    = require('./api/dashboard');
 const { startCallsAutoSync }             = require('./api/dashboard');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
+const { syncDealStagesFromBitrix } = require('./services/stageResolver');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -82,6 +83,7 @@ Promise.all([
 ]).then(() => {
   app.listen(PORT, () => {
     startCallsAutoSync();
+    syncDealStagesFromBitrix();
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);
