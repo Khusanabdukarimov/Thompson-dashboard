@@ -86,8 +86,8 @@ async function syncDealStagesFromBitrix() {
            VALUES ('deal', $1, $2, $3, $4, $5)
            ON CONFLICT (entity, bitrix_id) DO UPDATE
              SET name     = EXCLUDED.name,
-                 is_won   = EXCLUDED.is_won,
-                 is_final = EXCLUDED.is_final`,
+                 is_won   = CASE WHEN EXCLUDED.is_won   THEN TRUE ELSE stages.is_won   END,
+                 is_final = CASE WHEN EXCLUDED.is_final THEN TRUE ELSE stages.is_final END`,
           [bitrixId, s.NAME || bitrixId, parseInt(s.SORT) || 999, isWon, isFinal]
         );
       }

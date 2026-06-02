@@ -68,17 +68,11 @@ Promise.all([
     CREATE INDEX IF NOT EXISTS deals_date_modify_idx ON deals(date_modify);
   `).catch(err => console.error('[startup] leads/deals migration failed:', err.message)),
   pool.query(`
-    UPDATE stages
-    SET is_won = TRUE, is_final = TRUE
-    WHERE entity = 'deal'
-      AND bitrix_id LIKE '%:WON'
-      AND is_won = FALSE;
-    UPDATE stages
-    SET is_final = TRUE
-    WHERE entity = 'deal'
-      AND bitrix_id LIKE '%:LOSE'
-      AND is_final = FALSE;
-  `).catch(err => console.error('[startup] stages fix migration failed:', err.message)),
+    UPDATE stages SET is_won = TRUE, is_final = TRUE
+      WHERE entity = 'deal' AND bitrix_id LIKE '%:WON';
+    UPDATE stages SET is_final = TRUE
+      WHERE entity = 'deal' AND bitrix_id LIKE '%:LOSE';
+  `).catch(err => console.error('[startup] stages restore migration failed:', err.message)),
   rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
 ]).then(() => {
   app.listen(PORT, () => {
