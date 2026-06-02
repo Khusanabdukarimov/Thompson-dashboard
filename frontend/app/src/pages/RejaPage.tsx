@@ -4,8 +4,8 @@ import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, X } from 'lucide-
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, createRejaPlan, updateRejaPlan, deleteRejaPlan,
-  getRejaDistribution, saveRejaDistribution, getRejaProgress,
-  type RejaPlan, type PeriodType,
+  getRejaDistribution, saveRejaDistribution, getRejaProgress, listAllResponsibles,
+  type RejaPlan, type PeriodType, type RejaEmployee,
 } from '@/lib/api/reja';
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -184,14 +184,20 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const plan      = data?.plan;
   const employees = data?.employees ?? [];
 
-  const [targets,      setTargets]      = useState<Record<number, string>>({});
-  const [search,       setSearch]       = useState('');
-  const [dirty,        setDirty]        = useState(false);
-  const [showAll,      setShowAll]      = useState(false);
-  const [totalInput, setTotalInput] = useState('');
-  const [editTotal,  setEditTotal]  = useState(false);
-  const [addOpen,    setAddOpen]    = useState(false);
+  const [targets,          setTargets]          = useState<Record<number, string>>({});
+  const [search,           setSearch]           = useState('');
+  const [dirty,            setDirty]            = useState(false);
+  const [showAll,          setShowAll]          = useState(false);
+  const [totalInput,       setTotalInput]       = useState('');
+  const [addOpen,          setAddOpen]          = useState(false);
+  const [pendingEmployees, setPendingEmployees] = useState<RejaEmployee[]>([]);
   const addRef = useRef<HTMLDivElement>(null);
+
+  const allRespQ = useQuery({
+    queryKey: ['responsibles-list'],
+    queryFn:  listAllResponsibles,
+    staleTime: 5 * 60_000,
+  });
 
   useEffect(() => {
     if (!addOpen) return;
@@ -227,34 +233,49 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   );
   const hasAnyTarget = assignedEmployees.length > 0;
 
-  // Employees not yet in the plan (for the add dropdown)
+  // IDs already in plan (from DB or pending)
+  const employeeIds = useMemo(
+    () => new Set([...employees.map(e => e.responsible_id), ...pendingEmployees.map(e => e.responsible_id)]),
+    [employees, pendingEmployees],
+  );
+
+  // All active responsibles NOT yet in this plan
   const unassigned = useMemo(
-    () => employees.filter(e => parseFloat(String(e.target)) === 0 && parseNum(targets[e.responsible_id] ?? '') === 0),
-    [employees, targets],
+    () => (allRespQ.data ?? []).filter(r => !employeeIds.has(r.id)),
+    [allRespQ.data, employeeIds],
   );
 
   // When no targets saved yet → show all employees so user can assign
-  // When targets exist → show only assigned by default; toggle shows all
+  // When targets exist → show only assigned + pending by default; toggle shows all
   const filtered = useMemo(() => {
-    const base = (!hasAnyTarget || showAll) ? employees : assignedEmployees;
+    const base = (!hasAnyTarget || showAll)
+      ? [...employees, ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))]
+      : [...assignedEmployees, ...pendingEmployees.filter(p => !assignedEmployees.some(e => e.responsible_id === p.responsible_id))];
     if (!search.trim()) return base;
     const q = search.toLowerCase();
     return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-  }, [employees, assignedEmployees, search, showAll, hasAnyTarget]);
+  }, [employees, assignedEmployees, pendingEmployees, search, showAll, hasAnyTarget]);
+
+  // All employees to include in save (existing + newly added pending)
+  const allForSave = useMemo(
+    () => [...employees, ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))],
+    [employees, pendingEmployees],
+  );
 
   const saveMutation = useMutation({
-    mutationFn: () => saveRejaDistribution(planId, employees.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
+    mutationFn: () => saveRejaDistribution(planId, allForSave.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
       qc.invalidateQueries({ queryKey: ['reja/progress', planId] });
+      setPendingEmployees([]);
       setDirty(false);
     },
   });
 
   const updateTotalMutation = useMutation({
     mutationFn: (v: number) => updateRejaPlan(planId, { total_target: v }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); setEditTotal(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); },
   });
 
   const deleteMutation = useMutation({
@@ -298,18 +319,23 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
               <div key={i} style={{ paddingLeft: i > 0 ? 24 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>{item.label}</div>
 
-                {item.editable && editTotal ? (
-                  <form onSubmit={e => { e.preventDefault(); updateTotalMutation.mutate(parseNum(totalInput)); }} style={{ display: 'flex', gap: 6 }}>
-                    <input autoFocus value={totalInput} onChange={e => setTotalInput(e.target.value)}
-                      style={{ width: 140, padding: '6px 8px', borderRadius: 6, border: '1px solid #2563eb', background: 'var(--bg2)', color: 'var(--text)', fontSize: 15, fontWeight: 700, outline: 'none' }} />
-                    <button type="submit" style={{ padding: '6px 10px', borderRadius: 6, border: 0, background: '#2563eb', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>✓</button>
-                    <button type="button" onClick={() => setEditTotal(false)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}>✕</button>
+                {item.editable ? (
+                  <form onSubmit={e => { e.preventDefault(); updateTotalMutation.mutate(parseNum(totalInput)); }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text3)' }}>{CURRENCY_SIGN}</span>
+                      <input
+                        value={totalInput}
+                        onChange={e => setTotalInput(e.target.value)}
+                        onBlur={() => { if (parseNum(totalInput) !== totalTarget) updateTotalMutation.mutate(parseNum(totalInput)); }}
+                        style={{ width: 130, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 20, fontWeight: 700, outline: 'none', transition: 'border 0.15s' }}
+                        onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
+                        onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                      />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Enter yoki tashqariga bosing</div>
                   </form>
                 ) : (
-                  <div
-                    onClick={() => item.editable && setEditTotal(true)}
-                    style={{ cursor: item.editable ? 'pointer' : 'default' }}
-                  >
+                  <div>
                     <span style={{ fontSize: 22, fontWeight: 700, color: item.color ?? 'var(--text)' }}>
                       {CURRENCY_SIGN}{fmtUZS(item.raw)}
                     </span>
@@ -369,21 +395,23 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200, minWidth: 220, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 260, overflowY: 'auto' }}>
                   {unassigned.length === 0 ? (
                     <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>Barcha xodimlar tayinlangan</div>
-                  ) : unassigned.map(emp => (
+                  ) : unassigned.map(r => (
                     <div
-                      key={emp.responsible_id}
-                      onClick={() => { setTarget(emp.responsible_id, ''); setShowAll(true); setAddOpen(false); }}
+                      key={r.id}
+                      onClick={() => {
+                        setPendingEmployees(prev => [...prev, { responsible_id: r.id, full_name: r.full_name, work_position: null, active: true, photo_url: null, target: 0, actual_sales: 0, deal_count: 0 }]);
+                        setTarget(r.id, '');
+                        setShowAll(true);
+                        setAddOpen(false);
+                      }}
                       style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
-                        {initials(emp.full_name)}
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: avatarColor(r.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                        {initials(r.full_name)}
                       </div>
-                      <div>
-                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{emp.full_name}</div>
-                        {emp.work_position && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{emp.work_position}</div>}
-                      </div>
+                      <div style={{ fontWeight: 600, color: 'var(--text)' }}>{r.full_name}</div>
                     </div>
                   ))}
                 </div>

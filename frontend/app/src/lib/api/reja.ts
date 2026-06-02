@@ -121,3 +121,7 @@ export async function saveRejaDistribution(
 export function getRejaProgress(planId: number) {
   return apiGet<RejaProgressResponse>(`/api/reja/plans/${planId}/progress`, {}, API_URL_CRM);
 }
+
+export function listAllResponsibles() {
+  return apiGet<{ id: number; full_name: string }[]>('/api/dashboard/responsibles-list', {}, API_URL_CRM);
+}
