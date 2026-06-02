@@ -270,7 +270,34 @@ function BottomSections({ planId }: { planId: number }) {
     queryFn:  () => getRejaProgress(planId),
   });
 
-  if (isLoading || !data || !data.employees.length) return null;
+  if (isLoading) return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+      {[0,1,2].map(i => (
+        <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px', minHeight: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>Yuklanmoqda…</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (!data || !data.employees.length) return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+      {[
+        "Jamoa bo'yicha progress",
+        "Top 5 xodimlar",
+        "Rejani bajarilish dinamikasi",
+      ].map(title => (
+        <div key={title} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px', minHeight: 280, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+              Maqsadlarni tayinlang va saqlang
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const { employees, subperiods, summary } = data;
   const avgPct = summary.total_target > 0
@@ -630,153 +657,152 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
       </div>
 
       {/* Employee table */}
-      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
 
-
-        {/* Table toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+        {/* Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
               {showAll ? 'Barcha xodimlar' : `Tayinlangan xodimlar (${assignedEmployees.length})`}
             </div>
             <button
               onClick={() => setShowAll(v => !v)}
-              style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.1)' : 'transparent', color: showAll ? '#2563eb' : 'var(--text3)', cursor: 'pointer' }}
+              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
             >
-              {showAll ? '← Faqat tayinlangan' : '+ Xodim qo\'shish'}
+              <Plus size={12} /> {showAll ? 'Tayinlangan' : "Xodim qo'shish"}
             </button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ position: 'relative' }}>
-              <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
+              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
               <input
                 placeholder="Qidiruv…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ paddingLeft: 28, paddingRight: 10, height: 32, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 170 }}
+                style={{ paddingLeft: 30, paddingRight: 12, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }}
               />
             </div>
             <button
               onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
-              title="Rejani o'chirish"
-              style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+              style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
             >
               <Trash2 size={14} />
             </button>
           </div>
         </div>
 
-        {/* Scrollable table body */}
-        <div style={{ overflowX: 'auto' }}>
-
         {/* Column headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '200px 120px 180px 160px 140px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)', minWidth: 890 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 160px 170px 130px 100px', padding: '10px 24px', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
           {[
-            { label: 'XODIM ISMI',                       color: 'var(--text3)' },
-            { label: 'ROLI',                              color: 'var(--text3)' },
-            { label: `REJA (${CURRENCY})`,                color: '#2563eb'      },
-            { label: `FAKTIK SOTUV (${CURRENCY})`,        color: '#16a34a'      },
-            { label: 'QOLDI',                             color: '#d97706'      },
-            { label: 'STATUS',                            color: 'var(--text3)' },
+            { label: 'XODIM ISMI',             color: 'var(--text3)' },
+            { label: 'ROLI',                    color: 'var(--text3)' },
+            { label: `REJA (${CURRENCY})`,      color: '#2563eb'      },
+            { label: `FAKTIK SOTUV (${CURRENCY})`, color: '#16a34a'  },
+            { label: 'QOLDI',                   color: 'var(--text3)' },
+            { label: 'STATUS',                  color: 'var(--text3)' },
           ].map(h => (
-            <div key={h.label} style={{ fontSize: 10, fontWeight: 700, color: h.color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{h.label}</div>
+            <div key={h.label} style={{ fontSize: 10, fontWeight: 700, color: h.color, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{h.label}</div>
           ))}
         </div>
 
         {/* Rows */}
         {filtered.map((emp, i) => {
-          const target     = parseNum(targets[emp.responsible_id] ?? '');
-          const actual     = emp.actual_sales ?? 0;
-          const qoldi      = target - actual;
-          const pct        = totalTarget > 0 ? (target / totalTarget) * 100 : 0;
+          const target      = parseNum(targets[emp.responsible_id] ?? '');
+          const actual      = emp.actual_sales ?? 0;
+          const qoldi       = target - actual;
+          const pct         = totalTarget > 0 ? (target / totalTarget) * 100 : 0;
           const achievedPct = target > 0 ? Math.min(Math.round(actual / target * 100), 999) : 0;
+          const isLast      = i === filtered.length - 1;
 
           return (
             <div
               key={emp.responsible_id}
               style={{
-                display: 'grid', gridTemplateColumns: '200px 120px 180px 160px 140px 90px',
-                padding: '12px 20px', alignItems: 'center',
-                borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
+                display: 'grid', gridTemplateColumns: '1fr 130px 160px 170px 130px 100px',
+                padding: '18px 24px', alignItems: 'center',
+                borderBottom: isLast ? 'none' : '1px solid var(--border)',
               }}
             >
-              {/* Avatar + name */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+              {/* Avatar + name + deal count */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: 10, flexShrink: 0,
+                  background: avatarColor(emp.full_name),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 14, fontWeight: 800, color: '#fff', letterSpacing: '0.03em',
+                }}>
                   {initials(emp.full_name)}
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {emp.full_name}
                   </div>
-                  {emp.deal_count > 0 && (
-                    <div style={{ fontSize: 10.5, color: '#16a34a', marginTop: 1 }}>{emp.deal_count} ta sotuv</div>
-                  )}
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                    {emp.deal_count > 0
+                      ? <span style={{ color: '#16a34a' }}>{emp.deal_count} ta sotuv</span>
+                      : '0 ta sotuv'}
+                  </div>
                 </div>
               </div>
 
               {/* Role */}
-              <div style={{ fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
                 {emp.work_position || '—'}
               </div>
 
-              {/* Target input */}
-              <div style={{ paddingRight: 12 }}>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="number" min={0} step={1000}
-                    value={targets[emp.responsible_id] ?? ''}
-                    onChange={e => setTarget(emp.responsible_id, e.target.value)}
-                    placeholder="0"
-                    style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' }}
-                  />
-                  <span style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', fontSize: 10, fontWeight: 700, color: 'var(--text3)', pointerEvents: 'none' }}>{CURRENCY_SIGN}</span>
-                </div>
-                {pct > 0 && (
-                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>{pct.toFixed(1)}% of total</div>
+              {/* Reja — editable in showAll mode, display otherwise */}
+              <div>
+                {showAll ? (
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number" min={0} step={1000}
+                      value={targets[emp.responsible_id] ?? ''}
+                      onChange={e => setTarget(emp.responsible_id, e.target.value)}
+                      placeholder="0"
+                      style={{ width: '100%', padding: '8px 22px 8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' }}
+                    />
+                    <span style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text3)', pointerEvents: 'none' }}>{CURRENCY_SIGN}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                      {target > 0 ? `${CURRENCY_SIGN}${fmtUZS(target)}` : '—'}
+                    </div>
+                    {pct > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{pct.toFixed(1)}% of total</div>
+                    )}
+                  </>
                 )}
               </div>
 
-              {/* Actual sales */}
+              {/* Faktik sotuv */}
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: actual > 0 ? '#16a34a' : 'var(--text3)' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: actual > 0 ? '#16a34a' : 'var(--text3)' }}>
                   {actual > 0 ? `${CURRENCY_SIGN}${fmtUZS(actual)}` : '—'}
                 </div>
                 {actual > 0 && target > 0 && (
-                  <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.min(achievedPct, 100)}%`, background: achievedPct >= 100 ? '#16a34a' : achievedPct >= 70 ? '#f59e0b' : '#ef4444', borderRadius: 2 }} />
+                  <div style={{ marginTop: 5, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', width: 80 }}>
+                    <div style={{ height: '100%', width: `${Math.min(achievedPct, 100)}%`, background: achievedPct >= 100 ? '#16a34a' : achievedPct >= 60 ? '#f59e0b' : '#ef4444', borderRadius: 2 }} />
                   </div>
                 )}
-                {actual > 0 && target > 0 && (
-                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{achievedPct}% bajarildi</div>
-                )}
               </div>
 
-              {/* Remaining */}
+              {/* Qoldi */}
               <div>
                 {target > 0 ? (
-                  <>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: qoldi <= 0 ? '#16a34a' : 'var(--text)' }}>
-                      {qoldi <= 0 ? `+${CURRENCY_SIGN}${fmtUZS(-qoldi)}` : `${CURRENCY_SIGN}${fmtUZS(qoldi)}`}
-                    </div>
-                    <div style={{ fontSize: 10, color: qoldi <= 0 ? '#16a34a' : 'var(--text3)', marginTop: 2 }}>
-                      {qoldi <= 0 ? 'Oshirildi!' : 'qoldi'}
-                    </div>
-                  </>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: qoldi <= 0 ? '#16a34a' : 'var(--text)' }}>
+                    {qoldi <= 0 ? `+${CURRENCY_SIGN}${fmtUZS(-qoldi)}` : `${CURRENCY_SIGN}${fmtUZS(qoldi)}`}
+                  </div>
                 ) : (
-                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>—</span>
+                  <span style={{ fontSize: 13, color: 'var(--text3)' }}>—</span>
                 )}
               </div>
 
-              {/* Status badge */}
-              <div>
-                <span style={{
-                  fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 5, letterSpacing: '0.03em',
-                  ...(emp.active
-                    ? { background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }
-                    : { background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' }),
-                }}>
-                  {emp.active ? 'ACTIVE' : 'ON LEAVE'}
+              {/* Status — dot + text */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: emp.active ? '#16a34a' : '#d97706', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 500, color: emp.active ? '#16a34a' : '#d97706' }}>
+                  {emp.active ? 'Active' : 'On leave'}
                 </span>
               </div>
             </div>
@@ -784,12 +810,12 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         })}
 
         {filtered.length === 0 && (
-          <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ padding: 48, textAlign: 'center' }}>
             {!hasAnyTarget ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)' }}>Hech kim tayinlanmagan</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
-                  "Teng taqsimlash" tugmasini bosing yoki "+ Xodim qo'shish" orqali qo'lda tayinlang
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text2)' }}>Hech kim tayinlanmagan</div>
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                  "Teng taqsimlash" yoki "+ Xodim qo'shish" tugmasini bosing
                 </div>
               </div>
             ) : (
@@ -797,8 +823,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
             )}
           </div>
         )}
-
-        </div>{/* end scrollable wrapper */}
 
         {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>
