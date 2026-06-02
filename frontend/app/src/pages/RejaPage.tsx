@@ -241,26 +241,6 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
-// ── Team progress donut ────────────────────────────────────────────
-
-function TeamDonut({ pct, size = 140 }: { pct: number; size?: number }) {
-  const r   = (size - 20) / 2;
-  const cx  = size / 2;
-  const circ = 2 * Math.PI * r;
-  const dash = (pct / 100) * circ;
-  return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--border)" strokeWidth={14} />
-      <circle
-        cx={cx} cy={cx} r={r} fill="none"
-        stroke={pct >= 80 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#ef4444'}
-        strokeWidth={14} strokeLinecap="round"
-        strokeDasharray={`${dash} ${circ}`}
-        style={{ transition: 'stroke-dasharray 0.5s ease' }}
-      />
-    </svg>
-  );
-}
 
 
 // ── Distribution view ──────────────────────────────────────────────
