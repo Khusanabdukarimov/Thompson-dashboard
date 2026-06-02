@@ -525,6 +525,15 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const [showAll,      setShowAll]      = useState(false);
   const [totalInput, setTotalInput] = useState('');
   const [editTotal,  setEditTotal]  = useState(false);
+  const [addOpen,    setAddOpen]    = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!addOpen) return;
+    const h = (e: MouseEvent) => { if (!addRef.current?.contains(e.target as Node)) setAddOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [addOpen]);
 
   useEffect(() => {
     if (!data) return;
@@ -548,6 +557,12 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     [employees],
   );
   const hasAnyTarget = assignedEmployees.length > 0;
+
+  // Employees not yet in the plan (for the add dropdown)
+  const unassigned = useMemo(
+    () => employees.filter(e => parseFloat(String(e.target)) === 0 && parseNum(targets[e.responsible_id] ?? '') === 0),
+    [employees, targets],
+  );
 
   // When no targets saved yet → show all employees so user can assign
   // When targets exist → show only assigned by default; toggle shows all
@@ -661,16 +676,49 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
 
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
               {showAll ? 'Barcha xodimlar' : `Tayinlangan xodimlar (${assignedEmployees.length})`}
             </div>
+            {/* Tahrirlash toggle */}
             <button
               onClick={() => setShowAll(v => !v)}
-              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 8, border: '1px solid var(--border)', background: showAll ? 'rgba(37,99,235,0.1)' : 'var(--bg2)', color: showAll ? '#2563eb' : 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
             >
-              <Plus size={12} /> {showAll ? 'Tayinlangan' : "Xodim qo'shish"}
+              {showAll ? 'Yopish' : 'Tahrirlash'}
             </button>
+            {/* Xodim qo'shish — dropdown of unassigned */}
+            <div ref={addRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setAddOpen(v => !v)}
+                style={{ fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <Plus size={12} /> Xodim qo'shish
+              </button>
+              {addOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200, minWidth: 220, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 260, overflowY: 'auto' }}>
+                  {unassigned.length === 0 ? (
+                    <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>Barcha xodimlar tayinlangan</div>
+                  ) : unassigned.map(emp => (
+                    <div
+                      key={emp.responsible_id}
+                      onClick={() => { setTarget(emp.responsible_id, ''); setShowAll(true); setAddOpen(false); }}
+                      style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                        {initials(emp.full_name)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{emp.full_name}</div>
+                        {emp.work_position && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{emp.work_position}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ position: 'relative' }}>
