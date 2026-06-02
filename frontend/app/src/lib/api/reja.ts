@@ -23,6 +23,8 @@ export type RejaEmployee = {
   active: boolean;
   photo_url: string | null;
   target: number;
+  actual_sales: number;
+  deal_count: number;
 };
 
 export type RejaDistributionResponse = {

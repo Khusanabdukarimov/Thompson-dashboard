@@ -222,43 +222,72 @@ router.delete('/plans/:id', async (req, res) => {
 });
 
 // GET /api/reja/plans/:id/distribution
-// Returns all responsibles (active AND inactive) with their current target.
-// active = false means ON LEAVE — frontend shows badge accordingly.
+// Returns all responsibles with their target AND actual won-deal sales for the plan period.
+// active = false → ON LEAVE badge.
 router.get('/plans/:id/distribution', async (req, res) => {
   const planId = parseInt(req.params.id);
   try {
-    const [planRes, empRes] = await Promise.all([
-      pool.query(`
-        SELECT
-          p.*,
-          COUNT(DISTINCT t.responsible_id)::int  AS employee_count,
-          COALESCE(SUM(t.target), 0)::numeric    AS distributed_total
-        FROM reja_plans p
-        LEFT JOIN reja_targets t ON t.plan_id = p.id
-        WHERE p.id = $1
-        GROUP BY p.id
-      `, [planId]),
-
-      // Include both active and inactive responsibles.
-      // Sort: active first, then by name.
-      pool.query(`
-        SELECT
-          r.id                                                          AS responsible_id,
-          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
-          r.work_position,
-          r.active,
-          r.photo_url,
-          COALESCE(t.target, 0)::numeric                               AS target
-        FROM responsibles r
-        LEFT JOIN reja_targets t
-          ON  t.plan_id        = $1
-          AND t.responsible_id = r.id
-        ORDER BY r.active DESC, r.name, r.last_name
-      `, [planId]),
-    ]);
+    const planRes = await pool.query(`
+      SELECT
+        p.*,
+        COUNT(DISTINCT t.responsible_id)::int  AS employee_count,
+        COALESCE(SUM(t.target), 0)::numeric    AS distributed_total
+      FROM reja_plans p
+      LEFT JOIN reja_targets t ON t.plan_id = p.id
+      WHERE p.id = $1
+      GROUP BY p.id
+    `, [planId]);
 
     if (!planRes.rows.length) return res.status(404).json({ error: 'Plan not found' });
-    res.json({ plan: planRes.rows[0], employees: empRes.rows });
+    const plan = planRes.rows[0];
+
+    // All responsibles with their targets.
+    // Sort: assigned (target > 0) first, then by name.
+    const empRes = await pool.query(`
+      SELECT
+        r.id                                                          AS responsible_id,
+        TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+        r.work_position,
+        r.active,
+        r.photo_url,
+        COALESCE(t.target, 0)::numeric                               AS target
+      FROM responsibles r
+      LEFT JOIN reja_targets t
+        ON  t.plan_id        = $1
+        AND t.responsible_id = r.id
+      ORDER BY COALESCE(t.target, 0) DESC, r.active DESC, r.name, r.last_name
+    `, [planId]);
+
+    // Actual won-deal sales per responsible for the plan period.
+    const allIds = empRes.rows.map(r => r.responsible_id);
+    const actualsRes = allIds.length ? await pool.query(`
+      SELECT
+        d.responsible_id,
+        COALESCE(SUM(d.opportunity), 0)::numeric AS actual_sales,
+        COUNT(*)::int                             AS deal_count
+      FROM deals d
+      JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
+      WHERE d.responsible_id = ANY($1)
+        AND d.closedate IS NOT NULL
+        AND d.closedate::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id
+    `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
+
+    const actualsMap = {};
+    for (const row of actualsRes.rows) {
+      actualsMap[row.responsible_id] = {
+        actual_sales: Math.round(parseFloat(row.actual_sales) * 100) / 100,
+        deal_count:   row.deal_count,
+      };
+    }
+
+    const employees = empRes.rows.map(r => ({
+      ...r,
+      actual_sales: actualsMap[r.responsible_id]?.actual_sales ?? 0,
+      deal_count:   actualsMap[r.responsible_id]?.deal_count   ?? 0,
+    }));
+
+    res.json({ plan, employees });
   } catch (err) {
     console.error('[reja/distribution GET]', err.message);
     res.status(500).json({ error: err.message });

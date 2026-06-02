@@ -15,10 +15,15 @@ const MONTH_NAMES = [
   'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr',
 ];
 
-function fmtUZS(n: number): string {
+const CURRENCY = 'USD';
+const CURRENCY_SIGN = '$';
+
+function fmtMoney(n: number): string {
   if (!n && n !== 0) return '0';
   return new Intl.NumberFormat('en-US').format(Math.round(n));
 }
+// keep old name as alias so all call-sites work without rename
+const fmtUZS = fmtMoney;
 
 function parseNum(s: string): number {
   const n = parseFloat(s.replace(/,/g, ''));
@@ -122,7 +127,7 @@ function PlanDropdown({ plans, selected, onSelect, onCreateClick }: {
             >
               <div>{periodLabel(p)}</div>
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                {fmtUZS(p.total_target)} UZS · {p.employee_count} xodim
+                {CURRENCY_SIGN}{fmtUZS(p.total_target)} · {p.employee_count} xodim
               </div>
             </div>
           ))}
@@ -210,7 +215,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
         )}
 
         <div>
-          <span style={lbl}>Umumiy maqsad (UZS)</span>
+          <span style={lbl}>Umumiy maqsad ({CURRENCY})</span>
           <input style={inp} type="text" placeholder="500,000,000" value={totalTarget} onChange={e => setTotalTarget(e.target.value)} required />
         </div>
 
@@ -487,18 +492,19 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const plan      = data?.plan;
   const employees = data?.employees ?? [];
 
-  const [targets,    setTargets]    = useState<Record<number, string>>({});
-  const [search,     setSearch]     = useState('');
-  const [dirty,      setDirty]      = useState(false);
+  const [targets,      setTargets]      = useState<Record<number, string>>({});
+  const [search,       setSearch]       = useState('');
+  const [dirty,        setDirty]        = useState(false);
+  const [showAll,      setShowAll]      = useState(false);
   const [totalInput, setTotalInput] = useState('');
   const [editTotal,  setEditTotal]  = useState(false);
 
   useEffect(() => {
     if (!data) return;
     const map: Record<number, string> = {};
-    for (const e of data.employees) map[e.responsible_id] = e.target > 0 ? String(e.target) : '';
+    for (const e of data.employees) map[e.responsible_id] = e.target > 0 ? String(Math.round(parseFloat(String(e.target)))) : '';
     setTargets(map);
-    setTotalInput(String(data.plan.total_target));
+    setTotalInput(String(Math.round(parseFloat(String(data.plan.total_target)))));
     setDirty(false);
   }, [data]);
 
@@ -509,11 +515,22 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   );
   const remaining = totalTarget - distributed;
 
+  const hasAnyTarget = useMemo(
+    () => employees.some(e => parseNum(targets[e.responsible_id] ?? '') > 0 || e.target > 0),
+    [employees, targets],
+  );
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return employees;
-    const q = search.toLowerCase();
-    return employees.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-  }, [employees, search]);
+    // Show all when: user toggled showAll, OR no targets assigned yet (initial state)
+    let list = (showAll || !hasAnyTarget)
+      ? employees
+      : employees.filter(e => parseNum(targets[e.responsible_id] ?? '') > 0 || e.target > 0);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
+    }
+    return list;
+  }, [employees, search, targets, showAll, hasAnyTarget]);
 
   const saveMutation = useMutation({
     mutationFn: () => saveRejaDistribution(planId, employees.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
@@ -584,11 +601,11 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                     style={{ cursor: item.editable ? 'pointer' : 'default' }}
                   >
                     <span style={{ fontSize: 22, fontWeight: 700, color: item.color ?? 'var(--text)' }}>
-                      {fmtUZS(item.raw)}
+                      {CURRENCY_SIGN}{fmtUZS(item.raw)}
                     </span>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)', marginTop: 2 }}>UZS</div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)', marginTop: 2 }}>{CURRENCY}</div>
                     {overflowed && item.label === 'Qoldiq' && (
-                      <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>Ortiqcha: {fmtUZS(-remaining)}</div>
+                      <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>Ortiqcha: {CURRENCY_SIGN}{fmtUZS(-remaining)}</div>
                     )}
                   </div>
                 )}
@@ -619,9 +636,18 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
 
         {/* Table toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Xodimlar ro'yxati</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Xodimlar ro'yxati</div>
+            {hasAnyTarget && (
+              <button
+                onClick={() => setShowAll(v => !v)}
+                style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.1)' : 'transparent', color: showAll ? '#2563eb' : 'var(--text3)', cursor: 'pointer' }}
+              >
+                {showAll ? 'Faqat tayinlangan' : 'Hammasi'}
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Search */}
             <div style={{ position: 'relative' }}>
               <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
               <input
@@ -631,7 +657,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 style={{ paddingLeft: 28, paddingRight: 10, height: 32, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 170 }}
               />
             </div>
-            {/* Delete plan */}
             <button
               onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
               title="Rejani o'chirish"
@@ -643,63 +668,102 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         </div>
 
         {/* Column headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 1fr 160px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
-          {['XODIM ISMI','ROLI','BIRIKTIRILGAN MAQSAD (UZS)','ULUSHI (%)','STATUS'].map(h => (
-            <div key={h} style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{h}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 160px 130px 130px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+          {[
+            { label: 'XODIM ISMI',                       color: 'var(--text3)' },
+            { label: 'ROLI',                              color: 'var(--text3)' },
+            { label: `REJA (${CURRENCY})`,                color: '#2563eb'      },
+            { label: `FAKTIK SOTUV (${CURRENCY})`,        color: '#16a34a'      },
+            { label: 'QOLDI',                             color: '#d97706'      },
+            { label: 'STATUS',                            color: 'var(--text3)' },
+          ].map(h => (
+            <div key={h.label} style={{ fontSize: 10, fontWeight: 700, color: h.color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{h.label}</div>
           ))}
         </div>
 
         {/* Rows */}
         {filtered.map((emp, i) => {
-          const target = parseNum(targets[emp.responsible_id] ?? '');
-          const pct    = totalTarget > 0 ? (target / totalTarget) * 100 : 0;
+          const target     = parseNum(targets[emp.responsible_id] ?? '');
+          const actual     = emp.actual_sales ?? 0;
+          const qoldi      = target - actual;
+          const pct        = totalTarget > 0 ? (target / totalTarget) * 100 : 0;
+          const achievedPct = target > 0 ? Math.min(Math.round(actual / target * 100), 999) : 0;
 
           return (
             <div
               key={emp.responsible_id}
               style={{
-                display: 'grid', gridTemplateColumns: '1fr 150px 1fr 160px 90px',
-                padding: '13px 20px', alignItems: 'center',
+                display: 'grid', gridTemplateColumns: '1fr 130px 160px 130px 130px 90px',
+                padding: '12px 20px', alignItems: 'center',
                 borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
               }}
             >
               {/* Avatar + name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>
                   {initials(emp.full_name)}
                 </div>
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {emp.full_name}
-                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {emp.full_name}
+                  </div>
+                  {emp.deal_count > 0 && (
+                    <div style={{ fontSize: 10.5, color: '#16a34a', marginTop: 1 }}>{emp.deal_count} ta sotuv</div>
+                  )}
+                </div>
               </div>
 
               {/* Role */}
-              <div style={{ fontSize: 12.5, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {emp.work_position || '—'}
               </div>
 
-              {/* Amount input */}
-              <div style={{ paddingRight: 20 }}>
+              {/* Target input */}
+              <div style={{ paddingRight: 12 }}>
                 <div style={{ position: 'relative' }}>
                   <input
                     type="number" min={0} step={1000}
                     value={targets[emp.responsible_id] ?? ''}
                     onChange={e => setTarget(emp.responsible_id, e.target.value)}
                     placeholder="0"
-                    style={{ width: '100%', padding: '9px 46px 9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' }}
+                    style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' }}
                   />
-                  <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', pointerEvents: 'none' }}>UZS</span>
+                  <span style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', fontSize: 10, fontWeight: 700, color: 'var(--text3)', pointerEvents: 'none' }}>{CURRENCY_SIGN}</span>
                 </div>
+                {pct > 0 && (
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>{pct.toFixed(1)}% of total</div>
+                )}
               </div>
 
-              {/* Share % + bar */}
-              <div style={{ paddingRight: 16 }}>
-                <div style={{ fontSize: 12, color: pct > 0 ? 'var(--text)' : 'var(--text3)', fontWeight: 600, marginBottom: 5 }}>
-                  {pct.toFixed(1)}%
+              {/* Actual sales */}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: actual > 0 ? '#16a34a' : 'var(--text3)' }}>
+                  {actual > 0 ? `${CURRENCY_SIGN}${fmtUZS(actual)}` : '—'}
                 </div>
-                <div style={{ height: 4, borderRadius: 2, background: 'var(--border)' }}>
-                  <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: '#2563eb', borderRadius: 2, transition: 'width 0.15s' }} />
-                </div>
+                {actual > 0 && target > 0 && (
+                  <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(achievedPct, 100)}%`, background: achievedPct >= 100 ? '#16a34a' : achievedPct >= 70 ? '#f59e0b' : '#ef4444', borderRadius: 2 }} />
+                  </div>
+                )}
+                {actual > 0 && target > 0 && (
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{achievedPct}% bajarildi</div>
+                )}
+              </div>
+
+              {/* Remaining */}
+              <div>
+                {target > 0 ? (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: qoldi <= 0 ? '#16a34a' : 'var(--text)' }}>
+                      {qoldi <= 0 ? `+${CURRENCY_SIGN}${fmtUZS(-qoldi)}` : `${CURRENCY_SIGN}${fmtUZS(qoldi)}`}
+                    </div>
+                    <div style={{ fontSize: 10, color: qoldi <= 0 ? '#16a34a' : 'var(--text3)', marginTop: 2 }}>
+                      {qoldi <= 0 ? 'Oshirildi!' : 'qoldi'}
+                    </div>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>—</span>
+                )}
               </div>
 
               {/* Status badge */}
@@ -786,7 +850,7 @@ function ProgressView({ planId }: { planId: number }) {
           <div key={c.label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px 24px' }}>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{c.label}</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: c.color }}>
-              {fmtUZS(c.value)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)' }}>UZS</span>
+              {CURRENCY_SIGN}{fmtUZS(c.value)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)' }}>{CURRENCY}</span>
             </div>
           </div>
         ))}
@@ -833,7 +897,7 @@ function ProgressView({ planId }: { planId: number }) {
 
                   {/* Total target + bar */}
                   <td style={{ padding: '12px 14px', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{fmtUZS(emp.target)}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{CURRENCY_SIGN}{fmtUZS(emp.target)}</div>
                     <div style={{ height: 3, marginTop: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${Math.min((emp.target / maxTarget) * 100, 100)}%`, background: '#2563eb', borderRadius: 2 }} />
                     </div>
@@ -857,10 +921,10 @@ function ProgressView({ planId }: { planId: number }) {
                         background: sp.isCurrent ? 'rgba(37,99,235,0.04)' : 'transparent',
                       }}>
                         {/* Recalculated target (small, grey) */}
-                        <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 3 }}>{fmtUZS(sp.target)}</div>
+                        <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 3 }}>{CURRENCY_SIGN}{fmtUZS(sp.target)}</div>
                         {/* Actual (bold, coloured for past) */}
                         <div style={{ fontSize: 13, fontWeight: 700, color: sp.isPast ? (exceeded ? '#16a34a' : met ? '#d97706' : '#ef4444') : sp.actual > 0 ? '#2563eb' : 'var(--text3)' }}>
-                          {sp.actual > 0 ? fmtUZS(sp.actual) : '—'}
+                          {sp.actual > 0 ? `${CURRENCY_SIGN}${fmtUZS(sp.actual)}` : '—'}
                         </div>
                         {/* Mini bar */}
                         <div style={{ height: 3, marginTop: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
@@ -873,7 +937,7 @@ function ProgressView({ planId }: { planId: number }) {
                   {/* Total actual */}
                   <td style={{ padding: '12px 14px', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: emp.total_actual > 0 ? '#16a34a' : 'var(--text3)' }}>
-                      {fmtUZS(emp.total_actual)}
+                      {CURRENCY_SIGN}{fmtUZS(emp.total_actual)}
                     </div>
                   </td>
 
