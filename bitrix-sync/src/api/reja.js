@@ -255,6 +255,10 @@ router.get('/plans/:id/distribution', async (req, res) => {
       LEFT JOIN reja_targets t
         ON  t.plan_id        = $1
         AND t.responsible_id = r.id
+      WHERE (
+        r.work_position ILIKE '%hunter%'
+        OR r.work_position ILIKE '%closer%'
+      )
       ORDER BY COALESCE(t.target, 0) DESC, r.active DESC, r.name, r.last_name
     `, [planId]);
 
@@ -268,8 +272,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND d.closedate IS NOT NULL
-        AND d.closedate::date BETWEEN $2 AND $3
+        AND COALESCE(d.date_modify, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -382,19 +385,19 @@ router.get('/plans/:id/progress', async (req, res) => {
 
     const respIds = targetsRes.rows.map(r => r.responsible_id);
 
-    // Actuals: sum of won-deal opportunities, grouped by responsible + close date.
-    // Uses closedate (when the deal was won), filtered to the plan period.
+    // Actuals: sum of won-deal opportunities, grouped by responsible + actual win date.
+    // Uses date_modify (automatically updated when stage changes to won) as the win date.
+    // Falls back to date_create if date_modify not yet synced for older records.
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        d.closedate::date        AS close_date,
-        SUM(d.opportunity)::numeric AS amount
+        COALESCE(d.date_modify, d.date_create)::date AS close_date,
+        SUM(d.opportunity)::numeric                   AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND d.closedate IS NOT NULL
-        AND d.closedate::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, d.closedate::date
+        AND COALESCE(d.date_modify, d.date_create)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.date_modify, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build actuals map: { responsible_id: { subperiod_index: total_amount } }

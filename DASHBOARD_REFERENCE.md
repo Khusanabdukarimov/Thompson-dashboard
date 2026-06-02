@@ -899,3 +899,4 @@ const TD = (extra?: CSSProperties): CSSProperties => ({
 - [ ] `CallSubTable` fetches independently inside its own component
 - [ ] Sub-table max-height: `min(64vh, 640px)` with `overscrollBehavior: contain`
 - [ ] `parseISODate()` for timezone-safe date parsing (avoids UTC offset shift)
+r and

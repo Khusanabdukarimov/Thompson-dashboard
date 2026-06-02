@@ -632,6 +632,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
       {/* Employee table */}
       <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
 
+
         {/* Table toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -665,8 +666,11 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
           </div>
         </div>
 
+        {/* Scrollable table body */}
+        <div style={{ overflowX: 'auto' }}>
+
         {/* Column headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '200px 130px 1fr 150px 130px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '200px 120px 180px 160px 140px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)', minWidth: 890 }}>
           {[
             { label: 'XODIM ISMI',                       color: 'var(--text3)' },
             { label: 'ROLI',                              color: 'var(--text3)' },
@@ -691,7 +695,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
             <div
               key={emp.responsible_id}
               style={{
-                display: 'grid', gridTemplateColumns: '200px 130px 1fr 150px 130px 90px',
+                display: 'grid', gridTemplateColumns: '200px 120px 180px 160px 140px 90px',
                 padding: '12px 20px', alignItems: 'center',
                 borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
               }}
@@ -793,6 +797,8 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
             )}
           </div>
         )}
+
+        </div>{/* end scrollable wrapper */}
 
         {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>

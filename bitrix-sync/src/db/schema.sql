@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS deals (
   utm_source      TEXT,
   title           TEXT,
   date_create     TIMESTAMPTZ,
+  date_modify     TIMESTAMPTZ,
   closedate       TIMESTAMPTZ,
   uf_cancel_reason TEXT,
   contact_id      INTEGER,

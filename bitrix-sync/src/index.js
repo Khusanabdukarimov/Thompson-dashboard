@@ -63,7 +63,9 @@ Promise.all([
   pool.query(`
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
-  `).catch(err => console.error('[startup] leads migration failed:', err.message)),
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS date_modify TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS deals_date_modify_idx ON deals(date_modify);
+  `).catch(err => console.error('[startup] leads/deals migration failed:', err.message)),
   rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
 ]).then(() => {
   app.listen(PORT, () => {
