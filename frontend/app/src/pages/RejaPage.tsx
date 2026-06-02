@@ -191,6 +191,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const [totalInput,       setTotalInput]       = useState('');
   const [addOpen,          setAddOpen]          = useState(false);
   const [pendingEmployees, setPendingEmployees] = useState<RejaEmployee[]>([]);
+  const [removedIds,       setRemovedIds]       = useState<Set<number>>(new Set());
   const addRef = useRef<HTMLDivElement>(null);
 
   const allRespQ = useQuery({
@@ -235,11 +236,14 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
 
   // IDs already in plan (from DB or pending)
   const employeeIds = useMemo(
-    () => new Set([...employees.map(e => e.responsible_id), ...pendingEmployees.map(e => e.responsible_id)]),
-    [employees, pendingEmployees],
+    () => new Set([
+      ...employees.filter(e => !removedIds.has(e.responsible_id)).map(e => e.responsible_id),
+      ...pendingEmployees.map(e => e.responsible_id),
+    ]),
+    [employees, pendingEmployees, removedIds],
   );
 
-  // All active responsibles NOT yet in this plan
+  // All active responsibles NOT yet in this plan (or removed from it)
   const unassigned = useMemo(
     () => (allRespQ.data ?? []).filter(r => !employeeIds.has(r.id)),
     [allRespQ.data, employeeIds],
@@ -249,26 +253,33 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   // When targets exist → show only assigned + pending by default; toggle shows all
   const filtered = useMemo(() => {
     const base = (!hasAnyTarget || showAll)
-      ? [...employees, ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))]
-      : [...assignedEmployees, ...pendingEmployees.filter(p => !assignedEmployees.some(e => e.responsible_id === p.responsible_id))];
+      ? [...employees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))]
+      : [...assignedEmployees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !assignedEmployees.some(e => e.responsible_id === p.responsible_id))];
     if (!search.trim()) return base;
     const q = search.toLowerCase();
     return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-  }, [employees, assignedEmployees, pendingEmployees, search, showAll, hasAnyTarget]);
+  }, [employees, assignedEmployees, pendingEmployees, removedIds, search, showAll, hasAnyTarget]);
 
-  // All employees to include in save (existing + newly added pending)
+  // All employees to include in save — removed ones get target=0 (clears them from plan)
   const allForSave = useMemo(
-    () => [...employees, ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))],
+    () => [
+      ...employees,
+      ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id)),
+    ],
     [employees, pendingEmployees],
   );
 
   const saveMutation = useMutation({
-    mutationFn: () => saveRejaDistribution(planId, allForSave.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
+    mutationFn: () => saveRejaDistribution(planId, allForSave.map(e => ({
+      responsible_id: e.responsible_id,
+      target: removedIds.has(e.responsible_id) ? 0 : parseNum(targets[e.responsible_id] ?? ''),
+    }))),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
       qc.invalidateQueries({ queryKey: ['reja/progress', planId] });
       setPendingEmployees([]);
+      setRemovedIds(new Set());
       setDirty(false);
     },
   });
@@ -431,12 +442,14 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 <path d="M15.529 2.857l-1.403-1.404c-0.565-0.566-1.555-0.566-2.122 0l-9.057 9.058-1.722 5.288 5.248-1.765 9.055-9.056c0.586-0.584 0.586-1.536 0.001-2.121zM3.094 13.294l0.645-1.979 1.934 1.935-1.963 0.66-0.616-0.616zM4.355 10.518l5.493-5.493 2.111 2.11-5.494 5.494-2.11-2.111zM10.555 4.317l0.729-0.729 2.111 2.11-0.729 0.729-2.111-2.11zM14.822 4.271l-0.72 0.72-2.111-2.11 0.72-0.721c0.189-0.189 0.518-0.189 0.707 0l1.403 1.404c0.196 0.196 0.196 0.512 0.001 0.707z" fill={showAll ? '#2563eb' : 'var(--text2)'} />
               </svg>
             </button>
-            <button
-              onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
-              style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
-            >
-              <Trash2 size={14} />
-            </button>
+            {showAll && (
+              <button
+                onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
+                style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -557,7 +570,10 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                   <button
                     type="button"
                     title="Olib tashlash"
-                    onClick={() => { setTarget(emp.responsible_id, ''); }}
+                    onClick={() => {
+                      setRemovedIds(prev => new Set([...prev, emp.responsible_id]));
+                      setDirty(true);
+                    }}
                     style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.7, flexShrink: 0 }}
                   >
                     <Trash2 size={12} />
