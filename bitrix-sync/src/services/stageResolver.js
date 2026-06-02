@@ -1,5 +1,5 @@
 const pool = require('../db/pool');
-const { fetchAll } = require('./bitrix');
+const { bitrixCall } = require('./bitrix');
 
 // In-memory cache: "lead:NEW" → stages.id (integer)
 const _cache = new Map();
@@ -69,12 +69,15 @@ function invalidate() {
  */
 async function syncDealStagesFromBitrix() {
   try {
-    // Get all custom pipelines (category 0 = default is handled separately)
-    const categories = await fetchAll('crm.dealcategory.list');
+    // Get all custom pipelines; category 0 = default pipeline
+    const catRes = await bitrixCall('crm.dealcategory.list', {});
+    const categories = catRes.result || [];
     const categoryIds = [0, ...categories.map(c => parseInt(c.ID))];
 
     for (const catId of categoryIds) {
-      const stages = await fetchAll('crm.dealcategory.stage.list', { id: catId });
+      // id must be a top-level param — do NOT use fetchAll (it wraps as filter[id])
+      const stagesRes = await bitrixCall('crm.dealcategory.stage.list', { id: catId });
+      const stages = stagesRes.result || [];
       for (const s of stages) {
         // SEMANTICS: 'S' = won, 'F' = lost, '' = in-progress
         const isWon   = s.SEMANTICS === 'S';
