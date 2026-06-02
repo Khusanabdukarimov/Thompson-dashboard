@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, Trash2, ChevronDown, Scale, CheckCircle2, BarChart3, Settings2, X } from 'lucide-react';
+import { Search, Plus, Trash2, ChevronDown, Scale, CheckCircle2, BarChart3, X } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, createRejaPlan, updateRejaPlan, deleteRejaPlan,
@@ -549,7 +549,11 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     () => employees.reduce((s, e) => s + parseNum(targets[e.responsible_id] ?? ''), 0),
     [targets, employees],
   );
-  const remaining = totalTarget - distributed;
+  const remaining    = totalTarget - distributed;
+  const totalActual  = useMemo(
+    () => employees.reduce((s, e) => s + (e.actual_sales ?? 0), 0),
+    [employees],
+  );
 
   // Employees with a saved target (from DB) — shown by default
   const assignedEmployees = useMemo(
@@ -619,10 +623,11 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         {/* Stats card */}
         <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 32px' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 28 }}>Maqsadlarni taqsimlash</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
             {[
               { label: 'Umumiy maqsad', raw: totalTarget, editable: true },
               { label: 'Taqsimlangan',  raw: distributed,  color: distributed > 0 ? '#2563eb' : undefined },
+              { label: 'Bajarildi',     raw: totalActual,  color: totalActual > 0 ? '#16a34a' : undefined },
               { label: 'Qoldiq',        raw: Math.abs(remaining), color: overflowed ? '#ef4444' : undefined },
             ].map((item, i) => (
               <div key={i} style={{ paddingLeft: i > 0 ? 24 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
@@ -913,7 +918,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         </div>
       </div>
 
-      <BottomSections planId={planId} />
     </div>
   );
 }
@@ -926,43 +930,18 @@ function ProgressView({ planId }: { planId: number }) {
     queryFn:  () => getRejaProgress(planId),
   });
 
-  if (isLoading) return <div style={{ padding: 56, textAlign: 'center', color: 'var(--text3)' }}>Yuklanmoqda…</div>;
+  if (isLoading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)' }}>Yuklanmoqda…</div>;
   if (!data) return null;
 
-  const { plan, subperiods, employees, summary } = data;
-  if (!employees.length) return <div style={{ padding: 56, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>Avval maqsadlarni taqsimlang</div>;
+  const { plan, subperiods, employees } = data;
+  if (!employees.length) return null;
 
   const maxTarget = Math.max(...employees.map(e => e.target), 1);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 24px 96px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 24px 96px' }}>
 
-      {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-        {[
-          { label: 'Jami reja',  value: summary.total_target, color: '#2563eb' },
-          { label: 'Bajarildi', value: summary.total_actual,  color: '#16a34a' },
-          { label: 'Qoldi',     value: Math.max(0, summary.total_target - summary.total_actual), color: 'var(--text)' },
-        ].map(c => (
-          <div key={c.label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px 24px' }}>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{c.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: c.color }}>
-              {CURRENCY_SIGN}{fmtUZS(c.value)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)' }}>{CURRENCY}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Overall progress bar */}
-      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{periodLabel(plan)} – umumiy bajarilish</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: summary.pct >= 100 ? '#16a34a' : summary.pct >= 70 ? '#d97706' : '#ef4444' }}>{summary.pct}%</div>
-        </div>
-        <div style={{ height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(summary.pct, 100)}%`, borderRadius: 4, transition: 'width 0.3s', background: summary.pct >= 100 ? '#16a34a' : summary.pct >= 70 ? '#f59e0b' : '#2563eb' }} />
-        </div>
-      </div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', paddingTop: 4 }}>Bajarilish jadvali</div>
 
       {/* Per-employee table with sub-periods */}
       <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
@@ -1063,7 +1042,6 @@ function ProgressView({ planId }: { planId: number }) {
 export default function RejaPage() {
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
   const [showCreate,   setShowCreate]   = useState(false);
-  const [view, setView]                 = useState<'distribution' | 'progress'>('distribution');
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
@@ -1081,27 +1059,9 @@ export default function RejaPage() {
             <PlanDropdown
               plans={plans}
               selected={selectedPlan}
-              onSelect={p => { setSelectedPlan(p); setView('distribution'); }}
+              onSelect={p => setSelectedPlan(p)}
               onCreateClick={() => setShowCreate(true)}
             />
-
-            {selectedPlan && (
-              <div style={{ display: 'flex', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                {([
-                  { id: 'distribution', icon: Settings2, label: 'Taqsimlash' },
-                  { id: 'progress',     icon: BarChart3,  label: 'Progress'   },
-                ] as const).map((tab, i) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setView(tab.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 0, borderRight: i === 0 ? '1px solid var(--border)' : 'none', background: view === tab.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: view === tab.id ? '#2563eb' : 'var(--text2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    <tab.icon size={13} /> {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
             <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <Plus size={14} /> Yangi reja
             </button>
@@ -1118,17 +1078,18 @@ export default function RejaPage() {
               <Plus size={15} /> Birinchi rejani yarating
             </button>
           </div>
-        ) : view === 'distribution' ? (
-          <DistributionView planId={selectedPlan.id} onDeleted={() => setSelectedPlan(null)} />
         ) : (
-          <ProgressView planId={selectedPlan.id} />
+          <>
+            <DistributionView planId={selectedPlan.id} onDeleted={() => setSelectedPlan(null)} />
+            <ProgressView planId={selectedPlan.id} />
+          </>
         )}
       </div>
 
       {showCreate && (
         <CreatePlanModal
           onClose={() => setShowCreate(false)}
-          onCreated={plan => { setSelectedPlan(plan); setView('distribution'); setShowCreate(false); }}
+          onCreated={plan => { setSelectedPlan(plan); setShowCreate(false); }}
         />
       )}
     </div>
