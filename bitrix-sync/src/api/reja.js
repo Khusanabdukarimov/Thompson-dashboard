@@ -1,7 +1,18 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { syncDealStagesFromBitrix } = require('../services/stageResolver');
 
 const router = Router();
+
+// POST /api/reja/sync-stages  — one-time manual fix for is_won flags
+router.post('/sync-stages', async (_req, res) => {
+  try {
+    await syncDealStagesFromBitrix();
+    res.json({ ok: true, message: 'stages synced from Bitrix' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── Schema (runs once at module load via index.js startup hook) ────
 async function ensureSchema() {
