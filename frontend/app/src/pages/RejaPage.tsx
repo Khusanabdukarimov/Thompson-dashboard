@@ -1,4 +1,736 @@
-import Placeholder from "./Placeholder";
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Search, Plus, Trash2, ChevronDown, Scale, CheckCircle2, BarChart3, Settings2, X } from 'lucide-react';
+import { Topbar } from '@/components/Topbar';
+import {
+  getRejaPlans, createRejaPlan, updateRejaPlan, deleteRejaPlan,
+  getRejaDistribution, saveRejaDistribution, getRejaProgress,
+  type RejaPlan, type PeriodType,
+} from '@/lib/api/reja';
+
+// ── Helpers ───────────────────────────────────────────────────────
+
+const MONTH_NAMES = [
+  'Yanvar','Fevral','Mart','Aprel','May','Iyun',
+  'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr',
+];
+
+function fmtUZS(n: number): string {
+  if (!n && n !== 0) return '0';
+  return new Intl.NumberFormat('en-US').format(Math.round(n));
+}
+
+function parseNum(s: string): number {
+  const n = parseFloat(s.replace(/,/g, ''));
+  return isNaN(n) ? 0 : Math.max(0, n);
+}
+
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function periodLabel(plan: RejaPlan): string {
+  const d = new Date(plan.period_start);
+  if (plan.period_type === 'monthly') return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  return `${d.getFullYear()} – ${q}-kvartal`;
+}
+
+function monthStartEnd(year: number, month: number) {
+  return {
+    start: localISO(new Date(year, month, 1)),
+    end:   localISO(new Date(year, month + 1, 0)),
+  };
+}
+
+function quarterStartEnd(year: number, quarter: number) {
+  const m = (quarter - 1) * 3;
+  return {
+    start: localISO(new Date(year, m, 1)),
+    end:   localISO(new Date(year, m + 3, 0)),
+  };
+}
+
+const AVATAR_COLORS = [
+  '#2196F3','#E91E63','#9C27B0','#00BCD4','#FF9800',
+  '#4CAF50','#FF5722','#3F51B5','#009688','#795548',
+];
+
+function avatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function initials(name: string): string {
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (p[0]?.[0] ?? '?').toUpperCase();
+}
+
+// ── Plan dropdown ──────────────────────────────────────────────────
+
+function PlanDropdown({ plans, selected, onSelect, onCreateClick }: {
+  plans: RejaPlan[];
+  selected: RejaPlan | null;
+  onSelect: (p: RejaPlan) => void;
+  onCreateClick: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+          borderRadius: 8, border: `1px solid ${open ? '#2563eb' : 'var(--border)'}`,
+          background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600,
+          cursor: 'pointer', minWidth: 200,
+        }}
+      >
+        <span style={{ flex: 1, textAlign: 'left' }}>{selected ? periodLabel(selected) : 'Reja tanlang…'}</span>
+        <ChevronDown size={14} color="var(--text3)" />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 200, minWidth: 240,
+          background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', overflow: 'hidden',
+        }}>
+          {plans.length === 0 && (
+            <div style={{ padding: '12px 14px', color: 'var(--text3)', fontSize: 12 }}>Rejalar mavjud emas</div>
+          )}
+          {plans.map(p => (
+            <div
+              key={p.id}
+              onClick={() => { onSelect(p); setOpen(false); }}
+              style={{
+                padding: '10px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                background: selected?.id === p.id ? 'rgba(37,99,235,0.1)' : 'transparent',
+                color: selected?.id === p.id ? '#2563eb' : 'var(--text)',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              <div>{periodLabel(p)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                {fmtUZS(p.total_target)} UZS · {p.employee_count} xodim
+              </div>
+            </div>
+          ))}
+          <div
+            onClick={() => { setOpen(false); onCreateClick(); }}
+            style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Plus size={14} /> Yangi reja
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Create plan modal ──────────────────────────────────────────────
+
+function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: RejaPlan) => void }) {
+  const now = new Date();
+  const [periodType, setPeriodType] = useState<PeriodType>('monthly');
+  const [year,    setYear]    = useState(now.getFullYear());
+  const [month,   setMonth]   = useState(now.getMonth());
+  const [quarter, setQuarter] = useState(Math.floor(now.getMonth() / 3) + 1);
+  const [totalTarget, setTotalTarget] = useState('');
+  const [name, setName] = useState('');
+  const qc = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: createRejaPlan,
+    onSuccess: (plan) => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onCreated(plan); },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const { start, end } = periodType === 'monthly'
+      ? monthStartEnd(year, month)
+      : quarterStartEnd(year, quarter);
+    mutation.mutate({ name: name || undefined, period_type: periodType, period_start: start, period_end: end, total_target: parseNum(totalTarget) });
+  }
+
+  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box' };
+  const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5, display: 'block' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <button onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', border: 0, cursor: 'default' }} />
+      <form onSubmit={handleSubmit} style={{ position: 'relative', background: 'var(--bg)', borderRadius: 14, padding: '28px', width: 420, boxShadow: '0 20px 48px rgba(0,0,0,0.3)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Yangi reja yaratish</div>
+          <button type="button" onClick={onClose} style={{ border: 0, background: 'transparent', color: 'var(--text2)', cursor: 'pointer', padding: 4 }}><X size={18} /></button>
+        </div>
+
+        <div>
+          <span style={lbl}>Davr turi</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {(['monthly', 'quarterly'] as PeriodType[]).map(t => (
+              <button key={t} type="button" onClick={() => setPeriodType(t)} style={{ padding: '9px 0', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `1px solid ${periodType === t ? '#2563eb' : 'var(--border)'}`, background: periodType === t ? 'rgba(37,99,235,0.1)' : 'var(--bg3)', color: periodType === t ? '#2563eb' : 'var(--text2)' }}>
+                {t === 'monthly' ? 'Oylik' : 'Kvartal'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <span style={lbl}>Yil</span>
+          <select value={year} onChange={e => setYear(+e.target.value)} style={inp}>
+            {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        {periodType === 'monthly' ? (
+          <div>
+            <span style={lbl}>Oy</span>
+            <select value={month} onChange={e => setMonth(+e.target.value)} style={inp}>
+              {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div>
+            <span style={lbl}>Kvartal</span>
+            <select value={quarter} onChange={e => setQuarter(+e.target.value)} style={inp}>
+              {[1,2,3,4].map(q => <option key={q} value={q}>{q}-kvartal</option>)}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <span style={lbl}>Umumiy maqsad (UZS)</span>
+          <input style={inp} type="text" placeholder="500,000,000" value={totalTarget} onChange={e => setTotalTarget(e.target.value)} required />
+        </div>
+
+        <div>
+          <span style={lbl}>Nom (ixtiyoriy)</span>
+          <input style={inp} type="text" placeholder="Savdo rejasi…" value={name} onChange={e => setName(e.target.value)} />
+        </div>
+
+        {mutation.isError && (
+          <div style={{ fontSize: 12, color: '#ef4444', background: '#ef444414', borderRadius: 6, padding: '8px 10px' }}>
+            Xatolik: {(mutation.error as Error).message}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={onClose} style={{ flex: 1, padding: '10px', border: '1px solid var(--border)', background: 'var(--bg2)', borderRadius: 8, color: 'var(--text2)', fontSize: 13, cursor: 'pointer' }}>Bekor</button>
+          <button type="submit" disabled={mutation.isPending} style={{ flex: 2, padding: '10px', border: 0, background: '#1d4ed8', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: mutation.isPending ? 0.7 : 1 }}>
+            {mutation.isPending ? 'Saqlanmoqda…' : 'Yaratish'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── Distribution view ──────────────────────────────────────────────
+
+function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: () => void }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['reja/distribution', planId],
+    queryFn:  () => getRejaDistribution(planId),
+  });
+
+  const plan      = data?.plan;
+  const employees = data?.employees ?? [];
+
+  const [targets,    setTargets]    = useState<Record<number, string>>({});
+  const [search,     setSearch]     = useState('');
+  const [dirty,      setDirty]      = useState(false);
+  const [totalInput, setTotalInput] = useState('');
+  const [editTotal,  setEditTotal]  = useState(false);
+
+  useEffect(() => {
+    if (!data) return;
+    const map: Record<number, string> = {};
+    for (const e of data.employees) map[e.responsible_id] = e.target > 0 ? String(e.target) : '';
+    setTargets(map);
+    setTotalInput(String(data.plan.total_target));
+    setDirty(false);
+  }, [data]);
+
+  const totalTarget  = plan?.total_target ?? 0;
+  const distributed  = useMemo(
+    () => employees.reduce((s, e) => s + parseNum(targets[e.responsible_id] ?? ''), 0),
+    [targets, employees],
+  );
+  const remaining = totalTarget - distributed;
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return employees;
+    const q = search.toLowerCase();
+    return employees.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
+  }, [employees, search]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => saveRejaDistribution(planId, employees.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
+      qc.invalidateQueries({ queryKey: ['reja/plans'] });
+      qc.invalidateQueries({ queryKey: ['reja/progress', planId] });
+      setDirty(false);
+    },
+  });
+
+  const updateTotalMutation = useMutation({
+    mutationFn: (v: number) => updateRejaPlan(planId, { total_target: v }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); setEditTotal(false); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteRejaPlan(planId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onDeleted(); },
+  });
+
+  function distributeEqually() {
+    const active = employees.filter(e => e.active);
+    if (!active.length || !totalTarget) return;
+    const share     = Math.floor(totalTarget / active.length);
+    const remainder = totalTarget - share * active.length;
+    const map: Record<number, string> = {};
+    active.forEach((e, i) => { map[e.responsible_id] = String(i === 0 ? share + remainder : share); });
+    setTargets(prev => ({ ...prev, ...map }));
+    setDirty(true);
+  }
+
+  function setTarget(id: number, val: string) { setTargets(prev => ({ ...prev, [id]: val })); setDirty(true); }
+
+  if (isLoading) return <div style={{ padding: 56, textAlign: 'center', color: 'var(--text3)' }}>Yuklanmoqda…</div>;
+
+  const activeCount = employees.filter(e => e.active).length;
+  const overflowed  = remaining < 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 24px 96px' }}>
+
+      {/* Top row: stats + quick action */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'stretch' }}>
+
+        {/* Stats card */}
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 32px' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 28 }}>Maqsadlarni taqsimlash</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }}>
+            {[
+              { label: 'Umumiy maqsad', raw: totalTarget, editable: true },
+              { label: 'Taqsimlangan',  raw: distributed,  color: distributed > 0 ? '#2563eb' : undefined },
+              { label: 'Qoldiq',        raw: Math.abs(remaining), color: overflowed ? '#ef4444' : undefined },
+            ].map((item, i) => (
+              <div key={i} style={{ paddingLeft: i > 0 ? 24 : 0, borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>{item.label}</div>
+
+                {item.editable && editTotal ? (
+                  <form onSubmit={e => { e.preventDefault(); updateTotalMutation.mutate(parseNum(totalInput)); }} style={{ display: 'flex', gap: 6 }}>
+                    <input autoFocus value={totalInput} onChange={e => setTotalInput(e.target.value)}
+                      style={{ width: 140, padding: '6px 8px', borderRadius: 6, border: '1px solid #2563eb', background: 'var(--bg2)', color: 'var(--text)', fontSize: 15, fontWeight: 700, outline: 'none' }} />
+                    <button type="submit" style={{ padding: '6px 10px', borderRadius: 6, border: 0, background: '#2563eb', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>✓</button>
+                    <button type="button" onClick={() => setEditTotal(false)} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 12, cursor: 'pointer' }}>✕</button>
+                  </form>
+                ) : (
+                  <div
+                    onClick={() => item.editable && setEditTotal(true)}
+                    style={{ cursor: item.editable ? 'pointer' : 'default' }}
+                  >
+                    <span style={{ fontSize: 22, fontWeight: 700, color: item.color ?? 'var(--text)' }}>
+                      {fmtUZS(item.raw)}
+                    </span>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)', marginTop: 2 }}>UZS</div>
+                    {overflowed && item.label === 'Qoldiq' && (
+                      <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>Ortiqcha: {fmtUZS(-remaining)}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tezkor taqsimot */}
+        <div style={{ background: 'linear-gradient(135deg, #1d3a8a 0%, #1d4ed8 100%)', borderRadius: 14, padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ fontSize: 26 }}>✨</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Tezkor Taqsimot</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', lineHeight: 1.6 }}>
+            Barcha faol xodimlar orasida maqsadni teng miqdorda taqsimlang.
+          </div>
+          <button
+            type="button"
+            onClick={distributeEqually}
+            style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 16px', borderRadius: 9, border: 0, background: '#fff', color: '#1d3a8a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          >
+            <Scale size={15} /> Teng taqsimlash
+          </button>
+        </div>
+      </div>
+
+      {/* Employee table */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+
+        {/* Table toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Xodimlar ro'yxati</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
+              <input
+                placeholder="Qidiruv…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ paddingLeft: 28, paddingRight: 10, height: 32, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 170 }}
+              />
+            </div>
+            {/* Delete plan */}
+            <button
+              onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
+              title="Rejani o'chirish"
+              style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Column headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 1fr 160px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+          {['XODIM ISMI','ROLI','BIRIKTIRILGAN MAQSAD (UZS)','ULUSHI (%)','STATUS'].map(h => (
+            <div key={h} style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{h}</div>
+          ))}
+        </div>
+
+        {/* Rows */}
+        {filtered.map((emp, i) => {
+          const target = parseNum(targets[emp.responsible_id] ?? '');
+          const pct    = totalTarget > 0 ? (target / totalTarget) * 100 : 0;
+
+          return (
+            <div
+              key={emp.responsible_id}
+              style={{
+                display: 'grid', gridTemplateColumns: '1fr 150px 1fr 160px 90px',
+                padding: '13px 20px', alignItems: 'center',
+                borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
+              }}
+            >
+              {/* Avatar + name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                  {initials(emp.full_name)}
+                </div>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {emp.full_name}
+                </span>
+              </div>
+
+              {/* Role */}
+              <div style={{ fontSize: 12.5, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {emp.work_position || '—'}
+              </div>
+
+              {/* Amount input */}
+              <div style={{ paddingRight: 20 }}>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="number" min={0} step={1000}
+                    value={targets[emp.responsible_id] ?? ''}
+                    onChange={e => setTarget(emp.responsible_id, e.target.value)}
+                    placeholder="0"
+                    style={{ width: '100%', padding: '9px 46px 9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' }}
+                  />
+                  <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, fontWeight: 600, color: 'var(--text3)', pointerEvents: 'none' }}>UZS</span>
+                </div>
+              </div>
+
+              {/* Share % + bar */}
+              <div style={{ paddingRight: 16 }}>
+                <div style={{ fontSize: 12, color: pct > 0 ? 'var(--text)' : 'var(--text3)', fontWeight: 600, marginBottom: 5 }}>
+                  {pct.toFixed(1)}%
+                </div>
+                <div style={{ height: 4, borderRadius: 2, background: 'var(--border)' }}>
+                  <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: '#2563eb', borderRadius: 2, transition: 'width 0.15s' }} />
+                </div>
+              </div>
+
+              {/* Status badge */}
+              <div>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 5, letterSpacing: '0.03em',
+                  ...(emp.active
+                    ? { background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }
+                    : { background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' }),
+                }}>
+                  {emp.active ? 'ACTIVE' : 'ON LEAVE'}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        {filtered.length === 0 && (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Xodim topilmadi</div>
+        )}
+
+        {/* Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>
+          {/* Avatar stack + count */}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {employees.slice(0, 4).map((e, i) => (
+              <div key={e.responsible_id} style={{ width: 28, height: 28, borderRadius: '50%', marginLeft: i > 0 ? -8 : 0, background: avatarColor(e.full_name), border: '2px solid var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', position: 'relative', zIndex: 4 - i }}>
+                {initials(e.full_name)}
+              </div>
+            ))}
+            {activeCount > 4 && (
+              <div style={{ width: 28, height: 28, borderRadius: '50%', marginLeft: -8, background: 'var(--bg3)', border: '2px solid var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text2)' }}>
+                +{activeCount - 4}
+              </div>
+            )}
+            <span style={{ marginLeft: 14, fontSize: 13, color: 'var(--text2)' }}>
+              Jami <strong>{activeCount}</strong> ta faol xodim tanlangan
+            </span>
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !dirty}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 9, border: 0, fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default', transition: 'all 0.15s', background: dirty ? '#1d4ed8' : 'var(--bg3)', color: dirty ? '#fff' : 'var(--text3)' }}
+          >
+            <CheckCircle2 size={15} />
+            {saveMutation.isPending ? 'Saqlanmoqda…' : 'Maqsadlarni tasdiqlash'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Progress view ──────────────────────────────────────────────────
+
+function ProgressView({ planId }: { planId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['reja/progress', planId],
+    queryFn:  () => getRejaProgress(planId),
+  });
+
+  if (isLoading) return <div style={{ padding: 56, textAlign: 'center', color: 'var(--text3)' }}>Yuklanmoqda…</div>;
+  if (!data) return null;
+
+  const { plan, subperiods, employees, summary } = data;
+  if (!employees.length) return <div style={{ padding: 56, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>Avval maqsadlarni taqsimlang</div>;
+
+  const maxTarget = Math.max(...employees.map(e => e.target), 1);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 24px 96px' }}>
+
+      {/* Summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+        {[
+          { label: 'Jami reja',  value: summary.total_target, color: '#2563eb' },
+          { label: 'Bajarildi', value: summary.total_actual,  color: '#16a34a' },
+          { label: 'Qoldi',     value: Math.max(0, summary.total_target - summary.total_actual), color: 'var(--text)' },
+        ].map(c => (
+          <div key={c.label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px 24px' }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{c.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: c.color }}>
+              {fmtUZS(c.value)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text3)' }}>UZS</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Overall progress bar */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{periodLabel(plan)} – umumiy bajarilish</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: summary.pct >= 100 ? '#16a34a' : summary.pct >= 70 ? '#d97706' : '#ef4444' }}>{summary.pct}%</div>
+        </div>
+        <div style={{ height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.min(summary.pct, 100)}%`, borderRadius: 4, transition: 'width 0.3s', background: summary.pct >= 100 ? '#16a34a' : summary.pct >= 70 ? '#f59e0b' : '#2563eb' }} />
+        </div>
+      </div>
+
+      {/* Per-employee table with sub-periods */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg2)' }}>
+                <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', position: 'sticky', left: 0, background: 'var(--bg2)', zIndex: 2, minWidth: 180 }}>Xodim</th>
+                <th style={{ padding: '11px 14px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', minWidth: 130 }}>Reja</th>
+                {subperiods.map(sp => (
+                  <th key={sp.index} style={{ padding: '11px 14px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', minWidth: 110 }}>{sp.label}</th>
+                ))}
+                <th style={{ padding: '11px 14px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', minWidth: 130 }}>Bajarildi</th>
+                <th style={{ padding: '11px 14px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', minWidth: 70 }}>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((emp, i) => (
+                <tr key={emp.responsible_id} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.012)' }}>
+                  {/* Name */}
+                  <td style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', position: 'sticky', left: 0, background: 'var(--bg)', zIndex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                        {initials(emp.full_name)}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{emp.full_name}</span>
+                    </div>
+                  </td>
+
+                  {/* Total target + bar */}
+                  <td style={{ padding: '12px 14px', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{fmtUZS(emp.target)}</div>
+                    <div style={{ height: 3, marginTop: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min((emp.target / maxTarget) * 100, 100)}%`, background: '#2563eb', borderRadius: 2 }} />
+                    </div>
+                  </td>
+
+                  {/* Sub-period columns */}
+                  {emp.subperiods.map(sp => {
+                    const met      = sp.actual >= sp.target * 0.9;
+                    const exceeded = sp.actual > sp.target;
+                    const barColor = sp.isPast
+                      ? exceeded ? '#16a34a' : met ? '#f59e0b' : '#ef4444'
+                      : '#2563eb';
+                    const barW = sp.target > 0 ? Math.min((sp.actual / sp.target) * 100, 100) : 0;
+
+                    return (
+                      <td key={sp.index} style={{
+                        padding: '10px 14px', textAlign: 'center',
+                        borderBottom: '1px solid var(--border)',
+                        borderLeft: sp.isCurrent ? '2px solid rgba(37,99,235,0.35)' : '1px solid var(--border)',
+                        borderRight: sp.isCurrent ? '2px solid rgba(37,99,235,0.35)' : 'none',
+                        background: sp.isCurrent ? 'rgba(37,99,235,0.04)' : 'transparent',
+                      }}>
+                        {/* Recalculated target (small, grey) */}
+                        <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 3 }}>{fmtUZS(sp.target)}</div>
+                        {/* Actual (bold, coloured for past) */}
+                        <div style={{ fontSize: 13, fontWeight: 700, color: sp.isPast ? (exceeded ? '#16a34a' : met ? '#d97706' : '#ef4444') : sp.actual > 0 ? '#2563eb' : 'var(--text3)' }}>
+                          {sp.actual > 0 ? fmtUZS(sp.actual) : '—'}
+                        </div>
+                        {/* Mini bar */}
+                        <div style={{ height: 3, marginTop: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barW}%`, background: barColor, borderRadius: 2 }} />
+                        </div>
+                      </td>
+                    );
+                  })}
+
+                  {/* Total actual */}
+                  <td style={{ padding: '12px 14px', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: emp.total_actual > 0 ? '#16a34a' : 'var(--text3)' }}>
+                      {fmtUZS(emp.total_actual)}
+                    </div>
+                  </td>
+
+                  {/* % badge */}
+                  <td style={{ padding: '12px 14px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 8px', borderRadius: 5, background: emp.pct >= 100 ? '#dcfce7' : emp.pct >= 70 ? '#fef9c3' : 'rgba(239,68,68,0.1)', color: emp.pct >= 100 ? '#166534' : emp.pct >= 70 ? '#854d0e' : '#ef4444' }}>
+                      {emp.pct}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6 }}>
+        * Har bir tugallangan davr uchun asl natija hisobga olinadi. Qolgan davrlar uchun maqsad = (jami reja − o'tgan davrlar summasi) / qolgan davrlar soni.
+      </div>
+    </div>
+  );
+}
+
+// ── Page root ──────────────────────────────────────────────────────
+
 export default function RejaPage() {
-  return <Placeholder title="Reja" sub="5-qadam: tez orada quriladi" />;
+  const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
+  const [showCreate,   setShowCreate]   = useState(false);
+  const [view, setView]                 = useState<'distribution' | 'progress'>('distribution');
+
+  const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
+  const plans  = plansQ.data ?? [];
+
+  useEffect(() => {
+    if (!selectedPlan && plans.length > 0) setSelectedPlan(plans[0]);
+  }, [plans, selectedPlan]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden', background: 'var(--bg2)' }}>
+      <Topbar
+        title="Savdo Boshqaruvi"
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <PlanDropdown
+              plans={plans}
+              selected={selectedPlan}
+              onSelect={p => { setSelectedPlan(p); setView('distribution'); }}
+              onCreateClick={() => setShowCreate(true)}
+            />
+
+            {selectedPlan && (
+              <div style={{ display: 'flex', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                {([
+                  { id: 'distribution', icon: Settings2, label: 'Taqsimlash' },
+                  { id: 'progress',     icon: BarChart3,  label: 'Progress'   },
+                ] as const).map((tab, i) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setView(tab.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 0, borderRight: i === 0 ? '1px solid var(--border)' : 'none', background: view === tab.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: view === tab.id ? '#2563eb' : 'var(--text2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    <tab.icon size={13} /> {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!selectedPlan && (
+              <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <Plus size={14} /> Yangi reja
+              </button>
+            )}
+          </div>
+        }
+      />
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {!selectedPlan ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60%', gap: 16, color: 'var(--text3)' }}>
+            <BarChart3 size={48} strokeWidth={1} />
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>Hali reja yaratilmagan</div>
+            <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              <Plus size={15} /> Birinchi rejani yarating
+            </button>
+          </div>
+        ) : view === 'distribution' ? (
+          <DistributionView planId={selectedPlan.id} onDeleted={() => setSelectedPlan(null)} />
+        ) : (
+          <ProgressView planId={selectedPlan.id} />
+        )}
+      </div>
+
+      {showCreate && (
+        <CreatePlanModal
+          onClose={() => setShowCreate(false)}
+          onCreated={plan => { setSelectedPlan(plan); setView('distribution'); setShowCreate(false); }}
+        />
+      )}
+    </div>
+  );
 }

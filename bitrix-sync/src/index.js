@@ -15,6 +15,7 @@ const taskDeleted  = require('./webhooks/taskDeleted');
 const dashboardRouter                    = require('./api/dashboard');
 const { startCallsAutoSync }             = require('./api/dashboard');
 const campaignsRouter  = require('./api/campaigns');
+const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,6 +46,7 @@ app.use('/api/dashboard', dashboardRouter);
 
 // ── Campaigns API (Meta Ads, cached) ──────────────────────────
 app.use('/api/campaigns', campaignsRouter);
+app.use('/api/reja',      rejaRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', async (req, res) => {
@@ -62,6 +64,7 @@ app.listen(PORT, () => {
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
   `).catch(err => console.error('[startup] leads migration failed:', err.message));
+  rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message));
   console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);
