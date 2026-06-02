@@ -58,14 +58,17 @@ app.get('/health', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  startCallsAutoSync();
+// Run all migrations before accepting connections
+Promise.all([
   pool.query(`
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
-  `).catch(err => console.error('[startup] leads migration failed:', err.message));
-  rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message));
-  console.log(`[bitrix-sync] Server running on port ${PORT}`);
+  `).catch(err => console.error('[startup] leads migration failed:', err.message)),
+  rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
+]).then(() => {
+  app.listen(PORT, () => {
+    startCallsAutoSync();
+    console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);
   console.log(`  POST /webhook/lead/deleted`);
@@ -84,4 +87,10 @@ app.listen(PORT, () => {
   console.log(`  POST /webhook/facebook  (FB leadgen events)`);
   console.log(`  GET  /api/campaigns/rows`);
   console.log(`  GET  /api/campaigns/insights`);
+  console.log(`  GET  /api/reja/plans`);
+  console.log(`  POST /api/reja/plans`);
+  console.log(`  GET  /api/reja/plans/:id/distribution`);
+  console.log(`  POST /api/reja/plans/:id/distribution`);
+  console.log(`  GET  /api/reja/plans/:id/progress`);
+  });
 });

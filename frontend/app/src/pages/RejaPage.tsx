@@ -155,7 +155,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
     onSuccess: (plan) => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onCreated(plan); },
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const { start, end } = periodType === 'monthly'
       ? monthStartEnd(year, month)
@@ -232,6 +232,245 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ── Team progress donut ────────────────────────────────────────────
+
+function TeamDonut({ pct, size = 140 }: { pct: number; size?: number }) {
+  const r   = (size - 20) / 2;
+  const cx  = size / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--border)" strokeWidth={14} />
+      <circle
+        cx={cx} cy={cx} r={r} fill="none"
+        stroke={pct >= 80 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#ef4444'}
+        strokeWidth={14} strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`}
+        style={{ transition: 'stroke-dasharray 0.5s ease' }}
+      />
+    </svg>
+  );
+}
+
+function BottomSections({ planId }: { planId: number }) {
+  const [chartMode, setChartMode] = useState<'oy' | 'kvartal'>('oy');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['reja/progress', planId],
+    queryFn:  () => getRejaProgress(planId),
+  });
+
+  if (isLoading || !data || !data.employees.length) return null;
+
+  const { employees, subperiods, summary } = data;
+  const avgPct = summary.total_target > 0
+    ? Math.round(summary.total_actual / summary.total_target * 100)
+    : 0;
+
+  // Classify employees
+  const ahead   = employees.filter(e => e.pct >  100);
+  const onTrack = employees.filter(e => e.pct >= 70 && e.pct <= 100);
+  const behind  = employees.filter(e => e.pct <  70);
+
+  // Top 5 by actual amount
+  const top5 = [...employees].sort((a, b) => b.total_actual - a.total_actual).slice(0, 5);
+  const maxActual = Math.max(...top5.map(e => e.total_actual), 1);
+
+  // Chart: cumulative actual vs cumulative target per sub-period
+  const chartData = subperiods.map((sp, i) => {
+    const periodActual = employees.reduce((s, e) => s + (e.subperiods[i]?.actual ?? 0), 0);
+    const periodTarget = employees.reduce((s, e) => s + (e.subperiods[i]?.target ?? 0), 0);
+    return { label: sp.label, actual: periodActual, target: periodTarget };
+  });
+
+  let cumA = 0, cumT = 0;
+  const cumChart = chartData.map(d => {
+    cumA += d.actual;
+    cumT += d.target;
+    return { label: d.label, actual: cumA, target: cumT };
+  });
+
+  const maxChartVal = Math.max(...cumChart.map(d => Math.max(d.actual, d.target)), 1);
+  const W = 340, H = 140, PAD = { l: 44, r: 16, t: 12, b: 28 };
+  const xStep = (W - PAD.l - PAD.r) / Math.max(cumChart.length - 1, 1);
+  const yScale = (v: number) => PAD.t + (H - PAD.t - PAD.b) * (1 - v / maxChartVal);
+  const pts = (key: 'actual' | 'target') =>
+    cumChart.map((d, i) => `${PAD.l + i * xStep},${yScale(d[key])}`).join(' ');
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => ({ v: Math.round(f * maxChartVal), y: yScale(f * maxChartVal) }));
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+
+      {/* 1 — Team progress donut */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Jamoa bo'yicha progress</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <TeamDonut pct={avgPct} size={140} />
+            <div style={{ position: 'absolute', textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>{avgPct}%</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>O'rtacha</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[
+            { label: "Ma'lum darajada oldinda", count: ahead.length,   color: '#16a34a' },
+            { label: 'Reja bo\'yicha',          count: onTrack.length, color: '#2563eb' },
+            { label: 'Ortda qolmoqda',           count: behind.length,  color: '#ef4444' },
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
+                <span style={{ color: 'var(--text2)' }}>{row.label}</span>
+              </div>
+              <span style={{ fontWeight: 700, color: 'var(--text)' }}>
+                {row.count} xodim ({employees.length > 0 ? Math.round(row.count / employees.length * 100) : 0}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 2 — Top 5 employees */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>
+          Top 5 xodimlar <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 400 }}>(Bajarilish bo'yicha)</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {top5.map((emp) => {
+            const barPct = maxActual > 0 ? (emp.total_actual / maxActual) * 100 : 0;
+            const barColor = emp.pct >= 80 ? '#16a34a' : emp.pct >= 50 ? '#f59e0b' : '#ef4444';
+            return (
+              <div key={emp.responsible_id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                  {initials(emp.full_name)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {emp.full_name}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                      ${fmtUZS(emp.total_actual)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${barPct}%`, background: barColor, borderRadius: 2 }} />
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: barColor, width: 36, textAlign: 'right', flexShrink: 0 }}>
+                      {emp.pct}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'var(--text3)', marginTop: 2 }}>
+                    {fmtUZS(emp.target)} reja
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3 — Dynamics SVG line chart */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Rejani bajarilish dinamikasi</div>
+          <div style={{ display: 'flex', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            {(['oy', 'kvartal'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setChartMode(m)}
+                style={{ padding: '4px 10px', border: 0, background: chartMode === m ? 'rgba(37,99,235,0.15)' : 'transparent', color: chartMode === m ? '#2563eb' : 'var(--text3)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}
+              >
+                {m === 'oy' ? 'Oy' : 'Kvartal'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {cumChart.length > 0 ? (
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+            {/* Y grid lines + labels */}
+            {yTicks.map(t => (
+              <g key={t.v}>
+                <line x1={PAD.l} y1={t.y} x2={W - PAD.r} y2={t.y} stroke="var(--border)" strokeWidth={0.5} strokeDasharray="3 3" />
+                <text x={PAD.l - 4} y={t.y + 4} textAnchor="end" fontSize={9} fill="var(--text3)">
+                  {t.v >= 1000000 ? `${(t.v/1000000).toFixed(0)}M` : t.v >= 1000 ? `${(t.v/1000).toFixed(0)}K` : t.v}
+                </text>
+              </g>
+            ))}
+
+            {/* X labels */}
+            {cumChart.map((d, i) => (
+              <text key={i} x={PAD.l + i * xStep} y={H - PAD.b + 14} textAnchor="middle" fontSize={9.5} fill="var(--text3)">
+                {d.label}
+              </text>
+            ))}
+
+            {/* Area under actual line */}
+            <defs>
+              <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="#2563eb" stopOpacity="0.01" />
+              </linearGradient>
+            </defs>
+            <polygon
+              points={`${PAD.l},${H - PAD.b} ${pts('actual')} ${PAD.l + (cumChart.length - 1) * xStep},${H - PAD.b}`}
+              fill="url(#actualGrad)"
+            />
+
+            {/* Target line (dashed) */}
+            <polyline
+              points={pts('target')}
+              fill="none" stroke="var(--text3)" strokeWidth={1.5}
+              strokeDasharray="5 3"
+            />
+
+            {/* Actual line */}
+            <polyline
+              points={pts('actual')}
+              fill="none" stroke="#2563eb" strokeWidth={2}
+            />
+
+            {/* Dots on actual */}
+            {cumChart.map((d, i) => (
+              d.actual > 0 && (
+                <circle key={i} cx={PAD.l + i * xStep} cy={yScale(d.actual)} r={3} fill="#2563eb" />
+              )
+            ))}
+          </svg>
+        ) : (
+          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 12 }}>
+            Ma'lumot yo'q
+          </div>
+        )}
+
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: 16, marginTop: 8, justifyContent: 'center' }}>
+          {[
+            { label: 'Reja', color: 'var(--text3)', dashed: true },
+            { label: 'Fakt', color: '#2563eb', dashed: false },
+          ].map(l => (
+            <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+              <svg width={22} height={8}>
+                <line x1={0} y1={4} x2={22} y2={4} stroke={l.color} strokeWidth={2} strokeDasharray={l.dashed ? '4 2' : undefined} />
+              </svg>
+              <span style={{ color: 'var(--text3)' }}>{l.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -512,6 +751,8 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
           </button>
         </div>
       </div>
+
+      <BottomSections planId={planId} />
     </div>
   );
 }
