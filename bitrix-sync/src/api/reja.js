@@ -277,7 +277,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.date_modify, d.date_create)::date BETWEEN $2 AND $3
+        AND COALESCE(d.closedate, d.date_modify, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -391,18 +391,18 @@ router.get('/plans/:id/progress', async (req, res) => {
     const respIds = targetsRes.rows.map(r => r.responsible_id);
 
     // Actuals: sum of won-deal opportunities, grouped by responsible + actual win date.
-    // Uses date_modify (automatically updated when stage changes to won) as the win date.
-    // Falls back to date_create if date_modify not yet synced for older records.
+    // Uses closedate (Bitrix deal close date) as the win date.
+    // Falls back to date_modify then date_create for older records missing closedate.
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.date_modify, d.date_create)::date AS close_date,
-        SUM(d.opportunity)::numeric                   AS amount
+        COALESCE(d.closedate, d.date_modify, d.date_create)::date AS close_date,
+        SUM(d.opportunity)::numeric                                AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.date_modify, d.date_create)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.date_modify, d.date_create)::date
+        AND COALESCE(d.closedate, d.date_modify, d.date_create)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.closedate, d.date_modify, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build actuals map: { responsible_id: { subperiod_index: total_amount } }
