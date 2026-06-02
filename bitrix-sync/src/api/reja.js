@@ -396,8 +396,8 @@ router.get('/plans/:id/progress', async (req, res) => {
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.closedate, d.date_modify, d.date_create)::date AS close_date,
-        SUM(d.opportunity)::numeric                                AS amount
+        COALESCE(d.closedate, d.date_modify, d.date_create)::date::text AS close_date,
+        SUM(d.opportunity)::numeric                                      AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
