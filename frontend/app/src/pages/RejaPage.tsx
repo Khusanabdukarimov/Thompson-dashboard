@@ -522,13 +522,14 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   );
   const hasAnyTarget = assignedEmployees.length > 0;
 
-  // showAll = editing mode (all employees visible for assigning targets)
+  // When no targets saved yet → show all employees so user can assign
+  // When targets exist → show only assigned by default; toggle shows all
   const filtered = useMemo(() => {
-    const base = showAll ? employees : assignedEmployees;
+    const base = (!hasAnyTarget || showAll) ? employees : assignedEmployees;
     if (!search.trim()) return base;
     const q = search.toLowerCase();
     return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-  }, [employees, assignedEmployees, search, showAll]);
+  }, [employees, assignedEmployees, search, showAll, hasAnyTarget]);
 
   const saveMutation = useMutation({
     mutationFn: () => saveRejaDistribution(planId, employees.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
@@ -665,7 +666,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         </div>
 
         {/* Column headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 160px 130px 130px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '200px 130px 1fr 150px 130px 90px', padding: '9px 20px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
           {[
             { label: 'XODIM ISMI',                       color: 'var(--text3)' },
             { label: 'ROLI',                              color: 'var(--text3)' },
@@ -690,7 +691,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
             <div
               key={emp.responsible_id}
               style={{
-                display: 'grid', gridTemplateColumns: '1fr 130px 160px 130px 130px 90px',
+                display: 'grid', gridTemplateColumns: '200px 130px 1fr 150px 130px 90px',
                 padding: '12px 20px', alignItems: 'center',
                 borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
               }}
