@@ -798,12 +798,22 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 )}
               </div>
 
-              {/* Status — dot + text */}
+              {/* Status — dot + text + remove */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: emp.active ? '#16a34a' : '#d97706', flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 500, color: emp.active ? '#16a34a' : '#d97706' }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: emp.active ? '#16a34a' : '#d97706', flex: 1 }}>
                   {emp.active ? 'Active' : 'On leave'}
                 </span>
+                {!showAll && (
+                  <button
+                    type="button"
+                    title="Olib tashlash"
+                    onClick={() => { setTarget(emp.responsible_id, ''); }}
+                    style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.7, flexShrink: 0 }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -1044,11 +1054,9 @@ export default function RejaPage() {
               </div>
             )}
 
-            {!selectedPlan && (
-              <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                <Plus size={14} /> Yangi reja
-              </button>
-            )}
+            <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <Plus size={14} /> Yangi reja
+            </button>
           </div>
         }
       />
