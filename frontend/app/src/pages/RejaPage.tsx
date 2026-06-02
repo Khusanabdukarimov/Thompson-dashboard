@@ -160,7 +160,7 @@ function CreatePlanModal({ onClose, onCreated }: { onClose: () => void; onCreate
     onSuccess: (plan) => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onCreated(plan); },
   });
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     const { start, end } = periodType === 'monthly'
       ? monthStartEnd(year, month)
@@ -515,22 +515,20 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   );
   const remaining = totalTarget - distributed;
 
-  const hasAnyTarget = useMemo(
-    () => employees.some(e => parseNum(targets[e.responsible_id] ?? '') > 0 || e.target > 0),
-    [employees, targets],
+  // Employees with a saved target (from DB) — shown by default
+  const assignedEmployees = useMemo(
+    () => employees.filter(e => parseFloat(String(e.target)) > 0),
+    [employees],
   );
+  const hasAnyTarget = assignedEmployees.length > 0;
 
+  // showAll = editing mode (all employees visible for assigning targets)
   const filtered = useMemo(() => {
-    // Show all when: user toggled showAll, OR no targets assigned yet (initial state)
-    let list = (showAll || !hasAnyTarget)
-      ? employees
-      : employees.filter(e => parseNum(targets[e.responsible_id] ?? '') > 0 || e.target > 0);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-    }
-    return list;
-  }, [employees, search, targets, showAll, hasAnyTarget]);
+    const base = showAll ? employees : assignedEmployees;
+    if (!search.trim()) return base;
+    const q = search.toLowerCase();
+    return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
+  }, [employees, assignedEmployees, search, showAll]);
 
   const saveMutation = useMutation({
     mutationFn: () => saveRejaDistribution(planId, employees.map(e => ({ responsible_id: e.responsible_id, target: parseNum(targets[e.responsible_id] ?? '') }))),
@@ -567,7 +565,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
 
   if (isLoading) return <div style={{ padding: 56, textAlign: 'center', color: 'var(--text3)' }}>Yuklanmoqda…</div>;
 
-  const activeCount = employees.filter(e => e.active).length;
   const overflowed  = remaining < 0;
 
   return (
@@ -637,15 +634,15 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         {/* Table toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Xodimlar ro'yxati</div>
-            {hasAnyTarget && (
-              <button
-                onClick={() => setShowAll(v => !v)}
-                style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.1)' : 'transparent', color: showAll ? '#2563eb' : 'var(--text3)', cursor: 'pointer' }}
-              >
-                {showAll ? 'Faqat tayinlangan' : 'Hammasi'}
-              </button>
-            )}
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {showAll ? 'Barcha xodimlar' : `Tayinlangan xodimlar (${assignedEmployees.length})`}
+            </div>
+            <button
+              onClick={() => setShowAll(v => !v)}
+              style={{ fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.1)' : 'transparent', color: showAll ? '#2563eb' : 'var(--text3)', cursor: 'pointer' }}
+            >
+              {showAll ? '← Faqat tayinlangan' : '+ Xodim qo\'shish'}
+            </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ position: 'relative' }}>
@@ -782,25 +779,36 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         })}
 
         {filtered.length === 0 && (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Xodim topilmadi</div>
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            {!hasAnyTarget ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)' }}>Hech kim tayinlanmagan</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
+                  "Teng taqsimlash" tugmasini bosing yoki "+ Xodim qo'shish" orqali qo'lda tayinlang
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text3)' }}>Xodim topilmadi</div>
+            )}
+          </div>
         )}
 
         {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg2)' }}>
           {/* Avatar stack + count */}
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {employees.slice(0, 4).map((e, i) => (
+            {assignedEmployees.slice(0, 4).map((e, i) => (
               <div key={e.responsible_id} style={{ width: 28, height: 28, borderRadius: '50%', marginLeft: i > 0 ? -8 : 0, background: avatarColor(e.full_name), border: '2px solid var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', position: 'relative', zIndex: 4 - i }}>
                 {initials(e.full_name)}
               </div>
             ))}
-            {activeCount > 4 && (
+            {assignedEmployees.length > 4 && (
               <div style={{ width: 28, height: 28, borderRadius: '50%', marginLeft: -8, background: 'var(--bg3)', border: '2px solid var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text2)' }}>
-                +{activeCount - 4}
+                +{assignedEmployees.length - 4}
               </div>
             )}
             <span style={{ marginLeft: 14, fontSize: 13, color: 'var(--text2)' }}>
-              Jami <strong>{activeCount}</strong> ta faol xodim tanlangan
+              <strong>{assignedEmployees.length}</strong> ta xodimga maqsad tayinlangan
             </span>
           </div>
 
