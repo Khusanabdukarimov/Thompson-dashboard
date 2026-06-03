@@ -921,11 +921,11 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
       </div>
 
       {/* 2 ── Top 5 xodimlar ───────────────────────────────────── */}
-      <div style={CARD}>
+      <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
           Top 5 xodimlar <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 6 }}>Bajarilish bo'yicha</span>
         </div>
-        <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly' }}>
           {[...employees]
             .sort((a, b) => b.pct - a.pct)
             .slice(0, 5)
@@ -956,12 +956,12 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
       </div>
 
       {/* 3 ── Rejani bajarilish dinamikasi ─────────────────────── */}
-      <div style={CARD}>
+      <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Rejani bajarilish dinamikasi</span>
         </div>
-        <div style={{ padding: '12px 8px 8px' }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ flex: 1, padding: '12px 8px 8px', minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={lineData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
