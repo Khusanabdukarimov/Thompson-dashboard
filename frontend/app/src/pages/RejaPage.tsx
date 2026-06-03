@@ -740,10 +740,10 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
             const arcLen = G_R * G_SPAN; // ≈ 381
             // Visible dash length: pct% of the 100% arc, capped at 115%
             const dashLen = (Math.min(pct, 115) / 100) * arcLen;
-            // Needle angle & tip position
-            const needleAngle = gaugeAngle(pct);
-            const [nx, ny]    = gaugeXY(needleAngle, G_R * 0.80);
-            const [gx, gy]    = gaugeXY(needleAngle, G_R);       // glow dot on arc
+            // Needle angle & tip — clamped so it never leaves the arc bounds
+            const clampedAngle = Math.min(Math.max(gaugeAngle(pct), G_END), G_START);
+            const [nx, ny]    = gaugeXY(clampedAngle, G_R * 0.80);
+            const [gx, gy]    = gaugeXY(clampedAngle, G_R);       // glow dot on arc
             // Tick definitions
             const TICKS = [0, 25, 50, 75, 100].map(t => ({
               t,
