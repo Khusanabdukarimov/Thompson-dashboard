@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
@@ -17,10 +17,14 @@ function localISO(d: Date): string {
 export default function RejaCreatePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
   const now = new Date();
 
-  const [selYear,  setSelYear]  = useState(now.getFullYear());
-  const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
+  const initYear  = parseInt(searchParams.get('year')  ?? '') || now.getFullYear();
+  const initMonth = parseInt(searchParams.get('month') ?? '') || (now.getMonth() + 1);
+
+  const [selYear,  setSelYear]  = useState(initYear);
+  const [selMonth, setSelMonth] = useState(initMonth);
   const [target,   setTarget]   = useState('');
   const [error,    setError]    = useState('');
 

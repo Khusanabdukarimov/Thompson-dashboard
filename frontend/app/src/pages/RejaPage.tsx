@@ -31,22 +31,19 @@ function parseNum(s: string): number {
   return isNaN(n) ? 0 : Math.max(0, n);
 }
 
-function localISO(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Parses year/month directly from the first 7 characters of the date string
+// (handles both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS.sssZ" without timezone shifts)
+function parsePeriodYM(periodStart: string): { year: number; month: number } {
+  const [y, m] = periodStart.slice(0, 7).split('-');
+  return { year: parseInt(y, 10), month: parseInt(m, 10) };
 }
 
 function periodLabel(plan: RejaPlan): string {
-  const d = new Date(plan.period_start);
-  if (plan.period_type === 'monthly') return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
-  const q = Math.floor(d.getMonth() / 3) + 1;
-  return `${d.getFullYear()} – ${q}-kvartal`;
-}
-
-function monthStartEnd(year: number, month: number) {
-  return {
-    start: localISO(new Date(year, month, 1)),
-    end:   localISO(new Date(year, month + 1, 0)),
-  };
+  const { year, month } = parsePeriodYM(plan.period_start);
+  if (plan.period_type === 'monthly') return `${MONTH_NAMES[month - 1]} ${year}`;
+  const q = Math.floor((month - 1) / 3) + 1;
+  return `${year} – ${q}-kvartal`;
 }
 
 
@@ -717,24 +714,35 @@ export default function RejaPage() {
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
 
-  // Auto-select first plan and sync year/month from it
+  // Auto-select on first load: prefer plan matching today's month, else first plan.
+  // useRef guard ensures this runs exactly once even if plans refetch.
+  const didAutoSelect = useRef(false);
   useEffect(() => {
-    if (!selectedPlan && plans.length > 0) {
-      const p = plans[0];
-      setSelectedPlan(p);
-      const d = new Date(p.period_start + 'T00:00:00');
-      setSelYear(d.getFullYear());
-      setSelMonth(d.getMonth() + 1);
-    }
-  }, [plans, selectedPlan]);
+    if (didAutoSelect.current || !plans.length) return;
+    didAutoSelect.current = true;
+    const todayPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const match = plans.find(p => p.period_start.startsWith(todayPrefix));
+    setSelectedPlan(match ?? plans[0]);
+  }, [plans]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When year/month dropdowns change, find matching plan
+  // One-way sync: whenever selectedPlan changes, keep left selectors in sync.
+  // Uses parsePeriodYM so no invalid-date issue with ISO timestamps from the DB.
   useEffect(() => {
-    const prefix = `${selYear}-${String(selMonth).padStart(2, '0')}`;
+    if (!selectedPlan) return;
+    const { year, month } = parsePeriodYM(selectedPlan.period_start);
+    setSelYear(year);
+    setSelMonth(month);
+  }, [selectedPlan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Left-selector change handler: update both the dropdowns and selectedPlan together
+  // so they are never out of sync.
+  function handlePeriodChange(year: number, month: number) {
+    setSelYear(year);
+    setSelMonth(month);
+    const prefix = `${year}-${String(month).padStart(2, '0')}`;
     const match = plans.find(p => p.period_start.startsWith(prefix));
-    if (match && match.id !== selectedPlan?.id) setSelectedPlan(match);
-    else if (!match && plans.length > 0) setSelectedPlan(null);
-  }, [selYear, selMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+    setSelectedPlan(match ?? null);
+  }
 
   // Year range: 2020 → 2090
   const YEARS = Array.from({ length: 2090 - 2020 + 1 }, (_, i) => 2020 + i);
@@ -751,9 +759,9 @@ export default function RejaPage() {
                 const p = plans.find(pl => pl.id === Number(e.target.value));
                 if (!p) return;
                 setSelectedPlan(p);
-                const d = new Date(p.period_start + 'T00:00:00');
-                setSelYear(d.getFullYear());
-                setSelMonth(d.getMonth() + 1);
+                const { year, month } = parsePeriodYM(p.period_start);
+                setSelYear(year);
+                setSelMonth(month);
               }}
               style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 200, outline: 'none' }}
             >
@@ -766,7 +774,7 @@ export default function RejaPage() {
               ))}
             </select>
             <button
-              onClick={() => navigate('/reja/new')}
+              onClick={() => navigate(`/reja/new?year=${selYear}&month=${selMonth}`)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
             >
               <Plus size={14} /> Yangi reja
@@ -780,14 +788,14 @@ export default function RejaPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 24px 0' }}>
           <select
             value={selYear}
-            onChange={e => setSelYear(Number(e.target.value))}
+            onChange={e => handlePeriodChange(Number(e.target.value), selMonth)}
             style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
           >
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <select
             value={selMonth}
-            onChange={e => setSelMonth(Number(e.target.value))}
+            onChange={e => handlePeriodChange(selYear, Number(e.target.value))}
             style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
           >
             {MONTH_NAMES.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
@@ -799,7 +807,7 @@ export default function RejaPage() {
             <BarChart3 size={48} strokeWidth={1} />
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>{MONTH_NAMES[selMonth - 1]} {selYear} uchun reja mavjud emas</div>
             <button
-              onClick={() => navigate('/reja/new')}
+              onClick={() => navigate(`/reja/new?year=${selYear}&month=${selMonth}`)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
             >
               <Plus size={15} /> Reja yaratish
