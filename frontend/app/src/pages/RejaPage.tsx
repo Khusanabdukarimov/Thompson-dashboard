@@ -337,6 +337,16 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 <path d="M15.529 2.857l-1.403-1.404c-0.565-0.566-1.555-0.566-2.122 0l-9.057 9.058-1.722 5.288 5.248-1.765 9.055-9.056c0.586-0.584 0.586-1.536 0.001-2.121zM3.094 13.294l0.645-1.979 1.934 1.935-1.963 0.66-0.616-0.616zM4.355 10.518l5.493-5.493 2.111 2.11-5.494 5.494-2.11-2.111zM10.555 4.317l0.729-0.729 2.111 2.11-0.729 0.729-2.111-2.11zM14.822 4.271l-0.72 0.72-2.111-2.11 0.72-0.721c0.189-0.189 0.518-0.189 0.707 0l1.403 1.404c0.196 0.196 0.196 0.512 0.001 0.707z" fill={showAll ? '#2563eb' : 'var(--text2)'} />
               </svg>
             </button>
+            {showAll && dirty && (
+              <button
+                onClick={() => { saveMutation.mutate(); setShowAll(false); }}
+                disabled={saveMutation.isPending}
+                style={{ height: 34, padding: '0 14px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <CheckCircle2 size={13} />
+                {saveMutation.isPending ? 'Saqlanmoqda…' : 'Saqlash'}
+              </button>
+            )}
             {showAll && (
               <button
                 onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
@@ -640,6 +650,41 @@ function ProgressView({ planId }: { planId: number }) {
       <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6 }}>
         * Har bir tugallangan davr uchun asl natija hisobga olinadi. Qolgan davrlar uchun maqsad = (jami reja − o'tgan davrlar summasi) / qolgan davrlar soni.
       </div>
+
+      {/* Top 5 xodimlar by performance */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+          Top 5 xodimlar <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 6 }}>Bajarilish bo'yicha</span>
+        </div>
+        <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[...employees]
+            .sort((a, b) => b.pct - a.pct)
+            .slice(0, 5)
+            .map((emp, i) => {
+              const barColor = emp.pct >= 100 ? '#16a34a' : emp.pct >= 70 ? '#f59e0b' : '#ef4444';
+              return (
+                <div key={emp.responsible_id} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{ width: 20, fontSize: 12, fontWeight: 700, color: i === 0 ? '#f59e0b' : 'var(--text3)', flexShrink: 0 }}>{i + 1}</span>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                    {initials(emp.full_name)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.full_name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>{CURRENCY_SIGN}{fmtMoney(emp.total_actual)} <span style={{ color: 'var(--text3)', fontWeight: 400 }}>/ {CURRENCY_SIGN}{fmtMoney(emp.target)} reja</span></span>
+                        <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: emp.pct >= 100 ? '#dcfce7' : emp.pct >= 70 ? '#fef9c3' : 'rgba(239,68,68,0.1)', color: barColor }}>{emp.pct}%</span>
+                      </div>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(emp.pct, 100)}%`, background: barColor, borderRadius: 3, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -742,18 +787,6 @@ export default function RejaPage() {
           >
             {MONTH_NAMES.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
           </select>
-          {!selectedPlan && (
-            <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-              Bu davr uchun reja yo'q —{' '}
-              <button
-                onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending}
-                style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
-              >
-                yaratish
-              </button>
-            </span>
-          )}
         </div>
 
         {!selectedPlan ? (
