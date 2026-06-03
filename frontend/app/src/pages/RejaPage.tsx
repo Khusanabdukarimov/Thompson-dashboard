@@ -939,7 +939,7 @@ export default function RejaPage() {
           </div>
         ) : (
           <>
-            <DistributionView planId={selectedPlan.id} onDeleted={() => setSelectedPlan(null)} />
+            <DistributionView planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); }} />
             <ProgressView planId={selectedPlan.id} />
           </>
         )}
