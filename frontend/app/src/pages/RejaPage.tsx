@@ -191,7 +191,8 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   });
 
   function distributeEqually() {
-    const active = employees.filter(e => e.active);
+    // Only distribute among employees currently visible in the table (excludes removed ones)
+    const active = filtered.filter(e => e.active);
     if (!active.length || !totalTarget) return;
     const share     = Math.floor(totalTarget / active.length);
     const remainder = totalTarget - share * active.length;
@@ -227,20 +228,21 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>{item.label}</div>
 
                 {item.editable ? (
-                  <form onSubmit={e => { e.preventDefault(); updateTotalMutation.mutate(parseNum(totalInput)); }}>
+                  <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text3)' }}>{CURRENCY_SIGN}</span>
                       <input
                         value={totalInput}
                         onChange={e => setTotalInput(e.target.value)}
                         onBlur={() => { if (parseNum(totalInput) !== totalTarget) updateTotalMutation.mutate(parseNum(totalInput)); }}
+                        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         style={{ width: 130, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 20, fontWeight: 700, outline: 'none', transition: 'border 0.15s' }}
                         onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
                         onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--border)')}
                       />
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Enter yoki tashqariga bosing</div>
-                  </form>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Maydondan chiqib saqlang</div>
+                  </div>
                 ) : (
                   <div>
                     <span style={{ fontSize: 22, fontWeight: 700, color: item.color ?? 'var(--text)' }}>
