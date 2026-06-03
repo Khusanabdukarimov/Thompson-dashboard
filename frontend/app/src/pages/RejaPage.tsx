@@ -743,6 +743,9 @@ export default function RejaPage() {
     onSuccess: (plan) => {
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
       setSelectedPlan(plan);
+      const d = new Date(plan.period_start + 'T00:00:00');
+      setSelYear(d.getFullYear());
+      setSelMonth(d.getMonth() + 1);
     },
   });
 

@@ -62,6 +62,19 @@ async function ensureSchema() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS reja_targets_plan_idx ON reja_targets(plan_id)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reja_week_actuals (
+      id               SERIAL PRIMARY KEY,
+      plan_id          INTEGER NOT NULL REFERENCES reja_plans(id) ON DELETE CASCADE,
+      responsible_id   INTEGER NOT NULL REFERENCES responsibles(id),
+      week_index       INTEGER NOT NULL CHECK (week_index >= 1),
+      actual           NUMERIC(15,2) NOT NULL DEFAULT 0,
+      planned_snapshot NUMERIC(15,2),
+      updated_at       TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(plan_id, responsible_id, week_index)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS reja_week_actuals_idx ON reja_week_actuals(plan_id, responsible_id)`);
 }
 
 // ── Helper: fetch a plan enriched with aggregate columns ──────────
@@ -122,47 +135,73 @@ function getSubperiods(plan) {
   return result;
 }
 
-// ── Rolling recalculation (core business logic) ───────────────────
+// ── Redistribution (pure, no DB/date logic) ──────────────────────
 //
-// For each sub-period N:
-//   target_N = (totalTarget - sum(actuals for periods 1..N-1)) / (total_periods - N + 1)
+// A week is "completed" when it has a positive actual recorded.
+// All remaining (non-completed) weeks share equally whatever target is left.
+// Last remaining week absorbs the 2-decimal rounding remainder so that
+//   sum(remaining planned) == remainingTarget exactly.
+// Over-performance: remainingTarget clamped to 0 → future weeks planned = 0.
 //
-// Example (monthly, 4 weeks, target 50 000):
-//   week 1: 50 000 / 4 = 12 500
-//   week 1 actual = 10 000 → week 2: (50 000 − 10 000) / 3 = 13 333.33
-//   week 2 actual = 20 000 → week 3: (50 000 − 30 000) / 2 = 10 000
-//   week 3 actual = 8 000  → week 4: (50 000 − 38 000) / 1 = 12 000
+// Acceptance tests:
+//   A) M=50 000, N=4, week1=10 000 → remaining 3 weeks each 13 333.33 / 13 333.34
+//   B) M=50 000, N=4, week1=55 000 → remaining weeks clamped to 0
+//   C) no actuals → all N weeks = M/N (equal)
 //
-// Only FULLY COMPLETED past periods (end < today) reduce the running total.
-//
+function redistribute(totalTarget, subperiods, actualsMap) {
+  const n = subperiods.length;
+  if (n === 0) return [];
+
+  // Completed = has a positive actual recorded (date-independent)
+  const completedSet = new Set(
+    subperiods
+      .filter(sp => (actualsMap[sp.index] || 0) > 0)
+      .map(sp => sp.index)
+  );
+
+  const cumulativeActual = [...completedSet]
+    .reduce((s, idx) => s + (actualsMap[idx] || 0), 0);
+
+  const remainingTarget = Math.max(0, totalTarget - cumulativeActual);
+  const remainingWeeks  = subperiods.filter(sp => !completedSet.has(sp.index));
+  const remainingCount  = remainingWeeks.length;
+
+  // Round to 2dp; last remaining week absorbs remainder
+  const baseRounded = remainingCount > 0
+    ? Math.round((remainingTarget / remainingCount) * 100) / 100
+    : 0;
+  const lastRemIdx = remainingCount > 0
+    ? remainingWeeks[remainingWeeks.length - 1].index
+    : -1;
+  const lastPlanned = remainingCount > 0
+    ? Math.round((remainingTarget - (remainingCount - 1) * baseRounded) * 100) / 100
+    : 0;
+
+  // For completed weeks use initial snapshot = M/N
+  const initialBase = Math.round((totalTarget / n) * 100) / 100;
+
+  return subperiods.map(sp => {
+    const actual      = actualsMap[sp.index] || 0;
+    const isCompleted = completedSet.has(sp.index);
+    const target = isCompleted
+      ? initialBase
+      : (sp.index === lastRemIdx ? lastPlanned : baseRounded);
+    return { spIndex: sp.index, target, actual: Math.round(actual * 100) / 100 };
+  });
+}
+
+// Wraps redistribute() with date-aware isPast / isCurrent / pct fields.
 function computeSubperiodProgress(totalTarget, subperiods, actualsMap, today) {
-  const todayStr       = localISO(today);
-  const n              = subperiods.length;
-  let   cumulativeActual = 0;
+  const todayStr = localISO(today);
+  const results  = redistribute(totalTarget, subperiods, actualsMap);
+  const byIdx    = Object.fromEntries(results.map(r => [r.spIndex, r]));
 
-  return subperiods.map((sp, i) => {
-    const isPast    = sp.end < todayStr;
+  return subperiods.map(sp => {
+    const isPast    = sp.end   <  todayStr;
     const isCurrent = sp.start <= todayStr && todayStr <= sp.end;
-    const actual    = actualsMap[sp.index] || 0;
-
-    // Target for this period based on what was known at its start
-    const remainingTarget  = Math.max(0, totalTarget - cumulativeActual);
-    const remainingPeriods = n - i;
-    const target = remainingPeriods > 0 ? remainingTarget / remainingPeriods : 0;
-
+    const { target, actual } = byIdx[sp.index];
     const pct = target > 0 ? Math.min(Math.round(actual / target * 100), 999) : 0;
-
-    // Accumulate only fully-completed periods so next period recalculates correctly
-    if (isPast) cumulativeActual += actual;
-
-    return {
-      ...sp,
-      target:    Math.round(target * 100) / 100,
-      actual:    Math.round(actual  * 100) / 100,
-      isPast,
-      isCurrent,
-      pct,
-    };
+    return { ...sp, target, actual, isPast, isCurrent, pct };
   });
 }
 
@@ -441,7 +480,7 @@ router.get('/plans/:id/progress', async (req, res) => {
       GROUP BY d.responsible_id, COALESCE(d.date_modify, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
-    // Build actuals map: { responsible_id: { subperiod_index: total_amount } }
+    // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
     const actualsByResp = {};
     for (const row of actualsRes.rows) {
       if (!actualsByResp[row.responsible_id]) actualsByResp[row.responsible_id] = {};
@@ -454,9 +493,28 @@ router.get('/plans/:id/progress', async (req, res) => {
       }
     }
 
+    // Stored actuals override CRM actuals when present
+    const storedRes = await pool.query(`
+      SELECT responsible_id, week_index, actual::numeric AS actual
+      FROM reja_week_actuals
+      WHERE plan_id = $1 AND responsible_id = ANY($2)
+    `, [planId, respIds]);
+    const storedByResp = {};
+    for (const row of storedRes.rows) {
+      if (!storedByResp[row.responsible_id]) storedByResp[row.responsible_id] = {};
+      storedByResp[row.responsible_id][row.week_index] = parseFloat(row.actual);
+    }
+
     const employees = targetsRes.rows.map(emp => {
-      const empActuals  = actualsByResp[emp.responsible_id] || {};
-      const totalActual = Object.values(empActuals).reduce((s, v) => s + v, 0);
+      const crmActuals = actualsByResp[emp.responsible_id] || {};
+      const stored     = storedByResp[emp.responsible_id]  || {};
+      // Per week: stored takes priority over CRM
+      const mergedActuals = {};
+      for (const sp of subperiods) {
+        const s = stored[sp.index];
+        mergedActuals[sp.index] = s !== undefined ? s : (crmActuals[sp.index] || 0);
+      }
+      const totalActual = Object.values(mergedActuals).reduce((s, v) => s + v, 0);
       const target      = parseFloat(emp.target);
       return {
         responsible_id: emp.responsible_id,
@@ -467,7 +525,7 @@ router.get('/plans/:id/progress', async (req, res) => {
         target,
         total_actual:   Math.round(totalActual * 100) / 100,
         pct:            target > 0 ? Math.min(Math.round(totalActual / target * 100), 999) : 0,
-        subperiods:     computeSubperiodProgress(target, subperiods, empActuals, today),
+        subperiods:     computeSubperiodProgress(target, subperiods, mergedActuals, today),
       };
     });
 
@@ -486,6 +544,139 @@ router.get('/plans/:id/progress', async (req, res) => {
     });
   } catch (err) {
     console.error('[reja/progress GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/reja/plans/:planId/responsibles/:responsibleId/weeks/:weekIndex/actual
+// Body: { actual: number }
+// Records/updates a week's actual; returns recomputed weeks for that responsible.
+router.post('/plans/:planId/responsibles/:responsibleId/weeks/:weekIndex/actual', async (req, res) => {
+  const planId        = parseInt(req.params.planId);
+  const responsibleId = parseInt(req.params.responsibleId);
+  const weekIndex     = parseInt(req.params.weekIndex);
+  const actual        = parseFloat(req.body.actual);
+
+  if (isNaN(actual) || actual < 0)
+    return res.status(400).json({ error: 'actual (non-negative number) required' });
+  if (isNaN(weekIndex) || weekIndex < 1)
+    return res.status(400).json({ error: 'weekIndex must be >= 1' });
+
+  try {
+    const planRes = await pool.query(`SELECT * FROM reja_plans WHERE id = $1`, [planId]);
+    if (!planRes.rows.length) return res.status(404).json({ error: 'Plan not found' });
+    const plan = planRes.rows[0];
+
+    const targetRes = await pool.query(
+      `SELECT target FROM reja_targets WHERE plan_id = $1 AND responsible_id = $2`,
+      [planId, responsibleId]
+    );
+    if (!targetRes.rows.length) return res.status(404).json({ error: 'Responsible not in plan' });
+    const monthlyTarget = parseFloat(targetRes.rows[0].target);
+
+    // Load existing stored actuals for this responsible
+    const existingRes = await pool.query(
+      `SELECT week_index, actual::numeric AS actual FROM reja_week_actuals
+       WHERE plan_id = $1 AND responsible_id = $2`,
+      [planId, responsibleId]
+    );
+    const storedActuals = {};
+    for (const row of existingRes.rows) storedActuals[row.week_index] = parseFloat(row.actual);
+
+    // Snapshot = what the planned was for this week BEFORE recording this actual
+    const subperiods      = getSubperiods(plan);
+    const beforeResults   = redistribute(monthlyTarget, subperiods, storedActuals);
+    const beforeByIdx     = Object.fromEntries(beforeResults.map(r => [r.spIndex, r]));
+    const plannedSnapshot = beforeByIdx[weekIndex]?.target ?? null;
+
+    // Upsert actual
+    await pool.query(`
+      INSERT INTO reja_week_actuals
+        (plan_id, responsible_id, week_index, actual, planned_snapshot, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      ON CONFLICT (plan_id, responsible_id, week_index)
+      DO UPDATE SET actual = EXCLUDED.actual,
+                    planned_snapshot = EXCLUDED.planned_snapshot,
+                    updated_at = NOW()
+    `, [planId, responsibleId, weekIndex, actual, plannedSnapshot]);
+
+    // Recompute with updated actuals
+    storedActuals[weekIndex] = actual;
+    const today      = new Date();
+    const recomputed = computeSubperiodProgress(monthlyTarget, subperiods, storedActuals, today);
+    const totalActual = Object.values(storedActuals).reduce((s, a) => s + a, 0);
+
+    res.json({
+      responsible_id: responsibleId,
+      target:         monthlyTarget,
+      total_actual:   Math.round(totalActual * 100) / 100,
+      pct:            monthlyTarget > 0 ? Math.min(Math.round(totalActual / monthlyTarget * 100), 999) : 0,
+      subperiods:     recomputed,
+    });
+  } catch (err) {
+    console.error('[reja/weeks POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/reja/plans/:planId/responsibles/:responsibleId/weeks
+// Returns current week state with planned, actual, status for a single responsible.
+router.get('/plans/:planId/responsibles/:responsibleId/weeks', async (req, res) => {
+  const planId        = parseInt(req.params.planId);
+  const responsibleId = parseInt(req.params.responsibleId);
+
+  try {
+    const planRes = await pool.query(`SELECT * FROM reja_plans WHERE id = $1`, [planId]);
+    if (!planRes.rows.length) return res.status(404).json({ error: 'Plan not found' });
+    const plan = planRes.rows[0];
+
+    const targetRes = await pool.query(
+      `SELECT target FROM reja_targets WHERE plan_id = $1 AND responsible_id = $2`,
+      [planId, responsibleId]
+    );
+    if (!targetRes.rows.length) return res.status(404).json({ error: 'Responsible not in plan' });
+    const monthlyTarget = parseFloat(targetRes.rows[0].target);
+
+    const storedRes = await pool.query(
+      `SELECT week_index, actual::numeric AS actual, planned_snapshot::numeric AS planned_snapshot
+       FROM reja_week_actuals WHERE plan_id = $1 AND responsible_id = $2`,
+      [planId, responsibleId]
+    );
+    const storedActuals = {};
+    const snapshots     = {};
+    for (const row of storedRes.rows) {
+      storedActuals[row.week_index] = parseFloat(row.actual);
+      if (row.planned_snapshot != null) snapshots[row.week_index] = parseFloat(row.planned_snapshot);
+    }
+
+    const subperiods = getSubperiods(plan);
+    const today      = new Date();
+    const recomputed = computeSubperiodProgress(monthlyTarget, subperiods, storedActuals, today);
+    const totalActual = Object.values(storedActuals).reduce((s, a) => s + a, 0);
+    const remaining   = Math.max(0, monthlyTarget - totalActual);
+
+    res.json({
+      responsible_id:    responsibleId,
+      target:            monthlyTarget,
+      total_actual:      Math.round(totalActual * 100) / 100,
+      remaining_target:  Math.round(remaining   * 100) / 100,
+      pct:               monthlyTarget > 0 ? Math.min(Math.round(totalActual / monthlyTarget * 100), 999) : 0,
+      weeks: recomputed.map(sp => ({
+        week_index:       sp.index,
+        label:            sp.label,
+        start:            sp.start,
+        end:              sp.end,
+        planned:          sp.target,
+        planned_snapshot: snapshots[sp.index] ?? null,
+        actual:           sp.actual,
+        status:           sp.actual > 0 ? 'completed' : (sp.isPast ? 'pending' : (sp.isCurrent ? 'current' : 'future')),
+        isPast:           sp.isPast,
+        isCurrent:        sp.isCurrent,
+        pct:              sp.pct,
+      })),
+    });
+  } catch (err) {
+    console.error('[reja/weeks GET]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
