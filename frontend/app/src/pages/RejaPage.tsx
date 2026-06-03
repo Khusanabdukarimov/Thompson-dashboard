@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  ResponsiveContainer, PieChart, Pie, Cell,
+  ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -682,18 +682,28 @@ type SummaryRowProps = {
   summary:    { total_target: number; total_actual: number; pct: number };
 };
 
-function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
-  // ── Donut data ───────────────────────────────────────────────────
-  const ahead    = employees.filter(e => e.pct > 100).length;
-  const onTrack  = employees.filter(e => e.pct >= 70 && e.pct <= 100).length;
-  const behind   = employees.filter(e => e.pct < 70).length;
-  const total    = employees.length || 1;
+// ── Gauge helpers ─────────────────────────────────────────────────
+const G_CX = 150, G_CY = 155, G_R = 112;
+// Arc spans 210°: from 195° (left-bottom) to -15° (right-bottom)
+const G_START = 195 * Math.PI / 180;
+const G_END   = -15  * Math.PI / 180;
+const G_SPAN  = G_START - G_END; // 210° in radians
 
-  const donutData = [
-    { name: "Ma'lum darajada oldinda", value: ahead,   color: '#16a34a' },
-    { name: "Reja bo'yicha",           value: onTrack, color: '#2563eb' },
-    { name: 'Ortda qolmoqda',          value: behind,  color: '#ef4444' },
-  ].filter(d => d.value > 0);
+function gaugeAngle(pct: number): number {
+  return G_START - (Math.min(pct, 110) / 100) * G_SPAN;
+}
+function gaugeXY(angle: number, r = G_R): [number, number] {
+  return [G_CX + r * Math.cos(angle), G_CY - r * Math.sin(angle)];
+}
+function gaugePath(r: number, fromAngle: number, toAngle: number): string {
+  const [sx, sy] = gaugeXY(fromAngle, r);
+  const [ex, ey] = gaugeXY(toAngle, r);
+  const span = fromAngle - toAngle;
+  const large = span > Math.PI ? 1 : 0;
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+}
+
+function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
 
   // ── Line chart data (cumulative %, 0-100 scale) ──────────────────
   // Using percentage of total target avoids the Fakt line being invisible
@@ -719,46 +729,93 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
 
-      {/* 1 ── Jamoa bo'yicha progress ──────────────────────────── */}
+      {/* 1 ── Jamoa bo'yicha progress (gauge) ──────────────────── */}
       <div style={CARD}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
           Jamoa bo'yicha progress
         </div>
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-          {/* Donut */}
-          <div style={{ position: 'relative', width: 160, height: 160 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={donutData} cx="50%" cy="50%" innerRadius={52} outerRadius={74} dataKey="value" strokeWidth={0}>
-                  {donutData.map((d, i) => (
-                    <Cell key={i} fill={d.color} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            {/* Center label */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>{summary.pct}%</span>
-              <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>O'rtacha</span>
+        <div style={{ padding: '12px 16px 0' }}>
+          {(() => {
+            const pct       = summary.pct;
+            const a70       = gaugeAngle(70);
+            const a100      = gaugeAngle(100);
+            const needle    = gaugeAngle(pct);
+            const [nx, ny]  = gaugeXY(needle, G_R * 0.78);
+            const TICKS     = [0, 25, 50, 75, 100];
+            const arcColor  = pct >= 100 ? '#16a34a' : pct >= 70 ? '#f59e0b' : '#ef4444';
+            return (
+              <svg viewBox="0 0 300 200" style={{ width: '100%', overflow: 'visible' }}>
+                {/* Background track */}
+                <path d={gaugePath(G_R, G_START, G_END)} fill="none"
+                      stroke="rgba(128,128,128,0.18)" strokeWidth="16" strokeLinecap="round" />
+
+                {/* Colored arc: red 0→min(pct,70) */}
+                {pct > 0 && (
+                  <path d={gaugePath(G_R, G_START, pct <= 70 ? needle : a70)}
+                        fill="none" stroke="#ef4444" strokeWidth="16" strokeLinecap={pct <= 70 ? 'round' : 'butt'} />
+                )}
+                {/* Amber: 70→min(pct,100) */}
+                {pct > 70 && (
+                  <path d={gaugePath(G_R, a70, pct <= 100 ? needle : a100)}
+                        fill="none" stroke="#f59e0b" strokeWidth="16" strokeLinecap={pct <= 100 ? 'round' : 'butt'} />
+                )}
+                {/* Green: 100→min(pct,110) */}
+                {pct > 100 && (
+                  <path d={gaugePath(G_R, a100, needle)}
+                        fill="none" stroke="#16a34a" strokeWidth="16" strokeLinecap="round" />
+                )}
+
+                {/* Tick marks */}
+                {TICKS.map(t => {
+                  const ta = gaugeAngle(t);
+                  const [ox, oy] = gaugeXY(ta, G_R + 10);
+                  const [ix, iy] = gaugeXY(ta, G_R - 10);
+                  const [lx, ly] = gaugeXY(ta, G_R + 24);
+                  return (
+                    <g key={t}>
+                      <line x1={ox.toFixed(1)} y1={oy.toFixed(1)} x2={ix.toFixed(1)} y2={iy.toFixed(1)}
+                            stroke="rgba(255,255,255,0.35)" strokeWidth="2" />
+                      <text x={lx.toFixed(1)} y={ly.toFixed(1)} textAnchor="middle" dominantBaseline="central"
+                            fontSize="9" fill="rgba(200,200,200,0.6)">{t}%</text>
+                    </g>
+                  );
+                })}
+
+                {/* Needle */}
+                <line x1={G_CX} y1={G_CY} x2={nx.toFixed(2)} y2={ny.toFixed(2)}
+                      stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                <circle cx={G_CX} cy={G_CY} r="8" fill="#1d3a8a" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+                <circle cx={G_CX} cy={G_CY} r="3.5" fill="white" />
+
+                {/* Center text */}
+                <text x={G_CX} y={G_CY - 38} textAnchor="middle" fontSize="34" fontWeight="800"
+                      fill={arcColor}>{pct}%</text>
+                <text x={G_CX} y={G_CY - 14} textAnchor="middle" fontSize="10" fill="rgba(160,160,160,0.8)">
+                  {fmtMoney(summary.total_target)} maqsaddan
+                </text>
+                <text x={G_CX} y={G_CY + 6} textAnchor="middle" fontSize="16" fontWeight="700" fill="#a78bfa">
+                  ${fmtMoney(summary.total_actual)}
+                </text>
+                <text x={G_CX} y={G_CY + 22} textAnchor="middle" fontSize="10" fill="rgba(160,160,160,0.8)">
+                  bajarildi
+                </text>
+              </svg>
+            );
+          })()}
+        </div>
+        {/* Stat rows */}
+        <div style={{ display: 'flex', borderTop: '1px solid var(--border)', marginTop: 4 }}>
+          <div style={{ flex: 1, padding: '10px 16px', borderRight: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Maqsad</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+              ${fmtMoney(summary.total_target)} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)' }}>USD</span>
             </div>
           </div>
-          {/* Legend */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, width: '100%' }}>
-            {[
-              { label: "Ma'lum darajada oldinda", count: ahead,   color: '#16a34a' },
-              { label: "Reja bo'yicha",           count: onTrack, color: '#2563eb' },
-              { label: 'Ortda qolmoqda',          count: behind,  color: '#ef4444' },
-            ].map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>{item.label}</span>
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
-                  {item.count} xodim ({Math.round(item.count / total * 100)}%)
-                </span>
-              </div>
-            ))}
+          <div style={{ flex: 1, padding: '10px 16px' }}>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bajarilgan</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#a78bfa' }}>
+              ${fmtMoney(summary.total_actual)} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)' }}>USD</span>
+            </div>
           </div>
         </div>
       </div>
