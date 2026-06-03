@@ -695,23 +695,24 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
     { name: 'Ortda qolmoqda',          value: behind,  color: '#ef4444' },
   ].filter(d => d.value > 0);
 
-  // ── Line chart data ──────────────────────────────────────────────
-  // Cumulative reja vs fakt per sub-period (weekly for monthly plans)
+  // ── Line chart data (cumulative %, 0-100 scale) ──────────────────
+  // Using percentage of total target avoids the Fakt line being invisible
+  // when actual << reja on an absolute dollar scale.
   const lineData = useMemo(() => {
+    const totalReja = employees.reduce((s, e) => s + e.target, 0) || 1;
     let cumReja = 0, cumFakt = 0;
     return subperiods.map(sp => {
       const spReja = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.target ?? 0), 0);
       const spFakt = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.actual ?? 0), 0);
       cumReja += spReja;
       cumFakt += spFakt;
-      return { name: sp.label, Reja: Math.round(cumReja), Fakt: Math.round(cumFakt) };
+      return {
+        name: sp.label,
+        Reja: Math.round((cumReja / totalReja) * 100),
+        Fakt: Math.round((cumFakt / totalReja) * 100),
+      };
     });
   }, [subperiods, employees]);
-
-  function fmtK(v: number) {
-    if (v >= 1000) return `$${Math.round(v / 1000)}K`;
-    return `$${v}`;
-  }
 
   const CARD = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' };
 
@@ -807,8 +808,8 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
             <LineChart data={lineData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={44} />
-              <Tooltip formatter={(v) => `$${fmtMoney(Number(v) || 0)}`} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+              <YAxis tickFormatter={v => `${v}%`} domain={[0, 100]} tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={36} />
+              <Tooltip formatter={(v) => `${Number(v)}%`} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
               <Legend iconType="line" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
               <Line type="monotone" dataKey="Reja" stroke="#93c5fd" strokeDasharray="5 4" strokeWidth={2} dot={{ r: 3, fill: '#93c5fd' }} />
               <Line type="monotone" dataKey="Fakt" stroke="#1d4ed8" strokeWidth={2.5} dot={{ r: 3, fill: '#1d4ed8' }} />
