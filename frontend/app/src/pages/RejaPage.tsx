@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
-  getRejaPlans, createRejaPlan, updateRejaPlan, deleteRejaPlan,
+  getRejaPlans, updateRejaPlan, deleteRejaPlan,
   getRejaDistribution, saveRejaDistribution, getRejaProgress, listAllResponsibles,
   type RejaPlan, type RejaEmployee,
 } from '@/lib/api/reja';
@@ -708,10 +709,10 @@ function ProgressView({ planId }: { planId: number }) {
 
 export default function RejaPage() {
   const now = new Date();
+  const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
   const [selYear,  setSelYear]  = useState(now.getFullYear());
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
-  const qc = useQueryClient();
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
@@ -734,20 +735,6 @@ export default function RejaPage() {
     if (match && match.id !== selectedPlan?.id) setSelectedPlan(match);
     else if (!match && plans.length > 0) setSelectedPlan(null);
   }, [selYear, selMonth]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const createMutation = useMutation({
-    mutationFn: () => {
-      const { start, end } = monthStartEnd(selYear, selMonth - 1); // monthStartEnd uses 0-based month
-      return createRejaPlan({ period_type: 'monthly', period_start: start, period_end: end, total_target: 0 });
-    },
-    onSuccess: (plan) => {
-      qc.invalidateQueries({ queryKey: ['reja/plans'] });
-      setSelectedPlan(plan);
-      const d = new Date(plan.period_start + 'T00:00:00');
-      setSelYear(d.getFullYear());
-      setSelMonth(d.getMonth() + 1);
-    },
-  });
 
   // Year range: 2020 → 2090
   const YEARS = Array.from({ length: 2090 - 2020 + 1 }, (_, i) => 2020 + i);
@@ -779,11 +766,10 @@ export default function RejaPage() {
               ))}
             </select>
             <button
-              onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: createMutation.isPending ? 0.7 : 1 }}
+              onClick={() => navigate('/reja/new')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
             >
-              <Plus size={14} /> {createMutation.isPending ? 'Yaratilmoqda…' : 'Yangi reja'}
+              <Plus size={14} /> Yangi reja
             </button>
           </div>
         }
@@ -813,8 +799,7 @@ export default function RejaPage() {
             <BarChart3 size={48} strokeWidth={1} />
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>{MONTH_NAMES[selMonth - 1]} {selYear} uchun reja mavjud emas</div>
             <button
-              onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending}
+              onClick={() => navigate('/reja/new')}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
             >
               <Plus size={15} /> Reja yaratish
