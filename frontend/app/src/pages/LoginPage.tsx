@@ -28,7 +28,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!statusQ.data) return;
     if (!statusQ.data.enabled || getStoredToken()) {
-      nav("/payroll/dashboard", { replace: true });
+      nav("/lidlar", { replace: true });
     }
     if (statusQ.data.admin_username) setUsername(statusQ.data.admin_username);
   }, [statusQ.data, nav]);
@@ -48,7 +48,7 @@ export default function LoginPage() {
         r.username,
         (r.role as DashboardRole) ?? "admin",
       );
-      nav("/payroll/dashboard", { replace: true });
+      nav("/lidlar", { replace: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
