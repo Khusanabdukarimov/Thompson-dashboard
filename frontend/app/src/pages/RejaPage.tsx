@@ -768,6 +768,7 @@ export default function RejaPage() {
               style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 200, outline: 'none' }}
             >
               {plans.length === 0 && <option value="">Rejalar yo'q</option>}
+              {!selectedPlan && plans.length > 0 && <option value="">— Reja tanlanmagan —</option>}
               {plans.map(p => (
                 <option key={p.id} value={p.id}>
                   {periodLabel(p)} — ${fmtUZS(p.total_target)}
