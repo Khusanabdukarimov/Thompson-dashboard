@@ -342,6 +342,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
     `, [planId]);
 
     // Actual won-deal sales per responsible for the plan period.
+    // closedate = Bitrix24 CLOSEDATE (set when deal is won); fallback to date_modify, then date_create.
     const allIds = empRes.rows.map(r => r.responsible_id);
     const actualsRes = allIds.length ? await pool.query(`
       SELECT
@@ -351,7 +352,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.date_modify, d.date_create)::date BETWEEN $2 AND $3
+        AND COALESCE(d.closedate, d.date_modify, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -464,20 +465,20 @@ router.get('/plans/:id/progress', async (req, res) => {
 
     const respIds = targetsRes.rows.map(r => r.responsible_id);
 
-    // Actuals: sum of won-deal opportunities, grouped by responsible + win date.
-    // Uses date_modify (updated when deal moves to won stage) as the win date.
+    // Actuals: sum of won-deal opportunities, grouped by responsible + close date.
+    // closedate = Bitrix24 CLOSEDATE (the actual win date); fallback to date_modify, then date_create.
     // ::text cast ensures node-postgres returns a plain string (not a Date object)
     // so JS string comparison against sp.start/sp.end works correctly.
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.date_modify, d.date_create)::date::text AS close_date,
-        SUM(d.opportunity)::numeric                        AS amount
+        COALESCE(d.closedate, d.date_modify, d.date_create)::date::text AS close_date,
+        SUM(d.opportunity)::numeric                                      AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.date_modify, d.date_create)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.date_modify, d.date_create)::date
+        AND COALESCE(d.closedate, d.date_modify, d.date_create)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.closedate, d.date_modify, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
