@@ -728,75 +728,95 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
 
-      {/* 1 ── Jamoa bo'yicha progress (gauge) ──────────────────── */}
-      <div style={CARD}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-          Jamoa bo'yicha progress
+      {/* 1 ── MAQSADLAR gauge (reference design) ──────────────── */}
+      <div style={{ background: '#0d1224', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 18, overflow: 'hidden' }}>
+
+        {/* Header — icon + MAQSADLAR + subtitle, no divider */}
+        <div style={{ padding: '20px 22px 0', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 16px rgba(124,58,237,0.4)' }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '0.06em', lineHeight: 1.1 }}>MAQSADLAR</div>
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.42)', marginTop: 4, lineHeight: 1.4 }}>
+              Bizning maqsadimiz – rivojlanish<br/>va yangi marralarni zabt etish!
+            </div>
+          </div>
         </div>
-        <div style={{ padding: '8px 12px 0' }}>
+
+        {/* Gauge SVG */}
+        <div style={{ padding: '4px 14px 0' }}>
           {(() => {
-            const pct = summary.pct;
-            // Full arc circumference (210° arc)
-            const arcLen = G_R * G_SPAN; // ≈ 381
-            // Visible dash length: pct% of the 100% arc, capped at 115%
-            const dashLen = (Math.min(pct, 115) / 100) * arcLen;
-            // Needle angle & tip — clamped so it never leaves the arc bounds
+            const pct         = summary.pct;
+            const pctFontSize = pct >= 1000 ? 26 : pct >= 100 ? 34 : 40;
+            const arcLen      = G_R * G_SPAN;
+            const dashLen     = (Math.min(pct, 115) / 100) * arcLen;
             const clampedAngle = Math.min(Math.max(gaugeAngle(pct), G_END), G_START);
             const [nx, ny]    = gaugeXY(clampedAngle, G_R * 0.80);
-            const [gx, gy]    = gaugeXY(clampedAngle, G_R);       // glow dot on arc
-            // Tick definitions
+            const [gx, gy]    = gaugeXY(clampedAngle, G_R);
             const TICKS = [0, 25, 50, 75, 100].map(t => ({
-              t,
-              angle: gaugeAngle(t),
+              t, angle: gaugeAngle(t),
               dollar: Math.round(summary.total_target * t / 100),
             }));
             return (
-              <svg viewBox="0 0 300 198" style={{ width: '100%' }}>
+              <svg viewBox="0 0 300 200" style={{ width: '100%', display: 'block' }}>
                 <defs>
-                  {/* Main gradient: red → orange → amber (left to right = 0% → 100%) */}
                   <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%"   stopColor="#dc2626" />
-                    <stop offset="35%"  stopColor="#ea580c" />
-                    <stop offset="65%"  stopColor="#f97316" />
-                    <stop offset="88%"  stopColor="#fbbf24" />
-                    <stop offset="100%" stopColor="#16a34a" />
+                    <stop offset="0%"   stopColor="#cc1f1f" />
+                    <stop offset="30%"  stopColor="#e84020" />
+                    <stop offset="58%"  stopColor="#f97316" />
+                    <stop offset="82%"  stopColor="#fbbf24" />
+                    <stop offset="100%" stopColor="#f59e0b" />
                   </linearGradient>
-                  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                  {/* Bloom layer: blurred copy of the arc for glow effect */}
+                  <filter id="arcBloom" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="6" result="blur"/>
+                  </filter>
+                  <filter id="dotGlow" x="-100%" y="-100%" width="300%" height="300%">
                     <feGaussianBlur stdDeviation="4" result="b"/>
                     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
                   </filter>
                 </defs>
 
-                {/* 1. Background track (full 210° arc) */}
+                {/* Background track */}
                 <path d={gaugeArc(G_R)} fill="none"
-                      stroke="rgba(255,255,255,0.07)" strokeWidth="22" strokeLinecap="round" />
+                      stroke="rgba(255,255,255,0.06)" strokeWidth="26" strokeLinecap="round" />
 
-                {/* 2. Gradient filled arc — clipped via stroke-dasharray */}
+                {/* Bloom glow behind arc */}
                 {pct > 0 && (
                   <path d={gaugeArc(G_R)} fill="none"
-                        stroke="url(#gGrad)" strokeWidth="22" strokeLinecap="round"
+                        stroke="url(#gGrad)" strokeWidth="26" strokeLinecap="round"
+                        strokeDasharray={`${dashLen.toFixed(1)} ${(arcLen * 3).toFixed(1)}`}
+                        filter="url(#arcBloom)" opacity="0.55" />
+                )}
+
+                {/* Main arc */}
+                {pct > 0 && (
+                  <path d={gaugeArc(G_R)} fill="none"
+                        stroke="url(#gGrad)" strokeWidth="26" strokeLinecap="round"
                         strokeDasharray={`${dashLen.toFixed(1)} ${(arcLen * 3).toFixed(1)}`} />
                 )}
 
-                {/* 3. Tick marks + labels */}
+                {/* Tick marks + labels */}
                 {TICKS.map(({ t, angle, dollar }) => {
-                  const [ox, oy] = gaugeXY(angle, G_R + 9);
-                  const [ix, iy] = gaugeXY(angle, G_R - 9);
-                  const [lx, ly] = gaugeXY(angle, G_R + 25);
+                  const [ox, oy] = gaugeXY(angle, G_R + 11);
+                  const [ix, iy] = gaugeXY(angle, G_R - 11);
+                  const [lx, ly] = gaugeXY(angle, G_R + 28);
                   return (
                     <g key={t}>
-                      <line x1={ox.toFixed(1)} y1={oy.toFixed(1)}
-                            x2={ix.toFixed(1)} y2={iy.toFixed(1)}
-                            stroke="rgba(255,255,255,0.45)" strokeWidth="2" />
+                      <line x1={ox.toFixed(1)} y1={oy.toFixed(1)} x2={ix.toFixed(1)} y2={iy.toFixed(1)}
+                            stroke="rgba(255,255,255,0.5)" strokeWidth="2" />
                       <text x={lx.toFixed(1)} y={ly.toFixed(1)} textAnchor="middle"
-                            dominantBaseline="central" fontSize="8.5" fontWeight="600"
-                            fill="rgba(210,210,210,0.75)">
+                            dominantBaseline="central" fontSize="8.5" fontWeight="700"
+                            fill="rgba(220,220,220,0.8)">
                         {t === 0 ? '0' : `${t}%`}
                       </text>
                       {t > 0 && (
                         <text x={lx.toFixed(1)} y={(ly + 11).toFixed(1)} textAnchor="middle"
                               dominantBaseline="central" fontSize="7.5"
-                              fill="rgba(160,160,160,0.55)">
+                              fill="rgba(160,160,160,0.5)">
                           {fmtMoney(dollar)}
                         </text>
                       )}
@@ -804,87 +824,109 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
                   );
                 })}
 
-                {/* 4. Glow dot at needle tip (on arc) */}
+                {/* Glow dot at needle tip */}
                 {pct > 0 && (
                   <>
-                    <circle cx={gx.toFixed(2)} cy={gy.toFixed(2)} r="10"
-                            fill="rgba(255,255,255,0.12)" />
-                    <circle cx={gx.toFixed(2)} cy={gy.toFixed(2)} r="5"
-                            fill="white" filter="url(#glow)" />
+                    <circle cx={gx.toFixed(2)} cy={gy.toFixed(2)} r="12" fill="rgba(251,191,36,0.18)" />
+                    <circle cx={gx.toFixed(2)} cy={gy.toFixed(2)} r="6"  fill="#fbbf24" filter="url(#dotGlow)" />
                   </>
                 )}
 
-                {/* 5. Needle */}
+                {/* Needle */}
                 <line x1={G_CX} y1={G_CY} x2={nx.toFixed(2)} y2={ny.toFixed(2)}
                       stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx={G_CX} cy={G_CY} r="9"  fill="#1e1b4b" stroke="#818cf8" strokeWidth="2" />
-                <circle cx={G_CX} cy={G_CY} r="4"  fill="#a5b4fc" />
+                <circle cx={G_CX} cy={G_CY} r="10" fill="#1e1b4b" stroke="#818cf8" strokeWidth="2.5" />
+                <circle cx={G_CX} cy={G_CY} r="4.5" fill="#a5b4fc" />
 
-                {/* 6. Center text */}
-                <text x={G_CX} y={G_CY - 40} textAnchor="middle" fontSize="36" fontWeight="800" fill="white">
+                {/* Center text */}
+                <text x={G_CX} y={G_CY - 46} textAnchor="middle" fontSize={pctFontSize} fontWeight="800" fill="white">
                   {pct}%
                 </text>
-                <text x={G_CX} y={G_CY - 15} textAnchor="middle" fontSize="9.5" fill="rgba(170,170,170,0.75)">
+                <text x={G_CX} y={G_CY - 19} textAnchor="middle" fontSize="9.5" fill="rgba(180,180,180,0.65)">
                   {fmtMoney(summary.total_target)} maqsaddan
                 </text>
-                <text x={G_CX} y={G_CY + 7} textAnchor="middle" fontSize="17" fontWeight="700" fill="#c084fc">
+                <text x={G_CX} y={G_CY + 5} textAnchor="middle" fontSize="18" fontWeight="700" fill="#c084fc">
                   {fmtMoney(summary.total_actual)}
                 </text>
-                <text x={G_CX} y={G_CY + 25} textAnchor="middle" fontSize="9.5" fill="rgba(170,170,170,0.75)">
+                <text x={G_CX} y={G_CY + 23} textAnchor="middle" fontSize="9.5" fill="rgba(180,180,180,0.65)">
                   bajarildi
                 </text>
               </svg>
             );
           })()}
         </div>
-        {/* Stat rows */}
-        <div style={{ display: 'flex', borderTop: '1px solid var(--border)', marginTop: 4 }}>
-          <div style={{ flex: 1, padding: '10px 16px', borderRight: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Maqsad</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-              ${fmtMoney(summary.total_target)} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)' }}>USD</span>
+
+        {/* Stat card 1 — Maqsad + Bajarilgan */}
+        <div style={{ margin: '6px 14px 8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, display: 'flex' }}>
+          <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>Maqsad</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                {fmtMoney(summary.total_target)}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>USD</div>
             </div>
           </div>
-          <div style={{ flex: 1, padding: '10px 16px' }}>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bajarilgan</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#a78bfa' }}>
-              ${fmtMoney(summary.total_actual)} <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)' }}>USD</span>
+          <div style={{ flex: 1, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(124,58,237,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>Bajarilgan</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#c084fc' }}>
+                {fmtMoney(summary.total_actual)}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>USD</div>
             </div>
           </div>
         </div>
-        {/* Growth row */}
+
+        {/* Stat card 2 — O'sish + O'tgan oyga nisbatan */}
         {(() => {
-          const diff   = summary.total_actual - summary.prev_actual;
+          const diff    = summary.total_actual - summary.prev_actual;
           const hasPrev = summary.prev_actual > 0;
-          const gPct   = summary.growth_pct;
-          const up     = diff >= 0;
-          const color  = up ? '#16a34a' : '#ef4444';
-          const sign   = up ? '+' : '';
+          const gPct    = summary.growth_pct;
+          const up      = diff >= 0;
+          const clr     = up ? '#22c55e' : '#ef4444';
+          const sign    = up ? '+' : '';
           return (
-            <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>
-              <div style={{ flex: 1, padding: '10px 16px', borderRight: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: up ? 'rgba(22,163,74,0.15)' : 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <div style={{ margin: '0 14px 16px', background: up ? 'rgba(21,128,61,0.12)' : 'rgba(239,68,68,0.08)', border: `1px solid ${up ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`, borderRadius: 14, display: 'flex', alignItems: 'center' }}>
+              <div style={{ flex: 1, padding: '12px 16px', borderRight: `1px solid ${up ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: up ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={clr} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     {up
-                      ? <path d="M3 11L8 5L13 11" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      : <path d="M3 5L8 11L13 5"  stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}
+                      ? <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>
+                      : <><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></>}
                   </svg>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>O'sish</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>O'sish</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: clr }}>
                     {hasPrev && gPct !== null ? `${sign}${gPct}%` : '—'}
                   </div>
                 </div>
               </div>
-              <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>O'tgan oyga nisbatan</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: hasPrev ? color : 'var(--text3)' }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>O'tgan oyga nisbatan</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: hasPrev ? clr : 'rgba(255,255,255,0.3)' }}>
                     {hasPrev ? `${sign}$${fmtMoney(Math.abs(diff))}` : '—'}
-                    {hasPrev && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)', marginLeft: 3 }}>USD</span>}
                   </div>
+                  {hasPrev && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>USD</div>}
                 </div>
+                <svg width="28" height="24" viewBox="0 0 28 24" fill="none">
+                  <rect x="0"  y="16" width="5" height="8"  rx="1.5" fill={up ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.4)'}/>
+                  <rect x="8"  y="10" width="5" height="14" rx="1.5" fill={up ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.6)'}/>
+                  <rect x="16" y="4"  width="5" height="20" rx="1.5" fill={clr}/>
+                  {up && <polyline points="2.5,14 10.5,8 18.5,2 24,0" stroke={clr} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>}
+                </svg>
               </div>
             </div>
           );
