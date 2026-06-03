@@ -533,6 +533,30 @@ router.get('/plans/:id/progress', async (req, res) => {
     const totalTarget = employees.reduce((s, e) => s + e.target,       0);
     const totalActual = employees.reduce((s, e) => s + e.total_actual,  0);
 
+    // Previous period comparison
+    const prevPlanRes = await pool.query(`
+      SELECT id, period_start, period_end
+      FROM reja_plans
+      WHERE period_start < $1 AND period_type = $2
+      ORDER BY period_start DESC LIMIT 1
+    `, [plan.period_start, plan.period_type]);
+
+    let prevActual = 0;
+    if (prevPlanRes.rows.length) {
+      const pp = prevPlanRes.rows[0];
+      const prevActualRes = await pool.query(`
+        SELECT COALESCE(SUM(d.opportunity), 0)::numeric AS total
+        FROM deals d
+        JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
+        WHERE COALESCE(d.uf_sale_date, d.closedate, d.date_modify, d.date_create)::date BETWEEN $1 AND $2
+      `, [pp.period_start, pp.period_end]);
+      prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
+    }
+
+    const growthPct = prevActual > 0
+      ? Math.round((totalActual - prevActual) / prevActual * 100)
+      : null;
+
     res.json({
       plan,
       subperiods: subperiods.map(({ index, label, start, end }) => ({ index, label, start, end })),
@@ -541,6 +565,8 @@ router.get('/plans/:id/progress', async (req, res) => {
         total_target: Math.round(totalTarget * 100) / 100,
         total_actual: Math.round(totalActual * 100) / 100,
         pct: totalTarget > 0 ? Math.min(Math.round(totalActual / totalTarget * 100), 999) : 0,
+        prev_actual:  prevActual,
+        growth_pct:   growthPct,
       },
     });
   } catch (err) {

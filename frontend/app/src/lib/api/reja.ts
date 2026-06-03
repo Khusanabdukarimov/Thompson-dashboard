@@ -59,7 +59,7 @@ export type RejaProgressResponse = {
   plan: RejaPlan;
   subperiods: { index: number; label: string; start: string; end: string }[];
   employees: RejaProgressEmployee[];
-  summary: { total_target: number; total_actual: number; pct: number };
+  summary: { total_target: number; total_actual: number; pct: number; prev_actual: number; growth_pct: number | null };
 };
 
 // ── API calls ─────────────────────────────────────────────────────

@@ -679,7 +679,7 @@ function ProgressView({ planId }: { planId: number }) {
 type SummaryRowProps = {
   employees:  import('@/lib/api/reja').RejaProgressEmployee[];
   subperiods: { index: number; label: string; start: string; end: string }[];
-  summary:    { total_target: number; total_actual: number; pct: number };
+  summary:    { total_target: number; total_actual: number; pct: number; prev_actual: number; growth_pct: number | null };
 };
 
 // ── Gauge helpers ─────────────────────────────────────────────────
@@ -852,6 +852,43 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
             </div>
           </div>
         </div>
+        {/* Growth row */}
+        {(() => {
+          const diff   = summary.total_actual - summary.prev_actual;
+          const hasPrev = summary.prev_actual > 0;
+          const gPct   = summary.growth_pct;
+          const up     = diff >= 0;
+          const color  = up ? '#16a34a' : '#ef4444';
+          const sign   = up ? '+' : '';
+          return (
+            <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>
+              <div style={{ flex: 1, padding: '10px 16px', borderRight: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: up ? 'rgba(22,163,74,0.15)' : 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    {up
+                      ? <path d="M3 11L8 5L13 11" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      : <path d="M3 5L8 11L13 5"  stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>}
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>O'sish</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color }}>
+                    {hasPrev && gPct !== null ? `${sign}${gPct}%` : '—'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>O'tgan oyga nisbatan</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: hasPrev ? color : 'var(--text3)' }}>
+                    {hasPrev ? `${sign}$${fmtMoney(Math.abs(diff))}` : '—'}
+                    {hasPrev && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)', marginLeft: 3 }}>USD</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 2 ── Top 5 xodimlar ───────────────────────────────────── */}
