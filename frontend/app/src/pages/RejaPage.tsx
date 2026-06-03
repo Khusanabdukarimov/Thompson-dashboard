@@ -1,4 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import {
+  ResponsiveContainer, PieChart, Pie, Cell,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
@@ -664,9 +668,120 @@ function ProgressView({ planId }: { planId: number }) {
         * Har bir tugallangan davr uchun asl natija hisobga olinadi. Qolgan davrlar uchun maqsad = (jami reja − o'tgan davrlar summasi) / qolgan davrlar soni.
       </div>
 
-      {/* Top 5 xodimlar by performance */}
-      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+      {/* ── Summary row: Donut · Top-5 · Dynamics chart ─────────── */}
+      <SummaryRow employees={employees} subperiods={subperiods} summary={data.summary} />
+    </div>
+  );
+}
+
+// ── SummaryRow ─────────────────────────────────────────────────────
+
+type SummaryRowProps = {
+  employees:  import('@/lib/api/reja').RejaProgressEmployee[];
+  subperiods: { index: number; label: string; start: string; end: string }[];
+  summary:    { total_target: number; total_actual: number; pct: number };
+};
+
+function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
+  const [chartView, setChartView] = useState<'oy' | 'kvartal'>('oy');
+
+  // ── Donut data ───────────────────────────────────────────────────
+  const ahead    = employees.filter(e => e.pct > 100).length;
+  const onTrack  = employees.filter(e => e.pct >= 70 && e.pct <= 100).length;
+  const behind   = employees.filter(e => e.pct < 70).length;
+  const total    = employees.length || 1;
+
+  const donutData = [
+    { name: "Ma'lum darajada oldinda", value: ahead,   color: '#16a34a' },
+    { name: "Reja bo'yicha",           value: onTrack, color: '#2563eb' },
+    { name: 'Ortda qolmoqda',          value: behind,  color: '#ef4444' },
+  ].filter(d => d.value > 0);
+
+  // ── Line chart data ──────────────────────────────────────────────
+  // Aggregate per-subperiod across all employees, then make cumulative
+  const lineData = useMemo(() => {
+    if (chartView === 'oy') {
+      let cumReja = 0, cumFakt = 0;
+      return subperiods.map(sp => {
+        const spReja = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.target ?? 0), 0);
+        const spFakt = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.actual ?? 0), 0);
+        cumReja += spReja;
+        cumFakt += spFakt;
+        return { name: sp.label, Reja: Math.round(cumReja), Fakt: Math.round(cumFakt) };
+      });
+    }
+    // kvartal: group 4 weeks into 2-week halves as a simple breakdown
+    const half = Math.ceil(subperiods.length / 2);
+    let cumReja = 0, cumFakt = 0;
+    const halves = [];
+    for (let i = 0; i < subperiods.length; i += half) {
+      const chunk = subperiods.slice(i, i + half);
+      chunk.forEach(sp => {
+        cumReja += employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.target ?? 0), 0);
+        cumFakt += employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.actual ?? 0), 0);
+      });
+      halves.push({ name: `${i + 1}–${Math.min(i + half, subperiods.length)}-hafta`, Reja: Math.round(cumReja), Fakt: Math.round(cumFakt) });
+    }
+    return halves;
+  }, [chartView, subperiods, employees]);
+
+  function fmtK(v: number) {
+    if (v >= 1000) return `$${Math.round(v / 1000)}K`;
+    return `$${v}`;
+  }
+
+  const CARD = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+
+      {/* 1 ── Jamoa bo'yicha progress ──────────────────────────── */}
+      <div style={CARD}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+          Jamoa bo'yicha progress
+        </div>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          {/* Donut */}
+          <div style={{ position: 'relative', width: 160, height: 160 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={donutData} cx="50%" cy="50%" innerRadius={52} outerRadius={74} dataKey="value" strokeWidth={0}>
+                  {donutData.map((d, i) => (
+                    <Cell key={i} fill={d.color} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            {/* Center label */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>{summary.pct}%</span>
+              <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>O'rtacha</span>
+            </div>
+          </div>
+          {/* Legend */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, width: '100%' }}>
+            {[
+              { label: "Ma'lum darajada oldinda", count: ahead,   color: '#16a34a' },
+              { label: "Reja bo'yicha",           count: onTrack, color: '#2563eb' },
+              { label: 'Ortda qolmoqda',          count: behind,  color: '#ef4444' },
+            ].map(item => (
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>{item.label}</span>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                  {item.count} xodim ({Math.round(item.count / total * 100)}%)
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 2 ── Top 5 xodimlar ───────────────────────────────────── */}
+      <div style={CARD}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
           Top 5 xodimlar <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 6 }}>Bajarilish bo'yicha</span>
         </div>
         <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -676,21 +791,21 @@ function ProgressView({ planId }: { planId: number }) {
             .map((emp, i) => {
               const barColor = emp.pct >= 100 ? '#16a34a' : emp.pct >= 70 ? '#f59e0b' : '#ef4444';
               return (
-                <div key={emp.responsible_id} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{ width: 20, fontSize: 12, fontWeight: 700, color: i === 0 ? '#f59e0b' : 'var(--text3)', flexShrink: 0 }}>{i + 1}</span>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                <div key={emp.responsible_id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ width: 18, fontSize: 12, fontWeight: 700, color: i === 0 ? '#f59e0b' : 'var(--text3)', flexShrink: 0 }}>{i + 1}</span>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: avatarColor(emp.full_name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                     {initials(emp.full_name)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.full_name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
-                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>{CURRENCY_SIGN}{fmtMoney(emp.total_actual)} <span style={{ color: 'var(--text3)', fontWeight: 400 }}>/ {CURRENCY_SIGN}{fmtMoney(emp.target)} reja</span></span>
-                        <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: emp.pct >= 100 ? '#dcfce7' : emp.pct >= 70 ? '#fef9c3' : 'rgba(239,68,68,0.1)', color: barColor }}>{emp.pct}%</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.full_name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{CURRENCY_SIGN}{fmtMoney(emp.total_actual)}<span style={{ fontWeight: 400 }}> / {CURRENCY_SIGN}{fmtMoney(emp.target)}</span></span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: emp.pct >= 100 ? '#dcfce7' : emp.pct >= 70 ? '#fef9c3' : 'rgba(239,68,68,0.1)', color: barColor }}>{emp.pct}%</span>
                       </div>
                     </div>
-                    <div style={{ height: 5, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(emp.pct, 100)}%`, background: barColor, borderRadius: 3, transition: 'width 0.3s' }} />
+                    <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(emp.pct, 100)}%`, background: barColor, borderRadius: 2, transition: 'width 0.3s' }} />
                     </div>
                   </div>
                 </div>
@@ -698,6 +813,34 @@ function ProgressView({ planId }: { planId: number }) {
             })}
         </div>
       </div>
+
+      {/* 3 ── Rejani bajarilish dinamikasi ─────────────────────── */}
+      <div style={CARD}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Rejani bajarilish dinamikasi</span>
+          <div style={{ display: 'flex', borderRadius: 7, overflow: 'hidden', border: '1px solid var(--border)' }}>
+            {(['oy', 'kvartal'] as const).map(v => (
+              <button key={v} onClick={() => setChartView(v)} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 600, border: 0, cursor: 'pointer', background: chartView === v ? '#1d4ed8' : 'transparent', color: chartView === v ? '#fff' : 'var(--text2)', transition: 'all 0.15s' }}>
+                {v === 'oy' ? 'Oy' : 'Kvartal'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '12px 8px 8px' }}>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={lineData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={44} />
+              <Tooltip formatter={(v: number) => `$${fmtMoney(v)}`} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+              <Legend iconType="line" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+              <Line type="monotone" dataKey="Reja" stroke="#93c5fd" strokeDasharray="5 4" strokeWidth={2} dot={{ r: 3, fill: '#93c5fd' }} />
+              <Line type="monotone" dataKey="Fakt" stroke="#1d4ed8" strokeWidth={2.5} dot={{ r: 3, fill: '#1d4ed8' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
     </div>
   );
 }
