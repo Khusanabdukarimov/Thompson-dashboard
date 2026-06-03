@@ -129,13 +129,21 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   );
   const hasAnyTarget = assignedEmployees.length > 0;
 
-  // IDs already in plan (from DB or pending)
+  // When no targets saved yet → show all employees so user can assign
+  // When targets exist → always show only assigned + pending - removed (in both view and edit mode)
+  const filtered = useMemo(() => {
+    const base = !hasAnyTarget
+      ? [...employees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))]
+      : [...assignedEmployees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !assignedEmployees.some(e => e.responsible_id === p.responsible_id))];
+    if (!search.trim()) return base;
+    const q = search.toLowerCase();
+    return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
+  }, [employees, assignedEmployees, pendingEmployees, removedIds, search, hasAnyTarget]);
+
+  // IDs already visible in the table — used to exclude them from "Xodim qo'shish" dropdown
   const employeeIds = useMemo(
-    () => new Set([
-      ...employees.filter(e => !removedIds.has(e.responsible_id)).map(e => e.responsible_id),
-      ...pendingEmployees.map(e => e.responsible_id),
-    ]),
-    [employees, pendingEmployees, removedIds],
+    () => new Set(filtered.map(e => e.responsible_id)),
+    [filtered],
   );
 
   // All active responsibles NOT yet in this plan (or removed from it)
@@ -143,17 +151,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     () => (allRespQ.data ?? []).filter(r => !employeeIds.has(r.id)),
     [allRespQ.data, employeeIds],
   );
-
-  // When no targets saved yet → show all employees so user can assign
-  // When targets exist → show only assigned + pending by default; toggle shows all
-  const filtered = useMemo(() => {
-    const base = (!hasAnyTarget || showAll)
-      ? [...employees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))]
-      : [...assignedEmployees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !assignedEmployees.some(e => e.responsible_id === p.responsible_id))];
-    if (!search.trim()) return base;
-    const q = search.toLowerCase();
-    return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-  }, [employees, assignedEmployees, pendingEmployees, removedIds, search, showAll, hasAnyTarget]);
 
   // All employees to include in save — removed ones get target=0 (clears them from plan)
   const allForSave = useMemo(
