@@ -63,8 +63,10 @@ Promise.all([
   pool.query(`
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
-    ALTER TABLE deals ADD COLUMN IF NOT EXISTS date_modify TIMESTAMPTZ;
-    CREATE INDEX IF NOT EXISTS deals_date_modify_idx ON deals(date_modify);
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS date_modify   TIMESTAMPTZ;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_sale_date  TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS deals_date_modify_idx  ON deals(date_modify);
+    CREATE INDEX IF NOT EXISTS deals_uf_sale_date_idx ON deals(uf_sale_date);
   `).catch(err => console.error('[startup] leads/deals migration failed:', err.message)),
   pool.query(`
     UPDATE stages SET is_won = TRUE, is_final = TRUE

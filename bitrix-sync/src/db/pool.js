@@ -1,5 +1,11 @@
 require('dotenv').config();
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// DATE (OID 1082): return as plain "YYYY-MM-DD" string instead of letting
+// node-postgres convert through a JS Date, which applies the connection
+// timezone (Asia/Tashkent, UTC+5) and shifts midnight on the 1st into the
+// previous month in UTC — e.g. 2026-06-01 → "2026-05-31T19:00:00.000Z".
+types.setTypeParser(1082, val => val);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

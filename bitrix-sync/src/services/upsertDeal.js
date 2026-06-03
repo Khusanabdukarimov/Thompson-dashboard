@@ -48,8 +48,9 @@ async function upsertDeal(r, client) {
   const { rows } = await db.query(
     `INSERT INTO deals (
        id, responsible_id, stage_id, opportunity, currency_id,
-       source_id, utm_source, date_create, date_modify, closedate, uf_cancel_reason, contact_id, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+       source_id, utm_source, date_create, date_modify, closedate,
+       uf_sale_date, uf_cancel_reason, contact_id, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -59,6 +60,7 @@ async function upsertDeal(r, client) {
        utm_source       = EXCLUDED.utm_source,
        date_modify      = EXCLUDED.date_modify,
        closedate        = EXCLUDED.closedate,
+       uf_sale_date     = EXCLUDED.uf_sale_date,
        uf_cancel_reason = EXCLUDED.uf_cancel_reason,
        contact_id       = EXCLUDED.contact_id,
        synced_at        = NOW()
@@ -74,6 +76,7 @@ async function upsertDeal(r, client) {
       parseDate(r.DATE_CREATE),
       parseDate(r.DATE_MODIFY),
       parseDate(r.CLOSEDATE),
+      parseDate(r.UF_CRM_1779450406),
       ufEnum(r.UF_CRM_69EBC105EAA93, DEAL_CANCEL_REASON_MAP),
       contactId,
     ]
