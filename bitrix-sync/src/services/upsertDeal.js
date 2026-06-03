@@ -49,8 +49,8 @@ async function upsertDeal(r, client) {
     `INSERT INTO deals (
        id, responsible_id, stage_id, opportunity, currency_id,
        source_id, utm_source, date_create, date_modify, closedate,
-       uf_sale_date, uf_cancel_reason, contact_id, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+       uf_sale_date, uf_cancel_reason, contact_id, begindate, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -63,6 +63,7 @@ async function upsertDeal(r, client) {
        uf_sale_date     = EXCLUDED.uf_sale_date,
        uf_cancel_reason = EXCLUDED.uf_cancel_reason,
        contact_id       = EXCLUDED.contact_id,
+       begindate        = EXCLUDED.begindate,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -79,6 +80,7 @@ async function upsertDeal(r, client) {
       parseDate(r.UF_CRM_1779450406),
       ufEnum(r.UF_CRM_69EBC105EAA93, DEAL_CANCEL_REASON_MAP),
       contactId,
+      parseDate(r.BEGINDATE),
     ]
   );
 
