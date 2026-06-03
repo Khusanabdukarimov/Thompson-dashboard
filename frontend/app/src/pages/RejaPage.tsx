@@ -835,8 +835,7 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
                 {/* Needle */}
                 <line x1={G_CX} y1={G_CY} x2={nx.toFixed(2)} y2={ny.toFixed(2)}
                       stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx={G_CX} cy={G_CY} r="10" fill="#1e1b4b" stroke="#818cf8" strokeWidth="2.5" />
-                <circle cx={G_CX} cy={G_CY} r="4.5" fill="#a5b4fc" />
+                <circle cx={G_CX} cy={G_CY} r="4" fill="#a5b4fc" />
 
                 {/* Center text */}
                 <text x={G_CX} y={G_CY - 46} textAnchor="middle" fontSize={pctFontSize} fontWeight="800" fill="white">
