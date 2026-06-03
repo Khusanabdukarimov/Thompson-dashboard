@@ -6,7 +6,8 @@ const { loadAll: loadStages } = require('../src/services/stageResolver');
 
 const DEAL_SELECT = [
   'ID', 'ASSIGNED_BY_ID', 'STAGE_ID', 'OPPORTUNITY', 'CURRENCY_ID',
-  'SOURCE_ID', 'UTM_SOURCE', 'DATE_CREATE', 'CLOSEDATE', 'UF_CRM_69EBC105EAA93',
+  'SOURCE_ID', 'UTM_SOURCE', 'DATE_CREATE', 'DATE_MODIFY', 'CLOSEDATE',
+  'UF_CRM_69EBC105EAA93', 'UF_CRM_1779450406', 'CONTACT_ID',
 ];
 
 async function syncDeals() {
