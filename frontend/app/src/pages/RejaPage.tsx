@@ -740,9 +740,6 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
           </div>
           <div>
             <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '0.06em', lineHeight: 1.1 }}>MAQSADLAR</div>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.42)', marginTop: 4, lineHeight: 1.4 }}>
-              Bizning maqsadimiz – rivojlanish<br/>va yangi marralarni zabt etish!
-            </div>
           </div>
         </div>
 
