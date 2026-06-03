@@ -696,7 +696,7 @@ function gaugeArc(r: number): string {
   // Single full 210° arc path (start → end) — used for both bg and gradient
   const [sx, sy] = gaugeXY(G_START, r);
   const [ex, ey] = gaugeXY(G_END,   r);
-  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 1 0 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 1 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
 }
 function gaugeAngle(pct: number): number {
   return G_START - (Math.min(Math.max(pct, 0), 115) / 100) * G_SPAN;
