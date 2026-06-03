@@ -837,18 +837,9 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
                       stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
                 <circle cx={G_CX} cy={G_CY} r="4" fill="#a5b4fc" />
 
-                {/* Center text */}
-                <text x={G_CX} y={G_CY - 46} textAnchor="middle" fontSize={pctFontSize} fontWeight="800" fill="white">
+                {/* Center text — percentage only */}
+                <text x={G_CX} y={G_CY - 20} textAnchor="middle" fontSize={pctFontSize} fontWeight="800" fill="white">
                   {pct}%
-                </text>
-                <text x={G_CX} y={G_CY - 19} textAnchor="middle" fontSize="9.5" fill="rgba(180,180,180,0.65)">
-                  {fmtMoney(summary.total_target)} maqsaddan
-                </text>
-                <text x={G_CX} y={G_CY + 5} textAnchor="middle" fontSize="18" fontWeight="700" fill="#c084fc">
-                  {fmtMoney(summary.total_actual)}
-                </text>
-                <text x={G_CX} y={G_CY + 23} textAnchor="middle" fontSize="9.5" fill="rgba(180,180,180,0.65)">
-                  bajarildi
                 </text>
               </svg>
             );
