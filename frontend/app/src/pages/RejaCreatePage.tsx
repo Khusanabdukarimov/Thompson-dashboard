@@ -39,7 +39,7 @@ export default function RejaCreatePage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
-      navigate('/reja');
+      navigate(`/reja?year=${selYear}&month=${selMonth}`);
     },
     onError: (err: Error) => {
       setError(err.message || 'Xatolik yuz berdi. Qaytadan urinib ko\'ring.');

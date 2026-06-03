@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
@@ -826,6 +826,7 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
 export default function RejaPage() {
   const now = new Date();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
   const [selYear,  setSelYear]  = useState(now.getFullYear());
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
@@ -839,8 +840,12 @@ export default function RejaPage() {
   useEffect(() => {
     if (didAutoSelect.current || !plans.length) return;
     didAutoSelect.current = true;
-    const todayPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const match = plans.find(p => p.period_start.startsWith(todayPrefix));
+    const paramYear  = parseInt(searchParams.get('year')  ?? '');
+    const paramMonth = parseInt(searchParams.get('month') ?? '');
+    const prefix = (paramYear && paramMonth)
+      ? `${paramYear}-${String(paramMonth).padStart(2, '0')}`
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const match = plans.find(p => p.period_start.startsWith(prefix));
     setSelectedPlan(match ?? plans[0]);
   }, [plans]); // eslint-disable-line react-hooks/exhaustive-deps
 
