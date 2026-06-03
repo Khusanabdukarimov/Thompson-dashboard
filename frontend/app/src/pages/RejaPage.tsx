@@ -683,8 +683,6 @@ type SummaryRowProps = {
 };
 
 function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
-  const [chartView, setChartView] = useState<'oy' | 'kvartal'>('oy');
-
   // ── Donut data ───────────────────────────────────────────────────
   const ahead    = employees.filter(e => e.pct > 100).length;
   const onTrack  = employees.filter(e => e.pct >= 70 && e.pct <= 100).length;
@@ -698,32 +696,17 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
   ].filter(d => d.value > 0);
 
   // ── Line chart data ──────────────────────────────────────────────
-  // Aggregate per-subperiod across all employees, then make cumulative
+  // Cumulative reja vs fakt per sub-period (weekly for monthly plans)
   const lineData = useMemo(() => {
-    if (chartView === 'oy') {
-      let cumReja = 0, cumFakt = 0;
-      return subperiods.map(sp => {
-        const spReja = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.target ?? 0), 0);
-        const spFakt = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.actual ?? 0), 0);
-        cumReja += spReja;
-        cumFakt += spFakt;
-        return { name: sp.label, Reja: Math.round(cumReja), Fakt: Math.round(cumFakt) };
-      });
-    }
-    // kvartal: group 4 weeks into 2-week halves as a simple breakdown
-    const half = Math.ceil(subperiods.length / 2);
     let cumReja = 0, cumFakt = 0;
-    const halves = [];
-    for (let i = 0; i < subperiods.length; i += half) {
-      const chunk = subperiods.slice(i, i + half);
-      chunk.forEach(sp => {
-        cumReja += employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.target ?? 0), 0);
-        cumFakt += employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.actual ?? 0), 0);
-      });
-      halves.push({ name: `${i + 1}–${Math.min(i + half, subperiods.length)}-hafta`, Reja: Math.round(cumReja), Fakt: Math.round(cumFakt) });
-    }
-    return halves;
-  }, [chartView, subperiods, employees]);
+    return subperiods.map(sp => {
+      const spReja = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.target ?? 0), 0);
+      const spFakt = employees.reduce((s, e) => s + (e.subperiods.find(w => w.index === sp.index)?.actual ?? 0), 0);
+      cumReja += spReja;
+      cumFakt += spFakt;
+      return { name: sp.label, Reja: Math.round(cumReja), Fakt: Math.round(cumFakt) };
+    });
+  }, [subperiods, employees]);
 
   function fmtK(v: number) {
     if (v >= 1000) return `$${Math.round(v / 1000)}K`;
@@ -816,15 +799,8 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
 
       {/* 3 ── Rejani bajarilish dinamikasi ─────────────────────── */}
       <div style={CARD}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Rejani bajarilish dinamikasi</span>
-          <div style={{ display: 'flex', borderRadius: 7, overflow: 'hidden', border: '1px solid var(--border)' }}>
-            {(['oy', 'kvartal'] as const).map(v => (
-              <button key={v} onClick={() => setChartView(v)} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 600, border: 0, cursor: 'pointer', background: chartView === v ? '#1d4ed8' : 'transparent', color: chartView === v ? '#fff' : 'var(--text2)', transition: 'all 0.15s' }}>
-                {v === 'oy' ? 'Oy' : 'Kvartal'}
-              </button>
-            ))}
-          </div>
         </div>
         <div style={{ padding: '12px 8px 8px' }}>
           <ResponsiveContainer width="100%" height={220}>
