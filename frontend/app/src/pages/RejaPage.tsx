@@ -832,7 +832,7 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={44} />
-              <Tooltip formatter={(v: number) => `$${fmtMoney(v)}`} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+              <Tooltip formatter={(v) => `$${fmtMoney(Number(v) || 0)}`} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
               <Legend iconType="line" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
               <Line type="monotone" dataKey="Reja" stroke="#93c5fd" strokeDasharray="5 4" strokeWidth={2} dot={{ r: 3, fill: '#93c5fd' }} />
               <Line type="monotone" dataKey="Fakt" stroke="#1d4ed8" strokeWidth={2.5} dot={{ r: 3, fill: '#1d4ed8' }} />
