@@ -339,7 +339,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
             </button>
             {showAll && dirty && (
               <button
-                onClick={() => { saveMutation.mutate(); setShowAll(false); }}
+                onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending}
                 style={{ height: 34, padding: '0 14px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >

@@ -290,16 +290,13 @@ router.get('/plans/:id/distribution', async (req, res) => {
       LEFT JOIN reja_targets t
         ON  t.plan_id        = $1
         AND t.responsible_id = r.id
-      WHERE (
-        r.work_position ILIKE '%hunter%'
-        OR r.work_position ILIKE '%closer%'
-        OR TRIM(COALESCE(r.last_name,'') || ' ' || COALESCE(r.name,'')) ILIKE '%shaxzod%yormatov%'
-        OR TRIM(COALESCE(r.name,''    ) || ' ' || COALESCE(r.last_name,'')) ILIKE '%shaxzod%yormatov%'
-        OR TRIM(COALESCE(r.last_name,'') || ' ' || COALESCE(r.name,'')) ILIKE '%behzod%esonov%'
-        OR TRIM(COALESCE(r.name,''    ) || ' ' || COALESCE(r.last_name,'')) ILIKE '%behzod%esonov%'
-        OR t.target > 0
-      )
-      ORDER BY COALESCE(t.target, 0) DESC, r.active DESC, r.name, r.last_name
+      WHERE r.active = TRUE
+        AND (
+          r.work_position ILIKE '%hunter%'
+          OR r.work_position ILIKE '%closer%'
+          OR t.target > 0
+        )
+      ORDER BY COALESCE(t.target, 0) DESC, r.name, r.last_name
     `, [planId]);
 
     // Actual won-deal sales per responsible for the plan period.
