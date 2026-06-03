@@ -122,36 +122,39 @@ function getSubperiods(plan) {
   return result;
 }
 
-// ── Dynamic recalculation (core business logic) ───────────────────
+// ── Rolling recalculation (core business logic) ───────────────────
 //
-// Rule: after each completed sub-period the remaining target is
-//   remainingTarget = totalTarget - sum(past actuals)
-// and that remaining amount is split equally across remaining sub-periods.
+// For each sub-period N:
+//   target_N = (totalTarget - sum(actuals for periods 1..N-1)) / (total_periods - N + 1)
 //
 // Example (monthly, 4 weeks, target 50 000):
-//   base/week = 12 500
-//   week 1 actual = 10 000  →  remaining = 40 000 / 3 = 13 333.33
-//   week 2 actual = 20 000  →  remaining = 20 000 / 2 = 10 000
+//   week 1: 50 000 / 4 = 12 500
+//   week 1 actual = 10 000 → week 2: (50 000 − 10 000) / 3 = 13 333.33
+//   week 2 actual = 20 000 → week 3: (50 000 − 30 000) / 2 = 10 000
+//   week 3 actual = 8 000  → week 4: (50 000 − 38 000) / 1 = 12 000
+//
+// Only FULLY COMPLETED past periods (end < today) reduce the running total.
 //
 function computeSubperiodProgress(totalTarget, subperiods, actualsMap, today) {
-  const todayStr   = localISO(today);
-  const n          = subperiods.length;
-  const baseTarget = n > 0 ? totalTarget / n : 0;
+  const todayStr       = localISO(today);
+  const n              = subperiods.length;
+  let   cumulativeActual = 0;
 
-  // Split into fully-completed past vs current+future remaining
-  const past      = subperiods.filter(sp => sp.end < todayStr);
-  const remaining = subperiods.filter(sp => sp.end >= todayStr);
-
-  const sumPastActuals  = past.reduce((s, sp) => s + (actualsMap[sp.index] || 0), 0);
-  const remainingTarget = totalTarget - sumPastActuals;
-  const recalcTarget    = remaining.length > 0 ? remainingTarget / remaining.length : 0;
-
-  return subperiods.map(sp => {
+  return subperiods.map((sp, i) => {
     const isPast    = sp.end < todayStr;
     const isCurrent = sp.start <= todayStr && todayStr <= sp.end;
     const actual    = actualsMap[sp.index] || 0;
-    const target    = isPast ? baseTarget : recalcTarget;
-    const pct       = target > 0 ? Math.min(Math.round(actual / target * 100), 999) : 0;
+
+    // Target for this period based on what was known at its start
+    const remainingTarget  = Math.max(0, totalTarget - cumulativeActual);
+    const remainingPeriods = n - i;
+    const target = remainingPeriods > 0 ? remainingTarget / remainingPeriods : 0;
+
+    const pct = target > 0 ? Math.min(Math.round(actual / target * 100), 999) : 0;
+
+    // Accumulate only fully-completed periods so next period recalculates correctly
+    if (isPast) cumulativeActual += actual;
+
     return {
       ...sp,
       target:    Math.round(target * 100) / 100,
