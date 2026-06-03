@@ -683,24 +683,23 @@ type SummaryRowProps = {
 };
 
 // ── Gauge helpers ─────────────────────────────────────────────────
-const G_CX = 150, G_CY = 155, G_R = 112;
-// Arc spans 210°: from 195° (left-bottom) to -15° (right-bottom)
+const G_CX = 150, G_CY = 152, G_R = 104;
+// Arc spans 210°: from 195° (left-bottom) → top → -15° (right-bottom)
 const G_START = 195 * Math.PI / 180;
 const G_END   = -15  * Math.PI / 180;
-const G_SPAN  = G_START - G_END; // 210° in radians
+const G_SPAN  = G_START - G_END; // 210° in radians ≈ 3.665
 
-function gaugeAngle(pct: number): number {
-  return G_START - (Math.min(pct, 110) / 100) * G_SPAN;
-}
 function gaugeXY(angle: number, r = G_R): [number, number] {
   return [G_CX + r * Math.cos(angle), G_CY - r * Math.sin(angle)];
 }
-function gaugePath(r: number, fromAngle: number, toAngle: number): string {
-  const [sx, sy] = gaugeXY(fromAngle, r);
-  const [ex, ey] = gaugeXY(toAngle, r);
-  const span = fromAngle - toAngle;
-  const large = span > Math.PI ? 1 : 0;
-  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+function gaugeArc(r: number): string {
+  // Single full 210° arc path (start → end) — used for both bg and gradient
+  const [sx, sy] = gaugeXY(G_START, r);
+  const [ex, ey] = gaugeXY(G_END,   r);
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 1 0 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+}
+function gaugeAngle(pct: number): number {
+  return G_START - (Math.min(Math.max(pct, 0), 115) / 100) * G_SPAN;
 }
 
 function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
@@ -734,69 +733,104 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
           Jamoa bo'yicha progress
         </div>
-        <div style={{ padding: '12px 16px 0' }}>
+        <div style={{ padding: '8px 12px 0' }}>
           {(() => {
-            const pct       = summary.pct;
-            const a70       = gaugeAngle(70);
-            const a100      = gaugeAngle(100);
-            const needle    = gaugeAngle(pct);
-            const [nx, ny]  = gaugeXY(needle, G_R * 0.78);
-            const TICKS     = [0, 25, 50, 75, 100];
-            const arcColor  = pct >= 100 ? '#16a34a' : pct >= 70 ? '#f59e0b' : '#ef4444';
+            const pct = summary.pct;
+            // Full arc circumference (210° arc)
+            const arcLen = G_R * G_SPAN; // ≈ 381
+            // Visible dash length: pct% of the 100% arc, capped at 115%
+            const dashLen = (Math.min(pct, 115) / 100) * arcLen;
+            // Needle angle & tip position
+            const needleAngle = gaugeAngle(pct);
+            const [nx, ny]    = gaugeXY(needleAngle, G_R * 0.80);
+            const [gx, gy]    = gaugeXY(needleAngle, G_R);       // glow dot on arc
+            // Tick definitions
+            const TICKS = [0, 25, 50, 75, 100].map(t => ({
+              t,
+              angle: gaugeAngle(t),
+              dollar: Math.round(summary.total_target * t / 100),
+            }));
             return (
-              <svg viewBox="0 0 300 200" style={{ width: '100%', overflow: 'visible' }}>
-                {/* Background track */}
-                <path d={gaugePath(G_R, G_START, G_END)} fill="none"
-                      stroke="rgba(128,128,128,0.18)" strokeWidth="16" strokeLinecap="round" />
+              <svg viewBox="0 0 300 198" style={{ width: '100%' }}>
+                <defs>
+                  {/* Main gradient: red → orange → amber (left to right = 0% → 100%) */}
+                  <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%"   stopColor="#dc2626" />
+                    <stop offset="35%"  stopColor="#ea580c" />
+                    <stop offset="65%"  stopColor="#f97316" />
+                    <stop offset="88%"  stopColor="#fbbf24" />
+                    <stop offset="100%" stopColor="#16a34a" />
+                  </linearGradient>
+                  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="4" result="b"/>
+                    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
 
-                {/* Colored arc: red 0→min(pct,70) */}
+                {/* 1. Background track (full 210° arc) */}
+                <path d={gaugeArc(G_R)} fill="none"
+                      stroke="rgba(255,255,255,0.07)" strokeWidth="22" strokeLinecap="round" />
+
+                {/* 2. Gradient filled arc — clipped via stroke-dasharray */}
                 {pct > 0 && (
-                  <path d={gaugePath(G_R, G_START, pct <= 70 ? needle : a70)}
-                        fill="none" stroke="#ef4444" strokeWidth="16" strokeLinecap={pct <= 70 ? 'round' : 'butt'} />
-                )}
-                {/* Amber: 70→min(pct,100) */}
-                {pct > 70 && (
-                  <path d={gaugePath(G_R, a70, pct <= 100 ? needle : a100)}
-                        fill="none" stroke="#f59e0b" strokeWidth="16" strokeLinecap={pct <= 100 ? 'round' : 'butt'} />
-                )}
-                {/* Green: 100→min(pct,110) */}
-                {pct > 100 && (
-                  <path d={gaugePath(G_R, a100, needle)}
-                        fill="none" stroke="#16a34a" strokeWidth="16" strokeLinecap="round" />
+                  <path d={gaugeArc(G_R)} fill="none"
+                        stroke="url(#gGrad)" strokeWidth="22" strokeLinecap="round"
+                        strokeDasharray={`${dashLen.toFixed(1)} ${(arcLen * 3).toFixed(1)}`} />
                 )}
 
-                {/* Tick marks */}
-                {TICKS.map(t => {
-                  const ta = gaugeAngle(t);
-                  const [ox, oy] = gaugeXY(ta, G_R + 10);
-                  const [ix, iy] = gaugeXY(ta, G_R - 10);
-                  const [lx, ly] = gaugeXY(ta, G_R + 24);
+                {/* 3. Tick marks + labels */}
+                {TICKS.map(({ t, angle, dollar }) => {
+                  const [ox, oy] = gaugeXY(angle, G_R + 9);
+                  const [ix, iy] = gaugeXY(angle, G_R - 9);
+                  const [lx, ly] = gaugeXY(angle, G_R + 25);
                   return (
                     <g key={t}>
-                      <line x1={ox.toFixed(1)} y1={oy.toFixed(1)} x2={ix.toFixed(1)} y2={iy.toFixed(1)}
-                            stroke="rgba(255,255,255,0.35)" strokeWidth="2" />
-                      <text x={lx.toFixed(1)} y={ly.toFixed(1)} textAnchor="middle" dominantBaseline="central"
-                            fontSize="9" fill="rgba(200,200,200,0.6)">{t}%</text>
+                      <line x1={ox.toFixed(1)} y1={oy.toFixed(1)}
+                            x2={ix.toFixed(1)} y2={iy.toFixed(1)}
+                            stroke="rgba(255,255,255,0.45)" strokeWidth="2" />
+                      <text x={lx.toFixed(1)} y={ly.toFixed(1)} textAnchor="middle"
+                            dominantBaseline="central" fontSize="8.5" fontWeight="600"
+                            fill="rgba(210,210,210,0.75)">
+                        {t === 0 ? '0' : `${t}%`}
+                      </text>
+                      {t > 0 && (
+                        <text x={lx.toFixed(1)} y={(ly + 11).toFixed(1)} textAnchor="middle"
+                              dominantBaseline="central" fontSize="7.5"
+                              fill="rgba(160,160,160,0.55)">
+                          {fmtMoney(dollar)}
+                        </text>
+                      )}
                     </g>
                   );
                 })}
 
-                {/* Needle */}
-                <line x1={G_CX} y1={G_CY} x2={nx.toFixed(2)} y2={ny.toFixed(2)}
-                      stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx={G_CX} cy={G_CY} r="8" fill="#1d3a8a" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
-                <circle cx={G_CX} cy={G_CY} r="3.5" fill="white" />
+                {/* 4. Glow dot at needle tip (on arc) */}
+                {pct > 0 && (
+                  <>
+                    <circle cx={gx.toFixed(2)} cy={gy.toFixed(2)} r="10"
+                            fill="rgba(255,255,255,0.12)" />
+                    <circle cx={gx.toFixed(2)} cy={gy.toFixed(2)} r="5"
+                            fill="white" filter="url(#glow)" />
+                  </>
+                )}
 
-                {/* Center text */}
-                <text x={G_CX} y={G_CY - 38} textAnchor="middle" fontSize="34" fontWeight="800"
-                      fill={arcColor}>{pct}%</text>
-                <text x={G_CX} y={G_CY - 14} textAnchor="middle" fontSize="10" fill="rgba(160,160,160,0.8)">
+                {/* 5. Needle */}
+                <line x1={G_CX} y1={G_CY} x2={nx.toFixed(2)} y2={ny.toFixed(2)}
+                      stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+                <circle cx={G_CX} cy={G_CY} r="9"  fill="#1e1b4b" stroke="#818cf8" strokeWidth="2" />
+                <circle cx={G_CX} cy={G_CY} r="4"  fill="#a5b4fc" />
+
+                {/* 6. Center text */}
+                <text x={G_CX} y={G_CY - 40} textAnchor="middle" fontSize="36" fontWeight="800" fill="white">
+                  {pct}%
+                </text>
+                <text x={G_CX} y={G_CY - 15} textAnchor="middle" fontSize="9.5" fill="rgba(170,170,170,0.75)">
                   {fmtMoney(summary.total_target)} maqsaddan
                 </text>
-                <text x={G_CX} y={G_CY + 6} textAnchor="middle" fontSize="16" fontWeight="700" fill="#a78bfa">
-                  ${fmtMoney(summary.total_actual)}
+                <text x={G_CX} y={G_CY + 7} textAnchor="middle" fontSize="17" fontWeight="700" fill="#c084fc">
+                  {fmtMoney(summary.total_actual)}
                 </text>
-                <text x={G_CX} y={G_CY + 22} textAnchor="middle" fontSize="10" fill="rgba(160,160,160,0.8)">
+                <text x={G_CX} y={G_CY + 25} textAnchor="middle" fontSize="9.5" fill="rgba(170,170,170,0.75)">
                   bajarildi
                 </text>
               </svg>
