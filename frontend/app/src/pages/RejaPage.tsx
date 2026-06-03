@@ -174,7 +174,8 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
       qc.invalidateQueries({ queryKey: ['reja/progress', planId] });
       setPendingEmployees([]);
-      setRemovedIds(new Set());
+      // removedIds is intentionally NOT cleared here — keep deleted employees
+      // out of the table and in the "Xodim qo'shish" dropdown until pencil closes
       setDirty(false);
     },
   });
@@ -300,6 +301,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                       onClick={() => {
                         setPendingEmployees(prev => [...prev, { responsible_id: r.id, full_name: r.full_name, work_position: null, active: true, photo_url: null, target: 0, actual_sales: 0, deal_count: 0 }]);
                         setTarget(r.id, '');
+                        setRemovedIds(prev => { const s = new Set(prev); s.delete(r.id); return s; });
                         setShowAll(true);
                         setAddOpen(false);
                       }}
@@ -327,10 +329,19 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 style={{ paddingLeft: 30, paddingRight: 12, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }}
               />
             </div>
-            {/* Pencil — toggle edit mode */}
+            {/* Pencil — open: enter edit mode | close: save + exit */}
             <button
-              onClick={() => setShowAll(v => !v)}
-              title={showAll ? 'Tahrirlashni yopish' : 'Tahrirlash'}
+              onClick={() => {
+                if (showAll) {
+                  if (dirty) saveMutation.mutate();
+                  setShowAll(false);
+                  setRemovedIds(new Set());
+                  setPendingEmployees([]);
+                } else {
+                  setShowAll(true);
+                }
+              }}
+              title={showAll ? 'Saqlash va yopish' : 'Tahrirlash'}
               style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.12)' : 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
             >
               <svg width="16" height="16" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
