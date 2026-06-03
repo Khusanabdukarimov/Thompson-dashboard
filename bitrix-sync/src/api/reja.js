@@ -352,7 +352,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.closedate, d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
+        AND COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -472,13 +472,13 @@ router.get('/plans/:id/progress', async (req, res) => {
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.closedate, d.uf_sale_date, d.begindate, d.date_create)::date::text AS close_date,
+        COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date::text AS close_date,
         SUM(d.opportunity)::numeric                                      AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.closedate, d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.closedate, d.uf_sale_date, d.begindate, d.date_create)::date
+        AND COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
@@ -548,7 +548,7 @@ router.get('/plans/:id/progress', async (req, res) => {
         SELECT COALESCE(SUM(d.opportunity), 0)::numeric AS total
         FROM deals d
         JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
-        WHERE COALESCE(d.closedate, d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $1 AND $2
+        WHERE COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $1 AND $2
       `, [pp.period_start, pp.period_end]);
       prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
     }
