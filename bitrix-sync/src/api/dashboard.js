@@ -1024,7 +1024,7 @@ router.get('/taqsimot-stats', async (_req, res) => {
 });
 
 router.get('/utm-campaign-stats', async (req, res) => {
-  const { from, to, mode, utm_source } = req.query;
+  const { from, to, mode, utm_source, utm_medium } = req.query;
   if (!utm_source) return res.status(400).json({ error: 'utm_source required' });
   try {
     const { rows } = await pool.query(
@@ -1050,10 +1050,11 @@ router.get('/utm-campaign-stats', async (req, res) => {
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
+         AND ($4::text IS NULL OR COALESCE(NULLIF(TRIM(l.utm_medium),''),'Nomalum') = $4)
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, utm_source || null],
+      [from || null, to || null, utm_source || null, utm_medium || null],
     );
     res.json(rows);
   } catch (err) {
@@ -1062,8 +1063,136 @@ router.get('/utm-campaign-stats', async (req, res) => {
   }
 });
 
+router.get('/utm-medium-stats', async (req, res) => {
+  const { from, to, mode, utm_source } = req.query;
+  if (!utm_source) return res.status(400).json({ error: 'utm_source required' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(TRIM(l.utm_medium), ''), 'Nomalum') AS utm_medium,
+         COUNT(*)::int AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi,
+         COUNT(DISTINCT NULLIF(l.utm_campaign, ''))::int AS campaign_count
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND TRIM(l.utm_source) = $3
+         ${leadModeClause(mode)}
+       GROUP BY COALESCE(NULLIF(TRIM(l.utm_medium), ''), 'Nomalum')
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, utm_source],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/utm-medium-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/utm-content-stats', async (req, res) => {
+  const { from, to, mode, utm_source, utm_medium, utm_campaign } = req.query;
+  if (!utm_source) return res.status(400).json({ error: 'utm_source required' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(TRIM(l.utm_content), ''), 'Nomalum') AS utm_content,
+         COUNT(*)::int AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi,
+         COUNT(DISTINCT l.responsible_id)::int AS responsible_count
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
+         AND ($4::text IS NULL OR COALESCE(NULLIF(TRIM(l.utm_medium),''),'Nomalum') = $4)
+         AND (
+           $5::text IS NULL
+           OR ($5 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
+           OR ($5 != 'Nomalum' AND l.utm_campaign = $5)
+         )
+         ${leadModeClause(mode)}
+       GROUP BY COALESCE(NULLIF(TRIM(l.utm_content), ''), 'Nomalum')
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, utm_source || null, utm_medium || null, utm_campaign || null],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/utm-content-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/utm-term-stats', async (req, res) => {
+  const { from, to, mode, utm_source, utm_medium, utm_campaign, utm_content } = req.query;
+  if (!utm_source) return res.status(400).json({ error: 'utm_source required' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(TRIM(l.utm_term), ''), 'Nomalum') AS utm_term,
+         COUNT(*)::int AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
+         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi,
+         COUNT(DISTINCT l.responsible_id)::int AS responsible_count
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
+         AND ($4::text IS NULL OR COALESCE(NULLIF(TRIM(l.utm_medium),''),'Nomalum') = $4)
+         AND (
+           $5::text IS NULL
+           OR ($5 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
+           OR ($5 != 'Nomalum' AND l.utm_campaign = $5)
+         )
+         AND (
+           $6::text IS NULL
+           OR ($6 = 'Nomalum' AND (l.utm_content IS NULL OR l.utm_content = ''))
+           OR ($6 != 'Nomalum' AND l.utm_content = $6)
+         )
+         ${leadModeClause(mode)}
+       GROUP BY COALESCE(NULLIF(TRIM(l.utm_term), ''), 'Nomalum')
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, utm_source || null, utm_medium || null, utm_campaign || null, utm_content || null],
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/utm-term-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/utm-responsible-stats', async (req, res) => {
-  const { from, to, mode, utm_source, utm_campaign } = req.query;
+  const { from, to, mode, utm_source, utm_campaign, utm_medium, utm_content, utm_term } = req.query;
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -1094,10 +1223,21 @@ router.get('/utm-responsible-stats', async (req, res) => {
            OR ($4 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
            OR ($4 != 'Nomalum' AND l.utm_campaign = $4)
          )
+         AND ($5::text IS NULL OR COALESCE(NULLIF(TRIM(l.utm_medium),''),'Nomalum') = $5)
+         AND (
+           $6::text IS NULL
+           OR ($6 = 'Nomalum' AND (l.utm_content IS NULL OR l.utm_content = ''))
+           OR ($6 != 'Nomalum' AND l.utm_content = $6)
+         )
+         AND (
+           $7::text IS NULL
+           OR ($7 = 'Nomalum' AND (l.utm_term IS NULL OR l.utm_term = ''))
+           OR ($7 != 'Nomalum' AND l.utm_term = $7)
+         )
          ${leadModeClause(mode)}
        GROUP BY l.responsible_id, r.name, r.last_name
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, utm_source || null, utm_campaign || null],
+      [from || null, to || null, utm_source || null, utm_campaign || null, utm_medium || null, utm_content || null, utm_term || null],
     );
     res.json(rows);
   } catch (err) {

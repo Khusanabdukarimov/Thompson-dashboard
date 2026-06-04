@@ -195,10 +195,59 @@ export type UtmCampaignRow = UtmStatRow & { utm_campaign: string; responsible_co
 
 export function getUtmCampaignStats(
   utmSource: string,
+  utmMedium: string,
   filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
 ) {
   return apiGet<UtmCampaignRow[]>("/api/dashboard/utm-campaign-stats", {
     utm_source: utmSource,
+    utm_medium: utmMedium,
+    from: filter.start_date,
+    to:   filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
+export type UtmMediumRow = UtmStatRow & { utm_medium: string; campaign_count: number };
+
+export function getUtmMediumStats(
+  utmSource: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
+) {
+  return apiGet<UtmMediumRow[]>("/api/dashboard/utm-medium-stats", {
+    utm_source: utmSource,
+    from: filter.start_date,
+    to:   filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
+export type UtmContentRow = UtmStatRow & { utm_content: string; responsible_count: number };
+
+export function getUtmContentStats(
+  path: { source: string; medium: string; campaign: string },
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
+) {
+  return apiGet<UtmContentRow[]>("/api/dashboard/utm-content-stats", {
+    utm_source:   path.source,
+    utm_medium:   path.medium,
+    utm_campaign: path.campaign,
+    from: filter.start_date,
+    to:   filter.end_date,
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
+export type UtmTermRow = UtmStatRow & { utm_term: string; responsible_count: number };
+
+export function getUtmTermStats(
+  path: { source: string; medium: string; campaign: string; content: string },
+  filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
+) {
+  return apiGet<UtmTermRow[]>("/api/dashboard/utm-term-stats", {
+    utm_source:   path.source,
+    utm_medium:   path.medium,
+    utm_campaign: path.campaign,
+    utm_content:  path.content,
     from: filter.start_date,
     to:   filter.end_date,
     mode: filter.mode,
@@ -218,13 +267,15 @@ export type UtmResponsibleRow = {
 };
 
 export function getUtmResponsibleStats(
-  utmSource: string,
-  utmCampaign: string,
+  path: { source: string; medium?: string; campaign: string; content?: string; term?: string },
   filter: Pick<DashFilter, "start_date" | "end_date" | "mode">,
 ) {
   return apiGet<UtmResponsibleRow[]>("/api/dashboard/utm-responsible-stats", {
-    utm_source:   utmSource,
-    utm_campaign: utmCampaign,
+    utm_source:   path.source,
+    utm_campaign: path.campaign,
+    utm_medium:   path.medium,
+    utm_content:  path.content,
+    utm_term:     path.term,
     from: filter.start_date,
     to:   filter.end_date,
     mode: filter.mode,
