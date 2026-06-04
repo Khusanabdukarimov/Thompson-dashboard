@@ -106,18 +106,24 @@ function localISO(d) {
 }
 
 function getSubperiods(plan) {
-  const start = new Date(plan.period_start);
+  // Use period_start as string directly to avoid timezone shifts
+  const startStr = plan.period_start.slice(0, 10); // "YYYY-MM-DD"
+  const endStr   = plan.period_end.slice(0, 10);
 
   if (plan.period_type === 'monthly') {
-    const y       = start.getFullYear();
-    const m       = start.getMonth();
-    const lastDay = new Date(y, m + 1, 0).getDate();
-    return [
-      { index: 1, start: `${y}-${pad(m+1)}-01`, end: `${y}-${pad(m+1)}-07`,          label: '1-hafta' },
-      { index: 2, start: `${y}-${pad(m+1)}-08`, end: `${y}-${pad(m+1)}-14`,          label: '2-hafta' },
-      { index: 3, start: `${y}-${pad(m+1)}-15`, end: `${y}-${pad(m+1)}-21`,          label: '3-hafta' },
-      { index: 4, start: `${y}-${pad(m+1)}-22`, end: `${y}-${pad(m+1)}-${pad(lastDay)}`, label: '4-hafta' },
-    ];
+    // Build 4 weekly chunks of 7 days each, anchored to period_start
+    const [sy, sm, sd] = startStr.split('-').map(Number);
+    const result = [];
+    let cursor = new Date(sy, sm - 1, sd);
+    for (let i = 0; i < 4; i++) {
+      const wStart = localISO(cursor);
+      // Each week = 7 days; last week ends exactly on period_end
+      const wEndRaw = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6);
+      const wEnd = i === 3 ? endStr : localISO(wEndRaw);
+      result.push({ index: i + 1, start: wStart, end: wEnd, label: `${i + 1}-hafta` });
+      cursor = new Date(wEndRaw.getFullYear(), wEndRaw.getMonth(), wEndRaw.getDate() + 1);
+    }
+    return result;
   }
 
   // quarterly → 3 calendar months
