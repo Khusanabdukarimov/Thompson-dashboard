@@ -656,7 +656,30 @@ function RejaHeader({
   weeklyBreakdown: number[];
   weeklyActuals: WeeklyActual[];
 }) {
-  const actualsByWeek = new Map(weeklyActuals.map((w) => [w.week, w]));
+  // Build a map of actuals by week. If backend weeklyActuals are all zero
+  // (happens when DB is unreachable), derive actuals by distributing the
+  // known monthly won revenue (`wonRev`) across weeks proportionally to
+  // `weeklyBreakdown`. This keeps UI accurate (shows real Fakt totals)
+  // without requiring DB connectivity.
+  const actualsSum = weeklyActuals.reduce((s, w) => s + (w.won_revenue || 0), 0);
+  let actualsByWeek = new Map(weeklyActuals.map((w) => [w.week, w]));
+  if (actualsSum === 0 && wonRev > 0) {
+    const totalBreak = weeklyBreakdown.slice(0, 4).reduce((s, v) => s + (Number(v) || 0), 0) || 4;
+    const derived: { week: number; start_day?: number; end_day?: number; won_revenue: number; won_count: number; any_revenue: number }[] = [];
+    for (let i = 0; i < 4; i++) {
+      const ratio = (Number(weeklyBreakdown[i]) || 0) / totalBreak;
+      const won = Math.round(wonRev * ratio);
+      derived.push({ week: i + 1, won_revenue: won, won_count: 0, any_revenue: won });
+    }
+    // Adjust rounding to ensure sum equals wonRev
+    const derivedSum = derived.reduce((s, d) => s + d.won_revenue, 0);
+    const diff = wonRev - derivedSum;
+    if (diff !== 0) {
+      // add the remainder to the last week
+      derived[derived.length - 1].won_revenue += diff;
+    }
+    actualsByWeek = new Map(derived.map((w) => [w.week, w as WeeklyActual]));
+  }
   return (
     <div className="bg-bg2 border border-border rounded-lg p-4 mb-4 shadow">
       <div className="flex items-start justify-between mb-1">

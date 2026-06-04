@@ -23,6 +23,7 @@ const ByudjetPage      = lazy(() => import("@/pages/marketing/ByudjetPage"));
 
 // New standalone pages (built step-by-step; show Placeholder until built)
 const RejaNewPage      = lazy(() => import("@/pages/RejaPage"));
+const RejaCreatePage   = lazy(() => import("@/pages/RejaCreatePage"));
 const HisobotNewPage   = lazy(() => import("@/pages/HisobotPage"));
 
 // Payroll
@@ -141,6 +142,11 @@ export default function App() {
         <Route path="/byudjet" element={
           <RoleRoute roles={MGMT}>
             <S><ByudjetPage /></S>
+          </RoleRoute>
+        } />
+        <Route path="/reja/new" element={
+          <RoleRoute roles={[...MGMT, "closer", "hunter"]}>
+            <S><RejaCreatePage /></S>
           </RoleRoute>
         } />
         <Route path="/reja" element={

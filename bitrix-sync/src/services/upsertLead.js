@@ -59,15 +59,26 @@ function parseDate(s) {
  * Upsert a single lead from Bitrix24 raw data.
  * Returns the leads.id.
  */
+// ISO datetime pattern: 2026-06-04T11:42:09Z (or with offset)
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+
 async function upsertLead(r, client) {
   const db = client || pool;
 
   const stageId = await stageResolver.resolve('lead', r.STATUS_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
 
+  // For Website leads: use COMMENTS field as date_create if it's a valid ISO datetime
+  let dateCreate = parseDate(r.DATE_CREATE);
+  const isWebsite = (r.TITLE || '').trim().toLowerCase() === 'website';
+  if (isWebsite) {
+    const comment = (r.COMMENTS || '').trim();
+    if (ISO_DATE_RE.test(comment)) {
+      dateCreate = parseDate(comment);
+    }
+  }
+
   // Facebook/Instagram manbalarida UTM_SOURCE bo'lmasa, source_id dan avto-to'ldirish
-  const FB_SOURCE_ID = 'UC_O9BLGT';
-  const IG_SOURCE_ID = 'UC_3O8GTF';
   let utmSource = r.UTM_SOURCE || null;
   let utmMedium = r.UTM_MEDIUM || null;
 
@@ -78,19 +89,19 @@ async function upsertLead(r, client) {
 
   if (!utmSource && r.SOURCE_ID === FB_SOURCE_ID) { utmSource = 'fb'; utmMedium = utmMedium || 'paid'; }
   if (!utmSource && r.SOURCE_ID === IG_SOURCE_ID) { utmSource = 'ig'; utmMedium = utmMedium || 'paid'; }
-
   const { rows } = await db.query(
     `INSERT INTO leads (
        id, responsible_id, stage_id, opportunity, source_id,
        utm_source, utm_medium, utm_campaign, utm_content, utm_term,
        uf_segment, uf_filial, uf_service, uf_activity, uf_with_whom,
        uf_tashrif_sanasi,
+       uf_amo_date,
        uf_cancel_reason, uf_junk_reason,
        name, last_name, title,
        web_form_id,
        date_create, date_modify, synced_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW()
      )
      ON CONFLICT (id) DO UPDATE SET
        responsible_id    = EXCLUDED.responsible_id,
@@ -108,6 +119,7 @@ async function upsertLead(r, client) {
        uf_activity       = EXCLUDED.uf_activity,
        uf_with_whom      = EXCLUDED.uf_with_whom,
        uf_tashrif_sanasi = EXCLUDED.uf_tashrif_sanasi,
+       uf_amo_date       = EXCLUDED.uf_amo_date,
        uf_cancel_reason  = EXCLUDED.uf_cancel_reason,
        uf_junk_reason    = EXCLUDED.uf_junk_reason,
        name             = EXCLUDED.name,
@@ -134,13 +146,14 @@ async function upsertLead(r, client) {
       ufVal(r.UF_CRM_1775825155935),
       ufVal(r.UF_CRM_1770281264686),
       ufVal(r.UF_CRM_1770693781846),
+      r.SOURCE_ID === 'UC_1WUFJB' ? parseDate(r.UF_CRM_1778310745831) : null,
       ufEnum(r.UF_CRM_1770976355232, CANCEL_REASON_MAP),
       ufEnum(r.UF_CRM_1770282341169, JUNK_REASON_MAP),
       r.NAME || null,
       r.LAST_NAME || null,
       r.TITLE || null,
       r.WEB_FORM_ID ? String(r.WEB_FORM_ID) : null,
-      parseDate(r.DATE_CREATE),
+      dateCreate,
       parseDate(r.DATE_MODIFY),
     ]
   );

@@ -1,0 +1,203 @@
+const { Router } = require('express');
+const pool = require('../db/pool');
+
+const router = Router();
+
+const MONTH_NUMS = {
+  yanvar:1, fevral:2, mart:3, aprel:4, may:5, iyun:6,
+  iyul:7, avgust:8, sentabr:9, oktabr:10, noyabr:11, dekabr:12,
+};
+
+// Qualifying lead stage bitrix_ids
+const QUAL_STAGES = [
+  'IN_PROCESS','PROCESSED','UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW',
+  'UC_L28G68','CONVERTED','CONVERTED_CONSULT','CONSULTATION',
+  'CALLBACK','THINKING','NO_ANSWER',
+];
+const QUAL_LIST = QUAL_STAGES.map(s => `'${s}'`).join(',');
+
+// Meeting (Konsultatsiya) stage bitrix_ids
+const MEETING_STAGES = ['UC_L28G68','CONSULTATION'];
+const MEETING_LIST   = MEETING_STAGES.map(s => `'${s}'`).join(',');
+
+// Normalize phone → last 9 digits (handles +998XXXXXXXXX, 0XXXXXXXXX, local)
+const PHONE_NORM = `RIGHT(REGEXP_REPLACE({col}, '[^0-9]', '', 'g'), 9)`;
+
+function normExpr(col) { return PHONE_NORM.replace('{col}', col); }
+
+function makeEmpty(n) { return Array(n).fill(0); }
+
+// Platform detection from adset/campaign name:
+//   adset contains " I/" or starts with "I/" → instagram
+//   otherwise → target
+const PLATFORM_CASE = `
+  CASE
+    WHEN adset_name ~ '(^|\\s|-)I/'
+      OR LOWER(adset_name) LIKE '%instagram%'
+      OR LOWER(campaign_name) LIKE '%instagram%'
+    THEN 'instagram'
+    ELSE 'target'
+  END
+`;
+
+// GET /api/marketing/kunlik?month=iyun&year=2026
+router.get('/kunlik', async (req, res) => {
+  const monthKey = (req.query.month || '').toLowerCase();
+  const year     = parseInt(req.query.year) || new Date().getFullYear();
+  const monthNum = MONTH_NUMS[monthKey];
+  if (!monthNum) return res.status(400).json({ error: `Unknown month: ${monthKey}` });
+
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  const since = `${year}-${String(monthNum).padStart(2,'0')}-01 00:00:00`;
+  const until = `${year}-${String(monthNum).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')} 23:59:59`;
+
+  const SRCS    = ['target', 'instagram'];
+  const METRICS = ['leads','qual_leads','meetings','deals','deals_sum','sales_count','sales_sum','cancelled'];
+
+  const result = {};
+  for (const src of SRCS) {
+    result[src] = {};
+    for (const m of METRICS) result[src][m] = makeEmpty(daysInMonth);
+  }
+
+  try {
+    // ── 1. facebook_leads: count ALL submissions per day+platform ─
+    //    Lidlar soni = total facebook form submissions
+    const fbLeadsRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
+        (${PLATFORM_CASE}) AS src,
+        COUNT(*)::int AS cnt
+      FROM facebook_leads
+      WHERE created_time >= $1 AND created_time <= $2
+      GROUP BY day, src
+    `, [since, until]);
+
+    for (const row of fbLeadsRes.rows) {
+      if (row.day >= 1 && row.day <= daysInMonth) {
+        result[row.src].leads[row.day - 1] += row.cnt;
+      }
+    }
+
+    // ── 2. Match facebook_leads → Bitrix leads by phone ──────────
+    //    Used for: qual_leads, meetings (from stage history), cancelled
+    const fbLeadMatchRes = await pool.query(`
+      WITH fb AS (
+        SELECT
+          fl.id,
+          EXTRACT(DAY FROM fl.created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
+          (${PLATFORM_CASE.replace(/adset_name/g,'fl.adset_name').replace(/campaign_name/g,'fl.campaign_name')}) AS src,
+          ${normExpr('COALESCE(fl.phone,\'\')')} AS phone_norm
+        FROM facebook_leads fl
+        WHERE fl.created_time >= $1 AND fl.created_time <= $2
+          AND LENGTH(REGEXP_REPLACE(COALESCE(fl.phone,''), '[^0-9]', '', 'g')) >= 7
+      )
+      SELECT DISTINCT ON (f.id)
+        f.id      AS fb_id,
+        f.day,
+        f.src,
+        l.id      AS lead_id,
+        s.bitrix_id AS stage_bitrix_id,
+        s.is_final,
+        s.is_won
+      FROM fb f
+      JOIN lead_phones lp
+        ON ${normExpr('lp.phone')} = f.phone_norm
+      JOIN leads l ON l.id = lp.lead_id
+      LEFT JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
+      ORDER BY f.id, l.date_create DESC
+    `, [since, until]);
+
+    for (const row of fbLeadMatchRes.rows) {
+      if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
+      const i   = row.day - 1;
+      const src = row.src;
+
+      if (QUAL_STAGES.includes(row.stage_bitrix_id)) {
+        result[src].qual_leads[i]++;
+      }
+      if (row.is_final && !row.is_won) {
+        result[src].cancelled[i]++;
+      }
+    }
+
+    // ── 3. Meetings: facebook_leads whose matched Bitrix lead ever
+    //    reached a Konsultatsiya stage (from lead_stage_history) ──
+    const meetingsRes = await pool.query(`
+      WITH fb AS (
+        SELECT
+          fl.id,
+          EXTRACT(DAY FROM fl.created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
+          (${PLATFORM_CASE.replace(/adset_name/g,'fl.adset_name').replace(/campaign_name/g,'fl.campaign_name')}) AS src,
+          ${normExpr('COALESCE(fl.phone,\'\')')} AS phone_norm
+        FROM facebook_leads fl
+        WHERE fl.created_time >= $1 AND fl.created_time <= $2
+          AND LENGTH(REGEXP_REPLACE(COALESCE(fl.phone,''), '[^0-9]', '', 'g')) >= 7
+      )
+      SELECT DISTINCT
+        f.id AS fb_id, f.day, f.src
+      FROM fb f
+      JOIN lead_phones lp ON ${normExpr('lp.phone')} = f.phone_norm
+      JOIN leads l ON l.id = lp.lead_id
+      JOIN lead_stage_history h ON h.lead_id = l.id
+      JOIN stages s ON s.id = h.stage_id
+        AND s.entity = 'lead'
+        AND s.bitrix_id IN (${MEETING_LIST})
+    `, [since, until]);
+
+    for (const row of meetingsRes.rows) {
+      if (row.day >= 1 && row.day <= daysInMonth) {
+        result[row.src].meetings[row.day - 1]++;
+      }
+    }
+
+    // ── 4. Match facebook_leads → Bitrix deals by phone ──────────
+    //    Used for: deals, deals_sum, sales_count, sales_sum
+    const fbDealMatchRes = await pool.query(`
+      WITH fb AS (
+        SELECT
+          fl.id,
+          EXTRACT(DAY FROM fl.created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
+          (${PLATFORM_CASE.replace(/adset_name/g,'fl.adset_name').replace(/campaign_name/g,'fl.campaign_name')}) AS src,
+          ${normExpr('COALESCE(fl.phone,\'\')')} AS phone_norm
+        FROM facebook_leads fl
+        WHERE fl.created_time >= $1 AND fl.created_time <= $2
+          AND LENGTH(REGEXP_REPLACE(COALESCE(fl.phone,''), '[^0-9]', '', 'g')) >= 7
+      )
+      SELECT DISTINCT ON (f.id)
+        f.id   AS fb_id,
+        f.day,
+        f.src,
+        d.opportunity::numeric AS opp,
+        s.is_won,
+        s.is_final
+      FROM fb f
+      JOIN deal_phones dp ON ${normExpr('dp.phone')} = f.phone_norm
+      JOIN deals d ON d.id = dp.deal_id
+      LEFT JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
+      ORDER BY f.id, d.date_create DESC
+    `, [since, until]);
+
+    for (const row of fbDealMatchRes.rows) {
+      if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
+      const i   = row.day - 1;
+      const src = row.src;
+      const opp = parseFloat(row.opp) || 0;
+
+      result[src].deals[i]++;
+      result[src].deals_sum[i] = Math.round((result[src].deals_sum[i] + opp) * 100) / 100;
+
+      if (row.is_won) {
+        result[src].sales_count[i]++;
+        result[src].sales_sum[i] = Math.round((result[src].sales_sum[i] + opp) * 100) / 100;
+      }
+    }
+
+    res.json({ month: monthKey, year, data: result });
+  } catch (err) {
+    console.error('[marketing/kunlik]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;

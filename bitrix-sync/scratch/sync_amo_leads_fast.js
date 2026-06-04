@@ -45,6 +45,7 @@ async function main() {
     'DATE_CREATE', 'DATE_MODIFY',
     'UF_CRM_1775825731211', 'UF_CRM_1778260858916', 'UF_CRM_1777030859057', 'UF_CRM_1778261535982',
     'UF_CRM_1775824803703', 'UF_CRM_1775825155935', 'UF_CRM_1770281264686',
+    'UF_CRM_1778310745831',
   ];
   
   console.log('Fetching first page of amoCRM leads...');

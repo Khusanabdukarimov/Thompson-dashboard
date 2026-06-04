@@ -8,31 +8,36 @@ const router = Router();
 // ── Mode-aware SQL helpers ─────────────────────────────────────────
 
 function leadModeClause(mode) {
-  return mode === 'amocrm' ? `AND l.source_id = 'UC_1WUFJB'` : ``;
+  if (mode === 'amocrm')   return `AND l.source_id = 'UC_1WUFJB'`;
+  if (mode === 'bitrix24') return `AND (l.source_id IS NULL OR l.source_id != 'UC_1WUFJB')`;
+  return '';
 }
 
-function leadDateCond(_mode, p1, p2) {
-  return `($${p1}::date IS NULL OR l.date_create::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR l.date_create::date <= $${p2}::date)`;
+function leadDateCond(mode, p1, p2) {
+  const col = mode === 'amocrm' ? 'COALESCE(l.uf_amo_date, l.date_create)' : 'l.date_create';
+  return `($${p1}::date IS NULL OR ${col}::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR ${col}::date <= $${p2}::date)`;
 }
 
 function leadSrcCond(mode, pi) {
   const col = mode === 'amocrm' ? 'l.uf_filial' : 'l.source_id';
-  return `($${pi}::text IS NULL OR ${col} = $${pi}::text)`;
+  return `($${pi}::text IS NULL OR ${col}::text = ANY(string_to_array($${pi}, ',')))`;
 }
 
 function dealModeClause(mode) {
-  return mode === 'amocrm' ? `AND d.source_id = 'UC_1WUFJB'` : ``;
+  if (mode === 'amocrm')   return `AND d.source_id = 'UC_1WUFJB'`;
+  if (mode === 'bitrix24') return `AND (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')`;
+  return '';
 }
 
 function dealSrcCond(mode, pi) {
   if (mode === 'amocrm') {
-    return `($${pi}::text IS NULL OR EXISTS (
+    return `EXISTS (
       SELECT 1 FROM lead_phones lp
       JOIN leads l ON l.id = lp.lead_id
-      WHERE lp.phone = ph.phone AND l.uf_filial = $${pi}::text
-    ))`;
+      WHERE lp.phone = ph.phone AND l.uf_filial = ANY(string_to_array($${pi}, ','))
+    )`;
   } else {
-    return `($${pi}::text IS NULL OR d.source_id = $${pi}::text)`;
+    return `d.source_id = ANY(string_to_array($${pi}, ','))`;
   }
 }
 
@@ -338,11 +343,7 @@ router.get('/tasks-summary', async (req, res) => {
  */
 router.get('/cancel-reasons', async (req, res) => {
   const { from, to, responsible_id, mode } = req.query;
-  const params = [
-    from || null,
-    to || null,
-    responsible_id ? parseInt(responsible_id) : null,
-  ];
+  const params = [from || null, to || null, responsible_id || null];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -351,7 +352,7 @@ router.get('/cancel-reasons', async (req, res) => {
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_NAZK5J'
        WHERE ${leadDateCond(mode, 1, 2)}
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY l.uf_cancel_reason
        ORDER BY total DESC`,
@@ -371,11 +372,7 @@ router.get('/cancel-reasons', async (req, res) => {
  */
 router.get('/junk-reasons', async (req, res) => {
   const { from, to, responsible_id, mode } = req.query;
-  const params = [
-    from || null,
-    to || null,
-    responsible_id ? parseInt(responsible_id) : null,
-  ];
+  const params = [from || null, to || null, responsible_id || null];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -384,7 +381,7 @@ router.get('/junk-reasons', async (req, res) => {
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_F8K4GI'
        WHERE ${leadDateCond(mode, 1, 2)}
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY l.uf_junk_reason
        ORDER BY total DESC`,
@@ -487,20 +484,9 @@ router.get('/deals-stats', async (req, res) => {
   const extra = [];
   const params = [from || null, to || null];
   let pi = 3;
-  if (responsible_id) { extra.push(`AND d.responsible_id = $${pi++}`); params.push(parseInt(responsible_id)); }
-  if (stage_id)       { extra.push(`AND d.stage_id = $${pi++}`);       params.push(parseInt(stage_id)); }
-  
-  if (source === '__none__') {
-    if (mode === 'amocrm') {
-      extra.push(`AND NOT EXISTS (
-        SELECT 1 FROM lead_phones lp
-        JOIN leads l ON l.id = lp.lead_id
-        WHERE lp.phone = ph.phone AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
-      )`);
-    } else {
-      extra.push(`AND (d.source_id IS NULL OR d.source_id = '')`);
-    }
-  } else if (source) {
+  if (responsible_id) { extra.push(`AND d.responsible_id::text = ANY(string_to_array($${pi++}, ','))`); params.push(responsible_id); }
+  if (stage_id)       { extra.push(`AND d.stage_id::text = ANY(string_to_array($${pi++}, ','))`);       params.push(stage_id); }
+  if (source) {
     extra.push(`AND ${dealSrcCond(mode, pi++)}`);
     params.push(source);
   }
@@ -554,20 +540,9 @@ router.get('/deals-list', async (req, res) => {
   const baseParams = [from || null, to || null];
   let pi = 3;
   const extra = [];
-  if (responsible_id) { extra.push(`d.responsible_id = $${pi++}`); baseParams.push(parseInt(responsible_id)); }
-  if (stage_id)       { extra.push(`d.stage_id = $${pi++}`);       baseParams.push(parseInt(stage_id)); }
-  
-  if (source === '__none__') {
-    if (mode === 'amocrm') {
-      extra.push(`NOT EXISTS (
-        SELECT 1 FROM lead_phones lp
-        JOIN leads l ON l.id = lp.lead_id
-        WHERE lp.phone = ph.phone AND l.uf_filial IS NOT NULL AND l.uf_filial != ''
-      )`);
-    } else {
-      extra.push(`(d.source_id IS NULL OR d.source_id = '')`);
-    }
-  } else if (source) {
+  if (responsible_id) { extra.push(`d.responsible_id::text = ANY(string_to_array($${pi++}, ','))`); baseParams.push(responsible_id); }
+  if (stage_id)       { extra.push(`d.stage_id::text = ANY(string_to_array($${pi++}, ','))`);       baseParams.push(stage_id); }
+  if (source) {
     extra.push(dealSrcCond(mode, pi++));
     baseParams.push(source);
   }
@@ -759,17 +734,17 @@ router.get('/amocrm-sources', async (_req, res) => {
 router.get('/lead-stats', async (req, res) => {
   const { from, to, responsible_id, stage, source, mode } = req.query;
 
-  const statsParams  = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
-  const funnelParams = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, source || null];
+  const statsParams  = [from || null, to || null, responsible_id || null, stage || null, source || null];
+  const funnelParams = [from || null, to || null, responsible_id || null, source || null];
 
   const statsWhere = `${leadDateCond(mode, 1, 2)}
-      AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-      AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+      AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+      AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
       AND ${leadSrcCond(mode, 5)}
       ${leadModeClause(mode)}`;
 
   const funnelJoin = `${leadDateCond(mode, 1, 2)}
-      AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+      AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
       AND ${leadSrcCond(mode, 4)}
       ${leadModeClause(mode)}`;
 
@@ -789,7 +764,11 @@ router.get('/lead-stats', async (req, res) => {
            ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0)
              FILTER (WHERE NOT s.is_final), 1)                                                AS avg_age_days,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_bekor_count,
-           (COUNT(*) - COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK')))::int   AS sifatli_lid_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
+             'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+             'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+             'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+           ))::int AS sifatli_lid_count,
            COUNT(l.id) FILTER (WHERE l.uf_tashrif_sanasi IS NOT NULL AND l.uf_tashrif_sanasi != '' AND l.uf_tashrif_sanasi != 'false')::int AS konsultatsiya_belgilandi_count,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int  AS konsultatsiya_otkazildi_count,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS muvaffaqiyatsiz_count
@@ -826,7 +805,7 @@ router.get('/lead-stats', async (req, res) => {
  */
 router.get('/lead-responsibles', async (req, res) => {
   const { from, to, responsible_id, stage, source, mode } = req.query;
-  const params = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null];
 
   try {
     const { rows } = await pool.query(
@@ -835,8 +814,8 @@ router.get('/lead-responsibles', async (req, res) => {
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
-           AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-           AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
            ${leadModeClause(mode)}
        )
@@ -877,7 +856,7 @@ router.get('/lead-responsibles', async (req, res) => {
  */
 router.get('/lead-conversion', async (req, res) => {
   const { from, to, responsible_id, stage, source, mode } = req.query;
-  const params = [from || null, to || null, responsible_id ? parseInt(responsible_id) : null, stage || null, source || null];
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null];
 
   try {
     const { rows } = await pool.query(
@@ -886,8 +865,8 @@ router.get('/lead-conversion', async (req, res) => {
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
-           AND ($3::int  IS NULL OR l.responsible_id = $3::int)
-           AND ($4::text IS NULL OR s.bitrix_id       = $4::text)
+           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
            ${leadModeClause(mode)}
        )
@@ -1056,9 +1035,11 @@ router.get('/utm-campaign-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1093,9 +1074,11 @@ router.get('/utm-responsible-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1134,9 +1117,11 @@ router.get('/utm-stats', async (req, res) => {
            'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1187,9 +1172,11 @@ router.get('/source-stats', async (req, res) => {
            'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244',
            'IN_PROCESS'
          ))::int AS jarayonda,
-         (COUNT(*) - COUNT(*) FILTER (WHERE s.bitrix_id IN (
-           'UC_F8K4GI','UC_NAZK5J','RECYCLED','JUNK','ARCHIVE'
-         )))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
          COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
@@ -1198,11 +1185,11 @@ router.get('/source-stats', async (req, res) => {
        LEFT JOIN stages s ON s.id = l.stage_id
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::int  IS NULL OR l.responsible_id = $3::int)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          ${leadModeClause(mode)}
        GROUP BY COALESCE(l.source_id, 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+      [from || null, to || null, responsible_id || null]
     );
     res.json(rows.map(r => ({
       ...r,
@@ -1210,6 +1197,51 @@ router.get('/source-stats', async (req, res) => {
     })));
   } catch (err) {
     console.error('[dashboard/source-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/form-stats
+ * Leads grouped by web_form_id (direct DB field), joined with crm_forms for name.
+ * Params: from, to, responsible_id, mode
+ */
+router.get('/form-stats', async (req, res) => {
+  const { from, to, responsible_id, mode } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         l.web_form_id,
+         COALESCE(cf.form_name, 'Noma''lum') AS form_name,
+         COUNT(*)::int AS umumiy_lidlar,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'NEW','NO_ANSWER','UC_1KPATX','CALLBACK','UC_Q2U9EL',
+           'THINKING','UC_KXC3ZW','NOT_TRANSFERRED','UC_5G8244','IN_PROCESS'
+         ))::int AS jarayonda,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int AS sifatli_lid,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_L28G68','CONSULTATION'))::int AS konsultatsiya_belgilandi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int AS konsultatsiya_otkazildi,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK','ARCHIVE'))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int AS bekor_boldi
+       FROM leads l
+       LEFT JOIN stages s ON s.id = l.stage_id
+       LEFT JOIN crm_forms cf ON cf.form_id = l.web_form_id::text
+       WHERE l.web_form_id IS NOT NULL AND TRIM(l.web_form_id::text) != ''
+         AND ($1::date IS NULL OR l.date_create::date >= $1::date)
+         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         ${leadModeClause(mode)}
+       GROUP BY l.web_form_id, cf.form_name
+       ORDER BY umumiy_lidlar DESC`,
+      [from || null, to || null, responsible_id || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/form-stats]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

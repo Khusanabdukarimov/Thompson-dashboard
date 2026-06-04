@@ -10,10 +10,10 @@ import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
-  getAmocrmSources, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats,
-  getSourceStats, getResponsibleLeads,
-  type DashFilter, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow,
-  type SourceStatsRow, type ResponsibleLeadRow,
+  getAmocrmSources,
+  getSourceStats, getUtmStats, getUtmCampaignStats, getUtmResponsibleStats, getResponsibleLeads,
+  type DashFilter,
+  type SourceStatsRow, type UtmStatRow, type UtmCampaignRow, type UtmResponsibleRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -25,6 +25,93 @@ const todayISO   = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 
 const getDefaultFilter = (): DashFilter => ({});
+
+// ── MultiSelect dropdown component ───────────────────────────────
+function MultiSelect({
+  label, icon, options, values, onChange, loading,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  options: { value: string; label: string }[];
+  values: string[];
+  onChange: (v: string[]) => void;
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const toggle = (v: string) => {
+    onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
+  };
+
+  const displayLabel = values.length === 0
+    ? "Barchasi"
+    : values.length === 1
+      ? (options.find(o => o.value === values[0])?.label ?? values[0]).slice(0, 22)
+      : `${values.length} ta tanlangan`;
+
+  return (
+    <div ref={ref} style={{ flex: 1, minWidth: 0, position: "relative" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
+        {icon}{label}
+      </label>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "var(--bg)", border: `1px solid ${values.length > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
+          borderRadius: 8, color: values.length > 0 ? "#2196F3" : "var(--text3)",
+          fontSize: 12, padding: "8px 10px", cursor: "pointer", boxSizing: "border-box",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {loading ? "Yuklanmoqda…" : displayLabel}
+        </span>
+        <ChevronDown size={12} style={{ flexShrink: 0, marginLeft: 4, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 400,
+          background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4,
+        }}>
+          {values.length > 0 && (
+            <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
+              <button type="button" onClick={() => onChange([])}
+                style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                Hammasini olib tashlash
+              </button>
+            </div>
+          )}
+          {options.map(o => {
+            const checked = values.includes(o.value);
+            return (
+              <label key={o.value}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", background: checked ? "rgba(33,150,243,0.08)" : "transparent" }}
+                onMouseEnter={e => { if (!checked) (e.currentTarget as HTMLElement).style.background = "var(--bg3)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = checked ? "rgba(33,150,243,0.08)" : "transparent"; }}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} style={{ accentColor: "#2196F3", flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {o.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Responsible table column definitions ─────────────────────────
 const RESPONSIBLE_COLS = [
@@ -113,7 +200,7 @@ const UTM_SOURCE_DISPLAY_NAMES: Record<string, string> = {
   instagram: "Instagram",
 };
 
-// ── UTM shared column definitions ────────────────────────────────
+// ── Shared funnel column definitions ─────────────────────────────
 const UTM_COLS_DEF = [
   { key: "umumiy_lidlar"            as const, label: "UMUMIY LIDLAR",             color: "#2196F3" },
   { key: "jarayonda"                as const, label: "JARAYONDA",                 color: "#FF9800" },
@@ -124,128 +211,6 @@ const UTM_COLS_DEF = [
   { key: "bekor_boldi"              as const, label: "BEKOR BO'LDI",              color: "#FFC107" },
 ] as const;
 
-function UtmTable<T extends Record<string, string | number>>({
-  rows,
-  nameKey,
-  nameLabel,
-  onRowClick,
-  loading,
-  countKey,
-  countLabel,
-  getBitrixUrl,
-  formatName,
-}: {
-  rows: T[];
-  nameKey: keyof T;
-  nameLabel: string;
-  onRowClick?: (row: T) => void;
-  loading: boolean;
-  countKey?: keyof T;
-  countLabel?: string;
-  getBitrixUrl?: (row: T) => string;
-  formatName?: (raw: string) => string;
-}) {
-  const maxes: Record<string, number> = {};
-  for (const c of UTM_COLS_DEF)
-    maxes[c.key] = Math.max(1, ...rows.map(r => Number(r[c.key]) || 0));
-
-  const totals = rows.reduce((acc, r) => {
-    for (const c of UTM_COLS_DEF)
-      acc[c.key] = (acc[c.key] || 0) + (Number(r[c.key]) || 0);
-    return acc;
-  }, {} as Record<string, number>);
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      {loading ? (
-        <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-      ) : rows.length === 0 ? (
-        <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-          <thead>
-            <tr>
-              <th style={TH("#9E9E9E", 200)}>{nameLabel}</th>
-              {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
-              <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => {
-              const total = Number(r.umumiy_lidlar) || 0;
-              const otkazildi = Number(r.konsultatsiya_otkazildi) || 0;
-              const konv = total > 0 ? (otkazildi / total) * 100 : 0;
-              const rawName = String(r[nameKey]);
-              const name = formatName ? formatName(rawName) : rawName;
-              const cnt = countKey ? Number(r[countKey]) || 0 : 0;
-              return (
-                <tr key={name + i}
-                    style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", cursor: onRowClick ? "pointer" : "default" }}
-                    onClick={() => onRowClick?.(r)}
-                    onMouseEnter={e => { if (onRowClick) e.currentTarget.style.background = "var(--bg3)"; }}
-                    onMouseLeave={e => { if (onRowClick) e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
-                  <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
-                    {getBitrixUrl ? (
-                      <a
-                        href={getBitrixUrl(r)}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#2196F3", textDecoration: "underline" }}
-                      >
-                        {name}
-                      </a>
-                    ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: onRowClick ? "#2196F3" : "var(--text)", textDecoration: onRowClick ? "underline" : "none" }}>
-                        {name}
-                        {countKey && cnt > 0 && (
-                          <span style={{
-                            fontSize: 10, color: "#888", fontWeight: 500,
-                            background: "var(--bg3)", border: "1px solid var(--border)",
-                            padding: "1px 7px", borderRadius: 10, flexShrink: 0,
-                          }}>
-                            {cnt} {countLabel}
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </td>
-                  {UTM_COLS_DEF.map(c => {
-                    const val = Number(r[c.key]) || 0;
-                    return (
-                      <td key={c.key} style={TD}>
-                        {val > 0 ? (
-                          <>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span>
-                            <MiniBar value={val} max={maxes[c.key]} color={c.color} />
-                          </>
-                        ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                      </td>
-                    );
-                  })}
-                  <td style={{ ...TD, textAlign: "center" }}>
-                    <ConversionDonut pct={konv} size={38} />
-                  </td>
-                </tr>
-              );
-            })}
-            {/* JAMI */}
-            <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-              <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
-              {UTM_COLS_DEF.map(c => (
-                <td key={c.key} style={TD}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtNum(totals[c.key] || 0)}</span>
-                  <MiniBar value={1} max={1} color={c.color} />
-                </td>
-              ))}
-              <td style={{ ...TD, textAlign: "center" }}>
-                <ConversionDonut pct={(totals.umumiy_lidlar || 0) > 0 ? ((totals.konsultatsiya_otkazildi || 0) / (totals.umumiy_lidlar || 0)) * 100 : 0} size={38} />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
 
 // ── Sparkline ─────────────────────────────────────────────────────
 // Catmull-Rom → cubic Bézier smooth path
@@ -359,10 +324,9 @@ export default function LidlarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
-  const [mode, setMode] = useState<'default' | 'amocrm'>('default');
+  const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
 
-  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v3", getDefaultFilter());
-  const [pending, setPending] = useState<DashFilter>(applied);
+  const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -388,13 +352,12 @@ export default function LidlarPage() {
     enabled: mode === 'amocrm',
   });
 
-  const def = getDefaultFilter();
   const activeCount = [
-    applied.responsible_id != null,
-    applied.stage != null,
-    applied.source != null,
-    applied.form_id != null,
-    applied.start_date !== def.start_date || applied.end_date !== def.end_date,
+    (applied.responsible_ids?.length ?? 0) > 0,
+    (applied.stages?.length ?? 0) > 0,
+    (applied.sources?.length ?? 0) > 0,
+    (applied.form_ids?.length ?? 0) > 0,
+    applied.start_date != null || applied.end_date != null,
   ].filter(Boolean).length;
 
   const appliedWithMode = { ...applied, mode };
@@ -406,9 +369,7 @@ export default function LidlarPage() {
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
-  const utmQ        = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
-  const [selectedUtmSource,   setSelectedUtmSource]   = useState<string | null>(null);
-  const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<string | null>(null);
+  const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
   const respLeadsConvQ = useQuery({
     queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
@@ -421,15 +382,17 @@ export default function LidlarPage() {
     queryFn: () => getResponsibleLeads(selectedRespMasul!.id, appliedWithMode),
     enabled: selectedRespMasul !== null,
   });
-  const utmCampQ = useQuery({
-    queryKey: ["stats/utm-campaign", selectedUtmSource, appliedWithMode],
-    queryFn:  () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
-    enabled:  selectedUtmSource !== null,
+  const [selectedUtmSource, setSelectedUtmSource] = useState<string | null>(null);
+  const utmCampaignQ = useQuery({
+    queryKey: ["stats/utm-campaigns", selectedUtmSource, appliedWithMode],
+    queryFn: () => getUtmCampaignStats(selectedUtmSource!, appliedWithMode),
+    enabled: selectedUtmSource !== null,
   });
+  const [selectedUtmCampaign, setSelectedUtmCampaign] = useState<{ source: string; campaign: string } | null>(null);
   const utmRespQ = useQuery({
-    queryKey: ["stats/utm-responsible", selectedUtmSource, selectedUtmCampaign, appliedWithMode],
-    queryFn:  () => getUtmResponsibleStats(selectedUtmSource!, selectedUtmCampaign!, appliedWithMode),
-    enabled:  selectedUtmSource !== null && selectedUtmCampaign !== null,
+    queryKey: ["stats/utm-responsibles", selectedUtmCampaign, appliedWithMode],
+    queryFn: () => getUtmResponsibleStats(selectedUtmCampaign!.source, selectedUtmCampaign!.campaign, appliedWithMode),
+    enabled: selectedUtmCampaign !== null,
   });
 
   const header       = statsQ.data?.header;
@@ -496,7 +459,7 @@ export default function LidlarPage() {
       <Topbar
         title="Lidlar analitika"
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); utmQ.refetch(); }}>
+          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); utmStatsQ.refetch(); }}>
             <RefreshCw className="w-3.5 h-3.5" /> Yangilash
           </Button>
         }
@@ -505,14 +468,14 @@ export default function LidlarPage() {
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px]" style={{ background: "var(--bg)" }}>
 
         {/* ── Filter panel ── */}
-        <div ref={filterRef} style={{ position: "relative", marginBottom: 20 }}>
+        <div ref={filterRef} style={{ position: "sticky", top: 0, zIndex: 10, marginBottom: 20 }}>
           {/* Trigger button */}
           <button
-            onClick={() => { setPending({ ...applied }); setFilterOpen((o) => !o); }}
+            onClick={() => setFilterOpen((o) => !o)}
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
               background: "var(--bg2)",
-              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 || mode === 'amocrm' ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
+              border: `1px solid ${filterOpen ? "#2196F3" : activeCount > 0 || mode !== 'default' ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
               borderRadius: filterOpen ? "10px 10px 0 0" : 10,
               padding: "10px 16px", color: "var(--text)", fontSize: 13, fontWeight: 500,
               cursor: "pointer", textAlign: "left",
@@ -521,13 +484,10 @@ export default function LidlarPage() {
             <Search size={16} style={{ color: "var(--text3)", flexShrink: 0 }} />
             <span style={{ color: "var(--text3)", flex: 1 }}>Qidirish va filtrlash…</span>
             {mode === 'amocrm' && (
-              <span style={{
-                background: "rgba(217,119,6,0.15)", color: "#D97706",
-                border: "1px solid rgba(217,119,6,0.4)",
-                borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700,
-              }}>
-                AmoCRM
-              </span>
+              <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>AmoCRM</span>
+            )}
+            {mode === 'bitrix24' && (
+              <span style={{ background: "rgba(33,150,243,0.15)", color: "#2196F3", border: "1px solid rgba(33,150,243,0.4)", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>Bitrix24</span>
             )}
             {activeCount > 0 && (
               <span style={{
@@ -551,247 +511,126 @@ export default function LidlarPage() {
               background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none",
               borderRadius: "0 0 12px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
             }}>
-              <div style={{ display: "flex" }}>
-                {/* Left sidebar — presets */}
-                <div style={{
-                  width: "26%", borderRight: "1px solid var(--border)",
-                  padding: "16px 12px", flexShrink: 0,
-                }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                    Saqlangan filtrlar
+              <div style={{ padding: "16px 20px" }}>
+                {/* Quick date presets */}
+                {(() => {
+                  const presets = [
+                    { label: "Bugun",    start: todayISO(),    end: todayISO() },
+                    { label: "7 kun",    start: daysAgoISO(7), end: todayISO() },
+                    { label: "30 kun",   start: daysAgoISO(30),end: todayISO() },
+                    { label: "90 kun",   start: daysAgoISO(90),end: todayISO() },
+                    { label: "Barchasi", start: "",             end: "" },
+                  ];
+                  return (
+                    <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                      {presets.map((p) => {
+                        const active = applied.start_date === (p.start || undefined) && applied.end_date === (p.end || undefined);
+                        return (
+                          <button key={p.label}
+                            onClick={() => setApplied((prev) => ({ ...prev, start_date: p.start || undefined, end_date: p.end || undefined }))}
+                            style={{
+                              background: active ? "#2196F3" : "var(--bg3)",
+                              border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
+                              color: active ? "#fff" : "#9E9E9E",
+                              borderRadius: 20, padding: "5px 14px",
+                              fontSize: 12, fontWeight: active ? 600 : 400,
+                              cursor: "pointer", transition: "all 0.15s",
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Date row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
+                      <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
+                    </label>
+                    <input type="date" value={applied.start_date ?? ""}
+                      onChange={(e) => setApplied((p) => ({ ...p, start_date: e.target.value || undefined }))}
+                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
+                    />
                   </div>
-                  <button
-                    onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setMode('default'); }}
-                    style={{
-                      width: "100%", textAlign: "left",
-                      background: mode === 'default' ? "rgba(33,150,243,0.08)" : "transparent",
-                      border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.3)" : "var(--border)"}`,
-                      borderRadius: 8,
-                      color: mode === 'default' ? "#2196F3" : "var(--text2)",
-                      fontSize: 12, fontWeight: 600,
-                      padding: "8px 12px", cursor: "pointer", marginBottom: 6,
-                    }}
-                  >
-                    Barcha lidlar
-                  </button>
-                  <button
-                    onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setMode('amocrm'); }}
-                    style={{
-                      width: "100%", textAlign: "left",
-                      background: mode === 'amocrm' ? "rgba(217,119,6,0.10)" : "transparent",
-                      border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
-                      borderRadius: 8,
-                      color: mode === 'amocrm' ? "#D97706" : "var(--text2)",
-                      fontSize: 12, fontWeight: 600,
-                      padding: "8px 12px", cursor: "pointer", marginBottom: 8,
-                    }}
-                  >
-                    AmoCRM
-                  </button>
-                  <div style={{
-                    border: "1px dashed var(--border)", borderRadius: 8,
-                    padding: "12px 10px", color: "#444", fontSize: 11, textAlign: "center",
-                  }}>
-                    Saqlangan filtr yo'q
+                  <div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
+                      <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
+                    </label>
+                    <input type="date" value={applied.end_date ?? ""}
+                      onChange={(e) => setApplied((p) => ({ ...p, end_date: e.target.value || undefined }))}
+                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
+                    />
                   </div>
                 </div>
 
-                {/* Right form */}
-                <div style={{ flex: 1, padding: "16px 20px" }}>
-                  {/* Quick date presets */}
-                  {(() => {
-                    const presets = [
-                      { label: "Bugun",   start: todayISO(),       end: todayISO() },
-                      { label: "7 kun",   start: daysAgoISO(7),    end: todayISO() },
-                      { label: "30 kun",  start: daysAgoISO(30),   end: todayISO() },
-                      { label: "90 kun",  start: daysAgoISO(90),   end: todayISO() },
-                      { label: "Barchasi", start: "",               end: "" },
-                    ];
-                    return (
-                      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-                        {presets.map((p) => {
-                          const active = pending.start_date === (p.start || undefined) && pending.end_date === (p.end || undefined);
-                          return (
-                            <button
-                              key={p.label}
-                              onClick={() => setPending((prev) => ({
-                                ...prev,
-                                start_date: p.start || undefined,
-                                end_date:   p.end   || undefined,
-                              }))}
-                              style={{
-                                background: active ? "#2196F3" : "var(--bg3)",
-                                border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
-                                color: active ? "#fff" : "#9E9E9E",
-                                borderRadius: 20, padding: "5px 14px",
-                                fontSize: 12, fontWeight: active ? 600 : 400,
-                                cursor: "pointer", transition: "all 0.15s",
-                              }}
-                            >
-                              {p.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Date row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
-                      </label>
-                      <input
-                        type="date"
-                        value={pending.start_date ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, start_date: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px",
-                          outline: "none", boxSizing: "border-box",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
-                      </label>
-                      <input
-                        type="date"
-                        value={pending.end_date ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, end_date: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px",
-                          outline: "none", boxSizing: "border-box",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Dropdown filters row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Users size={12} />Mas'ul xodim
-                      </label>
-                      <select
-                        value={pending.responsible_id ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, responsible_id: e.target.value ? Number(e.target.value) : undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barchasi</option>
-                        {filterOpts?.responsibles.map((r) => (
-                          <option key={r.id} value={r.id}>{r.full_name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <Filter size={12} />Bosqich
-                      </label>
-                      <select
-                        value={pending.stage ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, stage: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barchasi</option>
-                        {filterOpts?.stages.map((s) => (
-                          <option key={s.bitrix_id} value={s.bitrix_id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <TrendingUp size={12} />Manba
-                      </label>
-                      <select
-                        value={pending.source ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, source: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barchasi</option>
-                        {mode === 'amocrm'
-                          ? amocrmSrcQ.isLoading
-                            ? <option disabled>Yuklanmoqda…</option>
-                            : (amocrmSrcQ.data ?? []).map((s) => (
-                                <option key={s} value={s}>{s}</option>
-                              ))
-                          : filterOpts?.sources.map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))
-                        }
-                      </select>
-                    </div>
-                  </div>
-                  {/* Facebook Forms filter row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
-                    <div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                        <TrendingUp size={12} />Facebook Forma (UTM bo'yicha)
-                      </label>
-                      <select
-                        value={pending.form_id ?? ""}
-                        onChange={(e) => setPending((p) => ({ ...p, form_id: e.target.value || undefined }))}
-                        style={{
-                          width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                          borderRadius: 8, color: "var(--text)",
-                          fontSize: 12, padding: "8px 10px", outline: "none",
-                          appearance: "none", cursor: "pointer",
-                        }}
-                      >
-                        <option value="">Barcha formalar</option>
-                        {filterOptsQ.isLoading
-                          ? <option disabled>Yuklanmoqda…</option>
-                          : (filterOpts?.forms ?? []).map((f) => (
-                              <option key={f.id} value={f.id}>{f.name} ({f.count} lid)</option>
-                            ))
-                        }
-                      </select>
-                    </div>
-                  </div>
+                {/* MultiSelect filters row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <MultiSelect
+                    label="Mas'ul xodim" icon={<Users size={12} />}
+                    options={(filterOpts?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
+                    values={(applied.responsible_ids ?? []).map(String)}
+                    onChange={(vals) => setApplied(p => ({ ...p, responsible_ids: vals.map(Number) }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Bosqich" icon={<Filter size={12} />}
+                    options={(filterOpts?.stages ?? []).map(s => ({ value: s.bitrix_id, label: s.name }))}
+                    values={applied.stages ?? []}
+                    onChange={(vals) => setApplied(p => ({ ...p, stages: vals.length ? vals : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Manba" icon={<TrendingUp size={12} />}
+                    options={mode === 'amocrm'
+                      ? (amocrmSrcQ.data ?? []).map(s => ({ value: s, label: s }))
+                      : (filterOpts?.sources ?? []).map(s => ({ value: s.id, label: s.name }))}
+                    values={applied.sources ?? []}
+                    onChange={(vals) => setApplied(p => ({ ...p, sources: vals.length ? vals : undefined }))}
+                    loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
+                  />
                 </div>
-              </div>
-
-              {/* Bottom action bar */}
-              <div style={{
-                display: "flex", justifyContent: "flex-end", gap: 10,
-                padding: "12px 20px", borderTop: "1px solid var(--border)",
-              }}>
-                <button
-                  onClick={() => { const d = getDefaultFilter(); setPending(d); setApplied(d); setFilterOpen(false); }}
-                  style={{
-                    background: "var(--bg3)", border: "1px solid var(--border)", color: "#9E9E9E",
-                    borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 500, cursor: "pointer",
-                  }}
-                >
-                  Tozalash
-                </button>
-                <button
-                  onClick={() => { setApplied({ ...pending }); setFilterOpen(false); }}
-                  style={{
-                    background: "#2196F3", border: "none", color: "#fff",
-                    borderRadius: 8, padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}
-                >
-                  Topish
-                </button>
+                {/* Bottom row: mode toggle buttons */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => setMode('default')}
+                      style={{
+                        background: mode === 'default' ? "rgba(33,150,243,0.1)" : "transparent",
+                        border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
+                        color: mode === 'default' ? "#2196F3" : "var(--text3)",
+                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      Barcha lidlar
+                    </button>
+                    <button onClick={() => setMode('bitrix24')}
+                      style={{
+                        background: mode === 'bitrix24' ? "rgba(33,150,243,0.1)" : "transparent",
+                        border: `1px solid ${mode === 'bitrix24' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
+                        color: mode === 'bitrix24' ? "#2196F3" : "var(--text3)",
+                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      Bitrix24
+                    </button>
+                    <button onClick={() => setMode('amocrm')}
+                      style={{
+                        background: mode === 'amocrm' ? "rgba(217,119,6,0.1)" : "transparent",
+                        border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
+                        color: mode === 'amocrm' ? "#D97706" : "var(--text3)",
+                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}>
+                      AmoCRM
+                    </button>
+                  </div>
+                  {(activeCount > 0 || mode !== 'default') && (
+                    <button onClick={() => { setApplied(getDefaultFilter()); setMode('default'); }}
+                      style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>
+                      Tozalash
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -847,7 +686,7 @@ export default function LidlarPage() {
             {/* Row 2 — Voronka (3 cols) + Sifatsiz/Bekor (1 col, aligned with Konsultatsiyalar) */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
               {/* Voronka — spans first 3 columns */}
-              <div style={{ gridColumn:"1 / 4", background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
+              <div style={{ gridColumn:"1 / 4", background: isDark ? "linear-gradient(135deg,#0a1628,#0d2240)" : "linear-gradient(135deg,rgba(33,150,243,0.06),rgba(0,188,212,0.04))", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
                   <Filter size={15} style={{ color:"var(--text3)" }} />
                   <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>Voronka samaradorligi</span>
@@ -966,9 +805,12 @@ export default function LidlarPage() {
                           <td style={{ ...TD, width:200 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <AvatarCircle name={r.full_name || "?"} size={34} />
-                              <span style={{ fontSize:13, color: isSelected ? "#2196F3" : "var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                              <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
+                                 target="_blank" rel="noopener noreferrer"
+                                 style={{ fontSize:13, color: isSelected ? "#2196F3" : "var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textDecoration:"none" }}
+                                 onClick={e => e.stopPropagation()}>
                                 {r.full_name}
-                              </span>
+                              </a>
                             </div>
                           </td>
                           <td style={TD}>
@@ -1021,7 +863,7 @@ export default function LidlarPage() {
                                             <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
                                                target="_blank" rel="noopener noreferrer"
                                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title}
+                                              {lead.title || `Lid #${lead.id}`}
                                             </a>
                                           </td>
                                           <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
@@ -1170,9 +1012,12 @@ export default function LidlarPage() {
                           <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                              <span style={{ fontSize:13, color: isSel ? "#2196F3" : "var(--text)", fontWeight:500, whiteSpace:"nowrap" }}>
+                              <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${u.responsible_id}`}
+                                 target="_blank" rel="noopener noreferrer"
+                                 style={{ fontSize:13, color: isSel ? "#2196F3" : "var(--text)", fontWeight:500, whiteSpace:"nowrap", textDecoration:"none" }}
+                                 onClick={e => e.stopPropagation()}>
                                 {u.full_name || `User ${u.responsible_id}`}
-                              </span>
+                              </a>
                             </div>
                           </td>
                           {RESPONSIBLE_COLS.map((col) => {
@@ -1222,7 +1067,7 @@ export default function LidlarPage() {
                                             <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
                                                target="_blank" rel="noopener noreferrer"
                                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title}
+                                              {lead.title || `Lid #${lead.id}`}
                                             </a>
                                           </td>
                                           <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
@@ -1353,9 +1198,11 @@ export default function LidlarPage() {
                             <td style={{ ...TD, width: 200 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <AvatarCircle name={r.full_name || "?"} size={34} />
-                                <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
+                                   target="_blank" rel="noopener noreferrer"
+                                   style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>
                                   {r.full_name}
-                                </span>
+                                </a>
                               </div>
                             </td>
                             <td style={TD}>
@@ -1453,6 +1300,7 @@ export default function LidlarPage() {
             grandTotal: number,
             barColor: string,
             loading: boolean,
+            stageId: string,
           ) => (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
               <div style={{
@@ -1461,7 +1309,14 @@ export default function LidlarPage() {
                 display: "flex", alignItems: "center", justifyContent: "space-between",
               }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
-                <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
+                  <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
+                     target="_blank" rel="noopener noreferrer"
+                     style={{ fontSize: 11, color: "#2196F3", background: "rgba(33,150,243,0.1)", border: "1px solid rgba(33,150,243,0.3)", borderRadius: 6, padding: "3px 8px", textDecoration: "none", whiteSpace: "nowrap" }}>
+                    Bitrix24 ↗
+                  </a>
+                </div>
               </div>
               {loading ? (
                 <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -1472,12 +1327,19 @@ export default function LidlarPage() {
                   {items.map((r, i) => (
                     <div key={i} style={{ padding: "7px 20px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                           {r.reason}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
-                          {fmtNum(r.total)}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                            {fmtNum(r.total)}
+                          </span>
+                          <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
+                             target="_blank" rel="noopener noreferrer"
+                             style={{ fontSize: 10, color: "#2196F3", background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.25)", borderRadius: 4, padding: "2px 6px", textDecoration: "none" }}>
+                            ↗
+                          </a>
+                        </div>
                       </div>
                       <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
                         <div style={{
@@ -1497,110 +1359,223 @@ export default function LidlarPage() {
 
           return (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading)}
-              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading)}
+              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading, "UC_NAZK5J")}
+              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading,   "UC_F8K4GI")}
             </div>
           );
         })()}
 
         {/* ══════════════════════════════════════════════════════════
-            UTM bo'yicha (3-level drill-down)
+            UTM bo'yicha — 3 separate sub-tables (master → campaigns → responsibles)
         ══════════════════════════════════════════════════════════ */}
         {(() => {
-          const utmRows:  UtmStatRow[]       = utmQ.data      ?? [];
-          const campRows: UtmCampaignRow[]   = utmCampQ.data  ?? [];
-          const respRows: UtmResponsibleRow[] = utmRespQ.data ?? [];
+          const utmRows: UtmStatRow[] = utmStatsQ.data ?? [];
+          const maxes: Record<string, number> = {};
+          for (const c of UTM_COLS_DEF)
+            maxes[c.key] = Math.max(1, ...utmRows.map(r => Number(r[c.key as keyof UtmStatRow]) || 0));
+          const totals = utmRows.reduce((acc, r) => {
+            for (const c of UTM_COLS_DEF) acc[c.key] = (acc[c.key] || 0) + (Number(r[c.key as keyof UtmStatRow]) || 0);
+            return acc;
+          }, {} as Record<string, number>);
 
-          const level = selectedUtmCampaign !== null ? 3
-                      : selectedUtmSource   !== null ? 2 : 1;
+          const campRows: UtmCampaignRow[] = selectedUtmSource !== null ? (utmCampaignQ.data ?? []) : [];
+          const campMaxes: Record<string, number> = {};
+          for (const c of UTM_COLS_DEF)
+            campMaxes[c.key] = Math.max(1, ...campRows.map(r => Number(r[c.key as keyof UtmCampaignRow]) || 0));
 
-          const backClick = () => {
-            if (level === 3) { setSelectedUtmCampaign(null); }
-            else             { setSelectedUtmSource(null); setSelectedUtmCampaign(null); }
-          };
+          const utmRespRows: UtmResponsibleRow[] = selectedUtmCampaign !== null ? (utmRespQ.data ?? []) : [];
+          const utmRespMaxes: Record<string, number> = {};
+          for (const c of UTM_COLS_DEF)
+            utmRespMaxes[c.key] = Math.max(1, ...utmRespRows.map(r => Number(r[c.key as keyof UtmResponsibleRow]) || 0));
+
+          const subCard = (label: string, onClose: () => void, children: React.ReactNode) => (
+            <div style={{ border: "1px solid rgba(33,150,243,0.3)", borderRadius: 10, overflow: "hidden", marginBottom: 8, background: "var(--bg2)" }}>
+              <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, background: "rgba(33,150,243,0.05)" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#2196F3", flex: 1 }}>{label}</span>
+                <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 4px" }}>×</button>
+              </div>
+              {children}
+            </div>
+          );
 
           return (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              {/* Breadcrumb header */}
-              <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                {level > 1 && (
-                  <button
-                    onClick={backClick}
-                    style={{
-                      background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
-                      color: "#9E9E9E", fontSize: 12, fontWeight: 600, padding: "4px 12px",
-                      cursor: "pointer", flexShrink: 0,
-                    }}
-                  >
-                    ← Orqaga
-                  </button>
-                )}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
-                  <span
-                    style={{ fontSize: 15, fontWeight: 700, color: level === 1 ? "var(--text)" : "var(--text3)", cursor: level > 1 ? "pointer" : "default", whiteSpace: "nowrap" }}
-                    onClick={() => level > 1 && (setSelectedUtmSource(null), setSelectedUtmCampaign(null))}
-                  >
-                    UTM bo'yicha
-                  </span>
-                  {level >= 2 && (
-                    <>
-                      <span style={{ color: "#444" }}>/</span>
-                      <span
-                        style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "var(--text)" : "var(--text3)", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
-                        onClick={() => level === 3 && setSelectedUtmCampaign(null)}
-                      >
-                        {UTM_SOURCE_DISPLAY_NAMES[selectedUtmSource!] ?? selectedUtmSource}
-                      </span>
-                    </>
-                  )}
-                  {level === 3 && (
-                    <>
-                      <span style={{ color: "#444" }}>/</span>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {selectedUtmCampaign}
-                      </span>
-                    </>
-                  )}
+            <div style={{ marginBottom: 16 }}>
+              {/* ── Level 1: UTM Sources ── */}
+              <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: selectedUtmSource ? 8 : 16 }}>
+                <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>UTM bo'yicha</span>
+                  <span style={{ fontSize: 12, color: "var(--text3)" }}>{utmRows.length} ta manba</span>
                 </div>
-                <span style={{ fontSize: 12, color: "#555", flexShrink: 0 }}>
-                  {level === 1 && `${utmRows.length} ta manba`}
-                  {level === 2 && `${campRows.length} ta kampaniya`}
-                  {level === 3 && `${respRows.length} ta mas'ul`}
-                </span>
+                {utmStatsQ.isLoading ? (
+                  <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                ) : utmRows.length === 0 ? (
+                  <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                      <thead>
+                        <tr>
+                          <th style={TH("#9E9E9E", 200)}>UTM MANBA</th>
+                          {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
+                          <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmRows.map((r, i) => {
+                          const konv = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+                          const isSel = selectedUtmSource === r.utm_source;
+                          return (
+                            <tr key={r.utm_source}
+                                style={{ background: isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                                onClick={() => { setSelectedUtmSource(isSel ? null : r.utm_source); setSelectedUtmCampaign(null); }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <ChevronDown size={13} style={{ color: isSel ? "#2196F3" : "#9E9E9E", transform: isSel ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+                                  <span style={{ color: isSel ? "#2196F3" : "var(--text)" }}>{UTM_SOURCE_DISPLAY_NAMES[r.utm_source] ?? r.utm_source ?? "(manbasiz)"}</span>
+                                  {r.campaign_count > 0 && <span style={{ fontSize: 10, background: "rgba(33,150,243,0.1)", color: "#2196F3", borderRadius: 8, padding: "1px 6px" }}>{r.campaign_count} kampaniya</span>}
+                                </div>
+                              </td>
+                              {UTM_COLS_DEF.map(c => {
+                                const val = Number(r[c.key as keyof UtmStatRow]) || 0;
+                                return (
+                                  <td key={c.key} style={TD}>
+                                    {val > 0 ? <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span><MiniBar value={val} max={maxes[c.key]} color={c.color} /></> : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                                  </td>
+                                );
+                              })}
+                              <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
+                            </tr>
+                          );
+                        })}
+                        <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
+                          <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+                          {UTM_COLS_DEF.map(c => (
+                            <td key={c.key} style={TD}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{fmtNum(totals[c.key] || 0)}</span>
+                              <MiniBar value={1} max={1} color={c.color} />
+                            </td>
+                          ))}
+                          <td style={{ ...TD, textAlign: "center" }}>
+                            <ConversionDonut pct={(totals.umumiy_lidlar || 0) > 0 ? ((totals.konsultatsiya_otkazildi || 0) / (totals.umumiy_lidlar || 0)) * 100 : 0} size={38} />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              {/* Body */}
-              {level === 1 && (
-                <UtmTable<UtmStatRow>
-                  rows={utmRows}
-                  nameKey="utm_source"
-                  nameLabel="UTM - SOURCE"
-                  onRowClick={(r) => { setSelectedUtmSource(r.utm_source); setSelectedUtmCampaign(null); }}
-                  loading={utmQ.isLoading}
-                  countKey="campaign_count"
-                  countLabel="kampaniya"
-                  formatName={(src) => UTM_SOURCE_DISPLAY_NAMES[src] ?? src}
-                />
+              {/* ── Level 2: Campaigns sub-table ── */}
+              {selectedUtmSource !== null && subCard(
+                `Kampaniyalar: ${UTM_SOURCE_DISPLAY_NAMES[selectedUtmSource] ?? selectedUtmSource}`,
+                () => { setSelectedUtmSource(null); setSelectedUtmCampaign(null); },
+                utmCampaignQ.isLoading ? (
+                  <div style={{ padding: 20, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                ) : campRows.length === 0 ? (
+                  <div style={{ padding: 20, color: "#555", fontSize: 13 }}>Kampaniyalar topilmadi</div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                      <thead>
+                        <tr>
+                          <th style={TH("#555", 44)}>#</th>
+                          <th style={TH("#9E9E9E", 260)}>KAMPANIYA</th>
+                          {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
+                          <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {campRows.map((cr, ci) => {
+                          const campKonv = cr.umumiy_lidlar > 0 ? (cr.konsultatsiya_otkazildi / cr.umumiy_lidlar) * 100 : 0;
+                          const isCampSel = selectedUtmCampaign?.campaign === cr.utm_campaign;
+                          return (
+                            <tr key={cr.utm_campaign}
+                                style={{ background: isCampSel ? "rgba(33,150,243,0.08)" : ci % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                                onClick={() => setSelectedUtmCampaign(isCampSel ? null : { source: selectedUtmSource, campaign: cr.utm_campaign })}
+                                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = isCampSel ? "rgba(33,150,243,0.08)" : ci % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              <td style={{ ...TD, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(ci + 1).padStart(2, "0")}</td>
+                              <td style={{ ...TD, fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <ChevronDown size={12} style={{ color: isCampSel ? "#2196F3" : "#9E9E9E", transform: isCampSel ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+                                  <span style={{ color: isCampSel ? "#2196F3" : "var(--text)" }}>{cr.utm_campaign || "(kampaniyasiz)"}</span>
+                                  {cr.responsible_count > 0 && <span style={{ fontSize: 10, background: "rgba(33,150,243,0.1)", color: "#2196F3", borderRadius: 6, padding: "1px 5px" }}>{cr.responsible_count} mas'ul</span>}
+                                </div>
+                              </td>
+                              {UTM_COLS_DEF.map(c => {
+                                const val = Number(cr[c.key as keyof UtmCampaignRow]) || 0;
+                                return (
+                                  <td key={c.key} style={TD}>
+                                    {val > 0 ? <><span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span><MiniBar value={val} max={campMaxes[c.key]} color={c.color} height={3} /></> : <span style={{ fontSize: 12, color: "var(--text3)" }}>—</span>}
+                                  </td>
+                                );
+                              })}
+                              <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={campKonv} size={36} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               )}
-              {level === 2 && (
-                <UtmTable<UtmCampaignRow>
-                  rows={campRows}
-                  nameKey="utm_campaign"
-                  nameLabel="UTM - CAMPAIGN"
-                  onRowClick={(r) => setSelectedUtmCampaign(r.utm_campaign)}
-                  loading={utmCampQ.isLoading}
-                  countKey="responsible_count"
-                  countLabel="mas'ul"
-                />
-              )}
-              {level === 3 && (
-                <UtmTable<UtmResponsibleRow>
-                  rows={respRows}
-                  nameKey="full_name"
-                  nameLabel="MAS'UL"
-                  loading={utmRespQ.isLoading}
-                  getBitrixUrl={(r) => `https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
-                />
+
+              {/* ── Level 3: Responsibles sub-table ── */}
+              {selectedUtmCampaign !== null && subCard(
+                `Mas'ullar: ${selectedUtmCampaign.campaign || "(kampaniyasiz)"}`,
+                () => setSelectedUtmCampaign(null),
+                utmRespQ.isLoading ? (
+                  <div style={{ padding: 20, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                ) : utmRespRows.length === 0 ? (
+                  <div style={{ padding: 20, color: "#555", fontSize: 13 }}>Mas'ullar topilmadi</div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                      <thead>
+                        <tr>
+                          <th style={TH("#555", 44)}>#</th>
+                          <th style={TH("#9E9E9E", 200)}>MAS'UL</th>
+                          {UTM_COLS_DEF.map(c => <th key={c.key} style={TH(c.color)}>{c.label}</th>)}
+                          <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmRespRows.map((rr, ri) => {
+                          const rKonv = rr.umumiy_lidlar > 0 ? (rr.konsultatsiya_otkazildi / rr.umumiy_lidlar) * 100 : 0;
+                          return (
+                            <tr key={rr.responsible_id} style={{ background: ri % 2 === 0 ? "transparent" : "var(--bg)" }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = ri % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              <td style={{ ...TD, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(ri + 1).padStart(2, "0")}</td>
+                              <td style={TD}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <AvatarCircle name={rr.full_name || "?"} size={30} />
+                                  <span style={{ fontSize: 13, color: "var(--text)", whiteSpace: "nowrap", fontWeight: 500 }}>{rr.full_name}</span>
+                                  <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${rr.responsible_id}`}
+                                     target="_blank" rel="noopener noreferrer"
+                                     style={{ fontSize: 10, color: "#2196F3", background: "rgba(33,150,243,0.1)", border: "1px solid rgba(33,150,243,0.3)", borderRadius: 5, padding: "2px 7px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                    ↗ Bitrix24
+                                  </a>
+                                </div>
+                              </td>
+                              {UTM_COLS_DEF.map(c => {
+                                const val = Number(rr[c.key as keyof UtmResponsibleRow]) || 0;
+                                return (
+                                  <td key={c.key} style={TD}>
+                                    {val > 0 ? <><span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{fmtNum(val)}</span><MiniBar value={val} max={utmRespMaxes[c.key]} color={c.color} height={3} /></> : <span style={{ fontSize: 12, color: "var(--text3)" }}>—</span>}
+                                  </td>
+                                );
+                              })}
+                              <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={rKonv} size={36} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               )}
             </div>
           );

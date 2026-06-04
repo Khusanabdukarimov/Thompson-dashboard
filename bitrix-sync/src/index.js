@@ -15,6 +15,8 @@ const taskDeleted  = require('./webhooks/taskDeleted');
 const dashboardRouter                    = require('./api/dashboard');
 const { startCallsAutoSync }             = require('./api/dashboard');
 const campaignsRouter  = require('./api/campaigns');
+const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
+const marketingRouter  = require('./api/marketing');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,6 +47,8 @@ app.use('/api/dashboard', dashboardRouter);
 
 // ── Campaigns API (Meta Ads, cached) ──────────────────────────
 app.use('/api/campaigns', campaignsRouter);
+app.use('/api/reja',      rejaRouter);
+app.use('/api/marketing', marketingRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', async (req, res) => {
@@ -56,9 +60,32 @@ app.get('/health', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  startCallsAutoSync();
-  console.log(`[bitrix-sync] Server running on port ${PORT}`);
+// Run all migrations before accepting connections
+Promise.all([
+  pool.query(`
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS date_modify   TIMESTAMPTZ;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_sale_date  TIMESTAMPTZ;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS begindate     TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS deals_date_modify_idx  ON deals(date_modify);
+    CREATE INDEX IF NOT EXISTS deals_uf_sale_date_idx ON deals(uf_sale_date);
+    CREATE INDEX IF NOT EXISTS deals_begindate_idx    ON deals(begindate);
+  `).catch(err => console.error('[startup] leads/deals migration failed:', err.message)),
+  pool.query(`
+    UPDATE stages SET is_won = TRUE, is_final = TRUE
+      WHERE entity = 'deal' AND (
+        bitrix_id = 'WON' OR bitrix_id LIKE '%:WON'
+        OR bitrix_id = 'UC_NV0Y4F' OR bitrix_id LIKE '%:UC_NV0Y4F'
+      );
+    UPDATE stages SET is_final = TRUE
+      WHERE entity = 'deal' AND (bitrix_id = 'LOSE' OR bitrix_id LIKE '%:LOSE');
+  `).catch(err => console.error('[startup] stages restore migration failed:', err.message)),
+  rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
+]).then(() => {
+  app.listen(PORT, () => {
+    startCallsAutoSync();
+    console.log(`[bitrix-sync] Server running on port ${PORT}`);
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);
   console.log(`  POST /webhook/lead/deleted`);
@@ -77,4 +104,10 @@ app.listen(PORT, () => {
   console.log(`  POST /webhook/facebook  (FB leadgen events)`);
   console.log(`  GET  /api/campaigns/rows`);
   console.log(`  GET  /api/campaigns/insights`);
+  console.log(`  GET  /api/reja/plans`);
+  console.log(`  POST /api/reja/plans`);
+  console.log(`  GET  /api/reja/plans/:id/distribution`);
+  console.log(`  POST /api/reja/plans/:id/distribution`);
+  console.log(`  GET  /api/reja/plans/:id/progress`);
+  });
 });

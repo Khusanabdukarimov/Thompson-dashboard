@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS leads (
   uf_activity     TEXT,
   uf_with_whom    TEXT,
   uf_tashrif_sanasi TEXT,
+  uf_amo_date     TIMESTAMPTZ,
   name            TEXT,
   last_name       TEXT,
   title           TEXT,
@@ -56,6 +57,7 @@ CREATE INDEX IF NOT EXISTS leads_responsible_idx ON leads(responsible_id);
 CREATE INDEX IF NOT EXISTS leads_stage_idx ON leads(stage_id);
 CREATE INDEX IF NOT EXISTS leads_date_create_idx ON leads(date_create);
 CREATE INDEX IF NOT EXISTS leads_source_idx ON leads(source_id);
+CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
 
 -- Lead phone numbers
 CREATE TABLE IF NOT EXISTS lead_phones (
@@ -77,6 +79,7 @@ CREATE TABLE IF NOT EXISTS deals (
   utm_source      TEXT,
   title           TEXT,
   date_create     TIMESTAMPTZ,
+  date_modify     TIMESTAMPTZ,
   closedate       TIMESTAMPTZ,
   uf_cancel_reason TEXT,
   contact_id      INTEGER,

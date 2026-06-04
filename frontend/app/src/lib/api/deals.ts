@@ -95,8 +95,8 @@ export type DealsListFilter = {
   to?: string;
   search?: string;
   status?: 'won' | 'lost' | 'active' | '';
-  responsible_id?: number;
-  stage_id?: number;
+  responsible_id?: string;
+  stage_id?: string;
   source?: string;
   page?: number;
   limit?: number;
@@ -105,7 +105,7 @@ export type DealsListFilter = {
 
 export function getDealKpiStats(filter: {
   from?: string; to?: string;
-  responsible_id?: number; stage_id?: number; source?: string;
+  responsible_id?: string; stage_id?: string; source?: string;
   mode?: string;
 }) {
   return apiGet<DealKpiStats>('/api/dashboard/deals-stats', filter as Record<string, string | number | undefined>, API_URL_CRM);

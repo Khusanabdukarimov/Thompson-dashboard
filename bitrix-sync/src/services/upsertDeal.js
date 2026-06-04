@@ -41,15 +41,16 @@ function parseDate(s) {
 async function upsertDeal(r, client) {
   const db = client || pool;
 
-  const stageId = await stageResolver.resolve('deal', r.STAGE_ID);
+  const stageId = await stageResolver.resolve('deal', r.STAGE_ID, r.STAGE_SEMANTIC_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
   const contactId = r.CONTACT_ID ? parseInt(r.CONTACT_ID) : null;
 
   const { rows } = await db.query(
     `INSERT INTO deals (
        id, responsible_id, stage_id, opportunity, currency_id,
-       source_id, utm_source, date_create, closedate, uf_cancel_reason, contact_id, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+       source_id, utm_source, date_create, date_modify, closedate,
+       uf_sale_date, uf_cancel_reason, contact_id, begindate, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -57,9 +58,12 @@ async function upsertDeal(r, client) {
        currency_id      = EXCLUDED.currency_id,
        source_id        = EXCLUDED.source_id,
        utm_source       = EXCLUDED.utm_source,
+       date_modify      = EXCLUDED.date_modify,
        closedate        = EXCLUDED.closedate,
+       uf_sale_date     = EXCLUDED.uf_sale_date,
        uf_cancel_reason = EXCLUDED.uf_cancel_reason,
        contact_id       = EXCLUDED.contact_id,
+       begindate        = EXCLUDED.begindate,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -71,9 +75,12 @@ async function upsertDeal(r, client) {
       r.SOURCE_ID || null,
       r.UTM_SOURCE || null,
       parseDate(r.DATE_CREATE),
+      parseDate(r.DATE_MODIFY),
       parseDate(r.CLOSEDATE),
+      parseDate(r.UF_CRM_1779450406),
       ufEnum(r.UF_CRM_69EBC105EAA93, DEAL_CANCEL_REASON_MAP),
       contactId,
+      parseDate(r.BEGINDATE),
     ]
   );
 
