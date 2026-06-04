@@ -148,14 +148,15 @@ function getSubperiods(plan) {
 //   B) M=50 000, N=4, week1=55 000 → remaining weeks clamped to 0
 //   C) no actuals → all N weeks = M/N (equal)
 //
-function redistribute(totalTarget, subperiods, actualsMap) {
+// todayStr: "YYYY-MM-DD" — weeks whose end date has passed are locked (updated every Sunday)
+function redistribute(totalTarget, subperiods, actualsMap, todayStr) {
   const n = subperiods.length;
   if (n === 0) return [];
 
-  // Completed = has a positive actual recorded (date-independent)
+  // Completed = week's end date is before today (date-based, not actual-based)
   const completedSet = new Set(
     subperiods
-      .filter(sp => (actualsMap[sp.index] || 0) > 0)
+      .filter(sp => sp.end < todayStr)
       .map(sp => sp.index)
   );
 
@@ -193,7 +194,7 @@ function redistribute(totalTarget, subperiods, actualsMap) {
 // Wraps redistribute() with date-aware isPast / isCurrent / pct fields.
 function computeSubperiodProgress(totalTarget, subperiods, actualsMap, today) {
   const todayStr = localISO(today);
-  const results  = redistribute(totalTarget, subperiods, actualsMap);
+  const results  = redistribute(totalTarget, subperiods, actualsMap, todayStr);
   const byIdx    = Object.fromEntries(results.map(r => [r.spIndex, r]));
 
   return subperiods.map(sp => {
@@ -612,7 +613,8 @@ router.post('/plans/:planId/responsibles/:responsibleId/weeks/:weekIndex/actual'
 
     // Snapshot = what the planned was for this week BEFORE recording this actual
     const subperiods      = getSubperiods(plan);
-    const beforeResults   = redistribute(monthlyTarget, subperiods, storedActuals);
+    const todayStr        = localISO(new Date());
+    const beforeResults   = redistribute(monthlyTarget, subperiods, storedActuals, todayStr);
     const beforeByIdx     = Object.fromEntries(beforeResults.map(r => [r.spIndex, r]));
     const plannedSnapshot = beforeByIdx[weekIndex]?.target ?? null;
 
