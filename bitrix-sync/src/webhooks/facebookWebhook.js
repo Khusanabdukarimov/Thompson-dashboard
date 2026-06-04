@@ -4,8 +4,8 @@ const { bitrixPost, fetchOne } = require('../services/bitrix');
 const { upsertLead } = require('../services/upsertLead');
 const { distributeLead } = require('../services/distributor');
 
-// Barcha Facebook/Instagram Lead Ads uchun "Target" manba ishlatiladi
-const SOURCE_TARGET = 'UC_89FPH6'; // Target (Bitrix24 da "Target" deb nomlangan)
+const SOURCE_FB = 'UC_O9BLGT'; // Facebook
+const SOURCE_IG = 'UC_3O8GTF'; // Instagram
 
 /**
  * GET /webhook/facebook
@@ -93,7 +93,7 @@ async function createBitrixLead(leadgenId, raw, fields) {
   const bxFields = {
     NAME:         name,
     STATUS_ID:    'NEW',           // Yangi lid bosqichi
-    SOURCE_ID:    SOURCE_TARGET,   // Target manba (UC_89FPH6)
+    SOURCE_ID:    platform === 'instagram' ? SOURCE_IG : SOURCE_FB,
     UTM_SOURCE:   utmSource,
     UTM_MEDIUM:   utmMedium,
     UTM_CAMPAIGN: raw.campaign_name || '',
