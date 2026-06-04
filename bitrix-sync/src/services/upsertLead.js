@@ -59,11 +59,24 @@ function parseDate(s) {
  * Upsert a single lead from Bitrix24 raw data.
  * Returns the leads.id.
  */
+// ISO datetime pattern: 2026-06-04T11:42:09Z (or with offset)
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+
 async function upsertLead(r, client) {
   const db = client || pool;
 
   const stageId = await stageResolver.resolve('lead', r.STATUS_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
+
+  // For Website leads: use COMMENTS field as date_create if it's a valid ISO datetime
+  let dateCreate = parseDate(r.DATE_CREATE);
+  const isWebsite = (r.TITLE || '').trim().toLowerCase() === 'website';
+  if (isWebsite) {
+    const comment = (r.COMMENTS || '').trim();
+    if (ISO_DATE_RE.test(comment)) {
+      dateCreate = parseDate(comment);
+    }
+  }
 
   const { rows } = await db.query(
     `INSERT INTO leads (
@@ -129,7 +142,7 @@ async function upsertLead(r, client) {
       r.LAST_NAME || null,
       r.TITLE || null,
       r.WEB_FORM_ID ? String(r.WEB_FORM_ID) : null,
-      parseDate(r.DATE_CREATE),
+      dateCreate,
       parseDate(r.DATE_MODIFY),
     ]
   );
