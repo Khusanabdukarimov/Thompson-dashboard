@@ -16,6 +16,7 @@ const dashboardRouter                    = require('./api/dashboard');
 const { startCallsAutoSync }             = require('./api/dashboard');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
+const marketingRouter  = require('./api/marketing');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,6 +48,7 @@ app.use('/api/dashboard', dashboardRouter);
 // ── Campaigns API (Meta Ads, cached) ──────────────────────────
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/reja',      rejaRouter);
+app.use('/api/marketing', marketingRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', async (req, res) => {

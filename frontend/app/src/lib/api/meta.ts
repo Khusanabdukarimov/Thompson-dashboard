@@ -32,6 +32,26 @@ export type BitrixDailyResponse = {
   };
 };
 
+export type KunlikRow = {
+  leads: number[];
+  qual_leads: number[];
+  meetings: number[];
+  deals: number[];
+  deals_sum: number[];
+  sales_count: number[];
+  sales_sum: number[];
+  cancelled: number[];
+};
+
+export type KunlikResponse = {
+  month: string;
+  year: number;
+  data: {
+    target: KunlikRow;
+    instagram: KunlikRow;
+  };
+};
+
 export type DashboardDailyResponse = {
   date: string;
   facebook: { date?: string; spend?: number | string; leads_count?: number; error?: string };
@@ -63,6 +83,10 @@ export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: s
 
 export function getBitrixDaily(month: MonthKey, year: number) {
   return apiGet<BitrixDailyResponse>('/api/marketing/bitrix-daily', { month, year });
+}
+
+export function getKunlikHisobot(month: MonthKey, year: number) {
+  return apiGet<KunlikResponse>('/api/marketing/kunlik', { month, year });
 }
 
 export type CampaignAdRow = {
