@@ -1039,6 +1039,7 @@ export default function RejaPage() {
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
   const [planSearch, setPlanSearch] = useState('');
   const [planDropOpen, setPlanDropOpen] = useState(false);
+  const [nameFilter, setNameFilter] = useState('');
   const planDropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1050,6 +1051,16 @@ export default function RejaPage() {
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
+
+  const uniqueNames = useMemo(() => {
+    const names = plans.map(p => p.name).filter((n): n is string => !!n && n.trim() !== '');
+    return [...new Set(names)].sort();
+  }, [plans]);
+
+  const filteredPlans = useMemo(
+    () => nameFilter ? plans.filter(p => p.name === nameFilter) : plans,
+    [plans, nameFilter],
+  );
 
   const createMutation = useMutation({
     mutationFn: ({ year, month }: { year: number; month: number }) => {
@@ -1098,6 +1109,19 @@ export default function RejaPage() {
         title="Savdo Boshqaruvi"
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Reja name filter dropdown */}
+            {uniqueNames.length > 0 && (
+              <select
+                value={nameFilter}
+                onChange={e => { setNameFilter(e.target.value); setPlanDropOpen(false); }}
+                style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: nameFilter ? 'var(--text)' : 'var(--text3)', fontSize: 13, fontWeight: nameFilter ? 600 : 400, outline: 'none', cursor: 'pointer', height: 36 }}
+              >
+                <option value="">Barcha rejalar</option>
+                {uniqueNames.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            )}
             {/* Searchable plan selector — search input always visible, dropdown below */}
             <div ref={planDropRef} style={{ position: 'relative', minWidth: 240 }}>
               <input
@@ -1111,7 +1135,7 @@ export default function RejaPage() {
               {planDropOpen && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
                   <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                    {plans
+                    {filteredPlans
                       .filter(p => {
                         const q = planSearch.toLowerCase();
                         return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q);
@@ -1128,7 +1152,7 @@ export default function RejaPage() {
                           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{p.name ? periodLabel(p) + ' · ' : ''}${fmtUZS(p.total_target)}</span>
                         </div>
                       ))}
-                    {plans.filter(p => { const q = planSearch.toLowerCase(); return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q); }).length === 0 && (
+                    {filteredPlans.filter(p => { const q = planSearch.toLowerCase(); return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q); }).length === 0 && (
                       <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>Topilmadi</div>
                     )}
                   </div>
