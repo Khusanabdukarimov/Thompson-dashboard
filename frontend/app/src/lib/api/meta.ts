@@ -1,4 +1,4 @@
-import { apiGet, API_URL_CRM } from './client';
+import { apiGet, authedFetch, API_URL_CRM } from './client';
 
 export type MetaInsightsRow = {
   budget: number[];
@@ -87,6 +87,32 @@ export function getBitrixDaily(month: MonthKey, year: number) {
 
 export function getKunlikHisobot(month: MonthKey, year: number) {
   return apiGet<KunlikResponse>('/api/marketing/kunlik', { month, year });
+}
+
+export type KunlikMeta = {
+  month: string; year: number;
+  plans:     { target: Partial<Record<string, number>>; instagram: Partial<Record<string, number>> };
+  overrides: { target: Partial<Record<string, Record<number, number>>>; instagram: Partial<Record<string, Record<number, number>>> };
+};
+
+export function getKunlikMeta(month: MonthKey, year: number) {
+  return apiGet<KunlikMeta>('/api/marketing/kunlik-meta', { month, year });
+}
+
+export function saveKunlikPlan(section: string, metric_key: string, month: MonthKey, year: number, value: number) {
+  return authedFetch('/api/marketing/kunlik-plan', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section, metric_key, month, year, value }),
+  });
+}
+
+export function saveKunlikOverride(section: string, metric_key: string, month: MonthKey, year: number, day: number, value: number | null) {
+  return authedFetch('/api/marketing/kunlik-override', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section, metric_key, month, year, day, value }),
+  });
 }
 
 export type CampaignAdRow = {

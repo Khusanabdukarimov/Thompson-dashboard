@@ -200,4 +200,120 @@ router.get('/kunlik', async (req, res) => {
   }
 });
 
+// ── Schema ────────────────────────────────────────────────────────
+async function ensureSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS kunlik_plans (
+      id         SERIAL PRIMARY KEY,
+      section    TEXT NOT NULL,
+      metric_key TEXT NOT NULL,
+      month      INTEGER NOT NULL,
+      year       INTEGER NOT NULL,
+      plan_value NUMERIC(15,2) NOT NULL DEFAULT 0,
+      UNIQUE(section, metric_key, month, year)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS kunlik_overrides (
+      id         SERIAL PRIMARY KEY,
+      section    TEXT NOT NULL,
+      metric_key TEXT NOT NULL,
+      month      INTEGER NOT NULL,
+      year       INTEGER NOT NULL,
+      day        INTEGER NOT NULL,
+      value      NUMERIC(15,2) NOT NULL,
+      UNIQUE(section, metric_key, month, year, day)
+    )
+  `);
+}
+ensureSchema().catch(e => console.error('[marketing] schema error:', e.message));
+
+// GET /api/marketing/kunlik-meta?month=iyun&year=2026
+// Returns plans + overrides for both sections
+router.get('/kunlik-meta', async (req, res) => {
+  const monthKey = (req.query.month || '').toLowerCase();
+  const year     = parseInt(req.query.year) || new Date().getFullYear();
+  const monthNum = MONTH_NUMS[monthKey];
+  if (!monthNum) return res.status(400).json({ error: `Unknown month: ${monthKey}` });
+
+  try {
+    const plansRes = await pool.query(
+      'SELECT section, metric_key, plan_value FROM kunlik_plans WHERE month=$1 AND year=$2',
+      [monthNum, year]
+    );
+    const overRes  = await pool.query(
+      'SELECT section, metric_key, day, value FROM kunlik_overrides WHERE month=$1 AND year=$2',
+      [monthNum, year]
+    );
+
+    // Structure: { target: { budget: 1500, leads: 550, ... }, instagram: {...} }
+    const plans = { target: {}, instagram: {} };
+    for (const r of plansRes.rows) plans[r.section][r.metric_key] = parseFloat(r.plan_value);
+
+    // Structure: { target: { budget: { 1: 51, 2: 63 }, ... }, instagram: {...} }
+    const overrides = { target: {}, instagram: {} };
+    for (const r of overRes.rows) {
+      if (!overrides[r.section][r.metric_key]) overrides[r.section][r.metric_key] = {};
+      overrides[r.section][r.metric_key][r.day] = parseFloat(r.value);
+    }
+
+    res.json({ month: monthKey, year, plans, overrides });
+  } catch (err) {
+    console.error('[marketing/kunlik-meta GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/marketing/kunlik-plan
+// Body: { section, metric_key, month, year, value }
+router.put('/kunlik-plan', async (req, res) => {
+  const { section, metric_key, month, year, value } = req.body;
+  const monthNum = MONTH_NUMS[(month || '').toLowerCase()];
+  if (!monthNum || !section || !metric_key)
+    return res.status(400).json({ error: 'section, metric_key, month, year, value required' });
+
+  try {
+    await pool.query(`
+      INSERT INTO kunlik_plans (section, metric_key, month, year, plan_value)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (section, metric_key, month, year)
+      DO UPDATE SET plan_value = EXCLUDED.plan_value
+    `, [section, metric_key, monthNum, year, parseFloat(value) || 0]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[marketing/kunlik-plan PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/marketing/kunlik-override
+// Body: { section, metric_key, month, year, day, value }
+router.put('/kunlik-override', async (req, res) => {
+  const { section, metric_key, month, year, day, value } = req.body;
+  const monthNum = MONTH_NUMS[(month || '').toLowerCase()];
+  if (!monthNum || !section || !metric_key || !day)
+    return res.status(400).json({ error: 'section, metric_key, month, year, day, value required' });
+
+  try {
+    if (value === null || value === '' || value === undefined) {
+      // Delete override (revert to auto)
+      await pool.query(
+        'DELETE FROM kunlik_overrides WHERE section=$1 AND metric_key=$2 AND month=$3 AND year=$4 AND day=$5',
+        [section, metric_key, monthNum, year, day]
+      );
+    } else {
+      await pool.query(`
+        INSERT INTO kunlik_overrides (section, metric_key, month, year, day, value)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (section, metric_key, month, year, day)
+        DO UPDATE SET value = EXCLUDED.value
+      `, [section, metric_key, monthNum, year, day, parseFloat(value) || 0]);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[marketing/kunlik-override PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

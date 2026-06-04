@@ -180,7 +180,21 @@ async function upsertLead(r, client) {
     ]
   );
 
-  return rows[0].id;
+  const leadId = rows[0].id;
+
+  // Save phone numbers to lead_phones
+  const phones = Array.isArray(r.PHONE) ? r.PHONE : [];
+  for (const p of phones) {
+    const val = (p.VALUE || '').trim();
+    if (!val) continue;
+    await db.query(
+      `INSERT INTO lead_phones (lead_id, phone) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [leadId, val]
+    );
+  }
+
+  return leadId;
 }
 
 module.exports = { upsertLead };
