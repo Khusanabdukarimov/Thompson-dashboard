@@ -197,7 +197,9 @@ const UTM_SOURCE_DISPLAY_NAMES: Record<string, string> = {
   ig:        "Instagram",
   fb:        "Facebook",
   facebook:  "Facebook",
+  Facebook:  "Facebook",
   instagram: "Instagram",
+  Instagram: "Instagram",
 };
 
 // ── Shared funnel column definitions ─────────────────────────────

@@ -634,7 +634,7 @@ async def bitrix_iframe_handler(request: Request):
         f'<script src="https://api.bitrix24.com/api/v1/"></script>'
         f'<script>'
         f'window.__BX_CLIENT__={json.dumps({"clientName": client_name})};'
-        f'history.replaceState(null,"","/marketing/kunlik");'
+        f'history.replaceState(null,"","/lidlar");'
         f'BX24.init(function(){{}});'
         f'</script>'
     )
