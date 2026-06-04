@@ -1061,8 +1061,10 @@ export default function RejaPage() {
     onSuccess: (plan) => {
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
       const { year, month } = parsePeriodYM(plan.period_start);
-      didAutoSelect.current = false;
-      navigate(`/reja?year=${year}&month=${month}`);
+      setSelectedPlan(plan);
+      setSelYear(year);
+      setSelMonth(month);
+      didAutoSelect.current = true;
     },
   });
 
