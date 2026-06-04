@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
+import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, ChevronDown } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, updateRejaPlan, deleteRejaPlan, createRejaPlan,
@@ -1122,16 +1122,32 @@ export default function RejaPage() {
                 ))}
               </select>
             )}
-            {/* Searchable plan selector — search input always visible, dropdown below */}
+            {/* Searchable plan selector — dropdown button */}
             <div ref={planDropRef} style={{ position: 'relative', minWidth: 240 }}>
-              <input
-                placeholder="Qidirish…"
-                value={planDropOpen ? planSearch : (selectedPlan ? periodLabel(selectedPlan) : '')}
-                onChange={e => { setPlanSearch(e.target.value); setPlanDropOpen(true); }}
-                onFocus={() => { setPlanSearch(''); setPlanDropOpen(true); }}
-                onBlur={() => { setTimeout(() => setPlanDropOpen(false), 150); }}
-                style={{ width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', boxSizing: 'border-box', cursor: 'text' }}
-              />
+              {/* Closed state: button showing selected plan */}
+              {!planDropOpen && (
+                <button
+                  type="button"
+                  onClick={() => { setPlanSearch(''); setPlanDropOpen(true); }}
+                  style={{ width: '100%', padding: '8px 12px 8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: selectedPlan ? 'var(--text)' : 'var(--text3)', fontSize: 13, fontWeight: 600, outline: 'none', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: 36 }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selectedPlan ? (selectedPlan.name || periodLabel(selectedPlan)) : 'Reja tanlang…'}
+                  </span>
+                  <ChevronDown size={14} style={{ flexShrink: 0, color: 'var(--text3)' }} />
+                </button>
+              )}
+              {/* Open state: search input */}
+              {planDropOpen && (
+                <input
+                  autoFocus
+                  placeholder="Qidirish…"
+                  value={planSearch}
+                  onChange={e => setPlanSearch(e.target.value)}
+                  onBlur={() => { setTimeout(() => setPlanDropOpen(false), 150); }}
+                  style={{ width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', boxSizing: 'border-box', cursor: 'text', height: 36 }}
+                />
+              )}
               {planDropOpen && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
                   <div style={{ maxHeight: 260, overflowY: 'auto' }}>
