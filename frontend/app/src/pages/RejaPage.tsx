@@ -1101,17 +1101,13 @@ export default function RejaPage() {
             {/* Searchable plan selector — search input always visible, dropdown below */}
             <div ref={planDropRef} style={{ position: 'relative', minWidth: 240 }}>
               <input
-                placeholder="Reja nomi bo'yicha qidirish…"
-                value={planSearch}
+                placeholder="Qidirish…"
+                value={planDropOpen ? planSearch : (selectedPlan ? periodLabel(selectedPlan) : '')}
                 onChange={e => { setPlanSearch(e.target.value); setPlanDropOpen(true); }}
-                onFocus={() => setPlanDropOpen(true)}
-                style={{ width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 500, outline: 'none', boxSizing: 'border-box', cursor: 'text' }}
+                onFocus={() => { setPlanSearch(''); setPlanDropOpen(true); }}
+                onBlur={() => { setTimeout(() => setPlanDropOpen(false), 150); }}
+                style={{ width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', boxSizing: 'border-box', cursor: 'text' }}
               />
-              {selectedPlan && !planSearch && (
-                <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 'calc(100% - 28px)' }}>
-                  {selectedPlan.name ? `${selectedPlan.name} (${periodLabel(selectedPlan)})` : periodLabel(selectedPlan)}
-                </div>
-              )}
               {planDropOpen && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
                   <div style={{ maxHeight: 260, overflowY: 'auto' }}>
@@ -1123,7 +1119,7 @@ export default function RejaPage() {
                       .map(p => (
                         <div
                           key={p.id}
-                          onMouseDown={() => { setSelectedPlan(p); const { year, month } = parsePeriodYM(p.period_start); setSelYear(year); setSelMonth(month); setPlanDropOpen(false); setPlanSearch(''); }}
+                          onMouseDown={e => { e.preventDefault(); setSelectedPlan(p); const { year, month } = parsePeriodYM(p.period_start); setSelYear(year); setSelMonth(month); setPlanDropOpen(false); setPlanSearch(''); }}
                           style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: selectedPlan?.id === p.id ? '#3b82f6' : 'var(--text)', borderBottom: '1px solid var(--border)' }}
                           onMouseEnter={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = 'var(--bg3)'; }}
                           onMouseLeave={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent'; }}
