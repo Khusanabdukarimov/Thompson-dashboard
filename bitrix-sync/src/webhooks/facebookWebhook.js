@@ -81,7 +81,7 @@ async function createBitrixLead(leadgenId, raw, fields) {
 
   const platform  = (raw.platform || 'facebook').toLowerCase();
   const sourceId  = platform === 'instagram' ? SOURCE_IG : SOURCE_FB;
-  const utmSource = platform === 'instagram' ? 'ig' : 'fb';
+  const utmSource = platform === 'instagram' ? 'Instagram' : 'Facebook';
   const utmMedium = raw.is_organic ? 'organic' : 'paid';
 
   const phone = fields.phone_number || fields.phone

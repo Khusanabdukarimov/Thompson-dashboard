@@ -87,8 +87,8 @@ async function upsertLead(r, client) {
     utmSource = null;
   }
 
-  if (!utmSource && r.SOURCE_ID === FB_SOURCE_ID) { utmSource = 'fb'; utmMedium = utmMedium || 'paid'; }
-  if (!utmSource && r.SOURCE_ID === IG_SOURCE_ID) { utmSource = 'ig'; utmMedium = utmMedium || 'paid'; }
+  if (!utmSource && r.SOURCE_ID === FB_SOURCE_ID) { utmSource = 'Facebook'; utmMedium = utmMedium || 'paid'; }
+  if (!utmSource && r.SOURCE_ID === IG_SOURCE_ID) { utmSource = 'Instagram'; utmMedium = utmMedium || 'paid'; }
   const { rows } = await db.query(
     `INSERT INTO leads (
        id, responsible_id, stage_id, opportunity, source_id,
