@@ -1016,18 +1016,6 @@ export default function RejaPage() {
     setSelMonth(month);
   }, [selectedPlan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Left-selector change handler: update both the dropdowns and selectedPlan together
-  // so they are never out of sync.
-  function handlePeriodChange(year: number, month: number) {
-    setSelYear(year);
-    setSelMonth(month);
-    const prefix = `${year}-${String(month).padStart(2, '0')}`;
-    const match = plans.find(p => p.period_start.startsWith(prefix));
-    setSelectedPlan(match ?? null);
-  }
-
-  // Year range: 2020 → 2090
-  const YEARS = Array.from({ length: 2090 - 2020 + 1 }, (_, i) => 2020 + i);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden', background: 'var(--bg2)' }}>
