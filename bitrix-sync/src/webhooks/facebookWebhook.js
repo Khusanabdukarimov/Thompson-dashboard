@@ -1,10 +1,11 @@
 const pool = require('../db/pool');
 const { fetchLead, extractFields } = require('../services/facebook');
-const { bitrixPost } = require('../services/bitrix');
+const { bitrixPost, fetchOne } = require('../services/bitrix');
+const { upsertLead } = require('../services/upsertLead');
+const { distributeLead } = require('../services/distributor');
 
-// Bitrix24 manba IDlari
-const SOURCE_FB = 'UC_O9BLGT';
-const SOURCE_IG = 'UC_3O8GTF';
+// Barcha Facebook/Instagram Lead Ads uchun "Target" manba ishlatiladi
+const SOURCE_TARGET = 'UC_89FPH6'; // Target (Bitrix24 da "Target" deb nomlangan)
 
 /**
  * GET /webhook/facebook
@@ -80,7 +81,6 @@ async function createBitrixLead(leadgenId, raw, fields) {
   }
 
   const platform  = (raw.platform || 'facebook').toLowerCase();
-  const sourceId  = platform === 'instagram' ? SOURCE_IG : SOURCE_FB;
   const utmSource = platform === 'instagram' ? 'Instagram' : 'Facebook';
   const utmMedium = raw.is_organic ? 'organic' : 'paid';
 
@@ -92,7 +92,8 @@ async function createBitrixLead(leadgenId, raw, fields) {
 
   const bxFields = {
     NAME:         name,
-    SOURCE_ID:    sourceId,
+    STATUS_ID:    'NEW',           // Yangi lid bosqichi
+    SOURCE_ID:    SOURCE_TARGET,   // Target manba (UC_89FPH6)
     UTM_SOURCE:   utmSource,
     UTM_MEDIUM:   utmMedium,
     UTM_CAMPAIGN: raw.campaign_name || '',
@@ -107,11 +108,30 @@ async function createBitrixLead(leadgenId, raw, fields) {
   const bxRes = await bitrixPost('crm.lead.add', { fields: bxFields });
 
   if (bxRes && bxRes.result) {
+    const newLeadId = bxRes.result;
+
     await pool.query(
       'UPDATE facebook_leads SET bitrix_lead_id = $1 WHERE id = $2',
-      [bxRes.result, String(leadgenId)]
+      [newLeadId, String(leadgenId)]
     );
-    console.log(`[facebook] Bitrix24 lead #${bxRes.result} created for FB lead ${leadgenId}`);
+    console.log(`[facebook] Bitrix24 lead #${newLeadId} created for FB lead ${leadgenId}`);
+
+    // Bitrix24 dan to'liq lead ma'lumotlarini olib DBga saqlash va taqsimot qilish
+    // (ONCRMLEAD_ADD webhook kelmasa ham ishlash uchun)
+    try {
+      const rawLead = await fetchOne('crm.lead.get', newLeadId);
+      if (rawLead) {
+        await upsertLead(rawLead);
+        const assigned = await distributeLead(newLeadId);
+        if (assigned) {
+          console.log(`[facebook] Lead #${newLeadId} distributed to responsible #${assigned}`);
+        } else {
+          console.warn(`[facebook] Lead #${newLeadId} distribution skipped (no distributors?)`);
+        }
+      }
+    } catch (distErr) {
+      console.error(`[facebook] Post-create sync/distribution error for lead #${newLeadId}:`, distErr.message);
+    }
   } else {
     console.error(`[facebook] Bitrix24 lead creation failed for ${leadgenId}:`, bxRes);
   }

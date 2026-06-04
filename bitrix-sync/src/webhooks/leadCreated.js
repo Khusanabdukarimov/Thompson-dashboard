@@ -45,11 +45,22 @@ async function leadCreated(req, res) {
     const isAmoCRM          = raw.SOURCE_ID === 'UC_1WUFJB';
     const isCallsStage      = raw.STATUS_ID === 'CALLS' || raw.STATUS_ID === 'UC_K0PWSA';
     const isMainResponsible = parseInt(raw.ASSIGNED_BY_ID, 10) === mainResponsibleId;
-    if (!isAmoCRM && !isCallsStage && isMainResponsible) {
+
+    // Facebook webhook orqali yaratilgan lidlarda taqsimot allaqachon qilingan —
+    // ikki marta taqsimot qilishdan saqlanish uchun tekshiramiz
+    const { rows: fbCheck } = await pool.query(
+      'SELECT bitrix_lead_id FROM facebook_leads WHERE bitrix_lead_id = $1 LIMIT 1',
+      [entityId]
+    );
+    const alreadyDistributed = fbCheck.length > 0;
+
+    if (!isAmoCRM && !isCallsStage && isMainResponsible && !alreadyDistributed) {
       const assignedTo = await distributeLead(entityId);
       if (assignedTo) {
         console.log(`[leadCreated] Lead ${entityId} distributed to responsible ${assignedTo}`);
       }
+    } else if (alreadyDistributed) {
+      console.log(`[leadCreated] Lead ${entityId} already distributed via Facebook webhook, skipping`);
     }
 
     // Record initial stage in history

@@ -44,6 +44,7 @@ function dealSrcCond(mode, pi) {
 const SOURCE_NAMES = {
   'UC_O9BLGT': 'Facebook',
   'UC_3O8GTF': 'Instagram',
+  'UC_89FPH6': 'Target',
   'UC_H1PMDS': 'Telegram forma',
   'REPEAT_SALE': 'Website forma',
   'CALL': "Qo'ng'iroq",
@@ -52,7 +53,12 @@ const SOURCE_NAMES = {
   'UC_8BLFVY': "Ko'chadan",
   'UC_3F6D2K': 'Vakansiya',
   'UC_1WUFJB': 'amoCRM',
-  'UC_89FPH6': 'Tavsiya',
+  'UC_P8729J': 'Tavsiya orqali (NPS)',
+  'UC_BU2WXB': 'Networking',
+  'UC_Y6RAXP': 'Qayta sotuv (LTV)',
+  'UC_BOJPCA': 'Sovuq qo\'ng\'iroq',
+  'UC_0QF8D1': 'Veb sayt',
+  'UC_CKSPAM': 'Organik tashrif',
 };
 
 /**
