@@ -1097,33 +1097,23 @@ export default function RejaPage() {
         title="Savdo Boshqaruvi"
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Custom searchable plan selector */}
+            {/* Searchable plan selector — search input always visible, dropdown below */}
             <div ref={planDropRef} style={{ position: 'relative', minWidth: 240 }}>
-              <div
-                onClick={() => { setPlanDropOpen(o => !o); setPlanSearch(''); }}
-                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
-              >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {selectedPlan
-                    ? (selectedPlan.name ? `${selectedPlan.name} (${periodLabel(selectedPlan)})` : periodLabel(selectedPlan))
-                    : "— Reja tanlanmagan —"}
-                </span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, transform: planDropOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
-                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
+              <input
+                placeholder="Reja nomi bo'yicha qidirish…"
+                value={planSearch}
+                onChange={e => { setPlanSearch(e.target.value); setPlanDropOpen(true); }}
+                onFocus={() => setPlanDropOpen(true)}
+                style={{ width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 500, outline: 'none', boxSizing: 'border-box', cursor: 'text' }}
+              />
+              {selectedPlan && !planSearch && (
+                <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 'calc(100% - 28px)' }}>
+                  {selectedPlan.name ? `${selectedPlan.name} (${periodLabel(selectedPlan)})` : periodLabel(selectedPlan)}
+                </div>
+              )}
               {planDropOpen && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
-                  <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
-                    <input
-                      autoFocus
-                      placeholder="Reja nomi bo'yicha qidirish…"
-                      value={planSearch}
-                      onChange={e => setPlanSearch(e.target.value)}
-                      style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                  <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                     {plans
                       .filter(p => {
                         const q = planSearch.toLowerCase();
@@ -1132,13 +1122,13 @@ export default function RejaPage() {
                       .map(p => (
                         <div
                           key={p.id}
-                          onClick={() => { setSelectedPlan(p); const { year, month } = parsePeriodYM(p.period_start); setSelYear(year); setSelMonth(month); setPlanDropOpen(false); }}
-                          style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: selectedPlan?.id === p.id ? '#3b82f6' : 'var(--text)' }}
+                          onMouseDown={() => { setSelectedPlan(p); const { year, month } = parsePeriodYM(p.period_start); setSelYear(year); setSelMonth(month); setPlanDropOpen(false); setPlanSearch(''); }}
+                          style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: selectedPlan?.id === p.id ? '#3b82f6' : 'var(--text)', borderBottom: '1px solid var(--border)' }}
                           onMouseEnter={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = 'var(--bg3)'; }}
-                          onMouseLeave={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = 'transparent'; }}
+                          onMouseLeave={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent'; }}
                         >
-                          <span style={{ fontWeight: 600 }}>{p.name ? `${p.name}` : periodLabel(p)}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{p.name ? periodLabel(p) : ''} ${fmtUZS(p.total_target)}</span>
+                          <span style={{ fontWeight: 600 }}>{p.name || periodLabel(p)}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{p.name ? periodLabel(p) + ' · ' : ''}${fmtUZS(p.total_target)}</span>
                         </div>
                       ))}
                     {plans.filter(p => { const q = planSearch.toLowerCase(); return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q); }).length === 0 && (
