@@ -78,17 +78,25 @@ async function upsertLead(r, client) {
     }
   }
 
-  // Facebook/Instagram manbalarida UTM_SOURCE bo'lmasa, source_id dan avto-to'ldirish
+  // Bitrix24 manba IDlari
+  const SOURCE_FB     = 'UC_O9BLGT';
+  const SOURCE_IG     = 'UC_3O8GTF';
+  const SOURCE_TARGET = 'UC_89FPH6'; // Target (Facebook + Instagram Lead Ads)
+
+  // UTM_SOURCE bo'lmasa yoki Bitrix24 forma nomi bo'lsa avto-to'ldirish
   let utmSource = r.UTM_SOURCE || null;
   let utmMedium = r.UTM_MEDIUM || null;
 
-  // Bitrix24 ning o'z forma nomlarini utm_source sifatida saqlamaymiz (masalan Leadmasterinstantform1)
+  // Bitrix24 ning o'z forma nomlarini utm_source sifatida saqlamaymiz
   if (utmSource && /leadmaster.*form|webform|instantform/i.test(utmSource)) {
     utmSource = null;
   }
 
-  if (!utmSource && r.SOURCE_ID === FB_SOURCE_ID) { utmSource = 'Facebook'; utmMedium = utmMedium || 'paid'; }
-  if (!utmSource && r.SOURCE_ID === IG_SOURCE_ID) { utmSource = 'Instagram'; utmMedium = utmMedium || 'paid'; }
+  const isAdSource = [SOURCE_FB, SOURCE_IG, SOURCE_TARGET].includes(r.SOURCE_ID);
+  if (!utmSource && isAdSource) {
+    utmSource = r.SOURCE_ID === SOURCE_IG ? 'Instagram' : 'Facebook';
+    utmMedium = utmMedium || 'paid';
+  }
   const { rows } = await db.query(
     `INSERT INTO leads (
        id, responsible_id, stage_id, opportunity, source_id,
