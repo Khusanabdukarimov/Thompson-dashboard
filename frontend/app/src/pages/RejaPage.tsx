@@ -87,7 +87,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const [showAll,          setShowAll]          = useState(false);
   const [totalInput,       setTotalInput]       = useState('');
   const [nameInput,        setNameInput]        = useState('');
-  const [monthInput,       setMonthInput]       = useState('');
   const [addOpen,          setAddOpen]          = useState(false);
   const [pendingEmployees, setPendingEmployees] = useState<RejaEmployee[]>([]);
   const [removedIds,       setRemovedIds]       = useState<Set<number>>(new Set());
@@ -113,7 +112,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     setTargets(map);
     setTotalInput(String(Math.round(parseFloat(String(data.plan.total_target)))));
     setNameInput(data.plan.name ?? '');
-    setMonthInput(data.plan.period_start.slice(0, 7)); // "YYYY-MM"
     setDirty(false);
   }, [data]);
 
@@ -193,18 +191,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); },
   });
 
-  const updatePeriodMutation = useMutation({
-    mutationFn: (ym: string) => {
-      const [y, m] = ym.split('-').map(Number);
-      const start = localISO(new Date(y, m - 1, 1));
-      const end   = localISO(new Date(y, m, 0));
-      return updateRejaPlan(planId, { period_start: start, period_end: end });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
-      qc.invalidateQueries({ queryKey: ['reja/plans'] });
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteRejaPlan(planId),
@@ -240,15 +226,27 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Maqsadlarni taqsimlash</div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-              {/* Month picker */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Oy</div>
-                <input
-                  type="month"
-                  value={monthInput}
-                  onChange={e => { setMonthInput(e.target.value); if (e.target.value) updatePeriodMutation.mutate(e.target.value); }}
-                  style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-                />
+              {/* Date range pickers */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dan</div>
+                  <input
+                    type="date"
+                    value={plan?.period_start.slice(0, 10) ?? ''}
+                    onChange={e => { if (e.target.value) updateRejaPlan(planId, { period_start: e.target.value }).then(() => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); }); }}
+                    style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+                  />
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text3)', paddingBottom: 6 }}>—</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gacha</div>
+                  <input
+                    type="date"
+                    value={plan?.period_end.slice(0, 10) ?? ''}
+                    onChange={e => { if (e.target.value) updateRejaPlan(planId, { period_end: e.target.value }).then(() => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); }); }}
+                    style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+                  />
+                </div>
               </div>
               {/* Name input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1043,6 +1041,16 @@ export default function RejaPage() {
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
   const [selYear,  setSelYear]  = useState(now.getFullYear());
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
+  const [planSearch, setPlanSearch] = useState('');
+  const [planDropOpen, setPlanDropOpen] = useState(false);
+  const planDropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!planDropOpen) return;
+    const h = (e: MouseEvent) => { if (!planDropRef.current?.contains(e.target as Node)) setPlanDropOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [planDropOpen]);
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
@@ -1092,26 +1100,57 @@ export default function RejaPage() {
         title="Savdo Boshqaruvi"
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <select
-              value={selectedPlan?.id ?? ''}
-              onChange={e => {
-                const p = plans.find(pl => pl.id === Number(e.target.value));
-                if (!p) return;
-                setSelectedPlan(p);
-                const { year, month } = parsePeriodYM(p.period_start);
-                setSelYear(year);
-                setSelMonth(month);
-              }}
-              style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 200, outline: 'none' }}
-            >
-              {plans.length === 0 && <option value="">Rejalar yo'q</option>}
-              {!selectedPlan && plans.length > 0 && <option value="">— Reja tanlanmagan —</option>}
-              {plans.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name ? `${p.name} (${periodLabel(p)})` : periodLabel(p)} — ${fmtUZS(p.total_target)}
-                </option>
-              ))}
-            </select>
+            {/* Custom searchable plan selector */}
+            <div ref={planDropRef} style={{ position: 'relative', minWidth: 240 }}>
+              <div
+                onClick={() => { setPlanDropOpen(o => !o); setPlanSearch(''); }}
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedPlan
+                    ? (selectedPlan.name ? `${selectedPlan.name} (${periodLabel(selectedPlan)})` : periodLabel(selectedPlan))
+                    : "— Reja tanlanmagan —"}
+                </span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, transform: planDropOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              {planDropOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+                  <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
+                    <input
+                      autoFocus
+                      placeholder="Reja nomi bo'yicha qidirish…"
+                      value={planSearch}
+                      onChange={e => setPlanSearch(e.target.value)}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    {plans
+                      .filter(p => {
+                        const q = planSearch.toLowerCase();
+                        return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q);
+                      })
+                      .map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => { setSelectedPlan(p); const { year, month } = parsePeriodYM(p.period_start); setSelYear(year); setSelMonth(month); setPlanDropOpen(false); }}
+                          style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: selectedPlan?.id === p.id ? '#3b82f6' : 'var(--text)' }}
+                          onMouseEnter={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = 'var(--bg3)'; }}
+                          onMouseLeave={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <span style={{ fontWeight: 600 }}>{p.name ? `${p.name}` : periodLabel(p)}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{p.name ? periodLabel(p) : ''} ${fmtUZS(p.total_target)}</span>
+                        </div>
+                      ))}
+                    {plans.filter(p => { const q = planSearch.toLowerCase(); return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q); }).length === 0 && (
+                      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>Topilmadi</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => createMutation.mutate({ year: now.getFullYear(), month: now.getMonth() + 1 })}
               disabled={createMutation.isPending}
