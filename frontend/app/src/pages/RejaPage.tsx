@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
-  getRejaPlans, updateRejaPlan, deleteRejaPlan,
+  getRejaPlans, updateRejaPlan, deleteRejaPlan, createRejaPlan,
   getRejaDistribution, saveRejaDistribution, getRejaProgress, listAllResponsibles,
   type RejaPlan, type RejaEmployee,
 } from '@/lib/api/reja';
@@ -981,9 +981,14 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
 
 // ── Page root ──────────────────────────────────────────────────────
 
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function RejaPage() {
   const now = new Date();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
   const [selYear,  setSelYear]  = useState(now.getFullYear());
@@ -991,6 +996,20 @@ export default function RejaPage() {
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: ({ year, month }: { year: number; month: number }) => {
+      const start = localISO(new Date(year, month - 1, 1));
+      const end   = localISO(new Date(year, month, 0));
+      return createRejaPlan({ period_type: 'monthly', period_start: start, period_end: end, total_target: 0 });
+    },
+    onSuccess: (plan) => {
+      qc.invalidateQueries({ queryKey: ['reja/plans'] });
+      const { year, month } = parsePeriodYM(plan.period_start);
+      didAutoSelect.current = false;
+      navigate(`/reja?year=${year}&month=${month}`);
+    },
+  });
 
   // Auto-select on first load: prefer plan matching today's month, else first plan.
   // useRef guard ensures this runs exactly once even if plans refetch.
@@ -1047,11 +1066,12 @@ export default function RejaPage() {
               onClick={() => {
                 const nm = now.getMonth() + 2;
                 const ny = nm > 12 ? now.getFullYear() + 1 : now.getFullYear();
-                navigate(`/reja/new?year=${ny}&month=${nm > 12 ? 1 : nm}`);
+                createMutation.mutate({ year: ny, month: nm > 12 ? 1 : nm });
               }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              disabled={createMutation.isPending}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: createMutation.isPending ? 'default' : 'pointer', opacity: createMutation.isPending ? 0.7 : 1 }}
             >
-              <Plus size={14} /> Yangi reja
+              <Plus size={14} /> {createMutation.isPending ? 'Yaratilmoqda…' : 'Yangi reja'}
             </button>
           </div>
         }
@@ -1063,10 +1083,11 @@ export default function RejaPage() {
             <BarChart3 size={48} strokeWidth={1} />
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>{MONTH_NAMES[selMonth - 1]} {selYear} uchun reja mavjud emas</div>
             <button
-              onClick={() => navigate(`/reja/new?year=${selYear}&month=${selMonth}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              onClick={() => createMutation.mutate({ year: selYear, month: selMonth })}
+              disabled={createMutation.isPending}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 9, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: createMutation.isPending ? 'default' : 'pointer', opacity: createMutation.isPending ? 0.7 : 1 }}
             >
-              <Plus size={15} /> Reja yaratish
+              <Plus size={15} /> {createMutation.isPending ? 'Yaratilmoqda…' : 'Reja yaratish'}
             </button>
           </div>
         ) : (
