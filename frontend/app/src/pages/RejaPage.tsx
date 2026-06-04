@@ -71,7 +71,7 @@ function initials(name: string): string {
 
 // ── Distribution view ──────────────────────────────────────────────
 
-function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: () => void }) {
+function DistributionView({ planId, onDeleted, initialEditMode }: { planId: number; onDeleted: () => void; initialEditMode?: boolean }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['reja/distribution', planId],
@@ -84,7 +84,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const [targets,          setTargets]          = useState<Record<number, string>>({});
   const [search,           setSearch]           = useState('');
   const [dirty,            setDirty]            = useState(false);
-  const [showAll,          setShowAll]          = useState(false);
+  const [showAll,          setShowAll]          = useState(initialEditMode ?? false);
   const [totalInput,       setTotalInput]       = useState('');
   const [nameInput,        setNameInput]        = useState('');
   const [addOpen,          setAddOpen]          = useState(false);
@@ -1039,6 +1039,7 @@ export default function RejaPage() {
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
   const [nameFilter, setNameFilter] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  const [newPlanId, setNewPlanId] = useState<number | null>(null);
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
@@ -1071,6 +1072,7 @@ export default function RejaPage() {
       setSelectedPlan(plan);
       setSelYear(year);
       setSelMonth(month);
+      setNewPlanId(plan.id);
       didAutoSelect.current = true;
     },
   });
@@ -1168,7 +1170,7 @@ export default function RejaPage() {
           </div>
         ) : (
           <>
-            <DistributionView planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); }} />
+            <DistributionView planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); setNewPlanId(null); }} initialEditMode={selectedPlan.id === newPlanId} />
             <ProgressView planId={selectedPlan.id} />
           </>
         )}
