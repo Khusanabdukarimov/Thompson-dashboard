@@ -430,6 +430,7 @@ export default function SdelkalarPage() {
         <div style={{
           background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10,
           marginBottom: 16, overflow: "hidden",
+          position: "sticky", top: 0, zIndex: 10,
         }}>
           <div
             style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}

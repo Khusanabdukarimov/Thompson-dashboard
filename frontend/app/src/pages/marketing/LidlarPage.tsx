@@ -460,7 +460,7 @@ export default function LidlarPage() {
       <div className="flex-1 overflow-y-auto px-[22px] py-[18px]" style={{ background: "var(--bg)" }}>
 
         {/* ── Filter panel ── */}
-        <div ref={filterRef} style={{ position: "relative", marginBottom: 20 }}>
+        <div ref={filterRef} style={{ position: "sticky", top: 0, zIndex: 10, marginBottom: 20 }}>
           {/* Trigger button */}
           <button
             onClick={() => setFilterOpen((o) => !o)}
