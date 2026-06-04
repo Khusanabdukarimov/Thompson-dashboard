@@ -1056,7 +1056,11 @@ export default function RejaPage() {
               ))}
             </select>
             <button
-              onClick={() => navigate(`/reja/new?year=${selYear}&month=${selMonth}`)}
+              onClick={() => {
+                const nm = now.getMonth() + 2;
+                const ny = nm > 12 ? now.getFullYear() + 1 : now.getFullYear();
+                navigate(`/reja/new?year=${ny}&month=${nm > 12 ? 1 : nm}`);
+              }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
             >
               <Plus size={14} /> Yangi reja
@@ -1066,25 +1070,7 @@ export default function RejaPage() {
       />
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-        {/* Year / Month selector — always visible */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 24px 0' }}>
-          <select
-            value={selYear}
-            onChange={e => handlePeriodChange(Number(e.target.value), selMonth)}
-            style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-          >
-            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select
-            value={selMonth}
-            onChange={e => handlePeriodChange(selYear, Number(e.target.value))}
-            style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-          >
-            {MONTH_NAMES.map((name, i) => <option key={i + 1} value={i + 1}>{name}</option>)}
-          </select>
-        </div>
-
-        {!selectedPlan ? (
+{!selectedPlan ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50%', gap: 16, color: 'var(--text3)' }}>
             <BarChart3 size={48} strokeWidth={1} />
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text2)' }}>{MONTH_NAMES[selMonth - 1]} {selYear} uchun reja mavjud emas</div>
