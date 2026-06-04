@@ -87,6 +87,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const [showAll,          setShowAll]          = useState(false);
   const [totalInput,       setTotalInput]       = useState('');
   const [nameInput,        setNameInput]        = useState('');
+  const [monthInput,       setMonthInput]       = useState('');
   const [addOpen,          setAddOpen]          = useState(false);
   const [pendingEmployees, setPendingEmployees] = useState<RejaEmployee[]>([]);
   const [removedIds,       setRemovedIds]       = useState<Set<number>>(new Set());
@@ -112,6 +113,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     setTargets(map);
     setTotalInput(String(Math.round(parseFloat(String(data.plan.total_target)))));
     setNameInput(data.plan.name ?? '');
+    setMonthInput(data.plan.period_start.slice(0, 7)); // "YYYY-MM"
     setDirty(false);
   }, [data]);
 
@@ -191,6 +193,19 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); },
   });
 
+  const updatePeriodMutation = useMutation({
+    mutationFn: (ym: string) => {
+      const [y, m] = ym.split('-').map(Number);
+      const start = localISO(new Date(y, m - 1, 1));
+      const end   = localISO(new Date(y, m, 0));
+      return updateRejaPlan(planId, { period_start: start, period_end: end });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
+      qc.invalidateQueries({ queryKey: ['reja/plans'] });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteRejaPlan(planId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onDeleted(); },
@@ -224,18 +239,31 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
         <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Maqsadlarni taqsimlash</div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-              <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reja nomi</div>
-              <input
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                onBlur={() => { if (nameInput !== (plan?.name ?? '')) updateNameMutation.mutate(nameInput); }}
-                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                placeholder="Masalan: Iyun rejasi"
-                style={{ width: 220, padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', transition: 'border 0.15s' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-              />
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
+              {/* Month picker */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Oy</div>
+                <input
+                  type="month"
+                  value={monthInput}
+                  onChange={e => { setMonthInput(e.target.value); if (e.target.value) updatePeriodMutation.mutate(e.target.value); }}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+                />
+              </div>
+              {/* Name input */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reja nomi</div>
+                <input
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
+                  onBlur={() => { if (nameInput !== (plan?.name ?? '')) updateNameMutation.mutate(nameInput); }}
+                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                  placeholder="Masalan: Marketing"
+                  style={{ width: 200, padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', transition: 'border 0.15s' }}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
+                  onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                />
+              </div>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
@@ -1085,11 +1113,7 @@ export default function RejaPage() {
               ))}
             </select>
             <button
-              onClick={() => {
-                const nm = now.getMonth() + 2;
-                const ny = nm > 12 ? now.getFullYear() + 1 : now.getFullYear();
-                createMutation.mutate({ year: ny, month: nm > 12 ? 1 : nm });
-              }}
+              onClick={() => createMutation.mutate({ year: now.getFullYear(), month: now.getMonth() + 1 })}
               disabled={createMutation.isPending}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: createMutation.isPending ? 'default' : 'pointer', opacity: createMutation.isPending ? 0.7 : 1 }}
             >
