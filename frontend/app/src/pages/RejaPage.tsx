@@ -1032,7 +1032,6 @@ function localISO(d: Date): string {
 
 export default function RejaPage() {
   const now = new Date();
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
