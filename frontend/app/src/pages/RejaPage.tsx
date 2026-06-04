@@ -86,6 +86,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
   const [dirty,            setDirty]            = useState(false);
   const [showAll,          setShowAll]          = useState(false);
   const [totalInput,       setTotalInput]       = useState('');
+  const [nameInput,        setNameInput]        = useState('');
   const [addOpen,          setAddOpen]          = useState(false);
   const [pendingEmployees, setPendingEmployees] = useState<RejaEmployee[]>([]);
   const [removedIds,       setRemovedIds]       = useState<Set<number>>(new Set());
@@ -110,6 +111,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     for (const e of data.employees) map[e.responsible_id] = e.target > 0 ? String(Math.round(parseFloat(String(e.target)))) : '';
     setTargets(map);
     setTotalInput(String(Math.round(parseFloat(String(data.plan.total_target)))));
+    setNameInput(data.plan.name ?? '');
     setDirty(false);
   }, [data]);
 
@@ -184,6 +186,11 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); },
   });
 
+  const updateNameMutation = useMutation({
+    mutationFn: (name: string) => updateRejaPlan(planId, { name }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteRejaPlan(planId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['reja/plans'] }); onDeleted(); },
@@ -215,7 +222,22 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
 
         {/* Stats card */}
         <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 32px' }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 28 }}>Maqsadlarni taqsimlash</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Maqsadlarni taqsimlash</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reja nomi</div>
+              <input
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onBlur={() => { if (nameInput !== (plan?.name ?? '')) updateNameMutation.mutate(nameInput); }}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                placeholder="Masalan: Iyun rejasi"
+                style={{ width: 220, padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', transition: 'border 0.15s' }}
+                onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
+                onBlurCapture={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              />
+            </div>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
             {[
               { label: 'Umumiy maqsad', raw: totalTarget, editable: true },
@@ -1058,7 +1080,7 @@ export default function RejaPage() {
               {!selectedPlan && plans.length > 0 && <option value="">— Reja tanlanmagan —</option>}
               {plans.map(p => (
                 <option key={p.id} value={p.id}>
-                  {periodLabel(p)} — ${fmtUZS(p.total_target)}
+                  {p.name ? `${p.name} (${periodLabel(p)})` : periodLabel(p)} — ${fmtUZS(p.total_target)}
                 </option>
               ))}
             </select>
