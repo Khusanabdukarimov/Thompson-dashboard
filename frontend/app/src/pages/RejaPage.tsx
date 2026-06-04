@@ -1170,7 +1170,7 @@ export default function RejaPage() {
           </div>
         ) : (
           <>
-            <DistributionView planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); setNewPlanId(null); }} initialEditMode={selectedPlan.id === newPlanId} />
+            <DistributionView key={selectedPlan.id} planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); setNewPlanId(null); }} initialEditMode={selectedPlan.id === newPlanId} />
             <ProgressView planId={selectedPlan.id} />
           </>
         )}
