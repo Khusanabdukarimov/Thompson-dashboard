@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, ChevronDown } from 'lucide-react';
+import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, updateRejaPlan, deleteRejaPlan, createRejaPlan,
@@ -1037,19 +1037,26 @@ export default function RejaPage() {
   const [selectedPlan, setSelectedPlan] = useState<RejaPlan | null>(null);
   const [selYear,  setSelYear]  = useState(now.getFullYear());
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
-  const [planSearch, setPlanSearch] = useState('');
-  const [planDropOpen, setPlanDropOpen] = useState(false);
-  const planDropRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!planDropOpen) return;
-    const h = (e: MouseEvent) => { if (!planDropRef.current?.contains(e.target as Node)) setPlanDropOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [planDropOpen]);
+  const [nameFilter, setNameFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
+
+  const uniqueNames = useMemo(() => {
+    const names = plans.map(p => p.name).filter((n): n is string => !!n && n.trim() !== '');
+    return [...new Set(names)].sort();
+  }, [plans]);
+
+  const availableMonths = useMemo(() => {
+    const src = nameFilter ? plans.filter(p => p.name === nameFilter) : plans;
+    const seen = new Map<string, string>();
+    for (const p of src) {
+      const key = p.period_start.slice(0, 7);
+      if (!seen.has(key)) seen.set(key, periodLabel(p));
+    }
+    return [...seen.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [plans, nameFilter]);
 
 
   const createMutation = useMutation({
@@ -1084,13 +1091,29 @@ export default function RejaPage() {
   }, [plans]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // One-way sync: whenever selectedPlan changes, keep left selectors in sync.
-  // Uses parsePeriodYM so no invalid-date issue with ISO timestamps from the DB.
   useEffect(() => {
     if (!selectedPlan) return;
     const { year, month } = parsePeriodYM(selectedPlan.period_start);
     setSelYear(year);
     setSelMonth(month);
   }, [selectedPlan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When filters change, auto-select the matching plan
+  useEffect(() => {
+    if (!plans.length) return;
+    const match = plans.find(p =>
+      (!nameFilter || p.name === nameFilter) &&
+      (!monthFilter || p.period_start.startsWith(monthFilter))
+    );
+    if (match) setSelectedPlan(match);
+  }, [nameFilter, monthFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When nameFilter changes, reset monthFilter if it's no longer valid
+  useEffect(() => {
+    if (!monthFilter) return;
+    const still = availableMonths.some(([key]) => key === monthFilter);
+    if (!still) setMonthFilter('');
+  }, [nameFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   return (
@@ -1099,59 +1122,26 @@ export default function RejaPage() {
         title="Savdo Boshqaruvi"
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Searchable plan selector — dropdown button */}
-            <div ref={planDropRef} style={{ position: 'relative', minWidth: 240 }}>
-              {/* Closed state: button showing selected plan */}
-              {!planDropOpen && (
-                <button
-                  type="button"
-                  onClick={() => { setPlanSearch(''); setPlanDropOpen(true); }}
-                  style={{ width: '100%', padding: '8px 12px 8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: selectedPlan ? 'var(--text)' : 'var(--text3)', fontSize: 13, fontWeight: 600, outline: 'none', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: 36 }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {selectedPlan ? (selectedPlan.name || periodLabel(selectedPlan)) : 'Reja tanlang…'}
-                  </span>
-                  <ChevronDown size={14} style={{ flexShrink: 0, color: 'var(--text3)' }} />
-                </button>
-              )}
-              {/* Open state: search input */}
-              {planDropOpen && (
-                <input
-                  autoFocus
-                  placeholder="Qidirish…"
-                  value={planSearch}
-                  onChange={e => setPlanSearch(e.target.value)}
-                  onBlur={() => { setTimeout(() => setPlanDropOpen(false), 150); }}
-                  style={{ width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', boxSizing: 'border-box', cursor: 'text', height: 36 }}
-                />
-              )}
-              {planDropOpen && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
-                  <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                    {plans
-                      .filter(p => {
-                        const q = planSearch.toLowerCase();
-                        return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q);
-                      })
-                      .map(p => (
-                        <div
-                          key={p.id}
-                          onMouseDown={e => { e.preventDefault(); setSelectedPlan(p); const { year, month } = parsePeriodYM(p.period_start); setSelYear(year); setSelMonth(month); setPlanDropOpen(false); setPlanSearch(''); }}
-                          style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent', color: selectedPlan?.id === p.id ? '#3b82f6' : 'var(--text)', borderBottom: '1px solid var(--border)' }}
-                          onMouseEnter={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = 'var(--bg3)'; }}
-                          onMouseLeave={e => { if (selectedPlan?.id !== p.id) e.currentTarget.style.background = selectedPlan?.id === p.id ? 'rgba(37,99,235,0.12)' : 'transparent'; }}
-                        >
-                          <span style={{ fontWeight: 600 }}>{p.name || periodLabel(p)}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{p.name ? periodLabel(p) + ' · ' : ''}${fmtUZS(p.total_target)}</span>
-                        </div>
-                      ))}
-                    {plans.filter(p => { const q = planSearch.toLowerCase(); return !q || (p.name ?? '').toLowerCase().includes(q) || periodLabel(p).toLowerCase().includes(q); }).length === 0 && (
-                      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text3)' }}>Topilmadi</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Filter 1: Reja nomi */}
+            <select
+              value={nameFilter}
+              onChange={e => setNameFilter(e.target.value)}
+              style={{ height: 36, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: nameFilter ? 'var(--text)' : 'var(--text3)', fontSize: 13, fontWeight: nameFilter ? 600 : 400, outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="">Barcha rejalar</option>
+              {uniqueNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+
+            {/* Filter 2: Oy */}
+            <select
+              value={monthFilter}
+              onChange={e => setMonthFilter(e.target.value)}
+              style={{ height: 36, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: monthFilter ? 'var(--text)' : 'var(--text3)', fontSize: 13, fontWeight: monthFilter ? 600 : 400, outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="">Barcha oylar</option>
+              {availableMonths.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+
             <button
               onClick={() => createMutation.mutate({ year: now.getFullYear(), month: now.getMonth() + 1 })}
               disabled={createMutation.isPending}
