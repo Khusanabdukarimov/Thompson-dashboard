@@ -226,27 +226,24 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Maqsadlarni taqsimlash</div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-              {/* Date range pickers */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dan</div>
-                  <input
-                    type="date"
-                    value={plan?.period_start.slice(0, 10) ?? ''}
-                    onChange={e => { if (e.target.value) updateRejaPlan(planId, { period_start: e.target.value }).then(() => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); }); }}
-                    style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-                  />
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text3)', paddingBottom: 6 }}>—</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gacha</div>
-                  <input
-                    type="date"
-                    value={plan?.period_end.slice(0, 10) ?? ''}
-                    onChange={e => { if (e.target.value) updateRejaPlan(planId, { period_end: e.target.value }).then(() => { qc.invalidateQueries({ queryKey: ['reja/distribution', planId] }); qc.invalidateQueries({ queryKey: ['reja/plans'] }); }); }}
-                    style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-                  />
-                </div>
+              {/* Start date picker — end date auto = last day of that month */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Boshlanish</div>
+                <input
+                  type="date"
+                  value={plan?.period_start.slice(0, 10) ?? ''}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    const [y, m] = v.split('-').map(Number);
+                    const end = localISO(new Date(y, m, 0));
+                    updateRejaPlan(planId, { period_start: v, period_end: end }).then(() => {
+                      qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
+                      qc.invalidateQueries({ queryKey: ['reja/plans'] });
+                    });
+                  }}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer' }}
+                />
               </div>
               {/* Name input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
