@@ -121,4 +121,44 @@ async function bitrixCall(method, params = {}) {
   return httpGet(url);
 }
 
-module.exports = { fetchAll, fetchOne, bitrixCall };
+/**
+ * POST request to Bitrix24 (for crm.lead.add, crm.lead.update, etc.)
+ */
+function httpPost(url, data, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(data);
+    const urlObj = new URL(url);
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.request(
+      {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname + urlObj.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let buf = '';
+        res.on('data', (chunk) => (buf += chunk));
+        res.on('end', () => {
+          try { resolve(JSON.parse(buf)); }
+          catch (e) { reject(new Error(`JSON parse error: ${e.message}`)); }
+        });
+        res.on('error', reject);
+      }
+    );
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('Request timed out')));
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+async function bitrixPost(method, params = {}) {
+  const url = `${WEBHOOK_URL}/${method}`;
+  return httpPost(url, params);
+}
+
+module.exports = { fetchAll, fetchOne, bitrixCall, bitrixPost };

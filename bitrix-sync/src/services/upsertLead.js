@@ -65,6 +65,20 @@ async function upsertLead(r, client) {
   const stageId = await stageResolver.resolve('lead', r.STATUS_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
 
+  // Facebook/Instagram manbalarida UTM_SOURCE bo'lmasa, source_id dan avto-to'ldirish
+  const FB_SOURCE_ID = 'UC_O9BLGT';
+  const IG_SOURCE_ID = 'UC_3O8GTF';
+  let utmSource = r.UTM_SOURCE || null;
+  let utmMedium = r.UTM_MEDIUM || null;
+
+  // Bitrix24 ning o'z forma nomlarini utm_source sifatida saqlamaymiz (masalan Leadmasterinstantform1)
+  if (utmSource && /leadmaster.*form|webform|instantform/i.test(utmSource)) {
+    utmSource = null;
+  }
+
+  if (!utmSource && r.SOURCE_ID === FB_SOURCE_ID) { utmSource = 'fb'; utmMedium = utmMedium || 'paid'; }
+  if (!utmSource && r.SOURCE_ID === IG_SOURCE_ID) { utmSource = 'ig'; utmMedium = utmMedium || 'paid'; }
+
   const { rows } = await db.query(
     `INSERT INTO leads (
        id, responsible_id, stage_id, opportunity, source_id,
@@ -109,8 +123,8 @@ async function upsertLead(r, client) {
       stageId,
       parseFloat(r.OPPORTUNITY || 0),
       r.SOURCE_ID || null,
-      r.UTM_SOURCE || null,
-      r.UTM_MEDIUM || null,
+      utmSource,
+      utmMedium,
       r.UTM_CAMPAIGN || null,
       r.UTM_CONTENT || null,
       r.UTM_TERM || null,

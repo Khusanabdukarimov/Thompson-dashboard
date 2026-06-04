@@ -105,6 +105,14 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
   );
 }
 
+// ── UTM source display name mapping ──────────────────────────────
+const UTM_SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  ig:        "Instagram",
+  fb:        "Facebook",
+  facebook:  "Facebook",
+  instagram: "Instagram",
+};
+
 // ── UTM shared column definitions ────────────────────────────────
 const UTM_COLS_DEF = [
   { key: "umumiy_lidlar"            as const, label: "UMUMIY LIDLAR",             color: "#2196F3" },
@@ -125,6 +133,7 @@ function UtmTable<T extends Record<string, string | number>>({
   countKey,
   countLabel,
   getBitrixUrl,
+  formatName,
 }: {
   rows: T[];
   nameKey: keyof T;
@@ -134,6 +143,7 @@ function UtmTable<T extends Record<string, string | number>>({
   countKey?: keyof T;
   countLabel?: string;
   getBitrixUrl?: (row: T) => string;
+  formatName?: (raw: string) => string;
 }) {
   const maxes: Record<string, number> = {};
   for (const c of UTM_COLS_DEF)
@@ -165,7 +175,8 @@ function UtmTable<T extends Record<string, string | number>>({
               const total = Number(r.umumiy_lidlar) || 0;
               const otkazildi = Number(r.konsultatsiya_otkazildi) || 0;
               const konv = total > 0 ? (otkazildi / total) * 100 : 0;
-              const name = String(r[nameKey]);
+              const rawName = String(r[nameKey]);
+              const name = formatName ? formatName(rawName) : rawName;
               const cnt = countKey ? Number(r[countKey]) || 0 : 0;
               return (
                 <tr key={name + i}
@@ -1538,7 +1549,7 @@ export default function LidlarPage() {
                         style={{ fontSize: 15, fontWeight: 700, color: level === 2 ? "var(--text)" : "var(--text3)", whiteSpace: "nowrap", cursor: level === 3 ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis" }}
                         onClick={() => level === 3 && setSelectedUtmCampaign(null)}
                       >
-                        {selectedUtmSource}
+                        {UTM_SOURCE_DISPLAY_NAMES[selectedUtmSource!] ?? selectedUtmSource}
                       </span>
                     </>
                   )}
@@ -1568,6 +1579,7 @@ export default function LidlarPage() {
                   loading={utmQ.isLoading}
                   countKey="campaign_count"
                   countLabel="kampaniya"
+                  formatName={(src) => UTM_SOURCE_DISPLAY_NAMES[src] ?? src}
                 />
               )}
               {level === 2 && (
