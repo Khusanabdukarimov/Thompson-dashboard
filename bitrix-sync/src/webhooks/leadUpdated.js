@@ -1,10 +1,20 @@
 const pool = require('../db/pool');
 const { fetchOne } = require('../services/bitrix');
 const { upsertLead } = require('../services/upsertLead');
+const { sendQualifiedLead } = require('../services/metaConversions');
+
+// Bitrix24 da "sifatli" hisoblanadigan bosqichlar
+const SIFATLI_BOSQICHLAR = new Set([
+  'UC_KXC3ZW', 'THINKING',            // O'ylab ko'radi
+  'UC_L28G68', 'CONSULTATION',        // Tashrif belgilandi
+  'UC_5G8244', 'NOT_TRANSFERRED',     // Kelmadi
+  'UC_NAZK5J', 'RECYCLED',            // Bekor bo'ldi
+  'CONVERTED_CONSULT', 'CONVERTED',   // Tashrif buyurdi
+]);
 
 /**
  * Handle ONCRMLEAD_UPDATE webhook.
- * Responds 200 immediately, processes async. Records stage change if applicable.
+ * Responds 200 immediately, processes async.
  */
 async function leadUpdated(req, res) {
   res.sendStatus(200);
@@ -19,7 +29,7 @@ async function leadUpdated(req, res) {
       [entityId, JSON.stringify(req.body)]
     );
 
-    // Capture current stage before upsert to detect transitions
+    // Oldingi bosqichni saqlab qolamiz
     const before = await pool.query('SELECT stage_id FROM leads WHERE id = $1', [entityId]);
     const prevStageId = before.rows[0]?.stage_id || null;
 
@@ -28,15 +38,29 @@ async function leadUpdated(req, res) {
 
     await upsertLead(raw);
 
-    // Record stage history if stage changed
-    const after = await pool.query('SELECT stage_id FROM leads WHERE id = $1', [entityId]);
-    const newStageId = after.rows[0]?.stage_id || null;
+    // Yangi bosqich
+    const after = await pool.query(
+      `SELECT l.stage_id, s.bitrix_id AS stage_bid
+       FROM leads l JOIN stages s ON s.id = l.stage_id
+       WHERE l.id = $1`,
+      [entityId]
+    );
+    const newStageId  = after.rows[0]?.stage_id  || null;
+    const newStageBid = after.rows[0]?.stage_bid || '';
 
+    // Bosqich o'zgargan bo'lsa tarixga yozamiz
     if (newStageId && newStageId !== prevStageId) {
       await pool.query(
         'INSERT INTO lead_stage_history (lead_id, stage_id) VALUES ($1, $2)',
         [entityId, newStageId]
       );
+
+      // Yangi bosqich sifatli bosqich bo'lsa → Meta ga signal yuboramiz
+      if (SIFATLI_BOSQICHLAR.has(newStageBid) && process.env.META_PIXEL_ID) {
+        sendMetaSignal(entityId, newStageBid).catch(err =>
+          console.error(`[meta] Signal yuborishda xato (lead #${entityId}):`, err.message)
+        );
+      }
     }
 
     await pool.query(
@@ -52,6 +76,37 @@ async function leadUpdated(req, res) {
        WHERE event = 'ONCRMLEAD_UPDATE' AND entity_id = $2 AND processed = FALSE`,
       [err.message, entityId]
     ).catch(() => {});
+  }
+}
+
+/**
+ * Facebookdan kelgan lid bo'lsa Meta ga sifatli signal yuboradi.
+ */
+async function sendMetaSignal(leadId, stageBid) {
+  // Telefon orqali facebook_leads bilan moslashtirish
+  const { rows } = await pool.query(`
+    SELECT fl.id AS leadgen_id, fl.phone, fl.email
+    FROM lead_phones lp
+    JOIN facebook_leads fl ON fl.phone = lp.phone
+    WHERE lp.lead_id = $1
+    LIMIT 1
+  `, [leadId]);
+
+  if (rows.length === 0) return; // Facebook lidi emas
+
+  const { leadgen_id, phone, email } = rows[0];
+
+  const result = await sendQualifiedLead({
+    leadgenId:  leadgen_id,
+    phone,
+    email,
+    customData: { bitrix_stage: stageBid },
+  });
+
+  if (result?.events_received > 0) {
+    console.log(`[meta] ✅ Lead #${leadId} sifatli signal yuborildi (FB lead: ${leadgen_id}, bosqich: ${stageBid})`);
+  } else {
+    console.warn(`[meta] ⚠️  Lead #${leadId} signal javobi:`, JSON.stringify(result));
   }
 }
 
