@@ -1484,12 +1484,14 @@ async function ensureCallsTable() {
     ALTER TABLE calls
       ADD COLUMN IF NOT EXISTS status_name     TEXT,
       ADD COLUMN IF NOT EXISTS lead_id         INT,
+      ADD COLUMN IF NOT EXISTS deal_id         INT,
       ADD COLUMN IF NOT EXISTS crm_entity_type TEXT,
       ADD COLUMN IF NOT EXISTS user_name       TEXT,
       ADD COLUMN IF NOT EXISTS failed_code     TEXT,
       ADD COLUMN IF NOT EXISTS call_category   TEXT,
       ADD COLUMN IF NOT EXISTS call_source     TEXT
   `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS calls_deal_id_idx ON calls(deal_id)`);
   await pool.query(`
     ALTER TABLE calls
       ALTER COLUMN failed_code TYPE TEXT USING failed_code::text
@@ -1617,7 +1619,7 @@ async function syncCallsFromBitrix(from, to) {
   let upserted = 0;
   for (const r of records) {
     let id, responsibleId, phoneNumber, callType, duration, callStart,
-        statusCode, statusName, leadId, crmEntityType, userName,
+        statusCode, statusName, leadId, dealId, crmEntityType, userName,
         failedCode, callCategory, callSource;
 
     if (useVoxi) {
@@ -1635,6 +1637,8 @@ async function syncCallsFromBitrix(from, to) {
       crmEntityType = r.CRM_ENTITY_TYPE  || null;
       leadId        = crmEntityType === 'LEAD' && r.CRM_ENTITY_ID
                         ? parseInt(r.CRM_ENTITY_ID) : null;
+      dealId        = crmEntityType === 'DEAL' && r.CRM_ENTITY_ID
+                        ? parseInt(r.CRM_ENTITY_ID) : null;
       userName      = r.PORTAL_USER     || null;
     } else {
       const startMs   = r.START_TIME ? new Date(r.START_TIME).getTime() : null;
@@ -1642,6 +1646,7 @@ async function syncCallsFromBitrix(from, to) {
       // Extract phone from subject like "Исходящий на 90 303 07 70"
       const phoneMatch = r.SUBJECT ? r.SUBJECT.match(/[\d\s\-\+\(\)]{7,}/) : null;
       const isLead     = String(r.OWNER_TYPE_ID) === '1';
+      const isDeal     = String(r.OWNER_TYPE_ID) === '2';
 
       id            = `act_${r.ID}`;
       responsibleId = r.RESPONSIBLE_ID ? parseInt(r.RESPONSIBLE_ID) : null;
@@ -1655,17 +1660,18 @@ async function syncCallsFromBitrix(from, to) {
       failedCode    = r.COMPLETED === 'Y' ? '200' : null;
       callCategory  = null;
       callSource    = 'activity';
-      crmEntityType = isLead ? 'LEAD' : (r.OWNER_TYPE_ID ? String(r.OWNER_TYPE_ID) : null);
+      crmEntityType = isLead ? 'LEAD' : isDeal ? 'DEAL' : (r.OWNER_TYPE_ID ? String(r.OWNER_TYPE_ID) : null);
       leadId        = isLead && r.OWNER_ID ? parseInt(r.OWNER_ID) : null;
+      dealId        = isDeal && r.OWNER_ID ? parseInt(r.OWNER_ID) : null;
       userName      = null;
     }
 
     await pool.query(
       `INSERT INTO calls (
          id, responsible_id, phone_number, call_type, duration,
-         call_start, status_code, status_name, lead_id, crm_entity_type,
+         call_start, status_code, status_name, lead_id, deal_id, crm_entity_type,
          user_name, failed_code, call_category, call_source, synced_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
        ON CONFLICT (id) DO UPDATE SET
          responsible_id  = EXCLUDED.responsible_id,
          phone_number    = EXCLUDED.phone_number,
@@ -1675,6 +1681,7 @@ async function syncCallsFromBitrix(from, to) {
          status_code     = EXCLUDED.status_code,
          status_name     = EXCLUDED.status_name,
          lead_id         = EXCLUDED.lead_id,
+         deal_id         = EXCLUDED.deal_id,
          crm_entity_type = EXCLUDED.crm_entity_type,
          user_name       = EXCLUDED.user_name,
          failed_code     = EXCLUDED.failed_code,
@@ -1682,7 +1689,7 @@ async function syncCallsFromBitrix(from, to) {
          call_source     = EXCLUDED.call_source,
          synced_at       = NOW()`,
       [id, responsibleId, phoneNumber, callType, duration,
-       callStart, statusCode, statusName, leadId, crmEntityType, userName,
+       callStart, statusCode, statusName, leadId, dealId, crmEntityType, userName,
        failedCode, callCategory, callSource]
     );
     upserted++;
@@ -2388,26 +2395,37 @@ router.get('/call-list', async (req, res) => {
          c.id, c.phone_number, c.call_type, c.duration,
          c.call_start, c.status_code, c.status_name,
          c.failed_code, c.call_category, c.call_source,
-         c.lead_id, c.crm_entity_type, c.responsible_id,
-         l.title AS lead_title,
-         COALESCE(s_hist.name, s_curr.name) AS stage_name,
-         COALESCE(s_hist.bitrix_id, s_curr.bitrix_id) AS stage_bitrix_id,
+         c.lead_id, c.deal_id, c.crm_entity_type, c.responsible_id,
+         COALESCE(l.title, d.title) AS lead_title,
+         COALESCE(s_lead_hist.name, s_lead_curr.name,
+                  s_deal_hist.name, s_deal_curr.name) AS stage_name,
+         COALESCE(s_lead_hist.bitrix_id, s_lead_curr.bitrix_id,
+                  s_deal_hist.bitrix_id, s_deal_curr.bitrix_id) AS stage_bitrix_id,
          (
            ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
            AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          ) AS in_range
        FROM calls c
        LEFT JOIN leads l ON l.id = c.lead_id
-       LEFT JOIN stages s_curr ON s_curr.id = l.stage_id
+       LEFT JOIN deals d ON d.id = c.deal_id
+       LEFT JOIN stages s_lead_curr ON s_lead_curr.id = l.stage_id
+       LEFT JOIN stages s_deal_curr ON s_deal_curr.id = d.stage_id
        LEFT JOIN LATERAL (
          SELECT s.name, s.bitrix_id
          FROM lead_stage_history lsh
          JOIN stages s ON s.id = lsh.stage_id
          WHERE lsh.lead_id = c.lead_id
            AND lsh.changed_at <= c.call_start
-         ORDER BY lsh.changed_at DESC
-         LIMIT 1
-       ) s_hist ON c.lead_id IS NOT NULL
+         ORDER BY lsh.changed_at DESC LIMIT 1
+       ) s_lead_hist ON c.lead_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id
+         FROM deal_stage_history dsh
+         JOIN stages s ON s.id = dsh.stage_id
+         WHERE dsh.deal_id = c.deal_id
+           AND dsh.changed_at <= c.call_start
+         ORDER BY dsh.changed_at DESC LIMIT 1
+       ) s_deal_hist ON c.deal_id IS NOT NULL
        WHERE c.call_start IS NOT NULL
          AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
@@ -2439,27 +2457,34 @@ router.get('/call-stage-stats', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(s_hist.bitrix_id, s_curr.bitrix_id, 'Noma''lum') AS stage_bitrix_id,
-         COALESCE(s_hist.name, s_curr.name, 'Noma''lum') AS stage_name,
+         COALESCE(s_lh.bitrix_id, s_lc.bitrix_id, s_dh.bitrix_id, s_dc.bitrix_id, 'Noma''lum') AS stage_bitrix_id,
+         COALESCE(s_lh.name, s_lc.name, s_dh.name, s_dc.name, 'Noma''lum') AS stage_name,
          COUNT(*)::int AS jami,
          COUNT(*) FILTER (WHERE c.duration > 0)::int AS muvaffaqiyatli
        FROM calls c
        LEFT JOIN leads l ON l.id = c.lead_id
-       LEFT JOIN stages s_curr ON s_curr.id = l.stage_id
+       LEFT JOIN deals  d ON d.id = c.deal_id
+       LEFT JOIN stages s_lc ON s_lc.id = l.stage_id
+       LEFT JOIN stages s_dc ON s_dc.id = d.stage_id
        LEFT JOIN LATERAL (
-         SELECT s.name, s.bitrix_id
-         FROM lead_stage_history lsh
+         SELECT s.name, s.bitrix_id FROM lead_stage_history lsh
          JOIN stages s ON s.id = lsh.stage_id
          WHERE lsh.lead_id = c.lead_id AND lsh.changed_at <= c.call_start
          ORDER BY lsh.changed_at DESC LIMIT 1
-       ) s_hist ON c.lead_id IS NOT NULL
+       ) s_lh ON c.lead_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id FROM deal_stage_history dsh
+         JOIN stages s ON s.id = dsh.stage_id
+         WHERE dsh.deal_id = c.deal_id AND dsh.changed_at <= c.call_start
+         ORDER BY dsh.changed_at DESC LIMIT 1
+       ) s_dh ON c.deal_id IS NOT NULL
        WHERE c.call_start IS NOT NULL
-         AND c.lead_id IS NOT NULL
+         AND (c.lead_id IS NOT NULL OR c.deal_id IS NOT NULL)
          AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          AND ($3::int IS NULL OR c.responsible_id = $3::int)
-       GROUP BY COALESCE(s_hist.bitrix_id, s_curr.bitrix_id, 'Noma''lum'),
-                COALESCE(s_hist.name, s_curr.name, 'Noma''lum')
+       GROUP BY COALESCE(s_lh.bitrix_id, s_lc.bitrix_id, s_dh.bitrix_id, s_dc.bitrix_id, 'Noma''lum'),
+                COALESCE(s_lh.name, s_lc.name, s_dh.name, s_dc.name, 'Noma''lum')
        ORDER BY jami DESC`,
       [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
     );
