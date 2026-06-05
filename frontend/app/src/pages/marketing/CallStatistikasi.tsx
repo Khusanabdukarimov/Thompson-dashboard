@@ -999,38 +999,6 @@ export default function CallStatistikasi() {
           </div>
         )}
 
-        {stageStatsQ.data && stageStatsQ.data.length > 0 && (
-          <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Bosqichlar bo'yicha qo'ng'iroqlar</div>
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: "var(--bg2)" }}>
-                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 700, color: "var(--text2)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>Bosqich</th>
-                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700, color: "var(--text2)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>Jami qo'ng'iroq</th>
-                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700, color: "var(--text2)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>Muvaffaqiyatli</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(stageStatsQ.data as CallStageStatsRow[]).map((row) => {
-                    const label = CALL_STAGE_LABELS[row.stage_bitrix_id] ?? row.stage_name;
-                    return (
-                      <tr key={row.stage_bitrix_id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "10px 16px" }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "#9C27B0", background: "rgba(156,39,176,0.10)", border: "1px solid rgba(156,39,176,0.25)", borderRadius: 5, padding: "2px 10px" }}>{label}</span>
-                        </td>
-                        <td style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700 }}>{row.jami}</td>
-                        <td style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700, color: "#4CAF50" }}>{row.muvaffaqiyatli}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
