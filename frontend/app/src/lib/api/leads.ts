@@ -370,6 +370,8 @@ export type CallListRow = {
   lead_id: number | null;
   crm_entity_type: string | null;
   lead_title: string | null;
+  stage_name: string | null;
+  stage_bitrix_id: string | null;
 };
 
 export type CallDashboardFilter = {
@@ -382,6 +384,7 @@ export type CallDashboardFilter = {
   status?: string;
   duration_from?: number;
   duration_to?: number;
+  stage?: string;
 };
 
 export type CallFilterOptions = {
@@ -400,6 +403,7 @@ function callFilterParams(filter: CallDashboardFilter) {
     status: filter.status,
     duration_from: filter.duration_from,
     duration_to: filter.duration_to,
+    stage: filter.stage,
   };
 }
 
@@ -436,6 +440,19 @@ export async function syncUserPhotos(): Promise<{ ok: boolean; total: number; wi
   }, API_URL_CRM);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export type CallStageStatsRow = {
+  stage_bitrix_id: string;
+  stage_name: string;
+  jami: number;
+  muvaffaqiyatli: number;
+};
+
+export function getCallStageStats(filter: CallDashboardFilter) {
+  return apiGet<CallStageStatsRow[]>("/api/dashboard/call-stage-stats", {
+    ...callFilterParams(filter),
+  }, API_URL_CRM);
 }
 
 export function getCallList(responsibleId: number, filter: CallDashboardFilter) {

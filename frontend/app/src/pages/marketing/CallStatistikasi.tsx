@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
-  getPyCallStats, getCallList, getCallFilterOptions,
+  getPyCallStats, getCallList, getCallFilterOptions, getCallStageStats,
   type CallDashboardFilter, type CallFilterOptions,
-  type PyCallStatsResult, type PyResponsibleCallStats,
+  type PyCallStatsResult, type PyResponsibleCallStats, type CallStageStatsRow,
 } from "@/lib/api/leads";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -114,7 +114,35 @@ type CallFilterState = {
   status: string;
   duration_from: string;
   duration_to: string;
+  stage: string;
 };
+
+const CALL_STAGE_LABELS: Record<string, string> = {
+  'NEW': 'Yangi lid', 'IN_PROCESS': 'Yangi lid',
+  'PROCESSED': 'Propushenniy',
+  'UC_1KPATX': 'Javob bermadi', 'NO_ANSWER': 'Javob bermadi',
+  'UC_Q2U9EL': 'Qayta aloqa', 'CALLBACK': 'Qayta aloqa',
+  'UC_KXC3ZW': "O'ylab ko'radi", 'THINKING': "O'ylab ko'radi",
+  'UC_L28G68': 'Tashrif belgilandi', 'CONSULTATION': 'Tashrif belgilandi',
+  'UC_5G8244': 'Kelmadi', 'NOT_TRANSFERRED': 'Kelmadi',
+  'JUNK': 'Sandiq', 'ARCHIVE': 'Sandiq',
+  'UC_F8K4GI': 'Sifatsiz',
+  'UC_NAZK5J': "Bekor bo'ldi", 'RECYCLED': "Bekor bo'ldi",
+  'CONVERTED_CONSULT': 'Tashrif buyurdi', 'CONVERTED': 'Tashrif buyurdi',
+  'C1:NEW': 'Konsultatsiya', 'C1:IN_PROCESS': 'Jarayonda',
+};
+
+const callStageOptions = [
+  { value: "all", label: "Barchasi" },
+  { value: "NEW", label: "Yangi lid" },
+  { value: "UC_1KPATX", label: "Javob bermadi" },
+  { value: "UC_Q2U9EL", label: "Qayta aloqa" },
+  { value: "UC_KXC3ZW", label: "O'ylab ko'radi" },
+  { value: "UC_L28G68", label: "Tashrif belgilandi" },
+  { value: "UC_5G8244", label: "Kelmadi" },
+  { value: "UC_NAZK5J", label: "Bekor bo'ldi" },
+  { value: "CONVERTED_CONSULT", label: "Tashrif buyurdi" },
+];
 
 const callStatusOptions = [
   { value: "all", label: "Barchasi" },
@@ -144,6 +172,7 @@ function defaultCallFilters(): CallFilterState {
     status: "all",
     duration_from: "",
     duration_to: "",
+    stage: "all",
   };
 }
 
@@ -165,6 +194,7 @@ function toApiFilter(filter: CallFilterState): CallDashboardFilter {
     status: filter.status !== "all" ? filter.status : undefined,
     duration_from: parseFilterNumber(filter.duration_from),
     duration_to: parseFilterNumber(filter.duration_to),
+    stage: filter.stage !== "all" ? filter.stage : undefined,
   };
 }
 
@@ -177,6 +207,7 @@ function activeFilterCount(filter: CallFilterState) {
     filter.status !== "all",
     Boolean(filter.duration_from.trim()),
     Boolean(filter.duration_to.trim()),
+    filter.stage !== "all",
   ].filter(Boolean).length;
 }
 
@@ -629,6 +660,13 @@ function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply,
             </select>
           </label>
 
+          <label style={labelStyle}>
+            Bosqich
+            <select value={value.stage} onChange={(e) => update({ stage: e.target.value })} style={inputStyle}>
+              {callStageOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)", fontSize: 14, paddingTop: 4 }}>
             Davomiylik
             <ChevronDown size={16} color="var(--text2)" />
@@ -671,10 +709,10 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
   if (!calls.length) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
   return (
     <div style={{ maxHeight: "min(64vh, 640px)", overflow: "auto", overscrollBehavior: "contain", borderTop: "1px solid var(--border)" }}>
-      <table style={{ width: "100%", minWidth: 1080, borderCollapse: "collapse", fontSize: 12.5 }}>
+      <table style={{ width: "100%", minWidth: 1180, borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>
           <tr style={{ background: "rgba(33,150,243,0.05)" }}>
-            {["#","Telefon","Turi","Davomiylik","Sana va vaqt","Status","Lead"].map((h) => (
+            {["#","Telefon","Turi","Davomiylik","Sana va vaqt","Status","Lead","Bosqich"].map((h) => (
               <th key={h} style={{ position: "sticky", top: 0, zIndex: 1, padding: "8px 14px", textAlign: "left", fontWeight: 600, color: "var(--text2)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" }}>{h}</th>
             ))}
           </tr>
@@ -683,6 +721,7 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
           {calls.map((c, i) => {
             const ct = c.call_type ? CALL_TYPE_LABEL[c.call_type] : null;
             const ok = c.status_code === 200 || (c.duration ?? 0) >= 10;
+            const stageLabel = c.stage_bitrix_id ? (CALL_STAGE_LABELS[c.stage_bitrix_id] ?? c.stage_name ?? c.stage_bitrix_id) : (c.stage_name ?? null);
             return (
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <td style={{ padding: "8px 14px", color: "var(--text2)" }}>{i + 1}</td>
@@ -692,6 +731,7 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
                 <td style={{ padding: "8px 14px", color: "var(--text2)", whiteSpace: "nowrap" }}>{c.call_start ? new Date(c.call_start).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                 <td style={{ padding: "8px 14px" }}><span style={{ fontSize: 11, fontWeight: 600, color: ok ? "#4CAF50" : "#F44336", background: ok ? "#4CAF5015" : "#F4433615", border: `1px solid ${ok ? "#4CAF5030" : "#F4433630"}`, borderRadius: 5, padding: "2px 8px" }}>{ok ? "Muvaffaqiyatli" : "Muvaffaqiyatsiz"}</span></td>
                 <td style={{ padding: "8px 14px" }}>{c.lead_id ? <a href={`https://mountain.bitrix24.kz/crm/lead/details/${c.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2196F3", textDecoration: "none", fontSize: 12 }}>{c.lead_title || `#${c.lead_id}`}</a> : "—"}</td>
+                <td style={{ padding: "8px 14px" }}>{stageLabel ? <span style={{ fontSize: 11, fontWeight: 600, color: "#9C27B0", background: "rgba(156,39,176,0.10)", border: "1px solid rgba(156,39,176,0.25)", borderRadius: 5, padding: "2px 8px", whiteSpace: "nowrap" }}>{stageLabel}</span> : "—"}</td>
               </tr>
             );
           })}
@@ -720,6 +760,12 @@ export default function CallStatistikasi() {
   const filterOptionsQ = useQuery({
     queryKey: ["call-filter-options"],
     queryFn: getCallFilterOptions,
+  });
+
+  const stageStatsQ = useQuery({
+    queryKey: ["call-stage-stats", apiFilter],
+    queryFn: () => getCallStageStats(apiFilter),
+    staleTime: 5 * 60 * 1000,
   });
 
   const data: PyCallStatsResult | undefined = statsQ.data;
@@ -915,6 +961,39 @@ export default function CallStatistikasi() {
               </button>
             </div>
             <CallSubTable responsibleId={selectedRow.responsible_id} filter={apiFilter} />
+          </div>
+        )}
+
+        {stageStatsQ.data && stageStatsQ.data.length > 0 && (
+          <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Bosqichlar bo'yicha qo'ng'iroqlar</div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "var(--bg2)" }}>
+                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 700, color: "var(--text2)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>Bosqich</th>
+                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700, color: "var(--text2)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>Jami qo'ng'iroq</th>
+                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700, color: "var(--text2)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>Muvaffaqiyatli</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(stageStatsQ.data as CallStageStatsRow[]).map((row) => {
+                    const label = CALL_STAGE_LABELS[row.stage_bitrix_id] ?? row.stage_name;
+                    return (
+                      <tr key={row.stage_bitrix_id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "10px 16px" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#9C27B0", background: "rgba(156,39,176,0.10)", border: "1px solid rgba(156,39,176,0.25)", borderRadius: 5, padding: "2px 10px" }}>{label}</span>
+                        </td>
+                        <td style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700 }}>{row.jami}</td>
+                        <td style={{ padding: "10px 16px", textAlign: "center", fontWeight: 700, color: "#4CAF50" }}>{row.muvaffaqiyatli}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

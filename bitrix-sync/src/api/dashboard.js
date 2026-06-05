@@ -1847,6 +1847,7 @@ function normalizeCallFilters(query) {
     status: optionalText(query.status),
     duration_from: optionalInt(query.duration_from),
     duration_to: optionalInt(query.duration_to),
+    stage: optionalText(query.stage),
   };
 }
 
@@ -1913,6 +1914,8 @@ function matchesCallFilters(row, filters, findCallback) {
     if (filters.status === 'recalled' && (!missed || !callbackAt)) return false;
     if (filters.status === 'unrecalled' && (!missed || callbackAt)) return false;
   }
+
+  if (filters.stage && String(row.stage_bitrix_id || '') !== filters.stage) return false;
 
   return true;
 }
@@ -2387,12 +2390,24 @@ router.get('/call-list', async (req, res) => {
          c.failed_code, c.call_category, c.call_source,
          c.lead_id, c.crm_entity_type, c.responsible_id,
          l.title AS lead_title,
+         COALESCE(s_hist.name, s_curr.name) AS stage_name,
+         COALESCE(s_hist.bitrix_id, s_curr.bitrix_id) AS stage_bitrix_id,
          (
            ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
            AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          ) AS in_range
        FROM calls c
        LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN stages s_curr ON s_curr.id = l.stage_id
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id
+         FROM lead_stage_history lsh
+         JOIN stages s ON s.id = lsh.stage_id
+         WHERE lsh.lead_id = c.lead_id
+           AND lsh.changed_at <= c.call_start
+         ORDER BY lsh.changed_at DESC
+         LIMIT 1
+       ) s_hist ON c.lead_id IS NOT NULL
        WHERE c.call_start IS NOT NULL
          AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
@@ -2411,6 +2426,46 @@ router.get('/call-list', async (req, res) => {
   } catch (err) {
     if (err.code === '42P01') return res.json([]);
     console.error('[dashboard/call-list]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/call-stage-stats
+ * Calls grouped by stage_bitrix_id — shows call counts per lead stage
+ */
+router.get('/call-stage-stats', async (req, res) => {
+  const { responsible_id, from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(s_hist.bitrix_id, s_curr.bitrix_id, 'Noma''lum') AS stage_bitrix_id,
+         COALESCE(s_hist.name, s_curr.name, 'Noma''lum') AS stage_name,
+         COUNT(*)::int AS jami,
+         COUNT(*) FILTER (WHERE c.duration > 0)::int AS muvaffaqiyatli
+       FROM calls c
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN stages s_curr ON s_curr.id = l.stage_id
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id
+         FROM lead_stage_history lsh
+         JOIN stages s ON s.id = lsh.stage_id
+         WHERE lsh.lead_id = c.lead_id AND lsh.changed_at <= c.call_start
+         ORDER BY lsh.changed_at DESC LIMIT 1
+       ) s_hist ON c.lead_id IS NOT NULL
+       WHERE c.call_start IS NOT NULL
+         AND c.lead_id IS NOT NULL
+         AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+         AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+         AND ($3::int IS NULL OR c.responsible_id = $3::int)
+       GROUP BY COALESCE(s_hist.bitrix_id, s_curr.bitrix_id, 'Noma''lum'),
+                COALESCE(s_hist.name, s_curr.name, 'Noma''lum')
+       ORDER BY jami DESC`,
+      [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/call-stage-stats]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
