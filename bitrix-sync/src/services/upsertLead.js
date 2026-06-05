@@ -92,6 +92,12 @@ async function upsertLead(r, client) {
     utmSource = null;
   }
 
+  // Qisqa nomlarni to'liq nomga normalizatsiya (ig→Instagram, fb→Facebook)
+  const UTM_NORMALIZE = { ig: 'Instagram', fb: 'Facebook', instagram: 'Instagram', facebook: 'Facebook' };
+  if (utmSource && UTM_NORMALIZE[utmSource.trim().toLowerCase()]) {
+    utmSource = UTM_NORMALIZE[utmSource.trim().toLowerCase()];
+  }
+
   const isAdSource = [SOURCE_FB, SOURCE_IG, SOURCE_TARGET].includes(r.SOURCE_ID);
   if (!utmSource && isAdSource) {
     utmSource = r.SOURCE_ID === SOURCE_IG ? 'Instagram' : 'Facebook';
