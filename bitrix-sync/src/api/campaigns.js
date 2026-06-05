@@ -228,6 +228,7 @@ router.get('/rows', async (req, res) => {
       level:         'ad',
       breakdowns:    'publisher_platform',
       time_range:    JSON.stringify({ since, until }),
+      filtering:     JSON.stringify([{ field: 'campaign.effective_status', operator: 'IN', value: ['ACTIVE'] }]),
       limit:         500,
     });
 
@@ -262,9 +263,10 @@ router.get('/insights', async (req, res) => {
       access_token:  token(),
       fields:        'spend,actions,date_start,impressions,clicks',
       time_increment: 1,
-      level:         'account',
+      level:         'campaign',
       breakdowns:    'publisher_platform',
       time_range:    JSON.stringify({ since, until }),
+      filtering:     JSON.stringify([{ field: 'campaign.effective_status', operator: 'IN', value: ['ACTIVE'] }]),
       limit:         500,
     });
 
