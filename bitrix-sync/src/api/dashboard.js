@@ -674,13 +674,7 @@ router.get('/deals-responsibles', async (req, res) => {
          r.work_position,
          COUNT(fd.id)::int AS total,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('NEW','C1:NEW','C1:CONSULTATION_DONE'))::int              AS konsultatsiya,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('PREPARATION'))::int                                      AS jarayonda,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('PREPAYMENT_INVOICE','C1:PREPARATION'))::int              AS taklif,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('EXECUTING','C1:EXECUTING','C1:PRESENTATION'))::int       AS taqdimot,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('FINAL_INVOICE'))::int                                    AS manzur,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_MZDG38'))::int                                        AS shartnoma,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_W35V62','C1:AGREEMENT'))::int                         AS kelishuv,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:FINAL_INVOICE'))::int                                 AS tolov,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_EHGFKW','UC_3BDUY6'))::int                           AS ish_boshlandi,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                        AS bekor_boldi
