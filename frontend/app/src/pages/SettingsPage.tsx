@@ -19,7 +19,7 @@ export default function SettingsPage() {
         title="Sozlamalar"
         sub="Tizim parametrlari · Bitrix integratsiyasi · jarima tariflari"
       />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg space-y-4">
         {/* ── Tizim ma'lumoti ─────────────────────────────────── */}
         <Section title="Tizim ma'lumoti" subtitle="Server tomondan keladi (read-only)">
           {cfgQ.isLoading ? (

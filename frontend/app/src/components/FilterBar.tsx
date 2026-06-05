@@ -191,9 +191,9 @@ export function FilterBar({
           'absolute top-[calc(100%+6px)] bg-bg2 border border-border rounded-xl shadow-lg z-50 overflow-hidden w-[720px] max-w-[calc(100vw-32px)]',
           anchor === 'left' ? 'left-0 right-auto' : 'right-0 left-auto',
         )}>
-          <div className="grid grid-cols-[200px_1fr]">
+          <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr]">
             {/* Saved presets */}
-            <div className="bg-bg3 border-r border-border p-2 flex flex-col gap-px overflow-y-auto max-h-[480px]">
+            <div className="bg-bg3 border-b sm:border-b-0 sm:border-r border-border p-2 flex flex-col gap-px overflow-y-auto max-h-[160px] sm:max-h-[480px]">
               {presets.map((p) => (
                 <div
                   key={p.id}
@@ -234,7 +234,7 @@ export function FilterBar({
             </div>
 
             {/* Body */}
-            <div className="p-[18px_22px] overflow-y-auto max-h-[480px]">
+            <div className="p-3 sm:p-[18px_22px] overflow-y-auto max-h-[480px]">
               {fields.map((f) => (
                 <FieldRow key={f.key} field={f} value={values[f.key]} onChange={(v) => onChange(f.key, v)} />
               ))}

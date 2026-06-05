@@ -163,7 +163,7 @@ export default function HisobotPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         {/* Mode tabs */}
         <div className="flex gap-1.5 mb-3">
           <ModeTab active={mode === 'report'}     onClick={() => setMode('report')}     label="Hisobot intizomi" hint={`${(statsQ.data?.employees ?? []).reduce((s, e) => s + Object.values(e.report).reduce((a, b) => a + b, 0), 0)} log`} />

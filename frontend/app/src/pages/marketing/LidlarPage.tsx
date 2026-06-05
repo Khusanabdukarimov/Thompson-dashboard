@@ -501,7 +501,7 @@ export default function LidlarPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px]" style={{ background: "var(--bg)" }}>
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px]" style={{ background: "var(--bg)" }}>
 
         {/* ── Filter panel ── */}
         <div ref={filterRef} style={{ position: "sticky", top: 0, zIndex: 10, marginBottom: 20 }}>

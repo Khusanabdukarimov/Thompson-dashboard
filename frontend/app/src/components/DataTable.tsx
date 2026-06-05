@@ -155,7 +155,7 @@ export function DataTable<T>({
       )}
       <div
         style={{ maxHeight: maxBodyHeight }}
-        className="overflow-y-auto relative"
+        className="overflow-auto relative"
       >
         <table
           className="w-full"
@@ -269,7 +269,7 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-bg2 text-[12px] text-text2">
+      <div className="flex flex-wrap items-center justify-between gap-y-1.5 px-3 sm:px-4 py-2.5 border-t border-border bg-bg2 text-[12px] text-text2">
         <div className="text-text3">
           {startRow}–{endRow}, jami {total}
         </div>

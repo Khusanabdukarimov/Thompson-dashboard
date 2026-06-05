@@ -338,7 +338,7 @@ export default function RejaPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         {/* ── REJA HEADER ────────────────────────────────────── */}
         {targetQ.isLoading && !targetQ.data ? (
           <div className="bg-bg2 border border-border rounded-lg p-4 mb-4 shadow">

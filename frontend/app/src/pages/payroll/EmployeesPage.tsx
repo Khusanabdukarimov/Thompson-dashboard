@@ -205,7 +205,7 @@ export default function EmployeesPage() {
           </>
         }
       />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         <DataTable<Employee>
           columns={columns}
           data={filtered}

@@ -94,7 +94,7 @@ export default function TaqsimotPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg space-y-5">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg space-y-5">
 
         {/* ── Settings table ─────────────────────────────────────────── */}
         <div className="bg-bg2 border border-border rounded-xl shadow overflow-hidden">

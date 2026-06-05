@@ -67,7 +67,7 @@ export default function AttendancePage() {
         sub={`${today} · Bitrix24 timeman.status orqali realtime (15s da yangilanadi)`}
         actions={<Button onClick={() => q.refetch()}>{q.isFetching ? 'Yangilanmoqda…' : 'Yangilash'}</Button>}
       />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         {q.isLoading && !q.data ? <MetricRowSkeleton count={5} /> : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
             <MetricCard label="Jami xodim" value={String(counts.all)} tone="blue" />

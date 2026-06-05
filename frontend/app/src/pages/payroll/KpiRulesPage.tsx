@@ -43,7 +43,7 @@ export default function KpiRulesPage() {
           </Button>
         }
       />
-      <div className="flex-1 overflow-y-auto px-[22px] py-[18px] bg-bg">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         {q.isLoading && !q.data ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 2 }).map((_, i) => (
