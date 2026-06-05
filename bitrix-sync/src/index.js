@@ -17,6 +17,7 @@ const { startCallsAutoSync }             = require('./api/dashboard');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
 const marketingRouter  = require('./api/marketing');
+const tolovRouter      = require('./api/tolov');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -49,6 +50,8 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/reja',      rejaRouter);
 app.use('/api/marketing', marketingRouter);
+app.use('/tolov',        tolovRouter);
+app.use('/api/tolov',    tolovRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', async (req, res) => {

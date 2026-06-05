@@ -121,75 +121,65 @@ router.get('/kunlik', async (req, res) => {
       }
     }
 
-    // ── 3. Meetings: facebook_leads whose matched Bitrix lead ever
-    //    reached a Konsultatsiya stage (from lead_stage_history) ──
-    const meetingsRes = await pool.query(`
-      WITH fb AS (
-        SELECT
-          fl.id,
-          EXTRACT(DAY FROM fl.created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
-          (${PLATFORM_CASE.replace(/adset_name/g,'fl.adset_name').replace(/campaign_name/g,'fl.campaign_name')}) AS src,
-          ${normExpr('COALESCE(fl.phone,\'\')')} AS phone_norm
-        FROM facebook_leads fl
-        WHERE fl.created_time >= $1 AND fl.created_time <= $2
-          AND LENGTH(REGEXP_REPLACE(COALESCE(fl.phone,''), '[^0-9]', '', 'g')) >= 7
-      )
-      SELECT DISTINCT
-        f.id AS fb_id, f.day, f.src
-      FROM fb f
-      JOIN lead_phones lp ON ${normExpr('lp.phone')} = f.phone_norm
-      JOIN leads l ON l.id = lp.lead_id
-      JOIN lead_stage_history h ON h.lead_id = l.id
-      JOIN stages s ON s.id = h.stage_id
-        AND s.entity = 'lead'
-        AND s.bitrix_id IN (${MEETING_LIST})
-    `, [since, until]);
-
-    for (const row of meetingsRes.rows) {
-      if (row.day >= 1 && row.day <= daysInMonth) {
-        result[row.src].meetings[row.day - 1]++;
-      }
-    }
-
-    // ── 4. Match facebook_leads → Bitrix deals by phone ──────────
-    //    Used for: deals, deals_sum, sales_count, sales_sum
-    const fbDealMatchRes = await pool.query(`
-      WITH fb AS (
-        SELECT
-          fl.id,
-          EXTRACT(DAY FROM fl.created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
-          (${PLATFORM_CASE.replace(/adset_name/g,'fl.adset_name').replace(/campaign_name/g,'fl.campaign_name')}) AS src,
-          ${normExpr('COALESCE(fl.phone,\'\')')} AS phone_norm
-        FROM facebook_leads fl
-        WHERE fl.created_time >= $1 AND fl.created_time <= $2
-          AND LENGTH(REGEXP_REPLACE(COALESCE(fl.phone,''), '[^0-9]', '', 'g')) >= 7
-      )
-      SELECT DISTINCT ON (f.id)
-        f.id   AS fb_id,
-        f.day,
-        f.src,
-        d.opportunity::numeric AS opp,
+    // ── 3. Deal-based metrics: direct query from deals table ─────
+    //    meetings    = Uchrashuvlar soni  = deals in NEW stage (Uchrashuv o'tkazildi)
+    //    deals       = Kelishuv bo'ldi    = deals in UC_W35V62 stage
+    //    deals_sum   = Kelishuv summasi   = opportunity sum for UC_W35V62 deals
+    //    sales_count = Sotuvlar soni      = won deals (is_won)
+    //    sales_sum   = Sotuvlar summasi   = opportunity sum for won deals
+    //    cancelled   = Bekor bo'ldi       = is_final AND NOT is_won deals
+    //
+    //    Source classification by deal.source_id:
+    //      target    = UC_O9BLGT (Facebook/Target ads)
+    //      instagram = UC_3O8GTF | UC_89FPH6 (Instagram)
+    const dealMetricsRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM d.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
+        CASE
+          WHEN d.source_id IN ('UC_O9BLGT') THEN 'target'
+          WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
+          ELSE NULL
+        END AS src,
+        s.bitrix_id AS stage_bid,
         s.is_won,
-        s.is_final
-      FROM fb f
-      JOIN deal_phones dp ON ${normExpr('dp.phone')} = f.phone_norm
-      JOIN deals d ON d.id = dp.deal_id
+        s.is_final,
+        COALESCE(d.opportunity, 0)::numeric AS opp
+      FROM deals d
       LEFT JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
-      ORDER BY f.id, d.date_create DESC
+      WHERE d.date_create >= $1 AND d.date_create <= $2
+        AND CASE
+              WHEN d.source_id IN ('UC_O9BLGT') THEN 'target'
+              WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
+              ELSE NULL
+            END IS NOT NULL
     `, [since, until]);
 
-    for (const row of fbDealMatchRes.rows) {
+    for (const row of dealMetricsRes.rows) {
       if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
       const i   = row.day - 1;
       const src = row.src;
       const opp = parseFloat(row.opp) || 0;
 
-      result[src].deals[i]++;
-      result[src].deals_sum[i] = Math.round((result[src].deals_sum[i] + opp) * 100) / 100;
+      // Uchrashuvlar soni = deals in NEW stage (Uchrashuv o'tkazildi)
+      if (row.stage_bid === 'NEW') {
+        result[src].meetings[i]++;
+      }
 
+      // Kelishuv bo'ldi = deals in UC_W35V62 (Kelishuv bo'ldi) stage
+      if (row.stage_bid === 'UC_W35V62') {
+        result[src].deals[i]++;
+        result[src].deals_sum[i] = Math.round((result[src].deals_sum[i] + opp) * 100) / 100;
+      }
+
+      // Sotuvlar = won deals
       if (row.is_won) {
         result[src].sales_count[i]++;
         result[src].sales_sum[i] = Math.round((result[src].sales_sum[i] + opp) * 100) / 100;
+      }
+
+      // Bekor bo'ldi = final + not won
+      if (row.is_final && !row.is_won) {
+        result[src].cancelled[i]++;
       }
     }
 
