@@ -44,18 +44,20 @@ async function leadCreated(req, res) {
     const mainResponsibleId = parseInt(process.env.MAIN_RESPONSIBLE_ID || '1', 10);
     const isAmoCRM          = raw.SOURCE_ID === 'UC_1WUFJB';
     const isCallsStage      = raw.STATUS_ID === 'CALLS' || raw.STATUS_ID === 'UC_K0PWSA';
-    const isMainResponsible = parseInt(raw.ASSIGNED_BY_ID, 10) === mainResponsibleId;
+    // Accept both main webhook user (#1) and Data365 Support (#40) as "unassigned" slots
+    const assignedId        = parseInt(raw.ASSIGNED_BY_ID, 10);
+    const isMainResponsible = assignedId === mainResponsibleId || assignedId === 40;
 
-    // FB/Instagram source leads skip distribution — they go directly to responsible via form
-    const isFbSource = ['UC_O9BLGT', 'UC_3O8GTF', 'UC_89FPH6'].includes(raw.SOURCE_ID);
+    // Only skip distribution for leads created by our own Facebook API webhook
+    const isFbApiSource = ['UC_O9BLGT', 'UC_3O8GTF'].includes(raw.SOURCE_ID);
 
-    if (!isAmoCRM && !isCallsStage && isMainResponsible && !isFbSource) {
+    if (!isAmoCRM && !isCallsStage && isMainResponsible && !isFbApiSource) {
       const assignedTo = await distributeLead(entityId);
       if (assignedTo) {
         console.log(`[leadCreated] Lead ${entityId} distributed to responsible ${assignedTo}`);
       }
-    } else if (isFbSource) {
-      console.log(`[leadCreated] Lead ${entityId} FB/Instagram source — skipping distribution`);
+    } else if (isFbApiSource) {
+      console.log(`[leadCreated] Lead ${entityId} FB API source — skipping distribution`);
     }
 
     // Facebook/Instagram lid bo'lsa va telefon yo'q bo'lsa — facebook_leads dan topib qo'shamiz
