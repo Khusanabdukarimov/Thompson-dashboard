@@ -19,6 +19,7 @@ from app.models import (
     MonthlyTarget,
     PenaltyConfig,
     ReportLog,
+    Tarif,
 )
 from app.services import bitrix
 
@@ -877,3 +878,60 @@ def calculate_payroll(
         "total_uzs": total_uzs,
         "total_usd": round(total_usd, 2),
     }
+
+
+# ────────────────────────────────────────────────────────────────────
+# Tariflar — service pricing tiers (dizayn | neyming)
+# ────────────────────────────────────────────────────────────────────
+class TarifIn(BaseModel):
+    service_type: str
+    name: str
+    loyiha_summasi: int = 0
+    variant_klass: str = ""
+    harf_oralighi: str = ""
+    tekshiruvlar: int = 0
+    deadline_mijoz: str = ""
+    hudud: str = "Mahalliy"
+    jami_summa: int = 0
+    sort_order: int = 0
+    is_active: bool = True
+
+
+@router.get("/tariflar")
+def list_tariflar(service_type: Optional[str] = None, session: Session = Depends(_session)):
+    stmt = select(Tarif)
+    if service_type:
+        stmt = stmt.where(Tarif.service_type == service_type)
+    stmt = stmt.order_by(Tarif.sort_order, Tarif.id)
+    items = session.exec(stmt).all()
+    return {"count": len(items), "tariflar": [t.model_dump() for t in items]}
+
+
+@router.post("/tariflar", status_code=201)
+def create_tarif(body: TarifIn, session: Session = Depends(_session)):
+    tarif = Tarif(**body.model_dump())
+    session.add(tarif)
+    session.commit()
+    session.refresh(tarif)
+    return tarif.model_dump()
+
+
+@router.put("/tariflar/{tarif_id}")
+def update_tarif(tarif_id: int, body: TarifIn, session: Session = Depends(_session)):
+    tarif = session.get(Tarif, tarif_id)
+    if not tarif:
+        raise HTTPException(status_code=404, detail="Tarif not found")
+    for k, v in body.model_dump().items():
+        setattr(tarif, k, v)
+    session.commit()
+    session.refresh(tarif)
+    return tarif.model_dump()
+
+
+@router.delete("/tariflar/{tarif_id}", status_code=204)
+def delete_tarif(tarif_id: int, session: Session = Depends(_session)):
+    tarif = session.get(Tarif, tarif_id)
+    if not tarif:
+        raise HTTPException(status_code=404, detail="Tarif not found")
+    session.delete(tarif)
+    session.commit()

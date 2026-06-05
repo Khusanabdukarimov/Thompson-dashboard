@@ -177,3 +177,24 @@ class PenaltyConfig(SQLModel, table=True):
     report_penalty_uzs: int = Field(default=0)
     report_missed_uzs: int = Field(default=0)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ────────────────────────────────────────────────────────────────────
+# tariflar — service pricing tiers (dizayn | neyming)
+# ────────────────────────────────────────────────────────────────────
+class Tarif(SQLModel, table=True):
+    __tablename__ = "tariflar"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    service_type: str  # "dizayn" | "neyming"
+    name: str  # "Light" | "Air" | "Marine" | "Premier" | "Premier (mahalliy)"
+    loyiha_summasi: int = Field(default=0)  # UZS
+    variant_klass: str = Field(default="")  # e.g. "3+3 / 1 klass"
+    harf_oralighi: str = Field(default="")  # e.g. "6-8 harf"
+    tekshiruvlar: int = Field(default=0)
+    deadline_mijoz: str = Field(default="")  # e.g. "700k + 800k"
+    hudud: str = Field(default="Mahalliy")  # "Mahalliy" | "Xalqaro"
+    jami_summa: int = Field(default=0)  # UZS
+    sort_order: int = Field(default=0)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)

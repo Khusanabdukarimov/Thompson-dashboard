@@ -45,8 +45,8 @@ const METRICS: MetricDef[] = [
 ];
 
 const SECTIONS: { key: Section; label: string; color: string }[] = [
-  { key: "target",    label: "Target reklama", color: "#e26113" },
-  { key: "instagram", label: "Instagram",       color: "#d63384" },
+  { key: "target",    label: "Facebook", color: "#1877f2" },
+  { key: "instagram", label: "Instagram", color: "#d63384" },
 ];
 
 function daysInMonth(month: MonthKey, year: number) {
@@ -177,7 +177,7 @@ export default function KunlikPage() {
         {/* Toggle */}
         <div className="flex items-center gap-2 mb-4">
           {([
-            { id: "target",    label: "Target reklama" },
+            { id: "target",    label: "Facebook" },
             { id: "instagram", label: "Instagram"      },
           ] as { id: "all" | Section; label: string }[]).map(opt => (
             <button key={opt.id} onClick={() => setActive(opt.id)}

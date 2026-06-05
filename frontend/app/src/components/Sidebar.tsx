@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
   Briefcase,
@@ -11,6 +12,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   X,
   Moon,
   Sun,
@@ -19,6 +21,7 @@ import {
   ClipboardCheck,
   PieChart,
   Phone,
+  Grid3x3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDarkMode } from "@/hooks/useDarkMode";
@@ -44,17 +47,18 @@ const MAIN_NAV: NavItem[] = [
   { to: "/byudjet",         label: "Byudjet",          icon: DollarSign,      roles: MGMT },
   { to: "/reja",            label: "Reja",             icon: GanttChart,      roles: [...MGMT, "closer", "hunter"] },
   { to: "/hisobot",         label: "Hisobot",          icon: ClipboardList,   roles: ALL },
-  { to: "/payroll",         label: "Payroll",          icon: Wallet,          roles: ALL },
   { to: "/sozlamalar",      label: "Sozlamalar",       icon: Settings,        roles: MGMT },
 ];
 
-// Admin-only management links (secondary, shown below separator)
-const ADMIN_NAV: NavItem[] = [
-  { to: "/payroll/employees",  label: "Xodimlar",    icon: Users,          roles: MGMT },
-  { to: "/payroll/attendance", label: "Davomat",     icon: ClipboardCheck, roles: ALL  },
-  { to: "/payroll/kpi",        label: "KPI qoidalar",icon: Award,          roles: MGMT },
-  { to: "/payroll/bonus",      label: "Bonuslar",    icon: Award,          roles: MGMT },
-  { to: "/taqsimot",           label: "Taqsimot",    icon: PieChart,       roles: MGMT },
+// Payroll accordion sub-items
+const PAYROLL_NAV: NavItem[] = [
+  { to: "/payroll",             label: "Payroll Hisoblash", icon: Wallet,         roles: ALL  },
+  { to: "/payroll/employees",   label: "Xodimlar",          icon: Users,          roles: MGMT },
+  { to: "/payroll/attendance",  label: "Davomat",           icon: ClipboardCheck, roles: ALL  },
+  { to: "/payroll/kpi",         label: "KPI Qoidalari",     icon: Award,          roles: MGMT },
+  { to: "/payroll/bonus",       label: "Bonuslar",          icon: Award,          roles: MGMT },
+  { to: "/payroll/tariflar",    label: "Tariflar",          icon: Grid3x3,        roles: MGMT },
+  { to: "/taqsimot",            label: "Taqsimot",          icon: PieChart,       roles: MGMT },
 ];
 
 type Props = {
@@ -67,7 +71,11 @@ type Props = {
 export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClose }: Props) {
   const { theme, toggle } = useDarkMode();
   const role = getStoredRole();
+  const location = useLocation();
   const canSee = (roles?: DashboardRole[]) => !roles || roles.includes(role);
+
+  const payrollActive = location.pathname.startsWith("/payroll") || location.pathname.startsWith("/taqsimot");
+  const [payrollOpen, setPayrollOpen] = useState(payrollActive);
 
   const linkClass = (isActive: boolean) =>
     cn(
@@ -152,7 +160,6 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
               >
                 {({ isActive }) => (
                   <>
-                    {/* Active left accent bar */}
                     {isActive && !collapsed && (
                       <span
                         className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-blue"
@@ -169,47 +176,65 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
             );
           })}
 
-          {/* Admin section separator */}
-          {ADMIN_NAV.some(i => canSee(i.roles)) && (
+          {/* Payroll accordion */}
+          {PAYROLL_NAV.some(i => canSee(i.roles)) && (
             <>
-              <div className={cn(
-                "pt-3 pb-1 mt-2 border-t border-border",
-                collapsed && "md:mt-2 md:pt-2",
-              )}>
-                <span className={cn(
-                  "text-[10px] text-text3 px-2 uppercase tracking-wider font-medium",
-                  collapsed && "md:hidden",
-                )}>
-                  Boshqaruv
+              <button
+                type="button"
+                onClick={() => setPayrollOpen(o => !o)}
+                title={collapsed ? "Payroll" : undefined}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg transition-all text-[12.5px] border font-normal w-full",
+                  collapsed
+                    ? "px-2.5 py-2 md:justify-center md:w-10 md:h-10 md:mx-auto md:px-0 md:py-0"
+                    : "px-2.5 py-2",
+                  payrollActive
+                    ? "bg-blue-bg border-blue-border text-blue font-semibold"
+                    : "border-transparent text-text2 hover:bg-bg3 hover:text-text",
+                )}
+              >
+                <Wallet className="w-[15px] h-[15px] shrink-0" />
+                <span className={cn("truncate flex-1 text-left", collapsed && "md:hidden")}>
+                  Payroll
                 </span>
-              </div>
-              {ADMIN_NAV.filter(i => canSee(i.roles)).map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    onClick={onMobileClose}
-                    title={collapsed ? item.label : undefined}
-                    className={({ isActive }) => linkClass(isActive)}
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && !collapsed && (
-                          <span
-                            className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-blue"
-                            style={{ marginLeft: -8 }}
-                          />
+                <ChevronDown
+                  className={cn(
+                    "w-3.5 h-3.5 shrink-0 transition-transform",
+                    payrollOpen && "rotate-180",
+                    collapsed && "md:hidden",
+                  )}
+                />
+              </button>
+
+              {payrollOpen && !collapsed && (
+                <div className="ml-4 pl-2 border-l border-border flex flex-col gap-0.5">
+                  {PAYROLL_NAV.filter(i => canSee(i.roles)).map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === "/payroll"}
+                        onClick={onMobileClose}
+                        className={({ isActive }) => linkClass(isActive)}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            {isActive && (
+                              <span
+                                className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-blue"
+                                style={{ marginLeft: -8 }}
+                              />
+                            )}
+                            <Icon className="w-[14px] h-[14px] shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                          </>
                         )}
-                        <Icon className="w-[15px] h-[15px] shrink-0" />
-                        <span className={cn("truncate", collapsed && "md:hidden")}>
-                          {item.label}
-                        </span>
-                      </>
-                    )}
-                  </NavLink>
-                );
-              })}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
 

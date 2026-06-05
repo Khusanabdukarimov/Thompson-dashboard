@@ -409,3 +409,40 @@ export type TimemanUser = {
 export function listTimeman() {
   return apiGet<{ count: number; users: TimemanUser[] }>("/api/users/timeman");
 }
+
+// ── Tariflar ──────────────────────────────────────────────────────
+export type Tarif = {
+  id: number;
+  service_type: "dizayn" | "neyming";
+  name: string;
+  loyiha_summasi: number;
+  variant_klass: string;
+  harf_oralighi: string;
+  tekshiruvlar: number;
+  deadline_mijoz: string;
+  hudud: string;
+  jami_summa: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+export type TarifIn = Omit<Tarif, "id" | "created_at">;
+
+export function listTariflar(service_type?: string) {
+  const q = service_type ? `?service_type=${service_type}` : "";
+  return apiGet<{ count: number; tariflar: Tarif[] }>(`/api/payroll/tariflar${q}`);
+}
+export async function createTarif(body: TarifIn): Promise<Tarif> {
+  const r = await authedFetch("/api/payroll/tariflar", { method: "POST", body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+export async function updateTarif(id: number, body: Partial<TarifIn>): Promise<Tarif> {
+  const r = await authedFetch(`/api/payroll/tariflar/${id}`, { method: "PUT", body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+export async function deleteTarif(id: number): Promise<void> {
+  const r = await authedFetch(`/api/payroll/tariflar/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(await r.text());
+}
