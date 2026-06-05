@@ -502,11 +502,11 @@ router.get('/deals-stats', async (req, res) => {
       `SELECT
          COUNT(d.id)::int AS total,
          COUNT(d.id) FILTER (WHERE s.is_final = false AND s.is_won = false)::int AS yangi,
-         COUNT(d.id) FILTER (WHERE s.is_won = true)::int                         AS sotuv_boldi,
+         COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
          COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int  AS bekor,
-         COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won = true), 0)::numeric AS jami_sotuv,
-         COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.is_won = true), 0), 0)::numeric AS ortacha_chek,
-         ROUND(COUNT(d.id) FILTER (WHERE s.is_won = true)::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
+         COALESCE(SUM(d.opportunity) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])), 0)::numeric AS jami_sotuv,
+         COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])), 0), 0)::numeric AS ortacha_chek,
+         ROUND(COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
        LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
@@ -622,7 +622,7 @@ router.get('/deals-conversion', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `WITH fd AS (
-         SELECT d.id, d.responsible_id, d.opportunity, s.is_won, s.is_final
+         SELECT d.id, d.responsible_id, d.opportunity, s.is_won, s.is_final, s.bitrix_id AS stage_bid
          FROM deals d
          JOIN stages s ON s.id = d.stage_id
          WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
@@ -632,14 +632,15 @@ router.get('/deals-conversion', async (req, res) => {
        SELECT
          r.id AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+         r.work_position,
          COUNT(fd.id)::int AS total,
-         COUNT(fd.id) FILTER (WHERE NOT fd.is_won AND NOT fd.is_final)::int AS jarayonda,
-         COUNT(fd.id) FILTER (WHERE fd.is_won)::int AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE NOT fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']) AND NOT fd.is_final)::int AS jarayonda,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int AS bekor_boldi,
-         COALESCE(SUM(fd.opportunity) FILTER (WHERE fd.is_won), 0)::numeric AS jami_sotuv
+         COALESCE(SUM(fd.opportunity) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])), 0)::numeric AS jami_sotuv
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
-       GROUP BY r.id, r.name, r.last_name
+       GROUP BY r.id, r.name, r.last_name, r.work_position
        HAVING COUNT(fd.id) > 0
        ORDER BY total DESC`,
       [from || null, to || null]
@@ -681,7 +682,7 @@ router.get('/deals-responsibles', async (req, res) => {
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_W35V62','C1:AGREEMENT'))::int                         AS kelishuv,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:FINAL_INVOICE','C1:PARTIAL_PAYMENT'))::int            AS tolov,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:WORK_STARTED'))::int                                  AS ish_boshlandi,
-         COUNT(fd.id) FILTER (WHERE fd.is_won)::int                                                             AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                        AS bekor_boldi
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
