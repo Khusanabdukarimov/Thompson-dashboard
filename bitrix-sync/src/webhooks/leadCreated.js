@@ -63,6 +63,12 @@ async function leadCreated(req, res) {
       console.log(`[leadCreated] Lead ${entityId} already distributed via Facebook webhook, skipping`);
     }
 
+    // Facebook/Instagram lid bo'lsa va telefon yo'q bo'lsa — facebook_leads dan topib qo'shamiz
+    const FB_SOURCES = ['UC_O9BLGT', 'UC_3O8GTF', 'UC_89FPH6'];
+    if (FB_SOURCES.includes(raw.SOURCE_ID)) {
+      await backfillPhoneFromFacebook(entityId, raw);
+    }
+
     // Record initial stage in history
     const lead = await pool.query('SELECT id, stage_id FROM leads WHERE id = $1', [entityId]);
     if (lead.rows.length && lead.rows[0].stage_id) {
@@ -85,6 +91,66 @@ async function leadCreated(req, res) {
        WHERE event = 'ONCRMLEAD_ADD' AND entity_id = $2 AND processed = FALSE`,
       [err.message, entityId]
     ).catch(() => {});
+  }
+}
+
+/**
+ * Facebook/Instagram lid uchun telefon yo'q bo'lsa, facebook_leads jadvalidan
+ * vaqt va ism bo'yicha moslashtirish orqali telefon qo'shadi.
+ */
+async function backfillPhoneFromFacebook(leadId, raw) {
+  try {
+    // Bitrix24 lead da telefon bormi?
+    const { rows: existing } = await pool.query(
+      'SELECT phone FROM lead_phones WHERE lead_id = $1 LIMIT 1',
+      [leadId]
+    );
+    if (existing.length > 0) return; // Telefon bor, kerak emas
+
+    const leadName = `${raw.NAME || ''} ${raw.LAST_NAME || ''}`.trim().toLowerCase();
+    const leadDate = raw.DATE_CREATE ? new Date(raw.DATE_CREATE) : null;
+    if (!leadDate) return;
+
+    // facebook_leads dan vaqt ±30 daqiqa va ism bo'yicha izlaymiz
+    const { rows: fbLeads } = await pool.query(`
+      SELECT id, phone, full_name
+      FROM facebook_leads
+      WHERE phone IS NOT NULL AND phone != ''
+        AND ABS(EXTRACT(EPOCH FROM (created_time - $1::timestamptz))) < 1800
+      ORDER BY ABS(EXTRACT(EPOCH FROM (created_time - $1::timestamptz))) ASC
+      LIMIT 5
+    `, [leadDate.toISOString()]);
+
+    if (fbLeads.length === 0) return;
+
+    // Eng yaqin vaqtdagi yoki ismi mos keladiganini topamiz
+    let best = fbLeads[0]; // Vaqt bo'yicha eng yaqini
+    for (const fl of fbLeads) {
+      const flName = (fl.full_name || '').toLowerCase();
+      if (leadName && flName && (leadName.includes(flName.split(' ')[0]) || flName.includes(leadName.split(' ')[0]))) {
+        best = fl;
+        break;
+      }
+    }
+
+    if (!best?.phone) return;
+
+    // lead_phones ga qo'shamiz
+    await pool.query(
+      `INSERT INTO lead_phones (lead_id, phone) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [leadId, best.phone]
+    );
+
+    // Bitrix24 da ham PHONE yangilaymiz
+    const { bitrixCall } = require('../services/bitrix');
+    await bitrixCall('crm.lead.update', {
+      id: leadId,
+      fields: { PHONE: [{ VALUE: best.phone, VALUE_TYPE: 'WORK' }] },
+    });
+
+    console.log(`[leadCreated] Telefon qo'shildi: lead #${leadId} ← ${best.phone} (FB lead: ${best.id})`);
+  } catch (err) {
+    console.error(`[leadCreated] Telefon backfill xatosi (lead #${leadId}):`, err.message);
   }
 }
 

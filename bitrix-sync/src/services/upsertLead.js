@@ -98,9 +98,17 @@ async function upsertLead(r, client) {
     utmSource = UTM_NORMALIZE[utmSource.trim().toLowerCase()];
   }
 
+  // Facebook/Instagram nativ integratsiyasi → Target ga normalize qilish
+  let sourceId = r.SOURCE_ID || null;
+  if (sourceId === SOURCE_FB || sourceId === SOURCE_IG) {
+    sourceId = SOURCE_TARGET; // UC_89FPH6 = Target
+  }
+
   const isAdSource = [SOURCE_FB, SOURCE_IG, SOURCE_TARGET].includes(r.SOURCE_ID);
   if (!utmSource && isAdSource) {
-    utmSource = r.SOURCE_ID === SOURCE_IG ? 'Instagram' : 'Facebook';
+    // platform aniqlaymiz: IG manba yoki utm "ig" → Instagram, qolganlar → Facebook
+    const isIg = r.SOURCE_ID === SOURCE_IG || (r.UTM_SOURCE || '').toLowerCase() === 'ig';
+    utmSource = isIg ? 'Instagram' : 'Facebook';
     utmMedium = utmMedium || 'paid';
   }
   const { rows } = await db.query(
@@ -148,7 +156,7 @@ async function upsertLead(r, client) {
       responsibleId,
       stageId,
       parseFloat(r.OPPORTUNITY || 0),
-      r.SOURCE_ID || null,
+      sourceId,
       utmSource,
       utmMedium,
       r.UTM_CAMPAIGN || null,
