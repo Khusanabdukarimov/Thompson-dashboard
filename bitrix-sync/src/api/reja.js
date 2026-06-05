@@ -357,7 +357,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
         COALESCE(SUM(d.opportunity), 0)::numeric AS actual_sales,
         COUNT(*)::int                             AS deal_count
       FROM deals d
-      JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
+      JOIN stages s ON s.id = d.stage_id AND s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])
       WHERE d.responsible_id = ANY($1)
         AND COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
@@ -482,7 +482,7 @@ router.get('/plans/:id/progress', async (req, res) => {
         COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date::text AS close_date,
         SUM(d.opportunity)::numeric                                      AS amount
       FROM deals d
-      JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
+      JOIN stages s ON s.id = d.stage_id AND s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])
       WHERE d.responsible_id = ANY($1)
         AND COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id, COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date
@@ -554,7 +554,7 @@ router.get('/plans/:id/progress', async (req, res) => {
       const prevActualRes = await pool.query(`
         SELECT COALESCE(SUM(d.opportunity), 0)::numeric AS total
         FROM deals d
-        JOIN stages s ON s.id = d.stage_id AND s.is_won = TRUE
+        JOIN stages s ON s.id = d.stage_id AND s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])
         WHERE COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $1 AND $2
       `, [pp.period_start, pp.period_end]);
       prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
