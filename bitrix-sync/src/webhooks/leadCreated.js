@@ -46,21 +46,16 @@ async function leadCreated(req, res) {
     const isCallsStage      = raw.STATUS_ID === 'CALLS' || raw.STATUS_ID === 'UC_K0PWSA';
     const isMainResponsible = parseInt(raw.ASSIGNED_BY_ID, 10) === mainResponsibleId;
 
-    // Facebook webhook orqali yaratilgan lidlarda taqsimot allaqachon qilingan —
-    // ikki marta taqsimot qilishdan saqlanish uchun tekshiramiz
-    const { rows: fbCheck } = await pool.query(
-      'SELECT bitrix_lead_id FROM facebook_leads WHERE bitrix_lead_id = $1 LIMIT 1',
-      [entityId]
-    );
-    const alreadyDistributed = fbCheck.length > 0;
+    // FB/Instagram source leads skip distribution — they go directly to responsible via form
+    const isFbSource = ['UC_O9BLGT', 'UC_3O8GTF', 'UC_89FPH6'].includes(raw.SOURCE_ID);
 
-    if (!isAmoCRM && !isCallsStage && isMainResponsible && !alreadyDistributed) {
+    if (!isAmoCRM && !isCallsStage && isMainResponsible && !isFbSource) {
       const assignedTo = await distributeLead(entityId);
       if (assignedTo) {
         console.log(`[leadCreated] Lead ${entityId} distributed to responsible ${assignedTo}`);
       }
-    } else if (alreadyDistributed) {
-      console.log(`[leadCreated] Lead ${entityId} already distributed via Facebook webhook, skipping`);
+    } else if (isFbSource) {
+      console.log(`[leadCreated] Lead ${entityId} FB/Instagram source — skipping distribution`);
     }
 
     // Facebook/Instagram lid bo'lsa va telefon yo'q bo'lsa — facebook_leads dan topib qo'shamiz
