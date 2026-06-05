@@ -2396,7 +2396,7 @@ router.get('/call-list', async (req, res) => {
          c.call_start, c.status_code, c.status_name,
          c.failed_code, c.call_category, c.call_source,
          c.lead_id, c.deal_id, c.crm_entity_type, c.responsible_id,
-         COALESCE(l.title, d.title) AS lead_title,
+         l.title AS lead_title,
          COALESCE(sl.name, sd.name)        AS stage_name,
          COALESCE(sl.bitrix_id, sd.bitrix_id) AS stage_bitrix_id,
          (
