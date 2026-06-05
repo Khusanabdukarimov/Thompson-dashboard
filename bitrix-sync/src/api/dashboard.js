@@ -2397,8 +2397,8 @@ router.get('/call-list', async (req, res) => {
          c.failed_code, c.call_category, c.call_source,
          c.lead_id, c.deal_id, c.crm_entity_type, c.responsible_id,
          l.title AS lead_title,
-         COALESCE(sl.name, sd.name)        AS stage_name,
-         COALESCE(sl.bitrix_id, sd.bitrix_id) AS stage_bitrix_id,
+         COALESCE(s_lh.name, sl.name, s_dh.name, sd.name) AS stage_name,
+         COALESCE(s_lh.bitrix_id, sl.bitrix_id, s_dh.bitrix_id, sd.bitrix_id) AS stage_bitrix_id,
          (
            ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
            AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
@@ -2408,6 +2408,20 @@ router.get('/call-list', async (req, res) => {
        LEFT JOIN deals d  ON d.id = c.deal_id
        LEFT JOIN stages sl ON sl.id = l.stage_id
        LEFT JOIN stages sd ON sd.id = d.stage_id
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id
+         FROM lead_stage_history lsh
+         JOIN stages s ON s.id = lsh.stage_id
+         WHERE lsh.lead_id = c.lead_id AND lsh.changed_at <= c.call_start
+         ORDER BY lsh.changed_at DESC LIMIT 1
+       ) s_lh ON c.lead_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id
+         FROM deal_stage_history dsh
+         JOIN stages s ON s.id = dsh.stage_id
+         WHERE dsh.deal_id = c.deal_id AND dsh.changed_at <= c.call_start
+         ORDER BY dsh.changed_at DESC LIMIT 1
+       ) s_dh ON c.deal_id IS NOT NULL
        WHERE c.call_start IS NOT NULL
          AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($3::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
@@ -2439,8 +2453,8 @@ router.get('/call-stage-stats', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(sl.bitrix_id, sd.bitrix_id, 'Noma''lum') AS stage_bitrix_id,
-         COALESCE(sl.name, sd.name, 'Noma''lum') AS stage_name,
+         COALESCE(s_lh.bitrix_id, sl.bitrix_id, s_dh.bitrix_id, sd.bitrix_id, 'Noma''lum') AS stage_bitrix_id,
+         COALESCE(s_lh.name, sl.name, s_dh.name, sd.name, 'Noma''lum') AS stage_name,
          COUNT(*)::int AS jami,
          COUNT(*) FILTER (WHERE c.duration > 0)::int AS muvaffaqiyatli
        FROM calls c
@@ -2448,13 +2462,25 @@ router.get('/call-stage-stats', async (req, res) => {
        LEFT JOIN deals  d ON d.id = c.deal_id
        LEFT JOIN stages sl ON sl.id = l.stage_id
        LEFT JOIN stages sd ON sd.id = d.stage_id
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id FROM lead_stage_history lsh
+         JOIN stages s ON s.id = lsh.stage_id
+         WHERE lsh.lead_id = c.lead_id AND lsh.changed_at <= c.call_start
+         ORDER BY lsh.changed_at DESC LIMIT 1
+       ) s_lh ON c.lead_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT s.name, s.bitrix_id FROM deal_stage_history dsh
+         JOIN stages s ON s.id = dsh.stage_id
+         WHERE dsh.deal_id = c.deal_id AND dsh.changed_at <= c.call_start
+         ORDER BY dsh.changed_at DESC LIMIT 1
+       ) s_dh ON c.deal_id IS NOT NULL
        WHERE c.call_start IS NOT NULL
          AND (c.lead_id IS NOT NULL OR c.deal_id IS NOT NULL)
          AND ($1::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (c.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          AND ($3::int IS NULL OR c.responsible_id = $3::int)
-       GROUP BY COALESCE(sl.bitrix_id, sd.bitrix_id, 'Noma''lum'),
-                COALESCE(sl.name, sd.name, 'Noma''lum')
+       GROUP BY COALESCE(s_lh.bitrix_id, sl.bitrix_id, s_dh.bitrix_id, sd.bitrix_id, 'Noma''lum'),
+                COALESCE(s_lh.name, sl.name, s_dh.name, sd.name, 'Noma''lum')
        ORDER BY jami DESC`,
       [from || null, to || null, responsible_id ? parseInt(responsible_id) : null]
     );
