@@ -122,6 +122,7 @@ export function getDealFilterOptions(filter?: { mode?: string }) {
 export type DealsConversionRow = {
   responsible_id: number;
   full_name: string;
+  work_position?: string | null;
   total: number;
   jarayonda: number;
   sotuv_boldi: number;
@@ -132,6 +133,7 @@ export type DealsConversionRow = {
 export type DealsResponsiblesRow = {
   responsible_id: number;
   full_name: string;
+  work_position?: string | null;
   total: number;
   konsultatsiya: number;
   jarayonda: number;

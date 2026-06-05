@@ -136,6 +136,21 @@ const AVATAR_COLORS = [
   "#4CAF50","#FF5722","#3F51B5","#009688","#795548",
 ];
 
+function RoleBadge({ role }: { role?: string | null }) {
+  if (!role) return <span style={{ color: "var(--text3)", fontSize: 11 }}>—</span>;
+  const r = role.toLowerCase();
+  const isHunter  = r.includes("hunter");
+  const isCloser  = r.includes("closer");
+  const color  = isHunter && isCloser ? "#9c27b0" : isHunter ? "#2196F3" : isCloser ? "#4caf50" : "#9E9E9E";
+  const bg     = isHunter && isCloser ? "rgba(156,39,176,0.12)" : isHunter ? "rgba(33,150,243,0.12)" : isCloser ? "rgba(76,175,80,0.12)" : "rgba(158,158,158,0.12)";
+  const label  = isHunter && isCloser ? "H+C" : isHunter ? "Hunter" : isCloser ? "Closer" : role;
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, border: `1px solid ${color}40`, borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
 function AvatarCircle({ name, size = 36 }: { name: string; size?: number }) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const initials = parts.length >= 2
@@ -1003,6 +1018,7 @@ export default function LidlarPage() {
                   <tr>
                     <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
                     <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
+                    <th style={TH("#9E9E9E", 100)}>Rol</th>
                     {RESPONSIBLE_COLS.map((col) => (
                       <th key={col.key} style={TH(col.color)}>{col.label}</th>
                     ))}
@@ -1034,7 +1050,7 @@ export default function LidlarPage() {
                       CONVERTED_CONSULT: { label: "Tashrif buyurdi", color: "#4CAF50" },
                       CONVERTED: { label: "Tashrif buyurdi", color: "#4CAF50" },
                     };
-                    const colCount = 2 + RESPONSIBLE_COLS.length;
+                    const colCount = 3 + RESPONSIBLE_COLS.length; // +1 for Rol column
                     return (
                       <>
                         <tr key={u.responsible_id}
@@ -1056,6 +1072,7 @@ export default function LidlarPage() {
                               </a>
                             </div>
                           </td>
+                          <td style={{ ...TD, width:100 }}><RoleBadge role={(u as any).work_position} /></td>
                           {RESPONSIBLE_COLS.map((col) => {
                             const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
                             const max = colMaxes[col.key] ?? 1;

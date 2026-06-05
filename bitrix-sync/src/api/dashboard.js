@@ -670,6 +670,7 @@ router.get('/deals-responsibles', async (req, res) => {
        SELECT
          r.id AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+         r.work_position,
          COUNT(fd.id)::int AS total,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('NEW','C1:NEW','C1:CONSULTATION_DONE'))::int              AS konsultatsiya,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('C1:IN_PROCESS'))::int                                    AS jarayonda,
@@ -684,7 +685,7 @@ router.get('/deals-responsibles', async (req, res) => {
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                        AS bekor_boldi
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
-       GROUP BY r.id, r.name, r.last_name
+       GROUP BY r.id, r.name, r.last_name, r.work_position
        HAVING COUNT(fd.id) > 0
        ORDER BY total DESC`,
       [from || null, to || null]
@@ -845,7 +846,7 @@ router.get('/lead-responsibles', async (req, res) => {
        FROM responsibles r
        LEFT JOIN fl ON fl.responsible_id = r.id
        WHERE r.active = TRUE
-       GROUP BY r.id, r.name, r.last_name
+       GROUP BY r.id, r.name, r.last_name, r.work_position
        ORDER BY total DESC`,
       params
     );

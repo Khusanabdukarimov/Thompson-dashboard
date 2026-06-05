@@ -43,6 +43,7 @@ export type ResponsiblesStatsResponse = {
   responsibles: {
     responsible_id: number;
     full_name: string;
+    work_position?: string | null;
     total: number;
     qongiroqlar: number;
     yangi_lid: number;
