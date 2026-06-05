@@ -130,18 +130,47 @@ const CALL_STAGE_LABELS: Record<string, string> = {
   'UC_NAZK5J': "Bekor bo'ldi", 'RECYCLED': "Bekor bo'ldi",
   'CONVERTED_CONSULT': 'Tashrif buyurdi', 'CONVERTED': 'Tashrif buyurdi',
   'C1:NEW': 'Konsultatsiya', 'C1:IN_PROCESS': 'Jarayonda',
+  'C1:PREPARATION': 'Taklif tayyorlash', 'C1:PRESENTATION': 'Taqdimot',
+  'C1:CLIENT_APPROVED': 'Mijoz manzur ko\'rdi', 'C1:CONTRACT_SENT': 'Shartnoma yuborildi',
+  'C1:AGREEMENT': 'Kelishuv', 'C1:FINAL_INVOICE': 'To\'lov',
+  'C1:PARTIAL_PAYMENT': 'Qisman to\'lov', 'C1:WORK_STARTED': 'Ish boshlandi',
+  'WON': 'Sotuv bo\'ldi', 'C1:WON': 'Sotuv bo\'ldi',
+  'LOSE': 'Muvaffaqiyatsiz', 'C1:LOSE': 'Muvaffaqiyatsiz',
 };
 
-const callStageOptions = [
-  { value: "all", label: "Barchasi" },
-  { value: "NEW", label: "Yangi lid" },
-  { value: "UC_1KPATX", label: "Javob bermadi" },
-  { value: "UC_Q2U9EL", label: "Qayta aloqa" },
-  { value: "UC_KXC3ZW", label: "O'ylab ko'radi" },
-  { value: "UC_L28G68", label: "Tashrif belgilandi" },
-  { value: "UC_5G8244", label: "Kelmadi" },
-  { value: "UC_NAZK5J", label: "Bekor bo'ldi" },
-  { value: "CONVERTED_CONSULT", label: "Tashrif buyurdi" },
+const callStageOptionGroups = [
+  { group: null, options: [{ value: "all", label: "Barchasi" }] },
+  {
+    group: "📋 Lid bosqichlari",
+    options: [
+      { value: "NEW",              label: "Yangi lid" },
+      { value: "PROCESSED",        label: "Propushenniy" },
+      { value: "UC_1KPATX",        label: "Javob bermadi" },
+      { value: "UC_Q2U9EL",        label: "Qayta aloqa" },
+      { value: "UC_KXC3ZW",        label: "O'ylab ko'radi" },
+      { value: "UC_L28G68",        label: "Tashrif belgilandi" },
+      { value: "UC_5G8244",        label: "Kelmadi" },
+      { value: "UC_F8K4GI",        label: "Sifatsiz" },
+      { value: "UC_NAZK5J",        label: "Bekor bo'ldi" },
+      { value: "CONVERTED_CONSULT",label: "Tashrif buyurdi" },
+    ],
+  },
+  {
+    group: "🤝 Sdelka bosqichlari",
+    options: [
+      { value: "C1:NEW",           label: "Konsultatsiya" },
+      { value: "C1:IN_PROCESS",    label: "Jarayonda" },
+      { value: "C1:PREPARATION",   label: "Taklif tayyorlash" },
+      { value: "C1:PRESENTATION",  label: "Taqdimot" },
+      { value: "C1:CLIENT_APPROVED", label: "Mijoz manzur ko'rdi" },
+      { value: "C1:CONTRACT_SENT", label: "Shartnoma yuborildi" },
+      { value: "C1:AGREEMENT",     label: "Kelishuv" },
+      { value: "C1:FINAL_INVOICE", label: "To'lov" },
+      { value: "C1:WORK_STARTED",  label: "Ish boshlandi" },
+      { value: "WON",              label: "Sotuv bo'ldi" },
+      { value: "LOSE",             label: "Muvaffaqiyatsiz" },
+    ],
+  },
 ];
 
 const callStatusOptions = [
@@ -663,7 +692,13 @@ function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply,
           <label style={labelStyle}>
             Bosqich
             <select value={value.stage} onChange={(e) => update({ stage: e.target.value })} style={inputStyle}>
-              {callStageOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {callStageOptionGroups.map((g) =>
+                g.group
+                  ? <optgroup key={g.group} label={g.group}>
+                      {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </optgroup>
+                  : g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)
+              )}
             </select>
           </label>
 
