@@ -83,6 +83,11 @@ async function upsertLead(r, client) {
   const SOURCE_IG     = 'UC_3O8GTF';
   const SOURCE_TARGET = 'UC_89FPH6'; // Target (Facebook + Instagram Lead Ads)
 
+  // Normalizatsiyadan oldin original qiymatlarni saqlaymiz (Bitrix24 sync uchun)
+  const originalSourceId  = r.SOURCE_ID  || null;
+  const originalUtmSource = r.UTM_SOURCE || null;
+  const originalUtmMedium = r.UTM_MEDIUM || null;
+
   // UTM_SOURCE bo'lmasa yoki Bitrix24 forma nomi bo'lsa avto-to'ldirish
   let utmSource = r.UTM_SOURCE || null;
   let utmMedium = r.UTM_MEDIUM || null;
@@ -192,6 +197,18 @@ async function upsertLead(r, client) {
        ON CONFLICT DO NOTHING`,
       [leadId, val]
     );
+  }
+
+  // Agar UTM yoki source normalizatsiya qilingan bo'lsa — Bitrix24 da ham yangilaymiz
+  const bxUpdateFields = {};
+  if (sourceId  !== originalSourceId)  bxUpdateFields.SOURCE_ID  = sourceId;
+  if (utmSource !== originalUtmSource) bxUpdateFields.UTM_SOURCE = utmSource;
+  if (utmMedium !== originalUtmMedium) bxUpdateFields.UTM_MEDIUM = utmMedium;
+
+  if (Object.keys(bxUpdateFields).length > 0 && r.ID) {
+    const { bitrixCall } = require('./bitrix');
+    bitrixCall('crm.lead.update', { id: parseInt(r.ID), fields: bxUpdateFields })
+      .catch(e => console.warn(`[upsertLead] Bitrix24 UTM sync xatosi (#${r.ID}):`, e.message));
   }
 
   return leadId;
