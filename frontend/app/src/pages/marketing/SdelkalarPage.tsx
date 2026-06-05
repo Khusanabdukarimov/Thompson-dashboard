@@ -128,14 +128,12 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
 function RoleBadge({ role }: { role?: string | null }) {
   if (!role) return <span style={{ color: "var(--text3)", fontSize: 11 }}>—</span>;
   const r = role.toLowerCase();
-  const isHunter  = r.includes("hunter");
-  const isCloser  = r.includes("closer");
-  const color  = isHunter && isCloser ? "#9c27b0" : isHunter ? "#2196F3" : isCloser ? "#4caf50" : "#9E9E9E";
-  const bg     = isHunter && isCloser ? "rgba(156,39,176,0.12)" : isHunter ? "rgba(33,150,243,0.12)" : isCloser ? "rgba(76,175,80,0.12)" : "rgba(158,158,158,0.12)";
-  const label  = isHunter && isCloser ? "H+C" : isHunter ? "Hunter" : isCloser ? "Closer" : role;
+  const isHunter = r.includes("hunter");
+  const isCloser = r.includes("closer");
+  const color = isHunter && isCloser ? "#9c27b0" : isHunter ? "#2196F3" : isCloser ? "#4caf50" : "#9E9E9E";
   return (
-    <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, border: `1px solid ${color}40`, borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap" }}>
-      {label}
+    <span style={{ fontSize: 11, fontWeight: 500, color, whiteSpace: "nowrap" }}>
+      {role}
     </span>
   );
 }
