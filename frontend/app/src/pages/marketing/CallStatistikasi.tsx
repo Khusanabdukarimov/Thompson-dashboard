@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
-  getPyCallStats, getCallList, getCallFilterOptions, getCallStageStats,
+  getPyCallStats, getCallList, getCallFilterOptions,
   type CallDashboardFilter, type CallFilterOptions,
-  type PyCallStatsResult, type PyResponsibleCallStats, type CallStageStatsRow,
+  type PyCallStatsResult, type PyResponsibleCallStats,
 } from "@/lib/api/leads";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -797,11 +797,6 @@ export default function CallStatistikasi() {
     queryFn: getCallFilterOptions,
   });
 
-  const stageStatsQ = useQuery({
-    queryKey: ["call-stage-stats", apiFilter],
-    queryFn: () => getCallStageStats(apiFilter),
-    staleTime: 5 * 60 * 1000,
-  });
 
   const data: PyCallStatsResult | undefined = statsQ.data;
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
