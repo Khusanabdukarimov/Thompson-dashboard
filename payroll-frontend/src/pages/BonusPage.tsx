@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Pencil } from 'lucide-react';
-import { Topbar } from '../components/Topbar';
-import { Card } from '../components/Card';
-import { MetricCard } from '../components/MetricCard';
+import { Plus, Trash2, Pencil, Shield, Wallet, Users, BarChart2 } from 'lucide-react';
 import { Btn } from '../components/Btn';
 import { Modal, FormRow, inputStyle } from '../components/Modal';
 import { listBonusRules, createBonusRule, updateBonusRule, deleteBonusRule, listBonusAwards, listEmployees } from '../lib/api/payroll';
 import type { BonusRule, BonusRuleIn } from '../lib/api/payroll';
-import { fmtUsd } from '../lib/utils';
+import { fmtUsd, fmtUzs } from '../lib/utils';
 
 const TABS = ['closer', 'hunter', 'dizayner', 'neyming', 'sayohat'] as const;
 const TAB_LABEL: Record<string, string> = { closer: 'Closer', hunter: 'Hunter', dizayner: 'Dizayner', neyming: 'Neyming', sayohat: 'Sayohat bonuslari' };
-
 const EMPTY: BonusRuleIn = { name: '', trigger_text: '', period: 'monthly', target_role: 'closer', rule_type: 'manual', value_kind: 'fixed_usd', value: 0, is_active: true };
+
+function Toggle({ on }: { on: boolean }) {
+  return (
+    <div style={{ width: 40, height: 22, borderRadius: 11, background: on ? '#16a34a' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: 'background .2s' }}>
+      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: on ? 20 : 2, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+    </div>
+  );
+}
 
 export default function BonusPage() {
   const qc = useQueryClient();
@@ -30,21 +34,16 @@ export default function BonusPage() {
   const awardsQ = useQuery({ queryKey: ['bonus-awards', periodLabel], queryFn: () => listBonusAwards(periodLabel) });
   const empQ    = useQuery({ queryKey: ['employees'], queryFn: listEmployees });
 
-  const rules  = (rulesQ.data?.rules  ?? []).filter(r => r.target_role === activeTab);
+  const rules    = (rulesQ.data?.rules  ?? []).filter(r => r.target_role === activeTab);
   const allRules = rulesQ.data?.rules ?? [];
-  const awards = awardsQ.data?.awards ?? [];
+  const awards   = awardsQ.data?.awards ?? [];
   const employees = empQ.data?.employees ?? [];
-
-  const activeRules  = allRules.filter(r => r.is_active).length;
+  const activeRulesCount  = allRules.filter(r => r.is_active).length;
   const totalBudget  = awards.reduce((s, a) => s + a.amount_usd, 0);
-  const coveredEmpIds = new Set(awards.map(a => a.bitrix_user_id));
-  const avgBonus = coveredEmpIds.size ? totalBudget / coveredEmpIds.size : 0;
+  const coveredIds = new Set(awards.map(a => a.bitrix_user_id));
+  const avgBonus = coveredIds.size ? totalBudget / coveredIds.size : 0;
 
-  function openCreate() {
-    setEditing(null);
-    setForm({ ...EMPTY, target_role: activeTab });
-    setModal('create');
-  }
+  function openCreate() { setEditing(null); setForm({ ...EMPTY, target_role: activeTab }); setModal('create'); }
   function openEdit(r: BonusRule) {
     setEditing(r);
     setForm({ name: r.name, trigger_text: r.trigger_text, period: r.period, target_role: r.target_role, rule_type: r.rule_type, value_kind: r.value_kind, value: r.value, is_active: r.is_active });
@@ -64,82 +63,113 @@ export default function BonusPage() {
     await deleteBonusRule(id);
     qc.invalidateQueries({ queryKey: ['bonus-rules'] });
   }
-
   const set = (f: Partial<BonusRuleIn>) => setForm(p => ({ ...p, ...f }));
 
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <Topbar title="Bonus Qoidalari" />
-      <div style={{ padding: 24 }}>
+  const metrics = [
+    { label: 'FAOL BONUS QOIDALARI', value: activeRulesCount, sub: `+${allRules.length - activeRulesCount} yangi`, icon: Shield, color: '#3b82f6' },
+    { label: 'OYLIK BONUS BUDJETI', value: fmtUzs(totalBudget * 12500), sub: 'Tasdiqlangan', icon: Wallet, color: '#8b5cf6' },
+    { label: 'QAMRAB OLINGAN', value: coveredIds.size || employees.length, sub: 'Shtadagi xodimlar', icon: Users, color: '#06b6d4' },
+    { label: "O'RTACHA BONUS", value: avgBonus > 0 ? fmtUsd(avgBonus) : '0 UZS', sub: 'Bir kishiga', icon: BarChart2, color: '#10b981' },
+  ];
 
-        {/* Metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-          <MetricCard label="Faol bonus qoidalari" value={activeRules} sub={`+${allRules.length - activeRules} yangi`} />
-          <MetricCard label="Oylik bonus budjeti" value={fmtUsd(totalBudget)} sub="Tasdiqlangan" color="var(--accent)" />
-          <MetricCard label="Qamrab olingan" value={coveredEmpIds.size} sub={`${employees.length} tadagi xodimlar`} />
-          <MetricCard label="O'rtacha bonus" value={fmtUsd(avgBonus)} sub="Bir kishiga" color="var(--green)" />
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--content-bg)' }}>
+      {/* Header */}
+      <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 4, letterSpacing: '0.06em' }}>MASTER PANEL</span>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>Global Sozlamalar</h1>
+          </div>
+          <p style={{ fontSize: 12.5, color: '#94a3b8', margin: 0, maxWidth: 480 }}>
+            Kompaniya miqyosidagi bonus tizimi parametrlari. Ushbu sozlamalar barcha tegishli departamentlar uchun asosiy qoidalarni belgilaydi.
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer' }}
+        >
+          <Plus size={14} /> Yangi bonus qo'shish
+        </button>
+      </div>
+
+      <div style={{ padding: 24 }}>
+        {/* Metric cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+          {metrics.map(m => {
+            const Icon = m.icon;
+            return (
+              <div key={m.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--border)', padding: '18px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em' }}>{m.label}</span>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: `${m.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={15} color={m.color} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>{m.value}</div>
+                <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{m.sub}</div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', marginBottom: 20, gap: 4 }}>
+        <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: 0, gap: 0 }}>
           {TABS.map(t => (
-            <button key={t} onClick={() => setActiveTab(t)} style={{
-              padding: '10px 18px', fontSize: 13, fontWeight: 600,
-              borderBottom: activeTab === t ? '2px solid var(--accent)' : '2px solid transparent',
-              color: activeTab === t ? 'var(--accent)' : 'var(--text-muted)', marginBottom: -2, background: 'none',
-            }}>
-              {TAB_LABEL[t]}
-            </button>
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              style={{
+                padding: '11px 22px', fontSize: 13, fontWeight: 600, border: 'none',
+                borderBottom: activeTab === t ? '2.5px solid var(--accent)' : '2.5px solid transparent',
+                color: activeTab === t ? 'var(--accent)' : '#64748b',
+                background: 'none', cursor: 'pointer', marginBottom: -2, transition: 'color .15s',
+              }}
+            >{TAB_LABEL[t]}</button>
           ))}
         </div>
 
-        <Card style={{ padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>
-              {TAB_LABEL[activeTab]} bonuslari
-              {activeTab === 'neyming' && ' (Loyihalar bo\'yicha)'}
+        {/* Table */}
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              {TAB_LABEL[activeTab]} bonuslari{activeTab === 'neyming' ? ' (Loyihalar bo\'yicha)' : ''}
             </div>
-            <Btn onClick={openCreate}><Plus size={14} /> Yangi bonus qo'shish</Btn>
           </div>
-
-          {rules.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Bu kategoriya uchun bonus qoidalar yo'q</p>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
-                  {['BONUS NOMI', 'BONUS TURI', 'SHART', 'TARIFLAR', 'QIYMAT', 'HOLAT', 'AMAL'].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rules.map(r => (
-                  <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '12px', fontWeight: 600, fontSize: 13 }}>{r.name}</td>
-                    <td style={{ padding: '12px', fontSize: 13 }}>{r.value_kind === 'percent' ? 'Tarifli' : 'Summali bonus'}</td>
-                    <td style={{ padding: '12px', fontSize: 13, color: 'var(--text-muted)' }}>{r.trigger_text || r.period}</td>
-                    <td style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)' }}>Barcha tariflar</td>
-                    <td style={{ padding: '12px', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
-                      {r.value_kind === 'percent' ? `${r.value}%` : fmtUsd(r.value)}
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      <div style={{ width: 34, height: 20, borderRadius: 10, background: r.is_active ? 'var(--green)' : '#cbd5e0', position: 'relative', cursor: 'pointer' }}>
-                        <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: r.is_active ? 16 : 2, transition: 'left .2s' }} />
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <Btn small variant="outline" onClick={() => openEdit(r)}><Pencil size={12} /></Btn>
-                        <Btn small variant="danger" onClick={() => handleDelete(r.id)}><Trash2 size={12} /></Btn>
-                      </div>
-                    </td>
-                  </tr>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                {['BONUS NOMI', 'BONUS TURI', 'SHART', 'TARIFLAR', 'QIYMAT', 'HOLAT'].map(h => (
+                  <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em' }}>{h}</th>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
+              </tr>
+            </thead>
+            <tbody>
+              {rulesQ.isLoading ? (
+                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Yuklanmoqda...</td></tr>
+              ) : rules.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Bu kategoriya uchun bonus qoidalar yo'q</td></tr>
+              ) : rules.map(r => (
+                <tr key={r.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '13px 16px', fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{r.name}</td>
+                  <td style={{ padding: '13px 16px', fontSize: 13, color: '#475569' }}>{r.value_kind === 'percent' ? 'Tarifli' : 'Summali bonus'}</td>
+                  <td style={{ padding: '13px 16px', fontSize: 13, color: '#64748b' }}>{r.trigger_text || r.period}</td>
+                  <td style={{ padding: '13px 16px', fontSize: 12, color: '#94a3b8' }}>Barcha tariflar</td>
+                  <td style={{ padding: '13px 16px', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
+                    {r.value_kind === 'percent' ? `${r.value}%` : fmtUsd(r.value)}
+                  </td>
+                  <td style={{ padding: '13px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Toggle on={r.is_active} />
+                      <button onClick={() => openEdit(r)} style={{ color: '#94a3b8', background: 'none', padding: 3 }}><Pencil size={13} /></button>
+                      <button onClick={() => handleDelete(r.id)} style={{ color: '#94a3b8', background: 'none', padding: 3 }}><Trash2 size={13} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <Modal open={!!modal} title={modal === 'edit' ? 'Bonus qoidani tahrirlash' : 'Yangi bonus qoida'} onClose={() => setModal(null)}>

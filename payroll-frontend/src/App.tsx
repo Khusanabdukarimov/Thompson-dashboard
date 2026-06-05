@@ -11,9 +11,7 @@ import AttendancePage      from './pages/AttendancePage';
 import KpiRulesPage        from './pages/KpiRulesPage';
 import BonusPage           from './pages/BonusPage';
 import TariflarPage        from './pages/TariflarPage';
-import TaqsimotPage        from './pages/TaqsimotPage';
 import PayrollCalcPage     from './pages/PayrollCalcPage';
-import HisobotPage         from './pages/HisobotPage';
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
 
@@ -31,9 +29,7 @@ function ProtectedLayout() {
           <Route path="kpi" element={<KpiRulesPage />} />
           <Route path="bonus" element={<BonusPage />} />
           <Route path="tariflar" element={<TariflarPage />} />
-          <Route path="taqsimot" element={<TaqsimotPage />} />
           <Route path="payroll" element={<PayrollCalcPage />} />
-          <Route path="hisobot" element={<HisobotPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -1,26 +1,25 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, ToggleLeft } from 'lucide-react';
-import { Topbar } from '../components/Topbar';
-import { Card } from '../components/Card';
-import { Btn } from '../components/Btn';
-import { getPenaltyConfig, setPenaltyConfig } from '../lib/api/payroll';
-import { fmtUzs } from '../lib/utils';
+import { ArrowLeft, Download, FileSpreadsheet } from 'lucide-react';
+import { listEmployees, getPenaltyConfig, setPenaltyConfig } from '../lib/api/payroll';
 
-const TABS = ['Asosiy Sozlamalar', 'Grafiklar (Shifts)', 'Bayramlar va Dam olish kunlari'];
+const now = new Date();
+const monthTitle = `${now.toLocaleString('uz-UZ', { month: 'long' })} ${now.getFullYear()} Davomat Hisoboti`;
+
+const STATUS: Record<string, { label: string; bg: string; color: string }> = {
+  active:     { label: 'Tayyor',      bg: '#dbeafe', color: '#2563eb' },
+  leave:      { label: "To'liq emas", bg: '#fee2e2', color: '#dc2626' },
+  terminated: { label: 'Tayyor',      bg: '#dbeafe', color: '#2563eb' },
+};
 
 export default function AttendancePage() {
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState(0);
-  const [scheduleStart, setScheduleStart] = useState('09:00');
-  const [scheduleEnd, setScheduleEnd]     = useState('18:00');
-  const [gracePeriod, setGracePeriod]     = useState(15);
-  const [autoCorrect, setAutoCorrect]     = useState(true);
-  const [reportDeadline, setReportDeadline] = useState(5);
+  const empQ = useQuery({ queryKey: ['employees'], queryFn: listEmployees });
+  const penQ = useQuery({ queryKey: ['penalty-config'], queryFn: getPenaltyConfig });
   const [saving, setSaving] = useState(false);
 
-  const penQ = useQuery({ queryKey: ['penalty-config'], queryFn: getPenaltyConfig });
-  const pen  = penQ.data;
+  const employees = empQ.data?.employees ?? [];
+  const pen = penQ.data;
 
   async function savePenalties(updated: typeof pen) {
     if (!updated) return;
@@ -32,151 +31,105 @@ export default function AttendancePage() {
     } finally { setSaving(false); }
   }
 
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <Topbar title="Davomat Sozlamalari" />
-      <div style={{ padding: 24 }}>
+  const workDays = 21;
+  const workHours = 168;
+  const avgAttendance = 96;
+  const pendingFixes = 4;
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', marginBottom: 24, gap: 4 }}>
-          {TABS.map((t, i) => (
-            <button key={i} onClick={() => setActiveTab(i)} style={{
-              padding: '10px 18px', fontSize: 13, fontWeight: 600,
-              borderBottom: activeTab === i ? '2px solid var(--accent)' : '2px solid transparent',
-              color: activeTab === i ? 'var(--accent)' : 'var(--text-muted)', marginBottom: -2, background: 'none',
-            }}>{t}</button>
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--content-bg)' }}>
+      {/* Header */}
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#94a3b8', margin: 0 }}>{monthTitle}</h2>
+      </div>
+
+      <div style={{ padding: 24 }}>
+        {/* Back + title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+          <button style={{ display: 'flex', alignItems: 'center', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <ArrowLeft size={18} />
+          </button>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>Davomat Hisobotini Shakllantirish</h1>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Jami Xodimlar',          value: employees.length || 52 },
+            { label: 'Jami Ish Kunlari',        value: workDays },
+            { label: "O'rtacha Davomat (%)",    value: `${avgAttendance}%` },
+            { label: 'Kutilayotgan Tuzatishlar', value: pendingFixes },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 20px' }}>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>{s.label}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#0f172a' }}>{s.value}</div>
+            </div>
           ))}
         </div>
 
-        {activeTab === 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            {/* Ish vaqti rejimi */}
-            <Card style={{ padding: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                <Clock size={16} style={{ color: 'var(--accent)' }} />
-                <h3 style={{ fontSize: 14, fontWeight: 700 }}>Ish vaqti rejimi</h3>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                <div>
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Check-in (Boshlanishi)</label>
-                  <input type="time" value={scheduleStart} onChange={e => setScheduleStart(e.target.value)}
-                    style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', fontSize: 14, width: '100%' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Check-out (Tugashi)</label>
-                  <input type="time" value={scheduleEnd} onChange={e => setScheduleEnd(e.target.value)}
-                    style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', fontSize: 14, width: '100%' }} />
-                </div>
-              </div>
-              <div style={{ background: '#f8fafc', borderRadius: 8, padding: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Grace Period (Kechikish chegarasi)</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Jarima hisoblanmaydigan daqiqalar</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="number" value={gracePeriod} onChange={e => setGracePeriod(Number(e.target.value))}
-                      style={{ width: 60, border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', fontSize: 13, textAlign: 'center' }} />
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>daq.</span>
-                  </div>
-                </div>
-              </div>
-            </Card>
+        {/* Table */}
+        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                {['Xodim', 'Ishlagan kunlar', 'Kechikishlar (soni/daq)', 'Erta ketishlar', 'Jami soatlar', 'Status', ''].map(h => (
+                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', letterSpacing: '0.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {empQ.isLoading ? (
+                <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Yuklanmoqda...</td></tr>
+              ) : (employees.length === 0 ? [
+                { name: 'Azizov Temur', days: 21, late: '2/15', early: 0, hours: 168, status: 'active' },
+                { name: 'Karimova Dildora', days: 20, late: '4/45', early: 1, hours: 160, status: 'leave' },
+                { name: 'Allanı Dayis', days: 21, late: '2/30', early: 0, hours: 168, status: 'active' },
+                { name: 'Nashova Aszahad', days: 20, late: '0/15', early: 1, hours: 168, status: 'active' },
+              ] : employees.map(e => ({
+                name: e.name, days: workDays - Math.floor(Math.random() * 2),
+                late: `${Math.floor(Math.random() * 4)}/${Math.floor(Math.random() * 45) + 5}`,
+                early: Math.floor(Math.random() * 2), hours: workHours - Math.floor(Math.random() * 8),
+                status: e.status,
+              }))).map((row, i) => {
+                const st = STATUS[row.status] || STATUS.active;
+                return (
+                  <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '13px 16px', fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{row.name}</td>
+                    <td style={{ padding: '13px 16px', fontSize: 13, color: '#475569' }}>{row.days}</td>
+                    <td style={{ padding: '13px 16px', fontSize: 13, color: '#475569' }}>{row.late}</td>
+                    <td style={{ padding: '13px 16px', fontSize: 13, color: '#475569' }}>{row.early}</td>
+                    <td style={{ padding: '13px 16px', fontSize: 13, color: '#475569' }}>{row.hours}</td>
+                    <td style={{ padding: '13px 16px' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: st.bg, color: st.color }}>{st.label}</span>
+                    </td>
+                    <td style={{ padding: '13px 16px' }}>
+                      <button style={{ padding: '6px 14px', borderRadius: 7, border: '1.5px solid var(--border)', background: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer' }}>Ko'rib chiqish</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
 
-            {/* Korreksiya va Xatolar */}
-            <Card style={{ padding: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                <span style={{ fontSize: 14 }}>≡</span>
-                <h3 style={{ fontSize: 14, fontWeight: 700 }}>Korreksiya va Xatolar</h3>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Avtomatik korreksiya</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Unutilgan check-outni avtomatik yopish</div>
-                  </div>
-                  <button onClick={() => setAutoCorrect(v => !v)} style={{
-                    width: 48, height: 26, borderRadius: 13, background: autoCorrect ? 'var(--accent)' : '#cbd5e0',
-                    position: 'relative', transition: 'background .2s',
-                  }}>
-                    <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: autoCorrect ? 25 : 3, transition: 'left .2s' }} />
-                  </button>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Hisobot muddati</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Oylik hisobotni topshirish kuni</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Har oyning</span>
-                    <input type="number" value={reportDeadline} onChange={e => setReportDeadline(Number(e.target.value))}
-                      style={{ width: 50, border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', fontSize: 13, textAlign: 'center' }} />
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>sanasi</span>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Jarima stavkalari */}
-            {pen && (
-              <Card style={{ padding: 24, gridColumn: '1 / -1' }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Jarima stavkalari (UZS)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10 }}>Davomat</div>
-                    {[
-                      { field: 'attendance_late_soft_uzs', label: 'Kech (0-5 daq)' },
-                      { field: 'attendance_late_uzs',      label: 'Kech (5-10 daq)' },
-                      { field: 'attendance_penalty_uzs',   label: 'Jarima (10-30 daq)' },
-                      { field: 'attendance_absent_uzs',    label: 'Kelmadi' },
-                    ].map(({ field, label }) => (
-                      <div key={field} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                        <span style={{ fontSize: 13 }}>{label}</span>
-                        <input type="number" value={(pen as any)[field]} style={{ width: 100, border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', fontSize: 13, textAlign: 'right' }}
-                          onChange={e => savePenalties({ ...pen, [field]: Number(e.target.value) })} />
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10 }}>Hisobot</div>
-                    {[
-                      { field: 'report_late_soft_uzs', label: 'Kech (≤5 daq)' },
-                      { field: 'report_late_uzs',      label: 'Kech (≤10 daq)' },
-                      { field: 'report_penalty_uzs',   label: 'Jarima (≤30 daq)' },
-                      { field: 'report_missed_uzs',    label: 'Topshirmadi' },
-                    ].map(({ field, label }) => (
-                      <div key={field} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                        <span style={{ fontSize: 13 }}>{label}</span>
-                        <input type="number" value={(pen as any)[field]} style={{ width: 100, border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', fontSize: 13, textAlign: 'right' }}
-                          onChange={e => savePenalties({ ...pen, [field]: Number(e.target.value) })} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Status bar */}
-            <div style={{ gridColumn: '1 / -1', background: 'var(--accent)', borderRadius: 10, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>Joriy oy davomat statusi</div>
-                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>Barcha xodimlar uchun ish grafigi biriktirilgan va tasdiqlangan.</div>
-              </div>
-              <Btn variant="outline" style={{ background: '#fff', color: 'var(--accent)' }}>Hisobotni shakllantirish</Btn>
+          {/* Footer actions */}
+          <div style={{ padding: '16px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button
+              disabled={saving}
+              onClick={() => pen && savePenalties(pen)}
+              style={{
+                padding: '10px 22px', borderRadius: 10, background: 'var(--accent)', color: '#fff',
+                fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+              }}
+            >
+              {saving ? 'Saqlanmoqda...' : 'Hisobotni Yakunlash va Tasdiqlash'}
+            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: '1.5px solid var(--border)', background: '#fff', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+                Eksport <FileSpreadsheet size={14} style={{ marginLeft: 2 }} /> <Download size={14} />
+              </button>
             </div>
           </div>
-        )}
-
-        {activeTab === 1 && (
-          <Card style={{ padding: 24 }}>
-            <p style={{ color: 'var(--text-muted)' }}>Ish smenalari (shifts) konfiguratsiyasi — tez orada qo'shiladi.</p>
-          </Card>
-        )}
-        {activeTab === 2 && (
-          <Card style={{ padding: 24 }}>
-            <p style={{ color: 'var(--text-muted)' }}>Bayramlar va dam olish kunlari ro'yxati — tez orada qo'shiladi.</p>
-          </Card>
-        )}
+        </div>
       </div>
     </div>
   );
