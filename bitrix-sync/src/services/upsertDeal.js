@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const stageResolver = require('./stageResolver');
+const { toUSD } = require('./currencyRates');
 
 const DEAL_CANCEL_REASON_MAP = {
   '1286': "Qimmatlik qildi",
@@ -44,6 +45,12 @@ async function upsertDeal(r, client) {
   const stageId = await stageResolver.resolve('deal', r.STAGE_ID, r.STAGE_SEMANTIC_ID);
   const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
   const contactId = r.CONTACT_ID ? parseInt(r.CONTACT_ID) : null;
+  const currency = r.CURRENCY_ID || 'USD';
+
+  const rawPaidSum     = r.UF_CRM_1780643524 ? parseFloat(r.UF_CRM_1780643524) : null;
+  const rawRemaining   = r.UF_CRM_1780643502 != null ? parseFloat(r.UF_CRM_1780643502) : null;
+  const paidSumUSD     = await toUSD(rawPaidSum,   currency);
+  const remainingSumUSD = await toUSD(rawRemaining, currency);
 
   const { rows } = await db.query(
     `INSERT INTO deals (
@@ -86,8 +93,8 @@ async function upsertDeal(r, client) {
       parseDate(r.UF_CRM_1779450406),
       parseDate(r.UF_CRM_10_1780604989),
       parseDate(r.UF_CRM_1779450159),
-      r.UF_CRM_1780643524 ? parseFloat(r.UF_CRM_1780643524) : null,
-      r.UF_CRM_1780643502 != null ? parseFloat(r.UF_CRM_1780643502) : null,
+      paidSumUSD,
+      remainingSumUSD,
       ufEnum(r.UF_CRM_69EBC105EAA93, DEAL_CANCEL_REASON_MAP),
       contactId,
       parseDate(r.BEGINDATE),
