@@ -426,39 +426,59 @@ def api_meta_campaign_forms(ad_account_id: Optional[str] = None):
 
 @app.get("/api/meta/page-forms")
 def api_meta_page_forms():
-    """Fetch all leadgen forms directly via page access token — returns real leads_count.
+    """Return per-form lead counts sourced from our facebook_leads DB table.
 
-    The user token is exchanged for page tokens via /me/accounts; page tokens have
-    the leads_retrieval scope needed for accurate leads_count on each form.
+    The Meta Graph API requires a Page Access Token to fetch leadgen_forms,
+    but our token is a user/system token without direct page ownership.
+    Instead we count leads from the facebook_leads table (populated by webhooks)
+    and try to enrich form names from the Meta campaign creative data.
     """
     import requests as _req
     token = meta_svc._token()
     graph = meta_svc.GRAPH
 
-    # Step 1: get pages + their page-level tokens (which have leads_retrieval)
-    pr = _req.get(f"{graph}/me/accounts", params={
-        "access_token": token, "fields": "id,name,access_token", "limit": 50
-    }, timeout=20)
-    pages = pr.json().get("data", [])
-
+    # ── Step 1: DB lead counts per form_id ──────────────────────────
     all_forms: dict = {}
-    for page in pages:
-        page_token = page.get("access_token") or token
-        page_id    = page.get("id", "")
-        fr = _req.get(f"{graph}/{page_id}/leadgen_forms", params={
-            "access_token": page_token,
-            "fields": "id,name,status,leads_count,created_time",
-            "limit": 100,
-        }, timeout=20)
-        for f in fr.json().get("data", []):
-            all_forms[f["id"]] = {
-                "form_id":      f["id"],
-                "form_name":    f.get("name", ""),
-                "status":       f.get("status", ""),
-                "leads_count":  f.get("leads_count") or 0,
-                "created_time": f.get("created_time", ""),
-                "page_name":    page.get("name", ""),
+    try:
+        with bx_engine.connect() as conn:
+            rows = conn.execute(_text("""
+                SELECT form_id,
+                       COUNT(*)::int        AS leads_count,
+                       MAX(created_time)    AS last_lead
+                FROM facebook_leads
+                WHERE form_id IS NOT NULL
+                GROUP BY form_id
+                ORDER BY leads_count DESC
+            """)).fetchall()
+        for r in rows:
+            all_forms[r[0]] = {
+                "form_id":     r[0],
+                "form_name":   r[0],   # placeholder — enriched below
+                "status":      "ACTIVE",
+                "leads_count": r[1],
+                "created_time": str(r[2]) if r[2] else "",
             }
+    except Exception as e:
+        print(f"[page-forms] DB query error: {e}")
+
+    # ── Step 2: enrich form names from Meta campaign creatives ──────
+    try:
+        ad_account_id = os.getenv("FB_AD_ACCOUNT_ID", "")
+        nr = _req.get(f"{graph}/{ad_account_id}/ads", params={
+            "access_token": token,
+            "fields": "creative{lead_gen_form{id,name,status}}",
+            "limit": 500,
+        }, timeout=20)
+        for ad in nr.json().get("data", []):
+            form = (ad.get("creative") or {}).get("lead_gen_form")
+            if not form:
+                continue
+            fid = form.get("id")
+            if fid and fid in all_forms:
+                all_forms[fid]["form_name"] = form.get("name", fid)
+                all_forms[fid]["status"]    = form.get("status", "ACTIVE")
+    except Exception as e:
+        print(f"[page-forms] Meta enrich error: {e}")
 
     return {"forms": sorted(all_forms.values(), key=lambda x: -(x["leads_count"] or 0))}
 
