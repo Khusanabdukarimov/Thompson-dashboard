@@ -206,8 +206,11 @@ export type PageForm = {
   page_name:    string;
 };
 
-export function getPageForms() {
-  return apiGet<{ forms: PageForm[] }>('/api/meta/page-forms');
+export function getPageForms(month?: string, year?: number) {
+  return apiGet<{ forms: PageForm[] }>('/api/meta/page-forms', {
+    ...(month ? { month } : {}),
+    ...(year  ? { year: String(year) } : {}),
+  });
 }
 
 export function getFormLeads(formId: string, campaignId?: string, from?: string, to?: string) {

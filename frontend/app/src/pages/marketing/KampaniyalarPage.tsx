@@ -97,7 +97,7 @@ export default function KampaniyalarPage() {
   const insightsQ  = useQuery({ queryKey: ["meta-insights",  month, year], queryFn: () => getMetaInsights(month, year),  staleTime: 60_000 });
   const campaignsQ = useQuery({ queryKey: ["meta-campaigns", month, year], queryFn: () => getMetaCampaigns(month, year), staleTime: 60_000 });
   const formsQ     = useQuery({ queryKey: ["campaign-forms", month, year], queryFn: () => getCampaignForms(month, year), staleTime: 60_000 });
-  const pageFormsQ = useQuery({ queryKey: ["page-forms"],                  queryFn: getPageForms,                        staleTime: 5 * 60_000 });
+  const pageFormsQ = useQuery({ queryKey: ["page-forms", month, year],     queryFn: () => getPageForms(month, year),     staleTime: 5 * 60_000 });
   const kunlikQ    = useQuery({ queryKey: ["kunlik-hisobot", month, year], queryFn: () => getKunlikHisobot(month, year), staleTime: 60_000 });
 
   const ins  = insightsQ.data?.data;

@@ -424,32 +424,48 @@ def api_meta_campaign_forms(ad_account_id: Optional[str] = None):
     return {"count": len(campaigns), "campaigns": campaigns}
 
 
-@app.get("/api/meta/page-forms")
-def api_meta_page_forms():
-    """Return per-form lead counts sourced from our facebook_leads DB table.
+MONTH_NAMES_MAP = {
+    "yanvar": 1, "fevral": 2, "mart": 3, "aprel": 4, "may": 5, "iyun": 6,
+    "iyul": 7, "avgust": 8, "sentabr": 9, "oktabr": 10, "noyabr": 11, "dekabr": 12,
+}
 
-    The Meta Graph API requires a Page Access Token to fetch leadgen_forms,
-    but our token is a user/system token without direct page ownership.
-    Instead we count leads from the facebook_leads table (populated by webhooks)
-    and try to enrich form names from the Meta campaign creative data.
+@app.get("/api/meta/page-forms")
+def api_meta_page_forms(month: Optional[str] = None, year: Optional[int] = None):
+    """Return per-form lead counts sourced from our facebook_leads DB table,
+    optionally filtered by month/year (same filter as the rest of the page).
     """
     import requests as _req
     token = meta_svc._token()
     graph = meta_svc.GRAPH
 
+    # ── Build date filter ────────────────────────────────────────────
+    date_filter = ""
+    date_params: dict = {}
+    if month and year:
+        m = MONTH_NAMES_MAP.get(month.lower())
+        if m:
+            import calendar
+            last_day = calendar.monthrange(year, m)[1]
+            date_params = {
+                "since": f"{year}-{m:02d}-01",
+                "until": f"{year}-{m:02d}-{last_day:02d}",
+            }
+            date_filter = "AND created_time::date BETWEEN :since AND :until"
+
     # ── Step 1: DB lead counts per form_id ──────────────────────────
     all_forms: dict = {}
     try:
         with bx_engine.connect() as conn:
-            rows = conn.execute(text("""
+            rows = conn.execute(text(f"""
                 SELECT form_id,
                        COUNT(*)::int        AS leads_count,
                        MAX(created_time)    AS last_lead
                 FROM facebook_leads
                 WHERE form_id IS NOT NULL
+                {date_filter}
                 GROUP BY form_id
                 ORDER BY leads_count DESC
-            """)).fetchall()
+            """), date_params).fetchall()
         for r in rows:
             all_forms[r[0]] = {
                 "form_id":     r[0],
