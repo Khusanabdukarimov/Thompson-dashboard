@@ -11,6 +11,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 APP_DIR = Path(__file__).resolve().parent          # backend/app/
@@ -23,7 +24,8 @@ from datetime import date
 from app.api.routes import payroll as payroll_routes
 from app.api.routes import call_stats as call_stats_routes
 from app.core import auth as auth_module
-from app.db import init_db
+from app.db import init_db, engine as _db_engine
+from sqlmodel import Session as _Session, select as sql_select
 from app.db_bx import init_bx_db, bx_engine
 from sqlalchemy import text
 from app.services import bitrix
@@ -34,6 +36,11 @@ app = FastAPI(openapi_url="/api/openapi.json", docs_url="/api/docs")
 
 # Auth middleware (no-op unless AUTH_ENABLED=true env)
 auth_module.install_auth_middleware(app)
+
+# Serve uploaded avatars
+AVATAR_DIR = BACKEND_DIR / "data" / "avatars"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=str(AVATAR_DIR)), name="avatars")
 
 
 @app.on_event("startup")
@@ -417,6 +424,45 @@ def api_meta_campaign_forms(ad_account_id: Optional[str] = None):
     return {"count": len(campaigns), "campaigns": campaigns}
 
 
+@app.get("/api/meta/page-forms")
+def api_meta_page_forms():
+    """Fetch all leadgen forms directly via page access token — returns real leads_count.
+
+    The user token is exchanged for page tokens via /me/accounts; page tokens have
+    the leads_retrieval scope needed for accurate leads_count on each form.
+    """
+    import requests as _req
+    token = meta_svc._token()
+    graph = meta_svc.GRAPH
+
+    # Step 1: get pages + their page-level tokens (which have leads_retrieval)
+    pr = _req.get(f"{graph}/me/accounts", params={
+        "access_token": token, "fields": "id,name,access_token", "limit": 50
+    }, timeout=20)
+    pages = pr.json().get("data", [])
+
+    all_forms: dict = {}
+    for page in pages:
+        page_token = page.get("access_token") or token
+        page_id    = page.get("id", "")
+        fr = _req.get(f"{graph}/{page_id}/leadgen_forms", params={
+            "access_token": page_token,
+            "fields": "id,name,status,leads_count,created_time",
+            "limit": 100,
+        }, timeout=20)
+        for f in fr.json().get("data", []):
+            all_forms[f["id"]] = {
+                "form_id":      f["id"],
+                "form_name":    f.get("name", ""),
+                "status":       f.get("status", ""),
+                "leads_count":  f.get("leads_count") or 0,
+                "created_time": f.get("created_time", ""),
+                "page_name":    page.get("name", ""),
+            }
+
+    return {"forms": sorted(all_forms.values(), key=lambda x: -(x["leads_count"] or 0))}
+
+
 @app.get("/api/meta/accounts")
 def api_meta_accounts():
     return meta_svc.get_ad_accounts()
@@ -502,7 +548,7 @@ def _classify_source(utm_source, source_id=None):
 
 
 def _stage_is_won(stage_id):
-    s = (stage_id or "").upper()
+    s = str(stage_id or "").upper()
     return s == "WON" or s.endswith(":WON")
 
 
@@ -585,6 +631,237 @@ def api_marketing_bitrix_daily(month: str, year: int):
         result[src]["qual_leads"][day - 1] += 1
 
     return {"month": month, "year": year, "data": result}
+
+
+@app.get("/api/marketing/kunlik")
+def api_marketing_kunlik(month: str, year: int):
+    """Daily CRM metrics from Bitrix24 — Facebook (target) and Instagram only.
+
+    Metrics per section (target / instagram), per day array:
+      leads        — total leads by DATE_CREATE
+      qual_leads   — leads at qualifying stages (Sifatli lid)
+      meetings     — deals at "Uchrashuv o'tkazildi" stage (consultation done)
+      deals        — deals at "Kelishuv bo'ldi" stage
+      deals_sum    — opportunity sum at Kelishuv stage
+      sales_count  — deals at "Ish boshlandi"/"Sotuv bo'ldi" stages
+      sales_sum    — opportunity sum at Sotuv/Ish boshlandi stages
+      cancelled    — leads at "Bekor bo'ldi" stage
+    """
+    from app.db_bx import bx_engine as _bxe
+    from sqlalchemy import text as _text
+
+    month_key = month.lower()
+    month_num = meta_svc.MONTH_NAMES.get(month_key)
+    if not month_num:
+        raise HTTPException(status_code=400, detail=f"Unknown month: {month}")
+
+    days_in_month = _calendar.monthrange(year, month_num)[1]
+    since = f"{year}-{month_num:02d}-01"
+    until = f"{year}-{month_num:02d}-{days_in_month:02d}"
+
+    _METRICS = ["leads", "qual_leads", "meetings", "deals", "deals_sum", "sales_count", "sales_sum", "cancelled"]
+    result = {sec: {m: [0.0] * days_in_month for m in _METRICS} for sec in ("target", "instagram")}
+
+    # SQL: utm_source → bucket, with source_id fallback
+    def _src_expr(utm_col: str, sid_col: str) -> str:
+        return f"""
+        CASE
+            WHEN LOWER(COALESCE({utm_col},'')) IN ('instagram','ig','instagram_ads','ig_ads') THEN 'instagram'
+            WHEN LOWER(COALESCE({utm_col},'')) IN ('facebook','fb','meta','target','facebook_ads','fb_ads','target_ads') THEN 'target'
+            WHEN UPPER(COALESCE({sid_col},'')) IN ('INSTAGRAM','IG') THEN 'instagram'
+            WHEN UPPER(COALESCE({sid_col},'')) IN ('FACEBOOK','FB','META','TARGET') THEN 'target'
+        END
+        """
+
+    with _bxe.connect() as conn:
+        # ── LEAD metrics ───────────────────────────────────────────────
+        lead_expr = _src_expr("l.utm_source", "l.source_id")
+        lead_sql = _text(f"""
+            WITH src AS (
+                SELECT
+                    EXTRACT(DAY FROM l.date_create)::int AS day,
+                    ({lead_expr}) AS bucket,
+                    s.bitrix_id AS stage_bid,
+                    COUNT(*) AS cnt
+                FROM leads l
+                JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
+                WHERE l.date_create::date BETWEEN :since AND :until
+                GROUP BY 1, 2, 3
+            )
+            SELECT day, bucket, stage_bid, cnt FROM src WHERE bucket IS NOT NULL
+        """)
+        for day, bucket, stage_bid, cnt in conn.execute(lead_sql, {"since": since, "until": until}):
+            if bucket not in result or day < 1 or day > days_in_month:
+                continue
+            idx = int(day) - 1
+            result[bucket]["leads"][idx] += int(cnt)
+            if stage_bid in {"IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68", "CONVERTED"}:
+                result[bucket]["qual_leads"][idx] += int(cnt)
+            if stage_bid in {"UC_NAZK5J", "JUNK"}:
+                result[bucket]["cancelled"][idx] += int(cnt)
+
+        # ── DEAL metrics: meetings + kelishuv (by date_create) ────────
+        deal_expr = _src_expr("d.utm_source", "d.source_id")
+        deal_sql = _text(f"""
+            WITH src AS (
+                SELECT
+                    EXTRACT(DAY FROM d.date_create)::int AS day,
+                    ({deal_expr}) AS bucket,
+                    s.bitrix_id AS stage_bid,
+                    COALESCE(d.opportunity, 0) AS opp
+                FROM deals d
+                JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
+                WHERE d.date_create::date BETWEEN :since AND :until
+            )
+            SELECT day, bucket, stage_bid, opp FROM src WHERE bucket IS NOT NULL
+        """)
+        for day, bucket, stage_bid, opp in conn.execute(deal_sql, {"since": since, "until": until}):
+            if bucket not in result or day < 1 or day > days_in_month:
+                continue
+            idx = int(day) - 1
+            opp_f = float(opp)
+            if stage_bid == "NEW":
+                result[bucket]["meetings"][idx] += 1
+            if stage_bid == "UC_W35V62":
+                result[bucket]["deals"][idx] += 1
+                result[bucket]["deals_sum"][idx] += opp_f
+
+        # ── DEAL metrics: sales by REAL sale date ───
+        # uf_bp_sale_date (BP field) takes priority; fallback to uf_payment_date (to'lov sanasi)
+        sales_sql = _text(f"""
+            WITH src AS (
+                SELECT
+                    EXTRACT(DAY FROM COALESCE(d.uf_bp_sale_date, d.uf_payment_date))::int AS day,
+                    ({deal_expr}) AS bucket,
+                    COALESCE(d.uf_paid_sum, 0) AS opp
+                FROM deals d
+                WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+                  AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date) IS NOT NULL
+                  AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN :since AND :until
+            )
+            SELECT day, bucket, opp FROM src WHERE bucket IS NOT NULL
+        """)
+        for day, bucket, opp in conn.execute(sales_sql, {"since": since, "until": until}):
+            if bucket not in result or day < 1 or day > days_in_month:
+                continue
+            idx = int(day) - 1
+            result[bucket]["sales_count"][idx] += 1
+            result[bucket]["sales_sum"][idx] += float(opp)
+
+    # Convert float arrays to int where appropriate
+    int_keys = {"leads", "qual_leads", "meetings", "deals", "sales_count", "cancelled"}
+    for sec in result.values():
+        for k in int_keys:
+            sec[k] = [int(v) for v in sec[k]]
+
+    return {"month": month, "year": year, "data": result}
+
+
+@app.get("/api/marketing/kunlik-meta")
+def api_marketing_kunlik_meta(month: str, year: int):
+    """Return saved plan targets and day overrides for the Kunlik hisobot table."""
+    from app.models import KunlikPlan, KunlikOverride
+    month = month.lower()
+    with _Session(_db_engine) as s:
+        plans_rows = s.exec(
+            sql_select(KunlikPlan).where(
+                KunlikPlan.month == month, KunlikPlan.year == year
+            )
+        ).all()
+        override_rows = s.exec(
+            sql_select(KunlikOverride).where(
+                KunlikOverride.month == month, KunlikOverride.year == year
+            )
+        ).all()
+
+    plans: dict = {"target": {}, "instagram": {}}
+    for row in plans_rows:
+        if row.section in plans:
+            plans[row.section][row.metric_key] = row.value
+
+    overrides: dict = {"target": {}, "instagram": {}}
+    for row in override_rows:
+        if row.section in overrides:
+            sec = overrides[row.section]
+            if row.metric_key not in sec:
+                sec[row.metric_key] = {}
+            sec[row.metric_key][row.day] = row.value
+
+    return {"plans": plans, "overrides": overrides}
+
+
+class KunlikPlanBody(BaseModel):
+    section: str
+    metric_key: str
+    month: str
+    year: int
+    value: float
+
+
+@app.put("/api/marketing/kunlik-plan")
+def api_marketing_kunlik_plan(body: KunlikPlanBody):
+    """Upsert a monthly plan target for one metric."""
+    from app.models import KunlikPlan
+    month = body.month.lower()
+    with _Session(_db_engine) as s:
+        existing = s.exec(
+            sql_select(KunlikPlan).where(
+                KunlikPlan.section == body.section,
+                KunlikPlan.metric_key == body.metric_key,
+                KunlikPlan.month == month,
+                KunlikPlan.year == body.year,
+            )
+        ).first()
+        if existing:
+            existing.value = body.value
+            s.add(existing)
+        else:
+            s.add(KunlikPlan(
+                section=body.section, metric_key=body.metric_key,
+                month=month, year=body.year, value=body.value,
+            ))
+        s.commit()
+    return {"ok": True}
+
+
+class KunlikOverrideBody(BaseModel):
+    section: str
+    metric_key: str
+    month: str
+    year: int
+    day: int
+    value: Optional[float]
+
+
+@app.put("/api/marketing/kunlik-override")
+def api_marketing_kunlik_override(body: KunlikOverrideBody):
+    """Upsert or delete a single-day override value."""
+    from app.models import KunlikOverride
+    month = body.month.lower()
+    with _Session(_db_engine) as s:
+        existing = s.exec(
+            sql_select(KunlikOverride).where(
+                KunlikOverride.section == body.section,
+                KunlikOverride.metric_key == body.metric_key,
+                KunlikOverride.month == month,
+                KunlikOverride.year == body.year,
+                KunlikOverride.day == body.day,
+            )
+        ).first()
+        if body.value is None:
+            if existing:
+                s.delete(existing)
+        else:
+            if existing:
+                existing.value = body.value
+                s.add(existing)
+            else:
+                s.add(KunlikOverride(
+                    section=body.section, metric_key=body.metric_key,
+                    month=month, year=body.year, day=body.day, value=body.value,
+                ))
+        s.commit()
+    return {"ok": True}
 
 
 @app.api_route("/install", methods=["GET", "POST", "HEAD"], response_class=HTMLResponse)

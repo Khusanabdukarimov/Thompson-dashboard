@@ -354,12 +354,12 @@ router.get('/plans/:id/distribution', async (req, res) => {
     const actualsRes = allIds.length ? await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(SUM(d.opportunity), 0)::numeric AS actual_sales,
+        COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS actual_sales,
         COUNT(*)::int                             AS deal_count
       FROM deals d
-      JOIN stages s ON s.id = d.stage_id AND s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
+        AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -479,13 +479,13 @@ router.get('/plans/:id/progress', async (req, res) => {
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date::text AS close_date,
-        SUM(d.opportunity)::numeric                                      AS amount
+        COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date::text AS close_date,
+        SUM(d.uf_paid_sum)::numeric                                 AS amount
       FROM deals d
-      JOIN stages s ON s.id = d.stage_id AND s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])
       WHERE d.responsible_id = ANY($1)
-        AND COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date
+        AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
@@ -552,10 +552,10 @@ router.get('/plans/:id/progress', async (req, res) => {
     if (prevPlanRes.rows.length) {
       const pp = prevPlanRes.rows[0];
       const prevActualRes = await pool.query(`
-        SELECT COALESCE(SUM(d.opportunity), 0)::numeric AS total
+        SELECT COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS total
         FROM deals d
-        JOIN stages s ON s.id = d.stage_id AND s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])
-        WHERE COALESCE(d.uf_sale_date, d.begindate, d.date_create)::date BETWEEN $1 AND $2
+        WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+          AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN $1 AND $2
       `, [pp.period_start, pp.period_end]);
       prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
     }
