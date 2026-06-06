@@ -441,7 +441,7 @@ def api_meta_page_forms():
     all_forms: dict = {}
     try:
         with bx_engine.connect() as conn:
-            rows = conn.execute(_text("""
+            rows = conn.execute(text("""
                 SELECT form_id,
                        COUNT(*)::int        AS leads_count,
                        MAX(created_time)    AS last_lead
