@@ -461,22 +461,21 @@ def api_meta_page_forms():
     except Exception as e:
         print(f"[page-forms] DB query error: {e}")
 
-    # ── Step 2: enrich form names from Meta campaign creatives ──────
+    # ── Step 2: enrich form names via batch Meta Graph API ──────────
+    # GET /?ids=fid1,fid2,...&fields=id,name,status  (works with user token)
     try:
-        ad_account_id = os.getenv("FB_AD_ACCOUNT_ID", "")
-        nr = _req.get(f"{graph}/{ad_account_id}/ads", params={
-            "access_token": token,
-            "fields": "creative{lead_gen_form{id,name,status}}",
-            "limit": 500,
-        }, timeout=20)
-        for ad in nr.json().get("data", []):
-            form = (ad.get("creative") or {}).get("lead_gen_form")
-            if not form:
-                continue
-            fid = form.get("id")
-            if fid and fid in all_forms:
-                all_forms[fid]["form_name"] = form.get("name", fid)
-                all_forms[fid]["status"]    = form.get("status", "ACTIVE")
+        form_ids = list(all_forms.keys())
+        for i in range(0, len(form_ids), 50):
+            chunk = form_ids[i:i + 50]
+            nr = _req.get(f"{graph}/", params={
+                "access_token": token,
+                "ids": ",".join(chunk),
+                "fields": "id,name,status",
+            }, timeout=15)
+            for fid, fd in nr.json().items():
+                if fid in all_forms:
+                    all_forms[fid]["form_name"] = fd.get("name", fid)
+                    all_forms[fid]["status"]    = fd.get("status", "ACTIVE")
     except Exception as e:
         print(f"[page-forms] Meta enrich error: {e}")
 
