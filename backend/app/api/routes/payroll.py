@@ -1,12 +1,18 @@
 """Payroll routes — employee enrichment, KPI/Bonus rules, monthly targets, calculation."""
 from datetime import date as date_t
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import and_
 from sqlmodel import Session, select
+
+AVATAR_DIR = Path(__file__).resolve().parents[3] / "data" / "avatars"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_SIZE = 5 * 1024 * 1024  # 5 MB
 
 from app.core.auth import hash_password
 from app.db import get_session
@@ -17,6 +23,7 @@ from app.models import (
     EmployeeExtra,
     KpiRule,
     MonthlyTarget,
+    PayrollApproval,
     PenaltyConfig,
     ReportLog,
     Tarif,
@@ -57,6 +64,7 @@ class EmployeeOut(BaseModel):
     # dashboard credentials
     login: Optional[str] = None
     dashboard_role: str = ""
+    avatar_url: Optional[str] = None
 
 
 @router.get("/employees")
@@ -93,6 +101,7 @@ def list_employees(s: Session = Depends(_session)) -> dict:
             has_extras=ex is not None,
             login=ex.login if ex else None,
             dashboard_role=ex.dashboard_role if ex else "",
+            avatar_url=ex.avatar_url if ex else None,
         ))
     out.sort(key=lambda e: (not e.bitrix_active, e.name.lower()))
     return {"count": len(out), "employees": [e.model_dump() for e in out]}
@@ -136,6 +145,53 @@ def upsert_employee_extra(
     d = ex.model_dump()
     d.pop("password_hash", None)
     return d
+
+
+@router.post("/employees/{bitrix_user_id}/avatar")
+async def upload_avatar(
+    bitrix_user_id: int,
+    file: UploadFile = File(...),
+    s: Session = Depends(_session),
+) -> dict:
+    """Upload a profile photo for an employee. Stores as /data/avatars/{uid}.ext"""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_EXTS:
+        raise HTTPException(status_code=400, detail=f"Rasm formati noto'g'ri. Ruxsat etilgan: {', '.join(ALLOWED_EXTS)}")
+
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="Fayl hajmi 5 MB dan oshmasin")
+
+    # Save file (overwrite previous avatar for this user)
+    dest = AVATAR_DIR / f"{bitrix_user_id}{suffix}"
+    # Remove old avatars with different extension
+    for old in AVATAR_DIR.glob(f"{bitrix_user_id}.*"):
+        old.unlink(missing_ok=True)
+    dest.write_bytes(content)
+
+    avatar_url = f"/avatars/{bitrix_user_id}{suffix}"
+
+    # Persist to DB
+    ex = s.get(EmployeeExtra, bitrix_user_id)
+    if ex is None:
+        ex = EmployeeExtra(bitrix_user_id=bitrix_user_id)
+    ex.avatar_url = avatar_url
+    s.add(ex)
+    s.commit()
+
+    return {"avatar_url": avatar_url}
+
+
+@router.delete("/employees/{bitrix_user_id}/avatar")
+def delete_avatar(bitrix_user_id: int, s: Session = Depends(_session)) -> dict:
+    for old in AVATAR_DIR.glob(f"{bitrix_user_id}.*"):
+        old.unlink(missing_ok=True)
+    ex = s.get(EmployeeExtra, bitrix_user_id)
+    if ex:
+        ex.avatar_url = None
+        s.add(ex)
+        s.commit()
+    return {"ok": True}
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -935,3 +991,168 @@ def delete_tarif(tarif_id: int, session: Session = Depends(_session)):
         raise HTTPException(status_code=404, detail="Tarif not found")
     session.delete(tarif)
     session.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Payroll Summary — batch calculate all active employees for a month
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/summary")
+def payroll_summary(year: int, month: int, s: Session = Depends(_session)) -> dict:
+    """Calculate payroll for all Bitrix24 employees in a given month."""
+    import calendar
+    days_in_month = calendar.monthrange(year, month)[1]
+    start_iso = f"{year:04d}-{month:02d}-01"
+    end_iso   = f"{year:04d}-{month:02d}-{days_in_month:02d}"
+    period_label = f"{year:04d}-{month:02d}"
+
+    # All Bitrix users merged with DB extras (same as list_employees)
+    bx_users = bitrix.list_users() or []
+    extras = {e.bitrix_user_id: e for e in s.exec(select(EmployeeExtra)).all()}
+
+    rows = []
+    for u in bx_users:
+        try:
+            uid = int(u.get("ID", 0))
+        except Exception:
+            continue
+        if uid <= 0:
+            continue
+
+        ex = extras.get(uid)
+        # Skip terminated / on-leave employees if they have no extras (bots, etc.)
+        status = ex.status if ex else "active"
+        if status == "terminated":
+            continue
+
+        name = f"{u.get('NAME','') or ''} {u.get('LAST_NAME','') or ''}".strip() or f"User {uid}"
+        fix_base = ex.fix_base_uzs if ex else 0
+        att_weekly = ex.attendance_weekly_uzs if ex else 0
+        kpi_rule = s.get(KpiRule, ex.kpi_rule_id) if (ex and ex.kpi_rule_id) else None
+
+        deal_agg = bitrix.aggregate_deals_sum_by_user(uid, start_iso, end_iso)
+        revenue_usd = float(deal_agg.get("sum") or 0)
+        deal_count  = int(deal_agg.get("count") or 0)
+        kpi_payout, _ = _compute_kpi_payout(kpi_rule, revenue_usd) if kpi_rule else (0.0, {})
+
+        awards = s.exec(select(BonusAward).where(
+            BonusAward.bitrix_user_id == uid, BonusAward.period_label == period_label
+        )).all()
+        bonuses_usd = sum(a.amount_usd for a in awards)
+        penalties_uzs, _ = _compute_penalty_uzs(uid, year, month, s)
+
+        attendance_bonus = att_weekly * 4
+        total_uzs = max(0, fix_base + attendance_bonus - penalties_uzs)
+        total_usd = round(kpi_payout + bonuses_usd, 2)
+
+        approval = s.exec(select(PayrollApproval).where(
+            PayrollApproval.bitrix_user_id == uid,
+            PayrollApproval.year == year,
+            PayrollApproval.month == month,
+        )).first()
+
+        rows.append({
+            "bitrix_user_id": uid,
+            "name": name,
+            "role": ex.role if ex else "closer",
+            "fix_base_uzs": fix_base,
+            "attendance_bonus_uzs": attendance_bonus,
+            "kpi_payout_usd": round(kpi_payout, 2),
+            "bonus_total_usd": round(bonuses_usd, 2),
+            "penalty_uzs": penalties_uzs,
+            "revenue_usd": revenue_usd,
+            "deal_count": deal_count,
+            "total_uzs": total_uzs,
+            "total_usd": total_usd,
+            "approval": approval.model_dump() if approval else None,
+        })
+
+    rows.sort(key=lambda r: r["total_uzs"] + r["total_usd"] * 12800, reverse=True)
+    return {"year": year, "month": month, "period_label": period_label, "count": len(rows), "rows": rows}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Payroll Approvals — save / list / update / delete confirmed payrolls
+# ─────────────────────────────────────────────────────────────────────────────
+class ApprovalIn(BaseModel):
+    bitrix_user_id: int
+    year: int
+    month: int
+    employee_name: str = ""
+    fix_base_uzs: int = 0
+    attendance_bonus_uzs: int = 0
+    kpi_payout_usd: float = 0.0
+    bonus_total_usd: float = 0.0
+    penalty_uzs: int = 0
+    total_uzs: int = 0
+    total_usd: float = 0.0
+    note: Optional[str] = None
+    approved_by: Optional[str] = None
+
+
+@router.get("/approvals")
+def list_approvals(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    s: Session = Depends(_session),
+) -> dict:
+    stmt = select(PayrollApproval)
+    if year:
+        stmt = stmt.where(PayrollApproval.year == year)
+    if month:
+        stmt = stmt.where(PayrollApproval.month == month)
+    stmt = stmt.order_by(PayrollApproval.approved_at.desc())
+    items = s.exec(stmt).all()
+    return {"count": len(items), "approvals": [a.model_dump() for a in items]}
+
+
+@router.post("/approvals", status_code=201)
+def create_approval(body: ApprovalIn, s: Session = Depends(_session)) -> dict:
+    # Upsert: one approval per employee per month
+    existing = s.exec(select(PayrollApproval).where(
+        PayrollApproval.bitrix_user_id == body.bitrix_user_id,
+        PayrollApproval.year == body.year,
+        PayrollApproval.month == body.month,
+    )).first()
+
+    if existing:
+        for k, v in body.model_dump().items():
+            setattr(existing, k, v)
+        existing.approved_at = datetime.utcnow()
+        existing.status = "approved"
+        s.add(existing)
+        s.commit()
+        s.refresh(existing)
+        return existing.model_dump()
+
+    approval = PayrollApproval(**body.model_dump(), status="approved")
+    s.add(approval)
+    s.commit()
+    s.refresh(approval)
+    return approval.model_dump()
+
+
+@router.put("/approvals/{approval_id}/status")
+def update_approval_status(
+    approval_id: int,
+    status: str,  # approved | paid | cancelled
+    s: Session = Depends(_session),
+) -> dict:
+    a = s.get(PayrollApproval, approval_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    if status not in ("approved", "paid", "cancelled"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    a.status = status
+    s.add(a)
+    s.commit()
+    s.refresh(a)
+    return a.model_dump()
+
+
+@router.delete("/approvals/{approval_id}", status_code=204)
+def delete_approval(approval_id: int, s: Session = Depends(_session)):
+    a = s.get(PayrollApproval, approval_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    s.delete(a)
+    s.commit()

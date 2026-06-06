@@ -968,7 +968,7 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
       {/* 2 ── Top 5 xodimlar ───────────────────────────────────── */}
       <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-          Championlar <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 6 }}>Sotuvda</span>
+          Chempionlar
         </div>
         <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly' }}>
           {[...employees]

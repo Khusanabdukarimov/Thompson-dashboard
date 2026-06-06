@@ -197,6 +197,19 @@ export interface FormLead {
   field_data: Record<string, string>;
 }
 
+export type PageForm = {
+  form_id:      string;
+  form_name:    string;
+  status:       string;
+  leads_count:  number;
+  created_time: string;
+  page_name:    string;
+};
+
+export function getPageForms() {
+  return apiGet<{ forms: PageForm[] }>('/api/meta/page-forms');
+}
+
 export function getFormLeads(formId: string, campaignId?: string, from?: string, to?: string) {
   return apiGet<{ count: number; leads: FormLead[] }>('/api/campaigns/leads', {
     form_id: formId,

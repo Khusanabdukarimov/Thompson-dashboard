@@ -34,6 +34,7 @@ class EmployeeExtra(SQLModel, table=True):
     login: Optional[str] = Field(default=None)
     password_hash: Optional[str] = Field(default=None)
     dashboard_role: str = Field(default="")  # "" | admin | owner | closer | marketolog | hunter
+    avatar_url: Optional[str] = Field(default=None)  # e.g. /avatars/42.jpg
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -198,3 +199,59 @@ class Tarif(SQLModel, table=True):
     sort_order: int = Field(default=0)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ────────────────────────────────────────────────────────────────────
+# payroll_approvals — finalized/approved monthly payroll per employee
+# ────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────
+# kunlik_plans — monthly plan targets per section/metric
+# ────────────────────────────────────────────────────────────────────
+class KunlikPlan(SQLModel, table=True):
+    __tablename__ = "kunlik_plans"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    section: str = Field(index=True)        # "target" | "instagram"
+    metric_key: str = Field(index=True)     # e.g. "byudjet", "lidlar_soni"
+    month: str = Field(index=True)          # "january" … "december"
+    year: int = Field(index=True)
+    value: float = Field(default=0.0)
+
+
+# ────────────────────────────────────────────────────────────────────
+# kunlik_overrides — daily cell overrides per section/metric/day
+# ────────────────────────────────────────────────────────────────────
+class KunlikOverride(SQLModel, table=True):
+    __tablename__ = "kunlik_overrides"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    section: str = Field(index=True)
+    metric_key: str = Field(index=True)
+    month: str = Field(index=True)
+    year: int = Field(index=True)
+    day: int                                # 1-31
+    value: Optional[float] = Field(default=None)
+
+
+# ────────────────────────────────────────────────────────────────────
+# payroll_approvals — finalized/approved monthly payroll per employee
+# ────────────────────────────────────────────────────────────────────
+class PayrollApproval(SQLModel, table=True):
+    __tablename__ = "payroll_approvals"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bitrix_user_id: int = Field(index=True)
+    year: int = Field(index=True)
+    month: int = Field(index=True)
+    employee_name: str = Field(default="")
+    fix_base_uzs: int = Field(default=0)
+    attendance_bonus_uzs: int = Field(default=0)
+    kpi_payout_usd: float = Field(default=0.0)
+    bonus_total_usd: float = Field(default=0.0)
+    penalty_uzs: int = Field(default=0)
+    total_uzs: int = Field(default=0)
+    total_usd: float = Field(default=0.0)
+    note: Optional[str] = Field(default=None)
+    approved_by: Optional[str] = Field(default=None)
+    status: str = Field(default="approved")  # approved | paid | cancelled
+    approved_at: datetime = Field(default_factory=datetime.utcnow)

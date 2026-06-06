@@ -198,6 +198,9 @@ function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
 }
 
 // ── Deal stage columns for "mas'ullar kesimida" table ─────────────
+const RESP_EXCL_LC = ["data365", "data365 support", "abror", "sardor jumayev", "sardor jjumayev", "main (asosiy)", "main"];
+const isRespExcluded = (name: string) => RESP_EXCL_LC.some(ex => (name ?? "").trim().toLowerCase().includes(ex));
+
 const DEAL_STAGE_COLS = [
   { key: "konsultatsiya", label: "Yangi / Uchrashuv",  color: "#607D8B" },
   { key: "kelishuv",      label: "Kelishuv bo'ldi",    color: "#4CAF50" },
@@ -307,7 +310,9 @@ export default function SdelkalarPage() {
     filter.from !== daysAgoISO(365) || filter.to !== todayISO(),
   ].filter(Boolean).length;
 
-  const respOptions = useMemo(() => (filterQ.data?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name })), [filterQ.data]);
+  const respOptions = useMemo(() => (filterQ.data?.responsibles ?? [])
+    .filter(r => !isRespExcluded(r.full_name ?? ""))
+    .map(r => ({ value: String(r.id), label: r.full_name })), [filterQ.data]);
   const stageOptions = useMemo(() => (filterQ.data?.stages ?? []).map(s => ({ value: String(s.id), label: s.name })), [filterQ.data]);
   const srcOptions = useMemo(() => (filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })), [filterQ.data]);
 
@@ -320,7 +325,7 @@ export default function SdelkalarPage() {
   ];
 
   // ── Conversion table derived data ────────────────────────────────
-  const convRows = convQ.data ?? [];
+  const convRows = (convQ.data ?? []).filter(r => !isRespExcluded(r.full_name ?? ""));
   const convMax = useMemo(() => ({
     total: Math.max(1, ...convRows.map(r => r.total)),
     jarayonda: Math.max(1, ...convRows.map(r => r.jarayonda)),
@@ -358,7 +363,7 @@ export default function SdelkalarPage() {
   ), [srcStatRows]);
 
   // ── Responsibles table derived data ──────────────────────────────
-  const dealRespRows = respQ.data ?? [];
+  const dealRespRows = (respQ.data ?? []).filter(r => !isRespExcluded(r.full_name ?? ""));
   const dealRespMax = useMemo(() => {
     const m: Record<string, number> = { total: 1 };
     for (const col of DEAL_STAGE_COLS)

@@ -327,8 +327,9 @@ function MetricRow({
   const [planDraft,   setPlanDraft]   = useState("");
   const [editingDay,  setEditingDay]  = useState<number | null>(null);
   const [dayDraft,    setDayDraft]    = useState("");
-  const planRef = useRef<HTMLInputElement>(null);
-  const dayRef  = useRef<HTMLInputElement>(null);
+  const planRef        = useRef<HTMLInputElement>(null);
+  const dayRef         = useRef<HTMLInputElement>(null);
+  const planCommitting = useRef(false);
 
   const vp = varPct(faktValue, planValue);
   const vpBg = vp == null ? "transparent"
@@ -342,12 +343,15 @@ function MetricRow({
 
   const openPlan = useCallback(() => {
     if (metric.computed) return;
+    planCommitting.current = false;
     setPlanDraft(planValue != null ? String(planValue) : "");
     setEditingPlan(true);
     setTimeout(() => planRef.current?.select(), 0);
   }, [planValue, metric.computed]);
 
   const commitPlan = useCallback(async () => {
+    if (planCommitting.current) return;
+    planCommitting.current = true;
     setEditingPlan(false);
     const n = parseFloat(planDraft);
     if (!isNaN(n)) await onPlanSave(n);
@@ -379,15 +383,24 @@ function MetricRow({
       </td>
 
       {/* Oylik reja */}
-      <td className="px-2 py-1.5 border-l border-border text-right min-w-[100px]">
+      <td className="px-2 py-1.5 border-l border-border text-right min-w-[120px]">
         {editingPlan ? (
-          <input ref={planRef} autoFocus
-            className="w-full text-right text-[12px] bg-blue-bg border border-blue rounded px-1.5 py-0.5 outline-none"
-            value={planDraft}
-            onChange={e => setPlanDraft(e.target.value)}
-            onBlur={commitPlan}
-            onKeyDown={e => { if (e.key === "Enter") commitPlan(); if (e.key === "Escape") setEditingPlan(false); }}
-          />
+          <div className="flex items-center gap-1">
+            <input ref={planRef} autoFocus
+              className="flex-1 min-w-0 text-right text-[12px] bg-blue-bg border border-blue rounded px-1.5 py-0.5 outline-none"
+              value={planDraft}
+              onChange={e => setPlanDraft(e.target.value)}
+              onBlur={commitPlan}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void commitPlan(); } if (e.key === "Escape") setEditingPlan(false); }}
+            />
+            <button
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => void commitPlan()}
+              className="shrink-0 text-[10px] px-1.5 py-0.5 bg-blue text-white rounded whitespace-nowrap hover:opacity-80"
+            >
+              Saqlash
+            </button>
+          </div>
         ) : (
           <span onClick={openPlan}
             className={cn(

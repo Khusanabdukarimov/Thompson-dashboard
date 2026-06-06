@@ -19,6 +19,7 @@ export type Employee = {
   has_extras: boolean;
   login: string | null;
   dashboard_role: string;
+  avatar_url: string | null;
 };
 
 export function listEmployees() {
@@ -43,6 +44,19 @@ export type EmployeeExtraIn = Partial<
     | "dashboard_role"
   >
 > & { password?: string };
+
+export async function uploadEmployeeAvatar(uid: number, file: File): Promise<{ avatar_url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authedFetch(`/api/payroll/employees/${uid}/avatar`, { method: "POST", body: form });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function deleteEmployeeAvatar(uid: number): Promise<void> {
+  const res = await authedFetch(`/api/payroll/employees/${uid}/avatar`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+}
 
 export async function upsertEmployeeExtra(
   uid: number,
@@ -444,5 +458,74 @@ export async function updateTarif(id: number, body: Partial<TarifIn>): Promise<T
 }
 export async function deleteTarif(id: number): Promise<void> {
   const r = await authedFetch(`/api/payroll/tariflar/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+// ── Payroll Summary ────────────────────────────────────────────────
+export type PayrollSummaryRow = {
+  bitrix_user_id: number;
+  name: string;
+  role: string;
+  fix_base_uzs: number;
+  attendance_bonus_uzs: number;
+  kpi_payout_usd: number;
+  bonus_total_usd: number;
+  penalty_uzs: number;
+  revenue_usd: number;
+  deal_count: number;
+  total_uzs: number;
+  total_usd: number;
+  approval: PayrollApproval | null;
+};
+
+export function getPayrollSummary(year: number, month: number) {
+  return apiGet<{ year: number; month: number; period_label: string; count: number; rows: PayrollSummaryRow[] }>(
+    "/api/payroll/summary", { year, month }
+  );
+}
+
+// ── Payroll Approvals ─────────────────────────────────────────────
+export type PayrollApproval = {
+  id: number;
+  bitrix_user_id: number;
+  year: number;
+  month: number;
+  employee_name: string;
+  fix_base_uzs: number;
+  attendance_bonus_uzs: number;
+  kpi_payout_usd: number;
+  bonus_total_usd: number;
+  penalty_uzs: number;
+  total_uzs: number;
+  total_usd: number;
+  note: string | null;
+  approved_by: string | null;
+  status: "approved" | "paid" | "cancelled";
+  approved_at: string;
+};
+
+export type ApprovalIn = Omit<PayrollApproval, "id" | "status" | "approved_at">;
+
+export function listApprovals(year?: number, month?: number) {
+  const p: Record<string, string> = {};
+  if (year) p.year = String(year);
+  if (month) p.month = String(month);
+  return apiGet<{ count: number; approvals: PayrollApproval[] }>("/api/payroll/approvals", p);
+}
+
+export async function createApproval(body: ApprovalIn): Promise<PayrollApproval> {
+  const r = await authedFetch("/api/payroll/approvals", { method: "POST", body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function updateApprovalStatus(id: number, status: "approved" | "paid" | "cancelled"): Promise<PayrollApproval> {
+  const r = await authedFetch(`/api/payroll/approvals/${id}/status?status=${status}`, { method: "PUT" });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function deleteApproval(id: number): Promise<void> {
+  const r = await authedFetch(`/api/payroll/approvals/${id}`, { method: "DELETE" });
   if (!r.ok) throw new Error(await r.text());
 }
