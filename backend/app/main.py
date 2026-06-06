@@ -477,12 +477,34 @@ def api_meta_page_forms(month: Optional[str] = None, year: Optional[int] = None)
     except Exception as e:
         print(f"[page-forms] DB query error: {e}")
 
-    # ── Step 2: enrich form names via batch Meta Graph API ──────────
-    # GET /?ids=fid1,fid2,...&fields=id,name,status  (works with user token)
+    # ── Step 2: fetch ALL forms from page using Page Token ──────────
+    page_token = os.getenv("FB_PAGE_TOKEN", "")
+    page_id    = os.getenv("FB_PAGE_ID", "")
+    if page_token and page_id:
+        try:
+            pr = _req.get(f"{graph}/{page_id}/leadgen_forms", params={
+                "access_token": page_token,
+                "fields": "id,name,status,leads_count,created_time",
+                "limit": 100,
+            }, timeout=20)
+            for f in pr.json().get("data", []):
+                fid = f["id"]
+                existing = all_forms.get(fid, {})
+                all_forms[fid] = {
+                    "form_id":      fid,
+                    "form_name":    f.get("name", fid),
+                    "status":       f.get("status", "ACTIVE"),
+                    "leads_count":  existing.get("leads_count", 0),
+                    "created_time": f.get("created_time", existing.get("created_time", "")),
+                }
+        except Exception as e:
+            print(f"[page-forms] Page token fetch error: {e}")
+
+    # ── Step 3: enrich names for any remaining forms via batch API ───
+    no_name = [fid for fid, f in all_forms.items() if f["form_name"] == fid]
     try:
-        form_ids = list(all_forms.keys())
-        for i in range(0, len(form_ids), 50):
-            chunk = form_ids[i:i + 50]
+        for i in range(0, len(no_name), 50):
+            chunk = no_name[i:i + 50]
             nr = _req.get(f"{graph}/", params={
                 "access_token": token,
                 "ids": ",".join(chunk),
