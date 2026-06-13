@@ -850,7 +850,6 @@ router.get('/creatives', async (req, res) => {
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_F8K4GI'                                   THEN fl.id END)::int AS sifatsiz,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_NAZK5J'                                   THEN fl.id END)::int AS bekor_boldi,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'CONVERTED'                                   THEN fl.id END)::int AS konsultatsiya_otdi,
-        COUNT(DISTINCT CASE WHEN d.uf_bp_sale_date IS NOT NULL                         THEN fl.id END)::int AS sotuv_boldi,
         COUNT(DISTINCT CASE WHEN lp.lead_id IS NOT NULL AND s.id IS NULL               THEN fl.id END)::int AS stage_unknown
       FROM facebook_leads fl
       LEFT JOIN lead_phones lp
@@ -858,11 +857,6 @@ router.get('/creatives', async (req, res) => {
          = RIGHT(REGEXP_REPLACE(fl.phone,  '[^0-9]', '', 'g'), 9)
       LEFT JOIN leads  l ON l.id = lp.lead_id
       LEFT JOIN stages s ON s.id = l.stage_id
-      LEFT JOIN deal_phones dp
-        ON RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
-         = RIGHT(REGEXP_REPLACE(fl.phone,  '[^0-9]', '', 'g'), 9)
-      LEFT JOIN deals  d  ON d.id = dp.deal_id
-      LEFT JOIN stages ds ON ds.id = d.stage_id
       WHERE fl.created_time >= $1::date
         AND fl.created_time <  ($2::date + INTERVAL '1 day')
       GROUP BY fl.adset_name, fl.campaign_name
@@ -881,7 +875,27 @@ router.get('/creatives', async (req, res) => {
     const spendMap = {};
     for (const r of cacheRows) spendMap[r.adset_name] = parseFloat(r.spend) || 0;
 
-    // 3. Creative name cache
+    // 3. Sotuv (paid deals) per adset — attributed by deal's uf_bp_sale_date in period
+    //    Starts from deals (not facebook_leads) so we don't miss leads created outside the period
+    const { rows: sotuvRows } = await pool.query(`
+      SELECT
+        fl.adset_name,
+        COUNT(DISTINCT d.id)::int AS sotuv_cnt
+      FROM deals d
+      JOIN deal_phones dp ON dp.deal_id = d.id
+      JOIN facebook_leads fl
+        ON RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
+         = RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
+      WHERE d.uf_bp_sale_date IS NOT NULL
+        AND d.uf_bp_sale_date >= $1::date
+        AND d.uf_bp_sale_date <  ($2::date + INTERVAL '1 day')
+        AND d.source_id IN ('UC_O9BLGT','UC_3O8GTF','UC_89FPH6')
+      GROUP BY fl.adset_name
+    `, [since, until]);
+    const sotuvMap = {};
+    for (const r of sotuvRows) sotuvMap[r.adset_name] = r.sotuv_cnt;
+
+    // 4. Creative name cache
     const adIds = qualRows.map(r => r.ad_id).filter(Boolean);
     const creativeMap = {};
     if (adIds.length) {
@@ -909,7 +923,7 @@ router.get('/creatives', async (req, res) => {
       sifatsiz:           r.sifatsiz,
       bekor_boldi:        r.bekor_boldi,
       konsultatsiya_otdi: r.konsultatsiya_otdi,
-      sotuv_boldi:        r.sotuv_boldi,
+      sotuv_boldi:        sotuvMap[r.adset_name] ?? 0,
       sifat_rate:    r.in_bitrix > 0
         ? Math.round((r.sifatli / r.in_bitrix) * 100)
         : 0,
