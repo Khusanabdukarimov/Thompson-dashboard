@@ -850,7 +850,7 @@ router.get('/creatives', async (req, res) => {
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_F8K4GI'                                   THEN fl.id END)::int AS sifatsiz,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_NAZK5J'                                   THEN fl.id END)::int AS bekor_boldi,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'CONVERTED'                                   THEN fl.id END)::int AS konsultatsiya_otdi,
-        COUNT(DISTINCT CASE WHEN ds.bitrix_id = ANY(ARRAY['UC_NV0Y4F','WON','C1:WON']) THEN fl.id END)::int AS sotuv_boldi,
+        COUNT(DISTINCT CASE WHEN d.uf_bp_sale_date IS NOT NULL                         THEN fl.id END)::int AS sotuv_boldi,
         COUNT(DISTINCT CASE WHEN lp.lead_id IS NOT NULL AND s.id IS NULL               THEN fl.id END)::int AS stage_unknown
       FROM facebook_leads fl
       LEFT JOIN lead_phones lp
