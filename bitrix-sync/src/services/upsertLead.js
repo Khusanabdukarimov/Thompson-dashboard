@@ -206,6 +206,14 @@ async function upsertLead(r, client) {
       [leadId, val]
     );
   }
+  // Also save "Telefon raqamingiz" custom field (UF_CRM_1778261403182) to lead_phones
+  const ufPhone = (r.UF_CRM_1778261403182 || '').trim();
+  if (ufPhone && ufPhone.replace(/[^0-9]/g, '').length >= 7) {
+    await db.query(
+      `INSERT INTO lead_phones (lead_id, phone) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [leadId, ufPhone]
+    );
+  }
 
   // Agar UTM yoki source normalizatsiya qilingan bo'lsa — Bitrix24 da ham yangilaymiz
   const bxUpdateFields = {};
