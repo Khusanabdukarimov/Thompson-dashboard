@@ -16,17 +16,6 @@ import { fmtNum } from "@/lib/utils";
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 function sumArr(arr: number[]) { return arr.reduce((a, b) => a + b, 0); }
-function pct(a: number, b: number) { return b > 0 ? Math.round((a / b) * 100) : 0; }
-
-function DeltaTag({ val }: { val: number }) {
-  if (val === 0) return null;
-  const pos = val > 0;
-  return (
-    <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${pos ? "bg-green/10 text-green" : "bg-red/10 text-red"}`}>
-      {pos ? "+" : ""}{val}%
-    </span>
-  );
-}
 
 type Tab = "kampaniyalar" | "formalar" | "lidlar" | "creative";
 
@@ -262,10 +251,6 @@ export default function KampaniyalarPage() {
   const [filterCreative,  setFilterCreative]  = useState("");
   const [expandedCreative, setExpandedCreative] = useState<string | null>(null);
   const [expandedSotuv,   setExpandedSotuv]   = useState<string | null>(null);
-  const [expandedCamps,   setExpandedCamps]   = useState<Set<string>>(new Set());
-  const [expandedAdsets,  setExpandedAdsets]  = useState<Set<string>>(new Set());
-  const toggleCamp  = (k: string) => setExpandedCamps(s  => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
-  const toggleAdset = (k: string) => setExpandedAdsets(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // Derive month/year from fromDate for API calls
   const fromD = new Date(fromDate + "T00:00:00");
@@ -280,7 +265,6 @@ export default function KampaniyalarPage() {
   const kunlikQ     = useQuery({ queryKey: ["kunlik-hisobot",  month, year],                   queryFn: () => getKunlikHisobot(month, year),                                      staleTime: 60_000, refetchInterval: AUTO_REFRESH });
   const creativesQ  = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate),                staleTime: 30_000, refetchInterval: AUTO_REFRESH });
 
-  const ins  = insightsQ.data?.data;
   const allRows = campaignsQ.data?.rows ?? [];
 
   // ── filter options (unique values) ─────────────────────────────────────────
@@ -330,29 +314,15 @@ export default function KampaniyalarPage() {
   // ── aggregate KPIs from filtered rows (date-range + filter aware) ────────────
   const isFiltered = !!(filterCampaign || filterPlatform || filterAdset || filterForm);
 
-  const fbSpend  = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.spend, 0);
-  const igSpend  = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.spend, 0);
-  const fbLeads  = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.leads, 0);
-  const igLeads  = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.leads, 0);
-  const fbClicks = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.clicks, 0);
-  const igClicks = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.clicks, 0);
-  const fbImpr   = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.impressions, 0);
-  const igImpr   = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.impressions, 0);
-
-  const totalSpend  = fbSpend + igSpend;
-  const totalLeads  = fbLeads + igLeads;
-  const totalClicks = fbClicks + igClicks;
-  const totalImpr   = fbImpr + igImpr;
-  const avgCTR      = totalImpr  > 0 ? (totalClicks / totalImpr)  * 100 : 0;
-  const avgCPC      = totalClicks > 0 ? totalSpend  / totalClicks       : 0;
-  const formConv    = totalClicks > 0 ? (totalLeads / totalClicks) * 100 : 0;
-  const avgCPL      = totalLeads  > 0 ? totalSpend  / totalLeads        : 0;
+  const totalSpend  = rows.reduce((a, r) => a + r.spend,       0);
+  const totalLeads  = rows.reduce((a, r) => a + r.leads,       0);
+  const totalClicks = rows.reduce((a, r) => a + r.clicks,      0);
+  const totalImpr   = rows.reduce((a, r) => a + r.impressions, 0);
+  const avgCPC      = totalClicks > 0 ? totalSpend / totalClicks : 0;
+  const avgCPL      = totalLeads  > 0 ? totalSpend / totalLeads  : 0;
 
   // ── Bitrix CRM cross-channel metrics ────────────────────────────────────────
   const kData = kunlikQ.data?.data;
-  const totalSalesUSD = kData
-    ? sumArr(kData.target.sales_sum) + sumArr(kData.instagram.sales_sum)
-    : 0;
   const totalDeals = kData
     ? sumArr(kData.target.deals) + sumArr(kData.instagram.deals)
     : 0;
@@ -360,7 +330,6 @@ export default function KampaniyalarPage() {
     ? sumArr(kData.target.qual_leads) + sumArr(kData.instagram.qual_leads)
     : 0;
 
-  const roas             = totalSpend > 0 && totalSalesUSD > 0 ? totalSalesUSD / totalSpend : 0;
   const maqsadliLidNarxi = totalQualLids > 0 ? totalSpend / totalQualLids : 0;
   const mijozNarxi       = totalDeals    > 0 ? totalSpend / totalDeals    : 0;
 
@@ -449,16 +418,6 @@ export default function KampaniyalarPage() {
     }
     return m;
   }, [formsQ.data]);
-
-  // ── trend: last 7 days of the month ─────────────────────────────────────────
-  const trendSpend = ins
-    ? ins.target.budget.slice(-7).map((v, i) => v + (ins.instagram.budget.slice(-7)[i] ?? 0))
-    : [];
-  const trendLeads = ins
-    ? ins.target.leads.slice(-7).map((v, i) => v + (ins.instagram.leads.slice(-7)[i] ?? 0))
-    : [];
-  const trendSpendMax = Math.max(...trendSpend, 0.01);
-  const trendLeadsMax = Math.max(...trendLeads, 0.01);
 
   async function refresh() {
     setRefreshing(true);
@@ -597,73 +556,33 @@ export default function KampaniyalarPage() {
       {/* ── Scrollable body ────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-        {/* KPI row 1 */}
-        <div className="grid grid-cols-3 gap-3">
-          {isLoading ? Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          )) : ([
-            { label: "JAMI SARF", value: `$${fmtNum(Math.round(totalSpend))}`, sub: "Meta Ads sarfi", delta: 5 },
-            { label: "JAMI LIDLAR", value: fmtNum(totalLeads), sub: "Meta formalar", delta: 12 },
-            { label: "FORMA KONVERSIYASI", value: `${formConv.toFixed(1)}%`, sub: "Clicks → Leads", delta: 2 },
-          ] as const).map(c => (
-            <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
-              <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
-              <div className="flex items-end gap-2">
-                <span className="text-[22px] font-bold text-text leading-none">{c.value}</span>
-                <DeltaTag val={c.delta} />
-              </div>
-              <div className="text-[11px] text-text3 mt-1">{c.sub}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* KPI row 2 */}
-        <div className="grid grid-cols-4 gap-3">
-          {isLoading ? Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          )) : ([
-            { label: "IMPRESSIONS", value: fmtNum(totalImpr), sub: "Jami ko'rishlar", delta: -1 },
-            { label: "CTR", value: `${avgCTR.toFixed(2)}%`, sub: "Click-through rate", delta: 0 },
-            { label: "CPC ($)", value: `$${avgCPC.toFixed(2)}`, sub: "Cost per click", delta: 0 },
-            { label: "CPL ($)", value: totalLeads > 0 ? `$${avgCPL.toFixed(2)}` : "—", sub: "Cost per lead", delta: 0 },
-          ] as const).map(c => (
-            <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
-              <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
-              <div className="flex items-end gap-2">
-                <span className="text-[22px] font-bold text-text leading-none">{c.value}</span>
-                <DeltaTag val={c.delta} />
-              </div>
-              <div className="text-[11px] text-text3 mt-1">{c.sub}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* KPI row 3 — cross-channel metrics */}
+        {/* KPI row 1 — Lidlar */}
         <div className="grid grid-cols-3 gap-3">
           {(isLoading || kunlikQ.isLoading) ? Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           )) : ([
-            {
-              label: "ROAS",
-              value: roas > 0 ? `${roas.toFixed(2)}x` : "—",
-              sub: "Sotuvlar summasi ÷ Byudjet",
-              formula: `$${fmtNum(Math.round(totalSalesUSD))} ÷ $${fmtNum(Math.round(totalSpend))}`,
-              color: "text-green",
-            },
-            {
-              label: "MAQSADLI LID NARXI",
-              value: maqsadliLidNarxi > 0 ? `$${maqsadliLidNarxi.toFixed(2)}` : "—",
-              sub: "Byudjet ÷ Maqsadli lidlar soni",
-              formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${fmtNum(totalQualLids)}`,
-              color: "text-blue",
-            },
-            {
-              label: "MIJOZ NARXI",
-              value: mijozNarxi > 0 ? `$${mijozNarxi.toFixed(2)}` : "—",
-              sub: "Byudjet ÷ Sotuvlar soni",
-              formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${totalDeals}`,
-              color: "text-amber",
-            },
+            { label: "JAMI LIDLAR",    value: fmtNum(totalLeads),    sub: "Meta formalar",       color: "text-text"  },
+            { label: "SIFATLI LIDLAR", value: fmtNum(totalQualLids), sub: "Bitrix24 sifatlilar", color: "text-green" },
+            { label: "SOTUV",          value: fmtNum(totalDeals),    sub: "Yutilgan sdelkalar",  color: "text-blue"  },
+          ]).map(c => (
+            <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
+              <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
+              <div className="flex items-end gap-2">
+                <span className={`text-[22px] font-bold leading-none ${c.color}`}>{c.value}</span>
+              </div>
+              <div className="text-[11px] text-text3 mt-1">{c.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* KPI row 2 — Sarf */}
+        <div className="grid grid-cols-3 gap-3">
+          {isLoading ? Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          )) : ([
+            { label: "JAMI SARF",         value: `$${fmtNum(Math.round(totalSpend))}`,                            sub: "Meta Ads sarfi",           formula: null,                                                                color: "text-text"  },
+            { label: "SIFATLI LID NARXI", value: maqsadliLidNarxi > 0 ? `$${maqsadliLidNarxi.toFixed(2)}` : "—", sub: "Byudjet ÷ Sifatli lidlar", formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${fmtNum(totalQualLids)}`,  color: "text-blue"  },
+            { label: "MIJOZ NARXI",       value: mijozNarxi > 0 ? `$${mijozNarxi.toFixed(2)}` : "—",              sub: "Byudjet ÷ Sotuvlar soni",  formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${totalDeals}`,               color: "text-amber" },
           ]).map(c => (
             <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
               <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
@@ -671,114 +590,30 @@ export default function KampaniyalarPage() {
                 <span className={`text-[22px] font-bold leading-none ${c.color}`}>{c.value}</span>
               </div>
               <div className="text-[10.5px] text-text3">{c.sub}</div>
-              <div className="text-[10px] text-text3/60 mt-0.5 font-mono">{c.formula}</div>
+              {c.formula && <div className="text-[10px] text-text3/60 mt-0.5 font-mono">{c.formula}</div>}
             </div>
           ))}
         </div>
 
-        {/* Charts row */}
-        <div className="grid grid-cols-2 gap-4">
-
-          {/* Platform split */}
-          <div className="bg-bg2 border border-border rounded-xl p-4">
-            <div className="text-[12px] font-bold text-text uppercase tracking-wider mb-4">
-              Platformalar ulushi (FB vs IG)
-            </div>
-            <div className="grid grid-cols-2 gap-6">
-              {([
-                { title: "SARF ULUSHI",  fb: pct(fbSpend,  totalSpend),  ig: pct(igSpend,  totalSpend)  },
-                { title: "LIDLAR ULUSHI", fb: pct(fbLeads,  totalLeads),  ig: pct(igLeads,  totalLeads)  },
-              ] as const).map(col => (
-                <div key={col.title}>
-                  <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{col.title}</div>
-                  <div className="h-2 rounded-full overflow-hidden flex mb-2">
-                    <div className="bg-blue   h-full" style={{ width: `${col.fb}%` }} />
-                    <div className="bg-[#e91e8c] h-full" style={{ width: `${col.ig}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-text2">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-blue inline-block" />
-                      FB {col.fb}%
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#e91e8c] inline-block" />
-                      IG {col.ig}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Trend chart */}
-          <div className="bg-bg2 border border-border rounded-xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-[12px] font-bold text-text uppercase tracking-wider">Trend: Sarf va Lidlar</div>
-                <div className="text-[10.5px] text-text3 mt-0.5">Oxirgi 7 kunlik dinamika</div>
+        {/* KPI row 3 — Meta ko'rsatkichlar */}
+        <div className="grid grid-cols-3 gap-3">
+          {isLoading ? Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          )) : ([
+            { label: "IMPRESSIYALAR",     value: fmtNum(totalImpr),                               sub: "Jami ko'rishlar", color: "text-text" },
+            { label: "CLICK NARXI (CPC)", value: `$${avgCPC.toFixed(2)}`,                         sub: "Cost per click",  color: "text-text" },
+            { label: "LEAD NARXI (CPL)",  value: totalLeads > 0 ? `$${avgCPL.toFixed(2)}` : "—", sub: "Cost per lead",   color: "text-text" },
+          ]).map(c => (
+            <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
+              <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
+              <div className="flex items-end gap-2">
+                <span className={`text-[22px] font-bold leading-none ${c.color}`}>{c.value}</span>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-text3">
-                <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue   inline-block rounded" /> Sarf</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-green  inline-block rounded" /> Lidlar</span>
-              </div>
+              <div className="text-[11px] text-text3 mt-1">{c.sub}</div>
             </div>
-            {insightsQ.isLoading
-              ? <Skeleton className="h-28 w-full rounded-lg" />
-              : trendSpend.length === 0 ? (
-                <div className="h-28 flex items-center justify-center text-text3 text-[12px]">Ma'lumot yo'q</div>
-              ) : (() => {
-                const W = 100; const H = 112; const pad = 8;
-                const iW = W - pad * 2; const iH = H - pad * 2;
-                const n7 = trendSpend.length;
-                function pts(vals: number[], vmax: number) {
-                  return vals.map((v, i) => {
-                    const x = pad + (i / Math.max(n7 - 1, 1)) * iW;
-                    const y = pad + iH - (v / vmax) * iH;
-                    return `${x},${y}`;
-                  }).join(" ");
-                }
-                return (
-                  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-28">
-                    {/* grid lines */}
-                    {[0.25, 0.5, 0.75].map(f => (
-                      <line key={f} x1={pad} x2={W - pad} y1={pad + iH * (1 - f)} y2={pad + iH * (1 - f)}
-                        stroke="currentColor" strokeWidth="0.3" className="text-border" />
-                    ))}
-                    {/* spend area fill */}
-                    <defs>
-                      <linearGradient id="sGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
-                      </linearGradient>
-                      <linearGradient id="lGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#22c55e" stopOpacity="0.02" />
-                      </linearGradient>
-                    </defs>
-                    <polygon
-                      points={`${pad},${pad + iH} ${pts(trendSpend, trendSpendMax)} ${W - pad},${pad + iH}`}
-                      fill="url(#sGrad)" />
-                    <polyline points={pts(trendSpend, trendSpendMax)} fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                    <polygon
-                      points={`${pad},${pad + iH} ${pts(trendLeads, trendLeadsMax)} ${W - pad},${pad + iH}`}
-                      fill="url(#lGrad)" />
-                    <polyline points={pts(trendLeads, trendLeadsMax)} fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                    {/* dots */}
-                    {trendSpend.map((v, i) => {
-                      const x = pad + (i / Math.max(n7 - 1, 1)) * iW;
-                      const y = pad + iH - (v / trendSpendMax) * iH;
-                      return <circle key={i} cx={x} cy={y} r="1.5" fill="#3b82f6" />;
-                    })}
-                    {trendLeads.map((v, i) => {
-                      const x = pad + (i / Math.max(n7 - 1, 1)) * iW;
-                      const y = pad + iH - (v / trendLeadsMax) * iH;
-                      return <circle key={i} cx={x} cy={y} r="1.5" fill="#22c55e" />;
-                    })}
-                  </svg>
-                );
-              })()}
-          </div>
+          ))}
         </div>
+
 
         {/* Tabs + 2-column body */}
         <div>
@@ -996,25 +831,16 @@ export default function KampaniyalarPage() {
                   .filter(r => !filterAdset     || r.adset_name    === filterAdset)
                   .filter(r => !filterCreative  || r.ad_name       === filterCreative);
 
-                // Group: campaign → adset → ads
-                const campMap = new Map<string, Map<string, typeof filtered>>();
-                for (const r of filtered) {
-                  if (!campMap.has(r.campaign_name)) campMap.set(r.campaign_name, new Map());
-                  const adsetMap = campMap.get(r.campaign_name)!;
-                  if (!adsetMap.has(r.adset_name)) adsetMap.set(r.adset_name, []);
-                  adsetMap.get(r.adset_name)!.push(r);
-                }
-
                 const agg = (rows: typeof filtered) => ({
-                  spend:         rows.reduce((a, r) => a + r.spend, 0),
-                  meta_leads:    rows.reduce((a, r) => a + r.meta_leads, 0),
-                  in_bitrix:     rows.reduce((a, r) => a + r.in_bitrix, 0),
+                  spend:              rows.reduce((a, r) => a + r.spend, 0),
+                  meta_leads:         rows.reduce((a, r) => a + r.meta_leads, 0),
+                  in_bitrix:          rows.reduce((a, r) => a + r.in_bitrix, 0),
                   sifatli:            rows.reduce((a, r) => a + r.sifatli, 0),
                   konsultatsiya_otdi: rows.reduce((a, r) => a + (r.konsultatsiya_otdi ?? 0), 0),
                   sotuv_boldi:        rows.reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
-                  sifatsiz:      rows.reduce((a, r) => a + r.sifatsiz, 0),
-                  bekor_boldi:   rows.reduce((a, r) => a + r.bekor_boldi, 0),
-                  not_in_bitrix: rows.reduce((a, r) => a + r.not_in_bitrix, 0),
+                  sifatsiz:           rows.reduce((a, r) => a + r.sifatsiz, 0),
+                  bekor_boldi:        rows.reduce((a, r) => a + r.bekor_boldi, 0),
+                  not_in_bitrix:      rows.reduce((a, r) => a + r.not_in_bitrix, 0),
                 });
 
                 const TH = "px-3 py-2.5 text-left text-[10px] font-bold text-text3 tracking-wider whitespace-nowrap";
@@ -1036,7 +862,7 @@ export default function KampaniyalarPage() {
                     <table className="w-full text-[12px]" style={{ borderCollapse: "collapse" }}>
                       <thead>
                         <tr className="bg-bg3 border-b border-border">
-                          <th className={TH} style={{ width: 320 }}>KAMPANIYA / ADSET / CREATIVE</th>
+                          <th className={TH} style={{ width: 320 }}>CREATIVE</th>
                           <th className={`${TH} text-right`}>SARF</th>
                           <th className={`${TH} text-right`}>META LIDLAR</th>
                           <th className={`${TH} text-right`}>BITRIX24</th>
@@ -1053,143 +879,66 @@ export default function KampaniyalarPage() {
                         {creativesQ.isLoading ? (
                           Array.from({ length: 5 }).map((_, i) => (
                             <tr key={i} className="border-b border-border">
-                              {Array.from({ length: 9 }).map((__, j) => (
+                              {Array.from({ length: 11 }).map((__, j) => (
                                 <td key={j} className={TD}><Skeleton className="h-3 w-14" /></td>
                               ))}
                             </tr>
                           ))
-                        ) : campMap.size === 0 ? (
-                          <tr><td colSpan={9} className="px-4 py-10 text-center text-text3">Ma'lumot topilmadi</td></tr>
-                        ) : Array.from(campMap.entries()).map(([campName, adsetMap]) => {
-                          const campRows = Array.from(adsetMap.values()).flat();
-                          const ca = agg(campRows);
-                          const campKey = campName;
-                          const campExp = expandedCamps.has(campKey);
-                          const campCpl = ca.meta_leads > 0 ? ca.spend / ca.meta_leads : 0;
-                          const campSifat = ca.in_bitrix > 0 ? Math.round(ca.sifatli / ca.in_bitrix * 100) : 0;
+                        ) : filtered.length === 0 ? (
+                          <tr><td colSpan={11} className="px-4 py-10 text-center text-text3">Ma'lumot topilmadi</td></tr>
+                        ) : filtered.map((r, ri) => {
+                          const adKey = `${r.campaign_name}::${r.adset_name}::${ri}`;
+                          const isExpAd    = expandedCreative === adKey;
+                          const isExpSotuv = expandedSotuv    === adKey;
+                          const cpl = r.meta_leads > 0 ? r.spend / r.meta_leads : 0;
                           return (
                             <>
-                              {/* ── CAMPAIGN ROW ── */}
-                              <tr key={campKey}
-                                className="border-b border-border cursor-pointer select-none"
-                                style={{ background: "rgba(59,130,246,0.06)" }}
-                                onClick={() => toggleCamp(campKey)}>
+                              <tr key={ri}
+                                className={`border-b border-border/50 hover:bg-bg3/30 cursor-pointer ${isExpAd ? "bg-bg3/20" : ""}`}
+                                onClick={() => { setExpandedCreative(isExpAd ? null : adKey); setExpandedSotuv(null); }}>
                                 <td className={TD}>
-                                  <div className="flex items-center gap-2">
-                                    <ChevronDown size={13} className={`text-blue shrink-0 transition-transform ${campExp ? "rotate-180" : ""}`} />
-                                    <span className="font-bold text-text text-[12px] truncate max-w-[280px]" title={campName}>{campName}</span>
-                                    <span className="text-[10px] text-text3 shrink-0">({campRows.length} ad)</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <ChevronDown size={11} className={`text-text3 shrink-0 transition-transform ${isExpAd ? "rotate-180" : ""}`} />
+                                    <div className="flex flex-col gap-0.5 min-w-0">
+                                      {r.ad_name ? (
+                                        <a href={r.post_url ?? undefined} target="_blank" rel="noreferrer"
+                                          onClick={e => e.stopPropagation()}
+                                          className="text-blue hover:underline text-[11px] truncate max-w-[280px] block" title={r.ad_name}>
+                                          {r.ad_name}
+                                        </a>
+                                      ) : (
+                                        <span className="text-text3 text-[11px] italic">Nomsiz ad</span>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
-                                <td className={`${TD} text-right font-bold text-text`}>
-                                  {ca.spend > 0 ? `$${Math.round(ca.spend)}` : <span className="text-text3">—</span>}
-                                  {campCpl > 0 && <div className="text-[10px] text-text3 font-normal">${campCpl.toFixed(2)} CPL</div>}
+                                <td className={`${TD} text-right text-[11px] text-text`}>
+                                  {r.spend > 0 ? `$${Math.round(r.spend)}` : <span className="text-text3">—</span>}
+                                  {cpl > 0 && <div className="text-[10px] text-text3">${cpl.toFixed(2)}</div>}
                                 </td>
-                                <td className={`${TD} text-right font-bold text-text2`}>{ca.meta_leads}</td>
-                                <td className={`${TD} text-right font-bold text-blue`}>{ca.in_bitrix}</td>
-                                <td className={`${TD} text-right font-bold text-green`}>{ca.sifatli}</td>
-                                <td className={`${TD} text-right font-bold`} style={{ color: "#a78bfa" }}>{ca.konsultatsiya_otdi || "—"}</td>
-                                <td className={`${TD} text-right font-bold`} style={{ color: "#22c55e" }}>{ca.sotuv_boldi || "—"}</td>
-                                <td className={`${TD} text-right font-bold text-red/80`}>{ca.sifatsiz}</td>
-                                <td className={`${TD} text-right font-bold text-amber`}>{ca.bekor_boldi}</td>
-                                <td className={`${TD} text-right text-text3`}>{ca.not_in_bitrix || "—"}</td>
-                                <td className={TD}><SifatBar rate={campSifat} /></td>
+                                <td className={`${TD} text-right text-[11px] text-text2`}>{r.meta_leads}</td>
+                                <td className={`${TD} text-right text-[11px]`}><span className={r.in_bitrix > 0 ? "text-blue" : "text-text3"}>{r.in_bitrix}</span></td>
+                                <td className={`${TD} text-right text-[11px]`}><span className={r.sifatli > 0 ? "text-green" : "text-text3"}>{r.sifatli}</span></td>
+                                <td className={`${TD} text-right text-[11px]`}><span className={(r.konsultatsiya_otdi ?? 0) > 0 ? "" : "text-text3"} style={(r.konsultatsiya_otdi ?? 0) > 0 ? { color: "#a78bfa" } : {}}>{(r.konsultatsiya_otdi ?? 0) || "—"}</span></td>
+                                <td className={`${TD} text-right text-[11px]`}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    if ((r.sotuv_boldi ?? 0) > 0) {
+                                      setExpandedSotuv(isExpSotuv ? null : adKey);
+                                      setExpandedCreative(null);
+                                    }
+                                  }}>
+                                  <span className={`${((r.sotuv_boldi ?? 0) > 0) ? "text-[#22c55e] underline underline-offset-2 cursor-pointer hover:opacity-70" : "text-text3"}`}>
+                                    {(r.sotuv_boldi ?? 0) || "—"}
+                                  </span>
+                                </td>
+                                <td className={`${TD} text-right text-[11px]`}><span className={r.sifatsiz > 0 ? "text-red/80" : "text-text3"}>{r.sifatsiz}</span></td>
+                                <td className={`${TD} text-right text-[11px]`}><span className={r.bekor_boldi > 0 ? "text-amber" : "text-text3"}>{r.bekor_boldi}</span></td>
+                                <td className={`${TD} text-right text-[11px] text-text3`}>{r.not_in_bitrix || "—"}</td>
+                                <td className={TD}><SifatBar rate={r.sifat_rate} /></td>
                               </tr>
-
-                              {campExp && Array.from(adsetMap.entries()).map(([adsetName, ads]) => {
-                                const aa = agg(ads);
-                                const adsetKey = `${campKey}::${adsetName}`;
-                                const adsetExp = expandedAdsets.has(adsetKey);
-                                const adsetCpl = aa.meta_leads > 0 ? aa.spend / aa.meta_leads : 0;
-                                const adsetSifat = aa.in_bitrix > 0 ? Math.round(aa.sifatli / aa.in_bitrix * 100) : 0;
-                                return (
-                                  <>
-                                    {/* ── ADSET ROW ── */}
-                                    <tr key={adsetKey}
-                                      className="border-b border-border cursor-pointer select-none"
-                                      style={{ background: "rgba(34,197,94,0.04)" }}
-                                      onClick={() => toggleAdset(adsetKey)}>
-                                      <td className={TD}>
-                                        <div className="flex items-center gap-2" style={{ paddingLeft: 20 }}>
-                                          <ChevronDown size={12} className={`text-green/70 shrink-0 transition-transform ${adsetExp ? "rotate-180" : ""}`} />
-                                          <span className="font-semibold text-text2 text-[11.5px] truncate max-w-[260px]" title={adsetName}>{adsetName}</span>
-                                          <span className="text-[10px] text-text3 shrink-0">({ads.length} ad)</span>
-                                        </div>
-                                      </td>
-                                      <td className={`${TD} text-right text-text`}>
-                                        {aa.spend > 0 ? `$${Math.round(aa.spend)}` : <span className="text-text3">—</span>}
-                                        {adsetCpl > 0 && <div className="text-[10px] text-text3">${adsetCpl.toFixed(2)} CPL</div>}
-                                      </td>
-                                      <td className={`${TD} text-right text-text2`}>{aa.meta_leads}</td>
-                                      <td className={`${TD} text-right text-blue`}>{aa.in_bitrix}</td>
-                                      <td className={`${TD} text-right text-green`}>{aa.sifatli}</td>
-                                      <td className={`${TD} text-right`} style={{ color: "#a78bfa" }}>{aa.konsultatsiya_otdi || "—"}</td>
-                                      <td className={`${TD} text-right`} style={{ color: "#22c55e" }}>{aa.sotuv_boldi || "—"}</td>
-                                      <td className={`${TD} text-right text-red/80`}>{aa.sifatsiz}</td>
-                                      <td className={`${TD} text-right text-amber`}>{aa.bekor_boldi}</td>
-                                      <td className={`${TD} text-right text-text3`}>{aa.not_in_bitrix || "—"}</td>
-                                      <td className={TD}><SifatBar rate={adsetSifat} /></td>
-                                    </tr>
-
-                                    {adsetExp && ads.map((r, ri) => {
-                                      const cpl = r.meta_leads > 0 ? r.spend / r.meta_leads : 0;
-                                      const adKey = `${adsetKey}::${ri}`;
-                                      const isExpAd    = expandedCreative === adKey;
-                                      const isExpSotuv = expandedSotuv    === adKey;
-                                      return (
-                                        <>
-                                        <tr key={ri}
-                                          className={`border-b border-border/50 hover:bg-bg3/30 cursor-pointer ${isExpAd ? "bg-bg3/20" : ""}`}
-                                          onClick={() => { setExpandedCreative(isExpAd ? null : adKey); setExpandedSotuv(null); }}>
-                                          <td className={TD}>
-                                            <div className="flex items-center gap-1.5" style={{ paddingLeft: 40 }}>
-                                              <ChevronDown size={11} className={`text-text3 shrink-0 transition-transform ${isExpAd ? "rotate-180" : ""}`} />
-                                              <div className="flex flex-col gap-0.5 min-w-0">
-                                                {r.ad_name ? (
-                                                  <a href={r.post_url ?? undefined} target="_blank" rel="noreferrer"
-                                                    onClick={e => e.stopPropagation()}
-                                                    className="text-blue hover:underline text-[11px] truncate max-w-[230px] block" title={r.ad_name}>
-                                                    {r.ad_name}
-                                                  </a>
-                                                ) : (
-                                                  <span className="text-text3 text-[11px] italic">Nomsiz ad</span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </td>
-                                          <td className={`${TD} text-right text-[11px] text-text`}>
-                                            {r.spend > 0 ? `$${Math.round(r.spend)}` : <span className="text-text3">—</span>}
-                                            {cpl > 0 && <div className="text-[10px] text-text3">${cpl.toFixed(2)}</div>}
-                                          </td>
-                                          <td className={`${TD} text-right text-[11px] text-text2`}>{r.meta_leads}</td>
-                                          <td className={`${TD} text-right text-[11px]`}><span className={r.in_bitrix > 0 ? "text-blue" : "text-text3"}>{r.in_bitrix}</span></td>
-                                          <td className={`${TD} text-right text-[11px]`}><span className={r.sifatli > 0 ? "text-green" : "text-text3"}>{r.sifatli}</span></td>
-                                          <td className={`${TD} text-right text-[11px]`}><span className={(r.konsultatsiya_otdi ?? 0) > 0 ? "" : "text-text3"} style={(r.konsultatsiya_otdi ?? 0) > 0 ? { color: "#a78bfa" } : {}}>{(r.konsultatsiya_otdi ?? 0) || "—"}</span></td>
-                                          <td className={`${TD} text-right text-[11px]`}
-                                            onClick={e => {
-                                              e.stopPropagation();
-                                              if ((r.sotuv_boldi ?? 0) > 0) {
-                                                setExpandedSotuv(isExpSotuv ? null : adKey);
-                                                setExpandedCreative(null);
-                                              }
-                                            }}>
-                                            <span className={`${((r.sotuv_boldi ?? 0) > 0) ? "text-[#22c55e] underline underline-offset-2 cursor-pointer hover:opacity-70" : "text-text3"}`}>
-                                              {(r.sotuv_boldi ?? 0) || "—"}
-                                            </span>
-                                          </td>
-                                          <td className={`${TD} text-right text-[11px]`}><span className={r.sifatsiz > 0 ? "text-red/80" : "text-text3"}>{r.sifatsiz}</span></td>
-                                          <td className={`${TD} text-right text-[11px]`}><span className={r.bekor_boldi > 0 ? "text-amber" : "text-text3"}>{r.bekor_boldi}</span></td>
-                                          <td className={`${TD} text-right text-[11px] text-text3`}>{r.not_in_bitrix || "—"}</td>
-                                          <td className={TD}><SifatBar rate={r.sifat_rate} /></td>
-                                        </tr>
-                                        {isExpAd    && <CreativeLeadsPanel key={`panel-${adKey}`}  adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
-                                        {isExpSotuv && <SotuvDealsPanel    key={`sotuv-${adKey}`}  adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
-                                        </>
-                                      );
-                                    })}
-                                  </>
-                                );
-                              })}
+                              {isExpAd    && <CreativeLeadsPanel key={`panel-${adKey}`} adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
+                              {isExpSotuv && <SotuvDealsPanel    key={`sotuv-${adKey}`} adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
                             </>
                           );
                         })}
