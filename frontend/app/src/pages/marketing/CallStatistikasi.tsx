@@ -3,12 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
   Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
-  SlidersHorizontal, Download, PhoneOff, X, CalendarDays, ChevronLeft, ChevronRight,
+  Download, PhoneOff, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import {
   getPyCallStats, getCallList, getCallFilterOptions,
-  type CallDashboardFilter, type CallFilterOptions,
+  type CallDashboardFilter,
   type PyCallStatsResult, type PyResponsibleCallStats,
 } from "@/lib/api/leads";
 
@@ -16,71 +16,8 @@ import {
 const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayISO  = () => localISO(new Date());
-const MONTH_NAMES = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
-const MONTH_SHORT_NAMES = ["Yan", "Fev", "Mar", "Apr", "May", "Iyn", "Iyl", "Avg", "Sen", "Okt", "Noy", "Dek"];
-const WEEK_DAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
-
-function parseISODate(iso: string) {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return new Date();
-  return new Date(y, m - 1, d);
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function addMonths(date: Date, months: number) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-}
-
-function startOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - day);
-  return d;
-}
-
-function endOfWeek(date: Date) {
-  return addDays(startOfWeek(date), 6);
-}
-
-function startOfQuarter(date: Date) {
-  return new Date(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
-}
-
-function endOfQuarter(date: Date) {
-  const start = startOfQuarter(date);
-  return new Date(start.getFullYear(), start.getMonth() + 3, 0);
-}
-
-function startOfYear(date: Date) {
-  return new Date(date.getFullYear(), 0, 1);
-}
-
-function endOfYear(date: Date) {
-  return new Date(date.getFullYear(), 11, 31);
-}
-
-function formatInputDate(iso: string) {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}.${m}.${y}`;
-}
-
-function monthDiff(a: Date, b: Date) {
-  return (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
-}
+const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+const startOfMonthISO = () => { const d = new Date(); d.setDate(1); return localISO(d); };
 
 function fmtDur(secs: number): string {
   if (!secs) return "00:00:00";
@@ -269,463 +206,15 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
   );
 }
 
-// ── Date range picker ─────────────────────────────────────────────
-type RangeMode = "day" | "week" | "month" | "quarter" | "year";
+// ── Date presets ─────────────────────────────────────────────────
+const CALL_PRESETS = [
+  { label: "Bugun",  f: todayISO(),        t: todayISO() },
+  { label: "7 kun",  f: daysAgoISO(7),     t: todayISO() },
+  { label: "30 kun", f: daysAgoISO(30),    t: todayISO() },
+  { label: "Bu oy",  f: startOfMonthISO(), t: todayISO() },
+  { label: "Barchasi", f: daysAgoISO(365), t: todayISO() },
+];
 
-function DateRangePicker({ startDate, endDate, onChange }: {
-  startDate: string;
-  endDate: string;
-  onChange: (range: { start_date: string; end_date: string }) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [rangeMode, setRangeMode] = useState<RangeMode>("day");
-  const [pendingStart, setPendingStart] = useState<string | null>(null);
-  const [viewMonth, setViewMonth] = useState(() => startOfMonth(parseISODate(startDate || todayISO())));
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [popoverPosition, setPopoverPosition] = useState({ top: 96, left: 24, width: 520 });
-  const selectedStart = startDate <= endDate ? startDate : endDate;
-  const selectedEnd = startDate <= endDate ? endDate : startDate;
-  const monthsToShow = Math.min(12, Math.max(3, monthDiff(startOfMonth(parseISODate(selectedStart)), startOfMonth(parseISODate(selectedEnd))) + 2));
-  const months = Array.from({ length: monthsToShow }, (_, i) => addMonths(viewMonth, i));
-
-  function updatePopoverPosition() {
-    const rect = rootRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const width = Math.min(540, Math.max(320, window.innerWidth - 24));
-    const height = Math.min(520, window.innerHeight - 24);
-    const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
-    const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - height - 12));
-    setPopoverPosition({ top, left, width });
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    updatePopoverPosition();
-    const closeOnOutside = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const reposition = () => updatePopoverPosition();
-    document.addEventListener("mousedown", closeOnOutside);
-    window.addEventListener("resize", reposition);
-    window.addEventListener("scroll", reposition, true);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      window.removeEventListener("resize", reposition);
-      window.removeEventListener("scroll", reposition, true);
-    };
-  }, [open]);
-
-  function applyRange(start: Date, end: Date, close = false) {
-    const startIso = localISO(start);
-    const endIso = localISO(end);
-    setPendingStart(null);
-    setViewMonth(startOfMonth(start));
-    onChange(startIso <= endIso ? { start_date: startIso, end_date: endIso } : { start_date: endIso, end_date: startIso });
-    if (close) setOpen(false);
-  }
-
-  function applyDate(iso: string) {
-    const clicked = parseISODate(iso);
-
-    if (rangeMode === "week") {
-      applyRange(startOfWeek(clicked), endOfWeek(clicked), true);
-      return;
-    }
-    if (rangeMode === "month") {
-      applyRange(startOfMonth(clicked), endOfMonth(clicked), true);
-      return;
-    }
-    if (rangeMode === "quarter") {
-      applyRange(startOfQuarter(clicked), endOfQuarter(clicked), true);
-      return;
-    }
-    if (rangeMode === "year") {
-      applyRange(startOfYear(clicked), endOfYear(clicked), true);
-      return;
-    }
-
-    if (!pendingStart) {
-      setPendingStart(iso);
-      onChange({ start_date: iso, end_date: iso });
-      return;
-    }
-
-    const start = pendingStart <= iso ? pendingStart : iso;
-    const end = pendingStart <= iso ? iso : pendingStart;
-    setPendingStart(null);
-    onChange({ start_date: start, end_date: end });
-    setOpen(false);
-  }
-
-  function renderMonth(month: Date) {
-    const first = startOfMonth(month);
-    const last = endOfMonth(month);
-    const leading = (first.getDay() + 6) % 7;
-    const days = Array.from({ length: last.getDate() }, (_, i) => localISO(new Date(month.getFullYear(), month.getMonth(), i + 1)));
-    const cells: (string | null)[] = [
-      ...Array.from({ length: leading }, () => null),
-      ...days,
-    ];
-    while (cells.length % 7 !== 0) cells.push(null);
-
-    return (
-      <div key={`${month.getFullYear()}-${month.getMonth()}`} style={{ paddingBottom: 10 }}>
-        <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, margin: "5px 0 8px" }}>
-          {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 5 }}>
-          {WEEK_DAYS.map((d) => (
-            <div key={d} style={{ textAlign: "center", color: "var(--text3)", fontSize: 10.5, fontWeight: 700 }}>{d}</div>
-          ))}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-          {cells.map((iso, idx) => {
-            if (!iso) return <div key={`empty-${idx}`} style={{ height: 30 }} />;
-            const isStart = iso === selectedStart;
-            const isEnd = iso === selectedEnd;
-            const inRange = iso >= selectedStart && iso <= selectedEnd;
-            const isToday = iso === todayISO();
-            const dayOfWeek = parseISODate(iso).getDay();
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-            return (
-              <button
-                key={iso}
-                type="button"
-                onClick={() => applyDate(iso)}
-                style={{
-                  height: 30,
-                  border: `1px solid ${isStart || isEnd ? "#2196F3" : isToday ? "rgba(33,150,243,0.45)" : "transparent"}`,
-                  borderRadius: isStart || isEnd ? 6 : 4,
-                  background: isStart || isEnd ? "#2196F3" : inRange ? "rgba(33,150,243,0.18)" : "transparent",
-                  color: isStart || isEnd ? "#fff" : isWeekend ? "#ff665c" : "var(--text)",
-                  fontSize: 12,
-                  fontWeight: isStart || isEnd || isToday ? 800 : 500,
-                  cursor: "pointer",
-                }}
-              >
-                {Number(iso.slice(-2))}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  function selectionStyle(active: boolean, soft = false): React.CSSProperties {
-    return {
-      border: `1px solid ${active ? "#2196F3" : soft ? "rgba(33,150,243,0.26)" : "transparent"}`,
-      borderRadius: 6,
-      background: active ? "rgba(33,150,243,0.28)" : soft ? "rgba(255,255,255,0.06)" : "transparent",
-      color: active ? "#2196F3" : "var(--text)",
-      fontSize: 13,
-      fontWeight: active ? 800 : 500,
-      cursor: "pointer",
-    };
-  }
-
-  function renderMonthPicker() {
-    const baseYear = parseISODate(selectedStart).getFullYear() - 2;
-    const years = Array.from({ length: 8 }, (_, i) => baseYear + i);
-    return (
-      <div style={{ maxHeight: 360, overflowY: "auto", padding: "10px 12px" }}>
-        {years.map((year) => (
-          <div key={year} style={{ display: "grid", gridTemplateColumns: "56px repeat(3, 1fr)", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <div style={{ color: "var(--text3)", fontSize: 18, fontWeight: 600 }}>{year}</div>
-            {MONTH_SHORT_NAMES.map((name, monthIndex) => {
-              const start = startOfMonth(new Date(year, monthIndex, 1));
-              const end = endOfMonth(start);
-              const startIso = localISO(start);
-              const endIso = localISO(end);
-              const active = selectedStart >= startIso && selectedEnd <= endIso;
-              return (
-                <button key={`${year}-${name}`} type="button" onClick={() => applyRange(start, end, true)} style={{ ...selectionStyle(active), height: 36 }}>
-                  {name}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderQuarterPicker() {
-    const baseYear = parseISODate(selectedStart).getFullYear() - 2;
-    const years = Array.from({ length: 10 }, (_, i) => baseYear + i);
-    return (
-      <div style={{ maxHeight: 360, overflowY: "auto", padding: "10px 12px" }}>
-        {years.map((year) => (
-          <div key={year} style={{ display: "grid", gridTemplateColumns: "56px repeat(4, 1fr)", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <div style={{ color: "var(--text3)", fontSize: 18, fontWeight: 600 }}>{year}</div>
-            {[0, 1, 2, 3].map((quarter) => {
-              const anchor = new Date(year, quarter * 3, 1);
-              const start = startOfQuarter(anchor);
-              const end = endOfQuarter(anchor);
-              const startIso = localISO(start);
-              const endIso = localISO(end);
-              const active = selectedStart >= startIso && selectedEnd <= endIso;
-              return (
-                <button key={`${year}-q${quarter + 1}`} type="button" onClick={() => applyRange(start, end, true)} style={{ ...selectionStyle(active), height: 36 }}>
-                  Q{quarter + 1}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderYearPicker() {
-    const baseYear = parseISODate(selectedStart).getFullYear() - 2;
-    const years = Array.from({ length: 36 }, (_, i) => baseYear + i);
-    return (
-      <div style={{ maxHeight: 360, overflowY: "auto", padding: "10px 12px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-          {years.map((year) => {
-            const start = startOfYear(new Date(year, 0, 1));
-            const end = endOfYear(start);
-            const startIso = localISO(start);
-            const endIso = localISO(end);
-            const active = selectedStart >= startIso && selectedEnd <= endIso;
-            return (
-              <button key={year} type="button" onClick={() => applyRange(start, end, true)} style={{ ...selectionStyle(active), height: 40 }}>
-                {year}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  const quickRanges = [
-    { label: "Bugun", start: new Date(), end: new Date() },
-    { label: "Kecha", start: addDays(new Date(), -1), end: addDays(new Date(), -1) },
-    { label: "Bu hafta", start: startOfWeek(new Date()), end: new Date() },
-    { label: "O'tgan hafta", start: addDays(startOfWeek(new Date()), -7), end: addDays(startOfWeek(new Date()), -1) },
-    { label: "Bu oy", start: startOfMonth(new Date()), end: new Date() },
-    { label: "O'tgan oy", start: startOfMonth(addMonths(new Date(), -1)), end: endOfMonth(addMonths(new Date(), -1)) },
-  ];
-
-  return (
-    <div ref={rootRef} style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={() => {
-          setOpen((v) => !v);
-          setViewMonth(startOfMonth(parseISODate(selectedStart)));
-        }}
-        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px", borderRadius: 5, border: `1px solid ${open ? "#2196F3" : "transparent"}`, background: "var(--bg2)", color: "var(--text)", cursor: "pointer" }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 700 }}>{formatInputDate(selectedStart)} - {formatInputDate(selectedEnd)}</span>
-        <CalendarDays size={16} color={open ? "#2196F3" : "var(--text2)"} />
-      </button>
-
-      {open && (
-        <div style={{ position: "fixed", top: popoverPosition.top, left: popoverPosition.left, width: popoverPosition.width, zIndex: 800, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", boxShadow: "0 18px 42px rgba(0,0,0,0.34)", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", borderBottom: "1px solid var(--border)" }}>
-            {[
-              { id: "day", label: "Kun" },
-              { id: "week", label: "Hafta" },
-              { id: "month", label: "Oy" },
-              { id: "quarter", label: "Kvartal" },
-              { id: "year", label: "Yil" },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setRangeMode(item.id as RangeMode);
-                  setPendingStart(null);
-                }}
-                style={{
-                  border: 0,
-                  borderBottom: rangeMode === item.id ? "2px solid #2196F3" : "2px solid transparent",
-                  background: rangeMode === item.id ? "rgba(33,150,243,0.10)" : "transparent",
-                  color: rangeMode === item.id ? "#2196F3" : "var(--text2)",
-                  padding: "8px 0 7px",
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: `${popoverPosition.width < 420 ? 104 : 124}px 1fr`, minHeight: 360 }}>
-            <div style={{ borderRight: "1px solid var(--border)", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 4, background: "rgba(255,255,255,0.02)" }}>
-              {quickRanges.map((p) => {
-                const startIso = localISO(p.start);
-                const endIso = localISO(p.end);
-                const active = selectedStart === startIso && selectedEnd === endIso;
-                return (
-                  <button key={p.label} type="button" onClick={() => applyRange(p.start, p.end, true)} style={{ border: 0, borderRadius: 5, background: active ? "rgba(33,150,243,0.18)" : "transparent", color: active ? "#2196F3" : "var(--text2)", padding: "8px 8px", fontSize: 12.5, fontWeight: active ? 800 : 500, textAlign: "left", cursor: "pointer" }}>
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              {(rangeMode === "day" || rangeMode === "week") && (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: "1px solid var(--border)" }}>
-                    <button type="button" aria-label="Oldingi oy" onClick={() => setViewMonth((m) => addMonths(m, -1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
-                      <ChevronLeft size={15} />
-                    </button>
-                    <button type="button" aria-label="Keyingi oy" onClick={() => setViewMonth((m) => addMonths(m, 1))} style={{ width: 30, height: 28, border: "1px solid var(--border)", borderRadius: 5, background: "transparent", color: "var(--text2)", display: "grid", placeItems: "center", cursor: "pointer" }}>
-                      <ChevronRight size={15} />
-                    </button>
-                    <span style={{ color: "var(--text3)", fontSize: 11.5 }}>{rangeMode === "day" && pendingStart ? "Tugash sanasini tanlang" : "Oraliqni belgilang"}</span>
-                  </div>
-                  <div style={{ maxHeight: 360, overflowY: "auto", padding: "8px 10px 10px" }}>
-                    {months.map(renderMonth)}
-                  </div>
-                </>
-              )}
-              {rangeMode === "month" && renderMonthPicker()}
-              {rangeMode === "quarter" && renderQuarterPicker()}
-              {rangeMode === "year" && renderYearPicker()}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Filter drawer ─────────────────────────────────────────────────
-function FilterDrawer({ open, value, options, optionsLoading, onChange, onApply, onReset, onClose }: {
-  open: boolean;
-  value: CallFilterState;
-  options?: CallFilterOptions;
-  optionsLoading: boolean;
-  onChange: (v: CallFilterState) => void;
-  onApply: () => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    border: "1px solid transparent",
-    borderRadius: 4,
-    background: "var(--bg2)",
-    color: "var(--text)",
-    padding: "11px 12px",
-    fontSize: 13,
-    outline: "none",
-  };
-  const labelStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    fontSize: 11,
-    color: "var(--text2)",
-  };
-  const update = (patch: Partial<CallFilterState>) => onChange({ ...value, ...patch });
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500 }}>
-      <button aria-label="Filtrni yopish" onClick={onClose} style={{ position: "absolute", inset: 0, border: 0, background: "rgba(0,0,0,0.35)", cursor: "default" }} />
-      <aside style={{ position: "absolute", top: 0, right: 0, width: 336, maxWidth: "calc(100vw - 20px)", height: "100%", background: "var(--bg)", borderLeft: "1px solid var(--border)", boxShadow: "-18px 0 40px rgba(0,0,0,0.24)", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "28px 24px 18px" }}>
-          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.08em", color: "var(--text)" }}>FILTR</div>
-          <button onClick={onClose} style={{ width: 34, height: 34, border: 0, background: "transparent", color: "var(--text2)", cursor: "pointer", display: "grid", placeItems: "center" }}>
-            <X size={20} />
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 142px", display: "flex", flexDirection: "column", gap: 13 }}>
-          <DateRangePicker
-            startDate={value.start_date}
-            endDate={value.end_date}
-            onChange={(range) => update(range)}
-          />
-
-          <label style={labelStyle}>
-            Xodim
-            <select value={value.responsible_id} onChange={(e) => update({ responsible_id: e.target.value })} style={inputStyle}>
-              <option value="all">{optionsLoading ? "Yuklanmoqda..." : "Barcha xodimlar"}</option>
-              {(options?.responsibles ?? []).map((r) => (
-                <option key={r.id} value={r.id}>{r.full_name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label style={labelStyle}>
-            Holat
-            <select value={value.status} onChange={(e) => update({ status: e.target.value })} style={inputStyle}>
-              {callStatusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </label>
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)", fontSize: 14, paddingTop: 4 }}>
-            Klient
-            <ChevronDown size={16} color="var(--text2)" />
-          </div>
-
-          <input value={value.phone} onChange={(e) => update({ phone: e.target.value })} placeholder="Telefon klienta" style={inputStyle} />
-
-          <label style={labelStyle}>
-            Manba
-            <select value={value.source} onChange={(e) => update({ source: e.target.value })} style={inputStyle}>
-              <option value="all">Barchasi</option>
-              {(options?.sources ?? []).map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label style={labelStyle}>
-            Qo'ng'iroq turi
-            <select value={value.call_kind} onChange={(e) => update({ call_kind: e.target.value })} style={inputStyle}>
-              {callKindOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </label>
-
-          <label style={labelStyle}>
-            Bosqich
-            <select value={value.stage} onChange={(e) => update({ stage: e.target.value })} style={inputStyle}>
-              {callStageOptionGroups.map((g) =>
-                g.group
-                  ? <optgroup key={g.group} label={g.group}>
-                      {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </optgroup>
-                  : g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)
-              )}
-            </select>
-          </label>
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)", fontSize: 14, paddingTop: 4 }}>
-            Davomiylik
-            <ChevronDown size={16} color="var(--text2)" />
-          </div>
-
-          <div style={{ color: "var(--text2)", fontSize: 13, marginTop: -2 }}>Qo'ng'iroq davomiyligi, sek</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, overflow: "hidden", borderRadius: 4, border: "1px solid transparent", marginBottom: 12 }}>
-            <input type="number" min={0} value={value.duration_from} onChange={(e) => update({ duration_from: e.target.value })} placeholder="dan 0" style={{ ...inputStyle, borderRadius: 0, border: 0 }} />
-            <input type="number" min={0} value={value.duration_to} onChange={(e) => update({ duration_to: e.target.value })} placeholder="gacha ∞" style={{ ...inputStyle, borderRadius: 0, border: 0 }} />
-          </div>
-        </div>
-
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 24px 24px", background: "linear-gradient(180deg, transparent, var(--bg) 24%)", display: "flex", gap: 10 }}>
-          <button onClick={onReset} style={{ width: 88, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", borderRadius: 6, padding: "10px 12px", fontSize: 13, cursor: "pointer" }}>
-            Tozalash
-          </button>
-          <button onClick={onApply} style={{ flex: 1, border: 0, background: "#1976D2", color: "#fff", borderRadius: 6, padding: "10px 14px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-            Qo'llash
-          </button>
-        </div>
-      </aside>
-    </div>
-  );
-}
 
 // ── Delta badge ───────────────────────────────────────────────────
 
@@ -778,14 +267,15 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
 
 // ── Page ──────────────────────────────────────────────────────────
 export default function CallStatistikasi() {
-  const [filters, setFilters]           = useState<CallFilterState>(() => defaultCallFilters());
-  const [draftFilters, setDraftFilters] = useState<CallFilterState>(() => defaultCallFilters());
-  const [filterOpen, setFilterOpen]     = useState(false);
+  const [filters, setFilters]       = useState<CallFilterState>(() => defaultCallFilters());
+  const [filterOpen, setFilterOpen] = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
   const pageScrollRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const apiFilter = toApiFilter(filters);
   const activeFilters = activeFilterCount(filters);
+
+  const update = (patch: Partial<CallFilterState>) => setFilters(s => ({ ...s, ...patch }));
 
   const statsQ = useQuery({
     queryKey: ["py-call-stats", apiFilter],
@@ -796,7 +286,6 @@ export default function CallStatistikasi() {
     queryKey: ["call-filter-options"],
     queryFn: getCallFilterOptions,
   });
-
 
   const data: PyCallStatsResult | undefined = statsQ.data;
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
@@ -818,41 +307,118 @@ export default function CallStatistikasi() {
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
 
+  const selStyle = { width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "var(--bg2)" }}>
-      <Topbar
-        title="Call statistikasi"
-        actions={
-          <div style={{ display: "flex", gap: 8, position: "relative" }}>
-            <div style={{ position: "relative" }}>
-              <button onClick={() => { setDraftFilters(filters); setFilterOpen(true); }} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: `1px solid ${filterOpen || activeFilters ? "#2196F3" : "var(--border)"}`, background: "var(--bg)", color: filterOpen || activeFilters ? "#2196F3" : "var(--text2)", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
-                <SlidersHorizontal size={14} />Filtrlar
-                {activeFilters > 0 && (
-                  <span style={{ minWidth: 18, height: 18, borderRadius: 9, background: "#2196F3", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
-                    {activeFilters}
-                  </span>
-                )}
-              </button>
-            </div>
-            <FilterDrawer
-              open={filterOpen}
-              value={draftFilters}
-              options={filterOptionsQ.data}
-              optionsLoading={filterOptionsQ.isLoading}
-              onChange={setDraftFilters}
-              onClose={() => setFilterOpen(false)}
-              onReset={() => setDraftFilters(defaultCallFilters())}
-              onApply={() => {
-                setFilters(draftFilters);
-                setSelectedResp(null);
-                setFilterOpen(false);
-              }}
-            />
-          </div>
-        }
-      />
+      <Topbar title="Call statistikasi" />
 
-      <div ref={pageScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "20px 24px 96px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div ref={pageScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "18px 24px 96px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* ── Inline filter panel ── */}
+        <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
+          <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+            onClick={() => setFilterOpen(o => !o)}>
+            <Search size={14} style={{ color: "var(--text3)" }} />
+            <span style={{ fontSize: 12.5, color: "var(--text3)", flex: 1 }}>
+              {`Filtr: ${filters.start_date} → ${filters.end_date}${activeFilters > 0 ? ` · ${activeFilters} ta qo'shimcha` : ""}`}
+            </span>
+            {activeFilters > 0 && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#3b82f6", color: "#fff" }}>{activeFilters} filtr</span>
+            )}
+            <ChevronDown size={14} style={{ color: "var(--text3)", transform: filterOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+          </div>
+
+          {filterOpen && (
+            <div style={{ borderTop: "1px solid var(--border)", padding: "16px 20px" }}>
+              {/* Quick presets */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                {CALL_PRESETS.map(p => {
+                  const active = filters.start_date === p.f && filters.end_date === p.t;
+                  return (
+                    <button key={p.label} onClick={() => update({ start_date: p.f, end_date: p.t })}
+                      style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", background: active ? "#3b82f6" : "var(--bg3)", border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`, color: active ? "#fff" : "var(--text2)", fontWeight: active ? 600 : 400 }}>
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Date inputs */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Dan (boshlanish)</div>
+                  <input type="date" value={filters.start_date} onChange={e => update({ start_date: e.target.value })} style={selStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Gacha (tugash)</div>
+                  <input type="date" value={filters.end_date} onChange={e => update({ end_date: e.target.value })} style={selStyle} />
+                </div>
+              </div>
+
+              {/* Other filters row */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+                <div style={{ flex: "1 1 160px", minWidth: 140 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Mas'ul xodim</div>
+                  <select value={filters.responsible_id} onChange={e => update({ responsible_id: e.target.value })} style={selStyle}>
+                    <option value="all">{filterOptionsQ.isLoading ? "Yuklanmoqda..." : "Barchasi"}</option>
+                    {(filterOptionsQ.data?.responsibles ?? []).map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 140px", minWidth: 130 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Holat</div>
+                  <select value={filters.status} onChange={e => update({ status: e.target.value })} style={selStyle}>
+                    {callStatusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 140px", minWidth: 130 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Manba</div>
+                  <select value={filters.source} onChange={e => update({ source: e.target.value })} style={selStyle}>
+                    <option value="all">Barchasi</option>
+                    {(filterOptionsQ.data?.sources ?? []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 140px", minWidth: 130 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Qo'ng'iroq turi</div>
+                  <select value={filters.call_kind} onChange={e => update({ call_kind: e.target.value })} style={selStyle}>
+                    {callKindOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 160px", minWidth: 140 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Bosqich</div>
+                  <select value={filters.stage} onChange={e => update({ stage: e.target.value })} style={selStyle}>
+                    {callStageOptionGroups.map(g =>
+                      g.group
+                        ? <optgroup key={g.group} label={g.group}>
+                            {g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </optgroup>
+                        : g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)
+                    )}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Klient telefon</div>
+                  <input value={filters.phone} onChange={e => update({ phone: e.target.value })} placeholder="Telefon klienta" style={selStyle} />
+                </div>
+              </div>
+
+              {/* Duration */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Davomiylik (sek)</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <input type="number" min={0} value={filters.duration_from} onChange={e => update({ duration_from: e.target.value })} placeholder="dan 0" style={selStyle} />
+                  <input type="number" min={0} value={filters.duration_to} onChange={e => update({ duration_to: e.target.value })} placeholder="gacha ∞" style={selStyle} />
+                </div>
+              </div>
+
+              {activeFilters > 0 && (
+                <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+                  <button onClick={() => { setFilters(defaultCallFilters()); setSelectedResp(null); }} style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── Row 1 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>

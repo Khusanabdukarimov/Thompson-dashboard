@@ -1,14 +1,13 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  RefreshCw, Search, Calendar,
-  ChevronDown, TrendingUp, X,
+  RefreshCw, Search, ChevronDown, TrendingUp,
 } from "lucide-react";
 import { Skeleton } from "@/components/Skeleton";
 import {
   getMetaInsights, getMetaCampaigns, getCampaignForms, getFormLeads,
   getPageForms, getKunlikHisobot, getCampaignCreatives, getCreativeLeads, getCreativeDeals,
-  MONTH_KEYS, MONTH_LABELS,
+  MONTH_KEYS,
 } from "@/lib/api/meta";
 import type { MonthKey, PageForm } from "@/lib/api/meta";
 import { fmtNum } from "@/lib/utils";
@@ -30,6 +29,103 @@ function DeltaTag({ val }: { val: number }) {
 }
 
 type Tab = "kampaniyalar" | "formalar" | "lidlar" | "creative";
+
+// ── Creative leads sub-table ──────────────────────────────────────────────────
+const BX_URL = "https://mountain.bitrix24.kz/crm/lead/details";
+
+const STAGE_COLOR: Record<string, string> = {
+  UC_F8K4GI: "#ef4444",
+  UC_NAZK5J: "#f59e0b",
+  JUNK:      "#6b7280",
+  CONVERTED: "#22c55e",
+  UC_L28G68: "#3b82f6",
+};
+
+function phoneDigits(p: string) { return (p || '').replace(/[^0-9]/g, ''); }
+function notInBitrixReason(phone: string, isDuplicate: boolean): string {
+  const digits = phoneDigits(phone);
+  if (digits.length < 9) return 'Telefon noto\'g\'ri';
+  if (isDuplicate) return 'Duplikat';
+  return 'Bitrix24 da yo\'q';
+}
+
+function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
+  const q = useQuery({
+    queryKey: ["creative-leads", adsetName, month, year, from, to],
+    queryFn: () => getCreativeLeads(adsetName, month, year, from, to),
+    staleTime: 2 * 60_000,
+  });
+  if (q.isLoading) return <tr><td colSpan={10} className="px-6 py-4"><div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div></td></tr>;
+  if (!q.data?.leads?.length) return <tr><td colSpan={10} className="px-6 py-4 text-[12px] text-text3 italic">Bu adset uchun lidlar topilmadi</td></tr>;
+  const leads = q.data.leads;
+  return (
+    <tr><td colSpan={10} className="p-0">
+      <div className="border-t border-border/40 bg-bg3/30">
+        <table className="w-full text-[11.5px]">
+          <thead><tr className="border-b border-border/30 bg-bg3/50">
+            {["ISM","TELEFON","PLATFORMA","SANA","BOSQICH","BITRIX24"].map(h => <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {leads.map(l => {
+              const stageColor = l.stage_code ? (STAGE_COLOR[l.stage_code] ?? "#94a3b8") : "#64748b";
+              const isSifatli = l.stage_code && !["UC_F8K4GI","UC_NAZK5J","JUNK"].includes(l.stage_code);
+              const reason = !l.bitrix_id ? notInBitrixReason(l.phone, l.is_duplicate) : null;
+              const reasonColor = reason === 'Telefon noto\'g\'ri' ? '#ef4444' : reason === 'Duplikat' ? '#f59e0b' : '#64748b';
+              return (
+                <tr key={l.fb_id} className="border-b border-border/20 hover:bg-bg3/40">
+                  <td className="px-4 py-2.5 font-medium text-text">{l.full_name}</td>
+                  <td className="px-4 py-2.5 text-text2 font-mono">{l.phone}</td>
+                  <td className="px-4 py-2.5"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.platform === "instagram" ? "bg-[#e91e8c]/15 text-[#e91e8c]" : "bg-blue/15 text-blue"}`}>{l.platform === "instagram" ? "IG" : "FB"}</span></td>
+                  <td className="px-4 py-2.5 text-text3">{l.created_time ? new Date(l.created_time).toLocaleDateString("ru-RU") : "—"}</td>
+                  <td className="px-4 py-2.5">
+                    {l.stage_name ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>{l.stage_name}</span>
+                      : <div className="flex flex-col gap-0.5"><span className="text-[10.5px] text-text3 italic">Bitrix24 da yo'q</span>{reason !== "Bitrix24 da yo'q" && <span className="text-[10px] font-semibold px-1 py-0.5 rounded w-fit" style={{ color: reasonColor, background: reasonColor + "22" }}>{reason}</span>}</div>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {l.bitrix_id ? <a href={`${BX_URL}/${l.bitrix_id}/`} target="_blank" rel="noopener noreferrer" className={`text-[11px] font-semibold underline underline-offset-2 ${isSifatli ? "text-green" : "text-blue"} hover:opacity-80`}>#{l.bitrix_id} →</a> : <span className="text-[11px] text-text3/60">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </td></tr>
+  );
+}
+
+function SotuvDealsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
+  const q = useQuery({
+    queryKey: ["creative-deals", adsetName, month, year, from, to],
+    queryFn: () => getCreativeDeals(adsetName, month, year, from, to),
+    staleTime: 2 * 60_000,
+  });
+  if (q.isLoading) return <tr><td colSpan={10} className="px-6 py-4"><div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div></td></tr>;
+  if (!q.data?.deals?.length) return <tr><td colSpan={10} className="px-6 py-4 text-[12px] text-text3 italic">Bu adset uchun sotuv sdelkalari topilmadi</td></tr>;
+  return (
+    <tr><td colSpan={10} className="p-0">
+      <div className="border-t border-border/40 bg-[#22c55e]/5">
+        <table className="w-full text-[11.5px]">
+          <thead><tr className="border-b border-border/30 bg-[#22c55e]/10">
+            {["SDELKA","TELEFON","MAS'UL","SUMMA","SANA","BOSQICH"].map(h => <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {q.data.deals.map(d => (
+              <tr key={d.id} className="border-b border-border/20 hover:bg-[#22c55e]/10">
+                <td className="px-4 py-2.5"><a href={`https://mountain.bitrix24.kz/crm/deal/details/${d.id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-[#22c55e] underline underline-offset-2 hover:opacity-80">#{d.id} →</a></td>
+                <td className="px-4 py-2.5 font-mono text-text2">{d.phone}</td>
+                <td className="px-4 py-2.5 text-text2">{d.responsible}</td>
+                <td className="px-4 py-2.5 font-semibold text-text">{d.opportunity > 0 ? `$${d.opportunity.toLocaleString()}` : '—'}</td>
+                <td className="px-4 py-2.5 text-text3">{d.date || '—'}</td>
+                <td className="px-4 py-2.5"><span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded bg-[#22c55e]/20 text-[#22c55e]">{d.stage}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </td></tr>
+  );
+}
 
 // ── Lead sub-table ─────────────────────────────────────────────────────────────
 function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campaignId: string; from: string; to: string }) {
@@ -134,429 +230,6 @@ function MiniBar({ label, pct: p, color }: { label: string; pct: number; color: 
   );
 }
 
-// ── DateRangePicker ───────────────────────────────────────────────────────────
-const UZ_DAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
-
-function isoDay(y: number, m: number, d: number) {
-  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-}
-function fmtLabel(iso: string) {
-  const d = new Date(iso + "T00:00:00");
-  return `${d.getDate()} ${MONTH_LABELS[MONTH_KEYS[d.getMonth()]].slice(0, 3)}`;
-}
-
-function DateRangePicker({
-  fromDate, toDate, onChange,
-}: {
-  fromDate: string;
-  toDate: string;
-  onChange: (from: string, to: string) => void;
-}) {
-  const [open, setOpen]       = useState(false);
-  const [navYear, setNavYear]   = useState(() => new Date(fromDate + "T00:00:00").getFullYear());
-  const [navMonth, setNavMonth] = useState(() => new Date(fromDate + "T00:00:00").getMonth());
-  const [pending, setPending]   = useState<string | null>(null); // first click while selecting range
-  const [hover, setHover]       = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) { setPending(null); setHover(null); return; }
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); }
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-
-  const today = new Date();
-
-  function prevMonth() {
-    if (navMonth === 0) { setNavMonth(11); setNavYear(y => y - 1); }
-    else setNavMonth(m => m - 1);
-  }
-  function nextMonth() {
-    if (navMonth === 11) { setNavMonth(0); setNavYear(y => y + 1); }
-    else setNavMonth(m => m + 1);
-  }
-
-  const startOffset = (new Date(navYear, navMonth, 1).getDay() + 6) % 7;
-  const daysInNav   = new Date(navYear, navMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(startOffset).fill(null),
-    ...Array.from({ length: daysInNav }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  function clickDay(day: number) {
-    const iso = isoDay(navYear, navMonth, day);
-    if (!pending) {
-      setPending(iso);
-    } else if (iso === pending) {
-      // Same day clicked twice → single day selection
-      onChange(iso, iso);
-      setPending(null);
-      setHover(null);
-      setOpen(false);
-    } else {
-      const [a, b] = iso < pending ? [iso, pending] : [pending, iso];
-      onChange(a, b);
-      setPending(null);
-      setHover(null);
-      setOpen(false);
-    }
-  }
-
-  function goToday() {
-    const t = new Date();
-    const iso = t.toISOString().slice(0, 10);
-    const first = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
-    onChange(first, iso);
-    setPending(null);
-    setOpen(false);
-  }
-
-  function clearAll() {
-    const t = new Date();
-    const iso = t.toISOString().slice(0, 10);
-    const first = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
-    onChange(first, iso);
-    setPending(null);
-    setOpen(false);
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg text-[13px] text-text hover:bg-bg3 transition-colors"
-      >
-        <Calendar className="w-4 h-4 text-text3 shrink-0" />
-        {fromDate === toDate ? (
-          <span className="font-semibold text-text">{fmtLabel(fromDate)}</span>
-        ) : (
-          <>
-            <span className="font-semibold text-text">{fmtLabel(fromDate)}</span>
-            <span className="text-text3 text-[11px]">→</span>
-            <span className="font-semibold text-text">{fmtLabel(toDate)}</span>
-          </>
-        )}
-        <ChevronDown className={`w-3.5 h-3.5 text-text3 transition-transform ml-1 ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div
-          className="absolute top-full left-0 mt-2 z-50 rounded-xl shadow-2xl border border-border overflow-hidden select-none"
-          style={{ background: "#1e293b", minWidth: 264 }}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-            <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-white transition-colors text-base">‹</button>
-            <span className="text-[13px] font-bold text-white">
-              {MONTH_LABELS[MONTH_KEYS[navMonth]]} {navYear}
-            </span>
-            <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-white transition-colors text-base">›</button>
-          </div>
-
-          {/* Selecting hint */}
-          {pending && (
-            <div className="px-4 py-1.5 text-[11px] text-[#64748b] border-b border-white/5">
-              {fmtLabel(pending)} tanlandi → tugash sanasini bosing
-            </div>
-          )}
-
-          {/* Day headers */}
-          <div className="grid grid-cols-7 px-3 pt-2">
-            {UZ_DAYS.map(d => (
-              <div key={d} className="text-center text-[10px] font-bold text-[#64748b] py-1">{d}</div>
-            ))}
-          </div>
-
-          {/* Day cells */}
-          <div className="grid grid-cols-7 px-3 pb-2">
-            {cells.map((day, i) => {
-              if (day === null) return <div key={i} />;
-              const iso = isoDay(navYear, navMonth, day);
-              const isToday = iso === today.toISOString().slice(0, 10);
-
-              // Determine if in selected range
-              const rangeFrom = pending ? (hover && hover < pending ? hover : pending) : fromDate;
-              const rangeTo   = pending ? (hover && hover > pending ? hover : pending) : toDate;
-              const [rA, rB]  = rangeFrom <= rangeTo ? [rangeFrom, rangeTo] : [rangeTo, rangeFrom];
-              const isFrom    = !pending && iso === fromDate;
-              const isTo      = !pending && iso === toDate;
-              const isPending = iso === pending;
-              const inRange   = iso > rA && iso < rB;
-              const isEdge    = iso === rA || iso === rB;
-
-              return (
-                <button
-                  key={i}
-                  onClick={() => clickDay(day)}
-                  onMouseEnter={() => pending && setHover(iso)}
-                  onMouseLeave={() => pending && setHover(null)}
-                  className={`
-                    h-8 w-full text-[12px] font-medium transition-colors
-                    ${isEdge || isPending
-                      ? "rounded-md bg-blue text-white font-bold"
-                      : isFrom || isTo
-                        ? "rounded-md bg-blue text-white font-bold"
-                        : inRange
-                          ? "bg-blue/20 text-white rounded-none"
-                          : isToday
-                            ? "rounded-md bg-white/10 text-blue font-bold"
-                            : "rounded-md text-[#cbd5e1] hover:bg-white/10"
-                    }
-                  `}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/10">
-            <button onClick={clearAll} className="text-[12px] font-semibold text-[#64748b] hover:text-white transition-colors">
-              Clear
-            </button>
-            <button onClick={goToday} className="text-[12px] font-semibold text-blue hover:text-blue/80 transition-colors">
-              Today
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Creative leads sub-table ──────────────────────────────────────────────────
-const BX_URL = "https://mountain.bitrix24.kz/crm/lead/details";
-
-const STAGE_COLOR: Record<string, string> = {
-  UC_F8K4GI: "#ef4444", // Sifatsiz
-  UC_NAZK5J: "#f59e0b", // Bekor bo'ldi
-  JUNK:      "#6b7280", // Sandiq
-  CONVERTED: "#22c55e", // Konsultatsiya o'tkazildi
-  UC_L28G68: "#3b82f6", // Konsultatsiya belgilandi
-};
-
-function phoneDigits(p: string) { return (p || '').replace(/[^0-9]/g, ''); }
-function notInBitrixReason(phone: string, isDuplicate: boolean): string {
-  const digits = phoneDigits(phone);
-  if (digits.length < 9) return 'Telefon noto\'g\'ri';
-  if (isDuplicate) return 'Duplikat';
-  return 'Bitrix24 da yo\'q';
-}
-
-function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
-  const q = useQuery({
-    queryKey: ["creative-leads", adsetName, month, year, from, to],
-    queryFn: () => getCreativeLeads(adsetName, month, year, from, to),
-    staleTime: 2 * 60_000,
-  });
-
-  if (q.isLoading) return (
-    <tr><td colSpan={10} className="px-6 py-4">
-      <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div>
-    </td></tr>
-  );
-  if (!q.data?.leads?.length) return (
-    <tr><td colSpan={10} className="px-6 py-4 text-[12px] text-text3 italic">Bu adset uchun lidlar topilmadi</td></tr>
-  );
-
-  const leads = q.data.leads;
-  return (
-    <tr>
-      <td colSpan={10} className="p-0">
-        <div className="border-t border-border/40 bg-bg3/30">
-          <table className="w-full text-[11.5px]">
-            <thead>
-              <tr className="border-b border-border/30 bg-bg3/50">
-                {["ISM", "TELEFON", "PLATFORMA", "SANA", "BOSQICH", "BITRIX24"].map(h => (
-                  <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map(l => {
-                const stageColor = l.stage_code ? (STAGE_COLOR[l.stage_code] ?? "#94a3b8") : "#64748b";
-                const isSifatli = l.stage_code && !["UC_F8K4GI", "UC_NAZK5J", "JUNK"].includes(l.stage_code);
-                const reason = !l.bitrix_id ? notInBitrixReason(l.phone, l.is_duplicate) : null;
-                const reasonColor = reason === 'Telefon noto\'g\'ri' ? '#ef4444'
-                                  : reason === 'Duplikat'           ? '#f59e0b'
-                                  : '#64748b';
-                return (
-                  <tr key={l.fb_id} className="border-b border-border/20 hover:bg-bg3/40">
-                    <td className="px-4 py-2.5 font-medium text-text">{l.full_name}</td>
-                    <td className="px-4 py-2.5 text-text2 font-mono">{l.phone}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.platform === "instagram" ? "bg-[#e91e8c]/15 text-[#e91e8c]" : "bg-blue/15 text-blue"}`}>
-                        {l.platform === "instagram" ? "IG" : "FB"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-text3">
-                      {l.created_time ? new Date(l.created_time).toLocaleDateString("ru-RU") : "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {l.stage_name ? (
-                        <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>
-                          {l.stage_name}
-                        </span>
-                      ) : (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10.5px] text-text3 italic">Bitrix24 da yo'q</span>
-                          {reason !== "Bitrix24 da yo'q" && (
-                            <span className="text-[10px] font-semibold px-1 py-0.5 rounded w-fit" style={{ color: reasonColor, background: reasonColor + "22" }}>
-                              {reason}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {l.bitrix_id ? (
-                        <a
-                          href={`${BX_URL}/${l.bitrix_id}/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`text-[11px] font-semibold underline underline-offset-2 ${isSifatli ? "text-green" : "text-blue"} hover:opacity-80`}
-                        >
-                          #{l.bitrix_id} →
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-text3/60">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function SotuvDealsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
-  const q = useQuery({
-    queryKey: ["creative-deals", adsetName, month, year, from, to],
-    queryFn: () => getCreativeDeals(adsetName, month, year, from, to),
-    staleTime: 2 * 60_000,
-  });
-
-  if (q.isLoading) return (
-    <tr><td colSpan={10} className="px-6 py-4">
-      <div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div>
-    </td></tr>
-  );
-  if (!q.data?.deals?.length) return (
-    <tr><td colSpan={10} className="px-6 py-4 text-[12px] text-text3 italic">Bu adset uchun sotuv sdelkalari topilmadi</td></tr>
-  );
-
-  return (
-    <tr>
-      <td colSpan={10} className="p-0">
-        <div className="border-t border-border/40 bg-[#22c55e]/5">
-          <table className="w-full text-[11.5px]">
-            <thead>
-              <tr className="border-b border-border/30 bg-[#22c55e]/10">
-                {["SDELKA", "TELEFON", "MAS'UL", "SUMMA", "SANA", "BOSQICH"].map(h => (
-                  <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {q.data.deals.map(d => (
-                <tr key={d.id} className="border-b border-border/20 hover:bg-[#22c55e]/10">
-                  <td className="px-4 py-2.5">
-                    <a
-                      href={`https://mountain.bitrix24.kz/crm/deal/details/${d.id}/`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-semibold text-[#22c55e] underline underline-offset-2 hover:opacity-80"
-                    >
-                      #{d.id} →
-                    </a>
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-text2">{d.phone}</td>
-                  <td className="px-4 py-2.5 text-text2">{d.responsible}</td>
-                  <td className="px-4 py-2.5 font-semibold text-text">
-                    {d.opportunity > 0 ? `$${d.opportunity.toLocaleString()}` : '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-text3">{d.date || '—'}</td>
-                  <td className="px-4 py-2.5">
-                    <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded bg-[#22c55e]/20 text-[#22c55e]">
-                      {d.stage}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-// ── FilterDropdown ────────────────────────────────────────────────────────────
-function FilterDropdown({ label, options, value, onChange }: {
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-
-  const active = value !== "";
-  return (
-    <div ref={ref} className="relative flex flex-col gap-0.5">
-      <span className="text-[9px] font-bold text-text3 tracking-wider uppercase">{label}</span>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-1 cursor-pointer focus:outline-none ${active ? "text-blue" : ""}`}
-      >
-        <span className="text-[13px] font-semibold text-text truncate max-w-[140px]">
-          {active ? (value.length > 20 ? value.slice(0, 20) + "…" : value) : "Hammasi"}
-        </span>
-        {active
-          ? <X className="w-3 h-3 text-blue" onClick={e => { e.stopPropagation(); onChange(""); setOpen(false); }} />
-          : <ChevronDown className={`w-3.5 h-3.5 text-text3 transition-transform ${open ? "rotate-180" : ""}`} />
-        }
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-bg2 border border-border rounded-lg shadow-lg min-w-[180px] max-w-[260px] max-h-[280px] overflow-y-auto">
-          <div
-            className="px-3 py-2 text-[12px] text-text3 hover:bg-bg3 cursor-pointer"
-            onClick={() => { onChange(""); setOpen(false); }}
-          >
-            Hammasi
-          </div>
-          {options.map(opt => (
-            <div
-              key={opt}
-              className={`px-3 py-2 text-[12px] hover:bg-bg3 cursor-pointer truncate ${opt === value ? "text-blue font-semibold" : "text-text"}`}
-              title={opt}
-              onClick={() => { onChange(opt); setOpen(false); }}
-            >
-              {opt}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -566,9 +239,17 @@ function getFirstOfMonth() {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+const KAMP_PRESETS = [
+  { label: "Bugun",    f: () => getTodayIso(),      t: () => getTodayIso() },
+  { label: "7 kun",    f: () => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); }, t: () => getTodayIso() },
+  { label: "30 kun",   f: () => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); }, t: () => getTodayIso() },
+  { label: "Bu oy",    f: () => getFirstOfMonth(),  t: () => getTodayIso() },
+];
+
 export default function KampaniyalarPage() {
   const [fromDate, setFromDate]     = useState(getFirstOfMonth);
   const [toDate,   setToDate]       = useState(getTodayIso);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [tab, setTab]               = useState<Tab>("formalar");
   const [search, setSearch]         = useState("");
   const [expandedForm, setExpandedForm]   = useState<string | null>(null);
@@ -806,13 +487,6 @@ export default function KampaniyalarPage() {
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-bg text-[13px] text-text placeholder:text-text3 focus:outline-none focus:border-blue"
           />
         </div>
-
-        <DateRangePicker
-          fromDate={fromDate}
-          toDate={toDate}
-          onChange={(f, t) => { setFromDate(f); setToDate(t); }}
-        />
-
         <div className="flex items-center gap-2 ml-auto">
           <button onClick={refresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border hover:bg-bg3 text-text3 hover:text-text transition-colors disabled:opacity-60">
             <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
@@ -821,30 +495,104 @@ export default function KampaniyalarPage() {
         </div>
       </div>
 
-      {/* ── Filter row ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-6 px-5 py-2.5 border-b border-border bg-bg2 shrink-0">
-        <FilterDropdown label="KAMPANIYA" options={optCampaigns} value={filterCampaign}
-          onChange={v => { setFilterCampaign(v); setFilterPlatform(""); setFilterAdset(""); setFilterForm(""); }} />
-        <FilterDropdown
-          label="PLATFORMA"
-          options={optPlatforms.map(p => p === "facebook" ? "Facebook" : "Instagram")}
-          value={filterPlatform === "facebook" ? "Facebook" : filterPlatform === "instagram" ? "Instagram" : ""}
-          onChange={v => { setFilterPlatform(v === "Facebook" ? "facebook" : v === "Instagram" ? "instagram" : ""); setFilterAdset(""); }}
-        />
-        <FilterDropdown label="FORMALAR" options={optForms} value={filterForm} onChange={setFilterForm} />
-        <FilterDropdown label="ADSET"    options={optAdsets} value={filterAdset} onChange={setFilterAdset} />
-        {tab === "creative" && (
-          <FilterDropdown label="CREATIVE" options={optCreatives} value={filterCreative} onChange={setFilterCreative} />
-        )}
-        {(filterCampaign || filterPlatform || filterForm || filterAdset || filterCreative) && (
-          <button
-            onClick={() => { setFilterCampaign(""); setFilterPlatform(""); setFilterForm(""); setFilterAdset(""); setFilterCreative(""); }}
-            className="text-[11px] text-text3 hover:text-red flex items-center gap-1 transition-colors"
-          >
-            <X className="w-3 h-3" /> Tozalash
-          </button>
-        )}
-      </div>
+      {/* ── Inline filter panel (Sdelka-style) ──────────────────────────────── */}
+      {(() => {
+        const hasExtra = !!(filterCampaign || filterPlatform || filterForm || filterAdset || filterCreative);
+        const selStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 };
+        return (
+          <div style={{ background: "var(--bg2)", borderBottom: "1px solid var(--border)", overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+              onClick={() => setFilterOpen(o => !o)}>
+              <Search size={14} style={{ color: "var(--text3)" }} />
+              <span style={{ fontSize: 12.5, color: "var(--text3)", flex: 1 }}>
+                {`Filtr: ${fromDate} → ${toDate}${hasExtra ? " · qo'shimcha filtrlar" : ""}`}
+              </span>
+              {hasExtra && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#3b82f6", color: "#fff" }}>filtr</span>
+              )}
+              <ChevronDown size={14} style={{ color: "var(--text3)", transform: filterOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+            </div>
+
+            {filterOpen && (
+              <div style={{ borderTop: "1px solid var(--border)", padding: "16px 20px" }}>
+                {/* Quick presets */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                  {KAMP_PRESETS.map(p => {
+                    const pf = p.f(), pt = p.t();
+                    const active = fromDate === pf && toDate === pt;
+                    return (
+                      <button key={p.label} onClick={() => { setFromDate(pf); setToDate(pt); }}
+                        style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", background: active ? "#3b82f6" : "var(--bg3)", border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`, color: active ? "#fff" : "var(--text2)", fontWeight: active ? 600 : 400 }}>
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Date inputs */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Dan (boshlanish)</div>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={selStyle} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Gacha (tugash)</div>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={selStyle} />
+                  </div>
+                </div>
+
+                {/* Dropdown filters */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: hasExtra ? 10 : 0 }}>
+                  <div style={{ flex: "1 1 180px", minWidth: 160 }}>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Kampaniya</div>
+                    <select value={filterCampaign} onChange={e => { setFilterCampaign(e.target.value); setFilterPlatform(""); setFilterAdset(""); setFilterForm(""); }} style={selStyle}>
+                      <option value="">Barchasi</option>
+                      {optCampaigns.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 140px", minWidth: 120 }}>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Platforma</div>
+                    <select value={filterPlatform} onChange={e => { setFilterPlatform(e.target.value); setFilterAdset(""); }} style={selStyle}>
+                      <option value="">Barchasi</option>
+                      {optPlatforms.map(p => <option key={p} value={p}>{p === "facebook" ? "Facebook" : "Instagram"}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 180px", minWidth: 160 }}>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Formalar</div>
+                    <select value={filterForm} onChange={e => setFilterForm(e.target.value)} style={selStyle}>
+                      <option value="">Barchasi</option>
+                      {optForms.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: "1 1 180px", minWidth: 160 }}>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Adset</div>
+                    <select value={filterAdset} onChange={e => setFilterAdset(e.target.value)} style={selStyle}>
+                      <option value="">Barchasi</option>
+                      {optAdsets.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  {tab === "creative" && (
+                    <div style={{ flex: "1 1 180px", minWidth: 160 }}>
+                      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Creative</div>
+                      <select value={filterCreative} onChange={e => setFilterCreative(e.target.value)} style={selStyle}>
+                        <option value="">Barchasi</option>
+                        {optCreatives.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {hasExtra && (
+                  <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={() => { setFilterCampaign(""); setFilterPlatform(""); setFilterForm(""); setFilterAdset(""); setFilterCreative(""); }}
+                      style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Scrollable body ────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
