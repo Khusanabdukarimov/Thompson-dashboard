@@ -191,8 +191,9 @@ const callKindOptions = [
 ];
 
 function defaultCallFilters(): CallFilterState {
+  const now = new Date();
   return {
-    start_date: daysAgoISO(30),
+    start_date: localISO(new Date(now.getFullYear(), now.getMonth(), 1)),
     end_date: todayISO(),
     responsible_id: "all",
     phone: "",
