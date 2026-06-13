@@ -1,21 +1,19 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  RefreshCw, Download, Bell, User, Search, Calendar,
-  ChevronDown, TrendingUp,
+  RefreshCw, Search, Calendar,
+  ChevronDown, TrendingUp, X,
 } from "lucide-react";
 import { Skeleton } from "@/components/Skeleton";
 import {
   getMetaInsights, getMetaCampaigns, getCampaignForms, getFormLeads,
-  getPageForms, getKunlikHisobot,
+  getPageForms, getKunlikHisobot, getCampaignCreatives, getCreativeLeads, getCreativeDeals,
   MONTH_KEYS, MONTH_LABELS,
 } from "@/lib/api/meta";
 import type { MonthKey, PageForm } from "@/lib/api/meta";
 import { fmtNum } from "@/lib/utils";
 
-const now = new Date();
-const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
-const DEFAULT_YEAR  = now.getFullYear();
+
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 function sumArr(arr: number[]) { return arr.reduce((a, b) => a + b, 0); }
@@ -31,10 +29,11 @@ function DeltaTag({ val }: { val: number }) {
   );
 }
 
-type Tab = "kampaniyalar" | "formalar" | "lidlar" | "tasdiqlash";
+type Tab = "kampaniyalar" | "formalar" | "lidlar" | "creative";
 
 // ── Lead sub-table ─────────────────────────────────────────────────────────────
 function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campaignId: string; from: string; to: string }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const q = useQuery({
     queryKey: ["form-leads", formId, campaignId, from, to],
     queryFn: () => getFormLeads(formId, campaignId, from, to),
@@ -47,23 +46,73 @@ function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campa
       <table className="w-full text-[11px]">
         <thead>
           <tr className="text-text3 border-b border-border/20">
-            {["Lid nomi", "Telefon", "UTM Source", "UTM Campaign", "Sana"].map(h => (
+            {["Lid nomi", "Telefon", "Bosqich", "Sana", "Bitrix24"].map(h => (
               <th key={h} className="text-left px-4 py-1.5 font-medium">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {q.data.leads.map(l => (
-            <tr key={l.id} className="border-b border-border/10 hover:bg-bg3/50">
-              <td className="px-4 py-2 text-text font-medium">{l.name || "—"}</td>
-              <td className="px-4 py-2 text-text2">{l.phone || "—"}</td>
-              <td className="px-4 py-2 text-text3">{l.utm_source || "—"}</td>
-              <td className="px-4 py-2 text-text3 max-w-[150px] truncate">{l.utm_campaign || "—"}</td>
-              <td className="px-4 py-2 text-text3">
-                {l.created_at ? new Date(l.created_at).toLocaleDateString("ru-RU") : "—"}
-              </td>
-            </tr>
-          ))}
+          {q.data.leads.map(l => {
+            const isOpen = expandedId === l.id;
+            const fieldEntries = Object.entries(l.field_data || {});
+            const stageColor = l.stage_code ? (STAGE_COLOR[l.stage_code] ?? "#94a3b8") : "#64748b";
+            return (
+              <>
+                <tr
+                  key={l.id}
+                  onClick={() => setExpandedId(isOpen ? null : l.id)}
+                  className="border-b border-border/10 hover:bg-bg3/50 cursor-pointer select-none"
+                >
+                  <td className="px-4 py-2 text-text font-medium">{l.name || "—"}</td>
+                  <td className="px-4 py-2 text-text2 font-mono">{l.phone || "—"}</td>
+                  <td className="px-4 py-2">
+                    {l.stage_name ? (
+                      <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>
+                        {l.stage_name}
+                      </span>
+                    ) : (
+                      <span className="text-text3 italic text-[10.5px]">Bitrix24 da yo'q</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-text3">
+                    {l.created_at ? new Date(l.created_at).toLocaleDateString("ru-RU") : "—"}
+                  </td>
+                  <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
+                    {l.bitrix_id ? (
+                      <a
+                        href={`${BX_URL}/${l.bitrix_id}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-blue underline underline-offset-2 hover:opacity-80"
+                      >
+                        #{l.bitrix_id} →
+                      </a>
+                    ) : (
+                      <span className="text-text3/50 text-[11px]">—</span>
+                    )}
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr key={`${l.id}-detail`} className="bg-bg3/30 border-b border-border/20">
+                    <td colSpan={5} className="px-6 py-3">
+                      {fieldEntries.length === 0 ? (
+                        <span className="text-text3 italic">Ma'lumot yo'q</span>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1.5">
+                          {fieldEntries.map(([k, v]) => (
+                            <div key={k} className="flex gap-2">
+                              <span className="text-text3 shrink-0 min-w-[120px]">{k}:</span>
+                              <span className="text-text break-all">{v || "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -85,33 +134,529 @@ function MiniBar({ label, pct: p, color }: { label: string; pct: number; color: 
   );
 }
 
+// ── DateRangePicker ───────────────────────────────────────────────────────────
+const UZ_DAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"];
+
+function isoDay(y: number, m: number, d: number) {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function fmtLabel(iso: string) {
+  const d = new Date(iso + "T00:00:00");
+  return `${d.getDate()} ${MONTH_LABELS[MONTH_KEYS[d.getMonth()]].slice(0, 3)}`;
+}
+
+function DateRangePicker({
+  fromDate, toDate, onChange,
+}: {
+  fromDate: string;
+  toDate: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  const [open, setOpen]       = useState(false);
+  const [navYear, setNavYear]   = useState(() => new Date(fromDate + "T00:00:00").getFullYear());
+  const [navMonth, setNavMonth] = useState(() => new Date(fromDate + "T00:00:00").getMonth());
+  const [pending, setPending]   = useState<string | null>(null); // first click while selecting range
+  const [hover, setHover]       = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) { setPending(null); setHover(null); return; }
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); }
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const today = new Date();
+
+  function prevMonth() {
+    if (navMonth === 0) { setNavMonth(11); setNavYear(y => y - 1); }
+    else setNavMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (navMonth === 11) { setNavMonth(0); setNavYear(y => y + 1); }
+    else setNavMonth(m => m + 1);
+  }
+
+  const startOffset = (new Date(navYear, navMonth, 1).getDay() + 6) % 7;
+  const daysInNav   = new Date(navYear, navMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(startOffset).fill(null),
+    ...Array.from({ length: daysInNav }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  function clickDay(day: number) {
+    const iso = isoDay(navYear, navMonth, day);
+    if (!pending) {
+      setPending(iso);
+    } else if (iso === pending) {
+      // Same day clicked twice → single day selection
+      onChange(iso, iso);
+      setPending(null);
+      setHover(null);
+      setOpen(false);
+    } else {
+      const [a, b] = iso < pending ? [iso, pending] : [pending, iso];
+      onChange(a, b);
+      setPending(null);
+      setHover(null);
+      setOpen(false);
+    }
+  }
+
+  function goToday() {
+    const t = new Date();
+    const iso = t.toISOString().slice(0, 10);
+    const first = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
+    onChange(first, iso);
+    setPending(null);
+    setOpen(false);
+  }
+
+  function clearAll() {
+    const t = new Date();
+    const iso = t.toISOString().slice(0, 10);
+    const first = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
+    onChange(first, iso);
+    setPending(null);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg text-[13px] text-text hover:bg-bg3 transition-colors"
+      >
+        <Calendar className="w-4 h-4 text-text3 shrink-0" />
+        {fromDate === toDate ? (
+          <span className="font-semibold text-text">{fmtLabel(fromDate)}</span>
+        ) : (
+          <>
+            <span className="font-semibold text-text">{fmtLabel(fromDate)}</span>
+            <span className="text-text3 text-[11px]">→</span>
+            <span className="font-semibold text-text">{fmtLabel(toDate)}</span>
+          </>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-text3 transition-transform ml-1 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-2 z-50 rounded-xl shadow-2xl border border-border overflow-hidden select-none"
+          style={{ background: "#1e293b", minWidth: 264 }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-white transition-colors text-base">‹</button>
+            <span className="text-[13px] font-bold text-white">
+              {MONTH_LABELS[MONTH_KEYS[navMonth]]} {navYear}
+            </span>
+            <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-white transition-colors text-base">›</button>
+          </div>
+
+          {/* Selecting hint */}
+          {pending && (
+            <div className="px-4 py-1.5 text-[11px] text-[#64748b] border-b border-white/5">
+              {fmtLabel(pending)} tanlandi → tugash sanasini bosing
+            </div>
+          )}
+
+          {/* Day headers */}
+          <div className="grid grid-cols-7 px-3 pt-2">
+            {UZ_DAYS.map(d => (
+              <div key={d} className="text-center text-[10px] font-bold text-[#64748b] py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 px-3 pb-2">
+            {cells.map((day, i) => {
+              if (day === null) return <div key={i} />;
+              const iso = isoDay(navYear, navMonth, day);
+              const isToday = iso === today.toISOString().slice(0, 10);
+
+              // Determine if in selected range
+              const rangeFrom = pending ? (hover && hover < pending ? hover : pending) : fromDate;
+              const rangeTo   = pending ? (hover && hover > pending ? hover : pending) : toDate;
+              const [rA, rB]  = rangeFrom <= rangeTo ? [rangeFrom, rangeTo] : [rangeTo, rangeFrom];
+              const isFrom    = !pending && iso === fromDate;
+              const isTo      = !pending && iso === toDate;
+              const isPending = iso === pending;
+              const inRange   = iso > rA && iso < rB;
+              const isEdge    = iso === rA || iso === rB;
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => clickDay(day)}
+                  onMouseEnter={() => pending && setHover(iso)}
+                  onMouseLeave={() => pending && setHover(null)}
+                  className={`
+                    h-8 w-full text-[12px] font-medium transition-colors
+                    ${isEdge || isPending
+                      ? "rounded-md bg-blue text-white font-bold"
+                      : isFrom || isTo
+                        ? "rounded-md bg-blue text-white font-bold"
+                        : inRange
+                          ? "bg-blue/20 text-white rounded-none"
+                          : isToday
+                            ? "rounded-md bg-white/10 text-blue font-bold"
+                            : "rounded-md text-[#cbd5e1] hover:bg-white/10"
+                    }
+                  `}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/10">
+            <button onClick={clearAll} className="text-[12px] font-semibold text-[#64748b] hover:text-white transition-colors">
+              Clear
+            </button>
+            <button onClick={goToday} className="text-[12px] font-semibold text-blue hover:text-blue/80 transition-colors">
+              Today
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Creative leads sub-table ──────────────────────────────────────────────────
+const BX_URL = "https://mountain.bitrix24.kz/crm/lead/details";
+
+const STAGE_COLOR: Record<string, string> = {
+  UC_F8K4GI: "#ef4444", // Sifatsiz
+  UC_NAZK5J: "#f59e0b", // Bekor bo'ldi
+  JUNK:      "#6b7280", // Sandiq
+  CONVERTED: "#22c55e", // Konsultatsiya o'tkazildi
+  UC_L28G68: "#3b82f6", // Konsultatsiya belgilandi
+};
+
+function phoneDigits(p: string) { return (p || '').replace(/[^0-9]/g, ''); }
+function notInBitrixReason(phone: string, isDuplicate: boolean): string {
+  const digits = phoneDigits(phone);
+  if (digits.length < 9) return 'Telefon noto\'g\'ri';
+  if (isDuplicate) return 'Duplikat';
+  return 'Bitrix24 da yo\'q';
+}
+
+function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
+  const q = useQuery({
+    queryKey: ["creative-leads", adsetName, month, year, from, to],
+    queryFn: () => getCreativeLeads(adsetName, month, year, from, to),
+    staleTime: 2 * 60_000,
+  });
+
+  if (q.isLoading) return (
+    <tr><td colSpan={10} className="px-6 py-4">
+      <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div>
+    </td></tr>
+  );
+  if (!q.data?.leads?.length) return (
+    <tr><td colSpan={10} className="px-6 py-4 text-[12px] text-text3 italic">Bu adset uchun lidlar topilmadi</td></tr>
+  );
+
+  const leads = q.data.leads;
+  return (
+    <tr>
+      <td colSpan={10} className="p-0">
+        <div className="border-t border-border/40 bg-bg3/30">
+          <table className="w-full text-[11.5px]">
+            <thead>
+              <tr className="border-b border-border/30 bg-bg3/50">
+                {["ISM", "TELEFON", "PLATFORMA", "SANA", "BOSQICH", "BITRIX24"].map(h => (
+                  <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map(l => {
+                const stageColor = l.stage_code ? (STAGE_COLOR[l.stage_code] ?? "#94a3b8") : "#64748b";
+                const isSifatli = l.stage_code && !["UC_F8K4GI", "UC_NAZK5J", "JUNK"].includes(l.stage_code);
+                const reason = !l.bitrix_id ? notInBitrixReason(l.phone, l.is_duplicate) : null;
+                const reasonColor = reason === 'Telefon noto\'g\'ri' ? '#ef4444'
+                                  : reason === 'Duplikat'           ? '#f59e0b'
+                                  : '#64748b';
+                return (
+                  <tr key={l.fb_id} className="border-b border-border/20 hover:bg-bg3/40">
+                    <td className="px-4 py-2.5 font-medium text-text">{l.full_name}</td>
+                    <td className="px-4 py-2.5 text-text2 font-mono">{l.phone}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.platform === "instagram" ? "bg-[#e91e8c]/15 text-[#e91e8c]" : "bg-blue/15 text-blue"}`}>
+                        {l.platform === "instagram" ? "IG" : "FB"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-text3">
+                      {l.created_time ? new Date(l.created_time).toLocaleDateString("ru-RU") : "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {l.stage_name ? (
+                        <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>
+                          {l.stage_name}
+                        </span>
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10.5px] text-text3 italic">Bitrix24 da yo'q</span>
+                          {reason !== "Bitrix24 da yo'q" && (
+                            <span className="text-[10px] font-semibold px-1 py-0.5 rounded w-fit" style={{ color: reasonColor, background: reasonColor + "22" }}>
+                              {reason}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {l.bitrix_id ? (
+                        <a
+                          href={`${BX_URL}/${l.bitrix_id}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`text-[11px] font-semibold underline underline-offset-2 ${isSifatli ? "text-green" : "text-blue"} hover:opacity-80`}
+                        >
+                          #{l.bitrix_id} →
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-text3/60">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function SotuvDealsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
+  const q = useQuery({
+    queryKey: ["creative-deals", adsetName, month, year, from, to],
+    queryFn: () => getCreativeDeals(adsetName, month, year, from, to),
+    staleTime: 2 * 60_000,
+  });
+
+  if (q.isLoading) return (
+    <tr><td colSpan={10} className="px-6 py-4">
+      <div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div>
+    </td></tr>
+  );
+  if (!q.data?.deals?.length) return (
+    <tr><td colSpan={10} className="px-6 py-4 text-[12px] text-text3 italic">Bu adset uchun sotuv sdelkalari topilmadi</td></tr>
+  );
+
+  return (
+    <tr>
+      <td colSpan={10} className="p-0">
+        <div className="border-t border-border/40 bg-[#22c55e]/5">
+          <table className="w-full text-[11.5px]">
+            <thead>
+              <tr className="border-b border-border/30 bg-[#22c55e]/10">
+                {["SDELKA", "TELEFON", "MAS'UL", "SUMMA", "SANA", "BOSQICH"].map(h => (
+                  <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {q.data.deals.map(d => (
+                <tr key={d.id} className="border-b border-border/20 hover:bg-[#22c55e]/10">
+                  <td className="px-4 py-2.5">
+                    <a
+                      href={`https://mountain.bitrix24.kz/crm/deal/details/${d.id}/`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-semibold text-[#22c55e] underline underline-offset-2 hover:opacity-80"
+                    >
+                      #{d.id} →
+                    </a>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-text2">{d.phone}</td>
+                  <td className="px-4 py-2.5 text-text2">{d.responsible}</td>
+                  <td className="px-4 py-2.5 font-semibold text-text">
+                    {d.opportunity > 0 ? `$${d.opportunity.toLocaleString()}` : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-text3">{d.date || '—'}</td>
+                  <td className="px-4 py-2.5">
+                    <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded bg-[#22c55e]/20 text-[#22c55e]">
+                      {d.stage}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ── FilterDropdown ────────────────────────────────────────────────────────────
+function FilterDropdown({ label, options, value, onChange }: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const active = value !== "";
+  return (
+    <div ref={ref} className="relative flex flex-col gap-0.5">
+      <span className="text-[9px] font-bold text-text3 tracking-wider uppercase">{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1 cursor-pointer focus:outline-none ${active ? "text-blue" : ""}`}
+      >
+        <span className="text-[13px] font-semibold text-text truncate max-w-[140px]">
+          {active ? (value.length > 20 ? value.slice(0, 20) + "…" : value) : "Hammasi"}
+        </span>
+        {active
+          ? <X className="w-3 h-3 text-blue" onClick={e => { e.stopPropagation(); onChange(""); setOpen(false); }} />
+          : <ChevronDown className={`w-3.5 h-3.5 text-text3 transition-transform ${open ? "rotate-180" : ""}`} />
+        }
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 bg-bg2 border border-border rounded-lg shadow-lg min-w-[180px] max-w-[260px] max-h-[280px] overflow-y-auto">
+          <div
+            className="px-3 py-2 text-[12px] text-text3 hover:bg-bg3 cursor-pointer"
+            onClick={() => { onChange(""); setOpen(false); }}
+          >
+            Hammasi
+          </div>
+          {options.map(opt => (
+            <div
+              key={opt}
+              className={`px-3 py-2 text-[12px] hover:bg-bg3 cursor-pointer truncate ${opt === value ? "text-blue font-semibold" : "text-text"}`}
+              title={opt}
+              onClick={() => { onChange(opt); setOpen(false); }}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── Main ──────────────────────────────────────────────────────────────────────
+function getTodayIso() { return new Date().toISOString().slice(0, 10); }
+function getFirstOfMonth() {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 export default function KampaniyalarPage() {
-  const [month, setMonth]           = useState<MonthKey>(DEFAULT_MONTH);
-  const [year, setYear]             = useState(DEFAULT_YEAR);
+  const [fromDate, setFromDate]     = useState(getFirstOfMonth);
+  const [toDate,   setToDate]       = useState(getTodayIso);
   const [tab, setTab]               = useState<Tab>("formalar");
   const [search, setSearch]         = useState("");
   const [expandedForm, setExpandedForm]   = useState<string | null>(null);
   const [expandedCamp, setExpandedCamp]   = useState<string | null>(null);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [filterCampaign,  setFilterCampaign]  = useState("");
+  const [filterPlatform,  setFilterPlatform]  = useState("");
+  const [filterForm,      setFilterForm]      = useState("");
+  const [filterAdset,     setFilterAdset]     = useState("");
+  const [filterCreative,  setFilterCreative]  = useState("");
+  const [expandedCreative, setExpandedCreative] = useState<string | null>(null);
+  const [expandedSotuv,   setExpandedSotuv]   = useState<string | null>(null);
+  const [expandedCamps,   setExpandedCamps]   = useState<Set<string>>(new Set());
+  const [expandedAdsets,  setExpandedAdsets]  = useState<Set<string>>(new Set());
+  const toggleCamp  = (k: string) => setExpandedCamps(s  => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleAdset = (k: string) => setExpandedAdsets(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
-  const insightsQ  = useQuery({ queryKey: ["meta-insights",  month, year], queryFn: () => getMetaInsights(month, year),  staleTime: 60_000 });
-  const campaignsQ = useQuery({ queryKey: ["meta-campaigns", month, year], queryFn: () => getMetaCampaigns(month, year), staleTime: 60_000 });
-  const formsQ     = useQuery({ queryKey: ["campaign-forms", month, year], queryFn: () => getCampaignForms(month, year), staleTime: 60_000 });
-  const pageFormsQ = useQuery({ queryKey: ["page-forms", month, year],     queryFn: () => getPageForms(month, year),     staleTime: 5 * 60_000 });
-  const kunlikQ    = useQuery({ queryKey: ["kunlik-hisobot", month, year], queryFn: () => getKunlikHisobot(month, year), staleTime: 60_000 });
+  // Derive month/year from fromDate for API calls
+  const fromD = new Date(fromDate + "T00:00:00");
+  const month = MONTH_KEYS[fromD.getMonth()] as MonthKey;
+  const year  = fromD.getFullYear();
+
+  const AUTO_REFRESH = 60_000; // 1 minute — meta_ad_daily syncs every minute
+  const insightsQ   = useQuery({ queryKey: ["meta-insights",   month, year, fromDate, toDate], queryFn: () => getMetaInsights(month, year, undefined, false, fromDate, toDate),  staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const campaignsQ  = useQuery({ queryKey: ["meta-campaigns",  month, year, fromDate, toDate], queryFn: () => getMetaCampaigns(month, year, false, fromDate, toDate),             staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const formsQ      = useQuery({ queryKey: ["campaign-forms",  month, year, fromDate, toDate], queryFn: () => getCampaignForms(month, year, fromDate, toDate),                    staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const pageFormsQ  = useQuery({ queryKey: ["page-forms", month, year, fromDate, toDate], queryFn: () => getPageForms(month, year, fromDate, toDate), staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const kunlikQ     = useQuery({ queryKey: ["kunlik-hisobot",  month, year],                   queryFn: () => getKunlikHisobot(month, year),                                      staleTime: 60_000, refetchInterval: AUTO_REFRESH });
+  const creativesQ  = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate),                staleTime: 30_000, refetchInterval: AUTO_REFRESH });
 
   const ins  = insightsQ.data?.data;
-  const rows = campaignsQ.data?.rows ?? [];
+  const allRows = campaignsQ.data?.rows ?? [];
 
-  // ── aggregate KPIs ──────────────────────────────────────────────────────────
-  const fbSpend  = ins ? sumArr(ins.target.budget)        : 0;
-  const igSpend  = ins ? sumArr(ins.instagram.budget)     : 0;
-  const fbLeads  = ins ? sumArr(ins.target.leads)         : 0;
-  const igLeads  = ins ? sumArr(ins.instagram.leads)      : 0;
-  const fbClicks = ins ? sumArr(ins.target.clicks)        : 0;
-  const igClicks = ins ? sumArr(ins.instagram.clicks)     : 0;
-  const fbImpr   = ins ? sumArr(ins.target.impressions)   : 0;
-  const igImpr   = ins ? sumArr(ins.instagram.impressions): 0;
+  // ── filter options (unique values) ─────────────────────────────────────────
+  const optCampaigns = useMemo(() => [...new Set(allRows.map(r => r.campaign_name))].sort(), [allRows]);
+
+  // Sub-filter hierarchy: Campaign → Platform → Adset
+  const optPlatforms = useMemo(() => [...new Set(allRows
+    .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
+    .map(r => r.platform)
+  )].sort(), [allRows, filterCampaign]);
+
+  const optAdsets = useMemo(() => [...new Set(allRows
+    .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
+    .filter(r => !filterPlatform || r.platform === filterPlatform)
+    .map(r => r.adset_name)
+  )].sort(), [allRows, filterCampaign, filterPlatform]);
+
+  const optForms = useMemo(() => {
+    const names: string[] = [];
+    for (const camp of formsQ.data?.campaigns ?? []) {
+      if (filterCampaign && camp.campaign_name !== filterCampaign) continue;
+      for (const f of camp.forms) {
+        if (f.status === "ACTIVE" && !names.includes(f.form_name)) names.push(f.form_name);
+      }
+    }
+    return names.sort();
+  }, [formsQ.data, filterCampaign]);
+
+  const optCreatives = useMemo(() => {
+    const creatives = creativesQ.data?.creatives ?? [];
+    return [...new Set(
+      creatives
+        .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
+        .filter(r => !filterAdset    || r.adset_name    === filterAdset)
+        .map(r => r.ad_name)
+        .filter(Boolean) as string[]
+    )].sort();
+  }, [creativesQ.data, filterCampaign, filterAdset]);
+
+  // ── filtered rows (apply campaign / platform / adset filters) ──────────────
+  const rows = useMemo(() => allRows
+    .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
+    .filter(r => !filterPlatform || r.platform === filterPlatform)
+    .filter(r => !filterAdset    || r.adset_name  === filterAdset),
+  [allRows, filterCampaign, filterPlatform, filterAdset]);
+
+  // ── aggregate KPIs from filtered rows (date-range + filter aware) ────────────
+  const isFiltered = !!(filterCampaign || filterPlatform || filterAdset || filterForm);
+
+  const fbSpend  = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.spend, 0);
+  const igSpend  = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.spend, 0);
+  const fbLeads  = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.leads, 0);
+  const igLeads  = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.leads, 0);
+  const fbClicks = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.clicks, 0);
+  const igClicks = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.clicks, 0);
+  const fbImpr   = rows.filter(r => r.platform === 'facebook').reduce((a, r) => a + r.impressions, 0);
+  const igImpr   = rows.filter(r => r.platform === 'instagram').reduce((a, r) => a + r.impressions, 0);
 
   const totalSpend  = fbSpend + igSpend;
   const totalLeads  = fbLeads + igLeads;
@@ -124,7 +669,6 @@ export default function KampaniyalarPage() {
 
   // ── Bitrix CRM cross-channel metrics ────────────────────────────────────────
   const kData = kunlikQ.data?.data;
-  // Sum FB + IG channel data for monthly totals
   const totalSalesUSD = kData
     ? sumArr(kData.target.sales_sum) + sumArr(kData.instagram.sales_sum)
     : 0;
@@ -193,19 +737,39 @@ export default function KampaniyalarPage() {
       }
     }
 
-    // If page-forms loaded but campaign-forms didn't yet, fall back to page-only list
-    if (seen.size === 0 && pageMap.size > 0) {
-      return [...pageMap.values()].filter(f => f.status === "ACTIVE");
+    // Also include page forms not linked to any campaign (standalone forms like "Filtr - RM")
+    for (const pf of pageMap.values()) {
+      if (!seen.has(pf.form_id) && pf.status === "ACTIVE" && (pf.leads_count ?? 0) > 0) {
+        seen.set(pf.form_id, pf);
+      }
     }
 
     return [...seen.values()]
       .filter(f => !search || f.form_name.toLowerCase().includes(search.toLowerCase()))
+      .filter(f => !filterForm || f.form_name === filterForm)
+      .filter(f => {
+        if (!filterCampaign) return true;
+        return (formsQ.data?.campaigns ?? []).some(c =>
+          c.campaign_name === filterCampaign && c.forms.some(cf => cf.form_id === f.form_id)
+        );
+      })
       .sort((a, b) => (b.leads_count ?? 0) - (a.leads_count ?? 0));
-  }, [formsQ.data, pageFormsQ.data, search]);
+  }, [formsQ.data, pageFormsQ.data, search, filterForm, filterCampaign]);
 
   const pendingLeads = uniqueForms.reduce((a, f) => a + (f.leads_count ?? 0), 0);
 
-  // ── trend (last 7 data points, separate scales) ──────────────────────────────
+  // sifatli_lid per form_id from formsQ (LeadgenForm has it)
+  const sifatliFormMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const camp of formsQ.data?.campaigns ?? []) {
+      for (const f of camp.forms) {
+        if (!m.has(f.form_id)) m.set(f.form_id, f.sifatli_lid ?? 0);
+      }
+    }
+    return m;
+  }, [formsQ.data]);
+
+  // ── trend: last 7 days of the month ─────────────────────────────────────────
   const trendSpend = ins
     ? ins.target.budget.slice(-7).map((v, i) => v + (ins.instagram.budget.slice(-7)[i] ?? 0))
     : [];
@@ -215,17 +779,18 @@ export default function KampaniyalarPage() {
   const trendSpendMax = Math.max(...trendSpend, 0.01);
   const trendLeadsMax = Math.max(...trendLeads, 0.01);
 
-  // date strings for sub-queries
-  const fromDate = `${year}-${String(MONTH_KEYS.indexOf(month) + 1).padStart(2, "0")}-01`;
-  const toDate   = now.toISOString().slice(0, 10);
-
-  function refresh() {
-    insightsQ.refetch();
-    campaignsQ.refetch();
-    formsQ.refetch();
+  async function refresh() {
+    setRefreshing(true);
+    await Promise.all([insightsQ.refetch(), campaignsQ.refetch(), formsQ.refetch(), pageFormsQ.refetch()]);
+    setRefreshing(false);
   }
 
-  const isLoading = insightsQ.isLoading || campaignsQ.isLoading;
+  const lastUpdated = Math.max(insightsQ.dataUpdatedAt, campaignsQ.dataUpdatedAt, formsQ.dataUpdatedAt);
+  const lastUpdatedTime = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  const isLoading = (isFiltered ? campaignsQ.isLoading : insightsQ.isLoading) || campaignsQ.isLoading;
 
   return (
     <div className="flex flex-col h-full bg-bg overflow-hidden">
@@ -242,65 +807,56 @@ export default function KampaniyalarPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg text-[13px] text-text">
-          <Calendar className="w-4 h-4 text-text3 shrink-0" />
-          <select
-            value={month}
-            onChange={e => setMonth(e.target.value as MonthKey)}
-            className="bg-transparent text-[13px] focus:outline-none cursor-pointer"
-          >
-            {MONTH_KEYS.map(m => <option key={m} value={m}>{MONTH_LABELS[m]}</option>)}
-          </select>
-          <select
-            value={year}
-            onChange={e => setYear(Number(e.target.value))}
-            className="bg-transparent text-[13px] focus:outline-none cursor-pointer"
-          >
-            {[DEFAULT_YEAR, DEFAULT_YEAR - 1].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
+        <DateRangePicker
+          fromDate={fromDate}
+          toDate={toDate}
+          onChange={(f, t) => { setFromDate(f); setToDate(t); }}
+        />
 
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={refresh} className="p-2 rounded-lg border border-border hover:bg-bg3 text-text3 hover:text-text transition-colors">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button className="p-2 rounded-lg border border-border hover:bg-bg3 text-text3">
-            <Bell className="w-4 h-4" />
-          </button>
-          <button className="p-2 rounded-lg border border-border hover:bg-bg3 text-text3">
-            <User className="w-4 h-4" />
+          <button onClick={refresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border hover:bg-bg3 text-text3 hover:text-text transition-colors disabled:opacity-60">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            {lastUpdatedTime && <span className="text-[11px]">{lastUpdatedTime}</span>}
           </button>
         </div>
       </div>
 
       {/* ── Filter row ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-6 px-5 py-2.5 border-b border-border bg-bg2 shrink-0">
-        {["KAMPANIYA", "PLATFORMA", "FORMALAR", "UTM CAMPAIGN"].map(label => (
-          <div key={label} className="flex flex-col gap-0.5">
-            <span className="text-[9px] font-bold text-text3 tracking-wider uppercase">{label}</span>
-            <div className="flex items-center gap-1 cursor-pointer">
-              <span className="text-[13px] font-semibold text-text">Hammasi</span>
-              <ChevronDown className="w-3.5 h-3.5 text-text3" />
-            </div>
-          </div>
-        ))}
-        <button className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-bg text-[13px] font-semibold text-text2 hover:bg-bg3 transition-colors">
-          <Download className="w-3.5 h-3.5" /> Ma'lumotlarni yuklash
-        </button>
+        <FilterDropdown label="KAMPANIYA" options={optCampaigns} value={filterCampaign}
+          onChange={v => { setFilterCampaign(v); setFilterPlatform(""); setFilterAdset(""); setFilterForm(""); }} />
+        <FilterDropdown
+          label="PLATFORMA"
+          options={optPlatforms.map(p => p === "facebook" ? "Facebook" : "Instagram")}
+          value={filterPlatform === "facebook" ? "Facebook" : filterPlatform === "instagram" ? "Instagram" : ""}
+          onChange={v => { setFilterPlatform(v === "Facebook" ? "facebook" : v === "Instagram" ? "instagram" : ""); setFilterAdset(""); }}
+        />
+        <FilterDropdown label="FORMALAR" options={optForms} value={filterForm} onChange={setFilterForm} />
+        <FilterDropdown label="ADSET"    options={optAdsets} value={filterAdset} onChange={setFilterAdset} />
+        {tab === "creative" && (
+          <FilterDropdown label="CREATIVE" options={optCreatives} value={filterCreative} onChange={setFilterCreative} />
+        )}
+        {(filterCampaign || filterPlatform || filterForm || filterAdset || filterCreative) && (
+          <button
+            onClick={() => { setFilterCampaign(""); setFilterPlatform(""); setFilterForm(""); setFilterAdset(""); setFilterCreative(""); }}
+            className="text-[11px] text-text3 hover:text-red flex items-center gap-1 transition-colors"
+          >
+            <X className="w-3 h-3" /> Tozalash
+          </button>
+        )}
       </div>
 
       {/* ── Scrollable body ────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
         {/* KPI row 1 */}
-        <div className="grid grid-cols-4 gap-3">
-          {isLoading ? Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-3 gap-3">
+          {isLoading ? Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           )) : ([
             { label: "JAMI SARF", value: `$${fmtNum(Math.round(totalSpend))}`, sub: "Meta Ads sarfi", delta: 5 },
             { label: "JAMI LIDLAR", value: fmtNum(totalLeads), sub: "Meta formalar", delta: 12 },
             { label: "FORMA KONVERSIYASI", value: `${formConv.toFixed(1)}%`, sub: "Clicks → Leads", delta: 2 },
-            { label: "O'RTACHA TASDIQLASH", value: "68.5%", sub: "Tasdiqlangan/Jami", delta: -3 },
           ] as const).map(c => (
             <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
               <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
@@ -484,7 +1040,7 @@ export default function KampaniyalarPage() {
               { key: "kampaniyalar", label: "Kampaniyalar" },
               { key: "formalar",     label: "Faol formalar ☆" },
               { key: "lidlar",       label: "Lidlar ro'yxati", badge: pendingLeads > 0 ? pendingLeads : null },
-              { key: "tasdiqlash",   label: "Lidlarni tasdiqlash" },
+              { key: "creative",     label: "Creative" },
             ] as { key: Tab; label: string; badge?: number | null }[]).map(t => (
               <button
                 key={t.key}
@@ -494,11 +1050,6 @@ export default function KampaniyalarPage() {
                 }`}
               >
                 {t.label}
-                {t.badge != null && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber text-white text-[10px] font-bold">
-                    {t.badge} kutilmoqda
-                  </span>
-                )}
               </button>
             ))}
           </div>
@@ -508,19 +1059,19 @@ export default function KampaniyalarPage() {
 
             {/* LEFT: content table */}
             <div className="bg-bg2 border border-border rounded-xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+              <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[14px] font-bold text-text">
                     {tab === "formalar"     && "Lead Form Performance"}
                     {tab === "kampaniyalar" && "Kampaniyalar"}
                     {tab === "lidlar"       && "Lidlar ro'yxati"}
-                    {tab === "tasdiqlash"   && "Lidlarni tasdiqlash"}
+                    {tab === "creative"     && "Creative Performance"}
                   </div>
                   <div className="text-[11.5px] text-text3 mt-0.5">
                     {tab === "formalar" ? "Faol formalar bo'yicha real vaqtdagi ko'rsatkichlar" : "Meta Ads ma'lumotlari"}
                   </div>
                 </div>
-                <button onClick={refresh} className="p-1.5 rounded-lg border border-border text-text3 hover:bg-bg3 transition-colors">
+                <button onClick={refresh} className="p-1.5 rounded-lg border border-border text-text3 hover:bg-bg3 transition-colors shrink-0">
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -531,7 +1082,7 @@ export default function KampaniyalarPage() {
                   <table className="w-full text-[12.5px]">
                     <thead>
                       <tr className="bg-bg3 border-b border-border">
-                        {["FORMA NOMI", "HOLAT", "SARF", "KLIKLAR", "CPC", "LIDLAR (jami)"].map(h => (
+                        {["FORMA NOMI", "KAMPANIYA", "HOLAT", "SARF", "KLIKLAR", "CPC", "LIDLAR (jami)", "SIFATLI LID"].map(h => (
                           <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
                         ))}
                       </tr>
@@ -540,21 +1091,21 @@ export default function KampaniyalarPage() {
                       {(formsQ.isLoading && pageFormsQ.isLoading) ? (
                         Array.from({ length: 5 }).map((_, i) => (
                           <tr key={i} className="border-b border-border">
-                            {Array.from({ length: 6 }).map((__, j) => (
+                            {Array.from({ length: 8 }).map((__, j) => (
                               <td key={j} className="px-4 py-3"><Skeleton className="h-3.5 w-20" /></td>
                             ))}
                           </tr>
                         ))
                       ) : uniqueForms.length === 0 ? (
-                        <tr><td colSpan={6} className="px-4 py-10 text-center text-text3">
+                        <tr><td colSpan={8} className="px-4 py-10 text-center text-text3">
                           Faol formalar topilmadi
                         </td></tr>
                       ) : uniqueForms.map(form => {
                           const isExp = expandedForm === form.form_id;
-                          // Sum spend + clicks across all campaigns that reference this form
                           const fCamps = (formsQ.data?.campaigns ?? []).filter(c =>
                             c.forms.some(f => f.form_id === form.form_id),
                           );
+                          const campName = fCamps.length > 0 ? fCamps[0].campaign_name : null;
                           const fSpend  = fCamps.reduce((acc, c) => {
                             const campRow = rows.filter(r => r.campaign_name === c.campaign_name);
                             const n = Math.max(c.forms.filter(f => f.status === "ACTIVE").length, 1);
@@ -567,41 +1118,59 @@ export default function KampaniyalarPage() {
                           }, 0);
                           const cpc = fClicks > 0 ? fSpend / fClicks : 0;
                           return (
-                            <tr
-                              key={form.form_id}
-                              className={`border-b border-border hover:bg-bg3/50 cursor-pointer transition-colors ${isExp ? "bg-bg3/30" : ""}`}
-                              onClick={() => setExpandedForm(isExp ? null : form.form_id)}
-                            >
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-2 h-2 rounded-full bg-blue shrink-0" />
-                                  <div>
-                                    <div className="font-medium text-text" title={form.form_name}>
-                                      {form.form_name.length > 28 ? form.form_name.slice(0, 28) + "…" : form.form_name}
+                            <>
+                              <tr
+                                key={form.form_id}
+                                className={`border-b border-border hover:bg-bg3/50 cursor-pointer transition-colors ${isExp ? "bg-bg3/30" : ""}`}
+                                onClick={() => setExpandedForm(isExp ? null : form.form_id)}
+                              >
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-blue shrink-0" />
+                                    <div>
+                                      <div className="font-medium text-text" title={form.form_name}>
+                                        {form.form_name.length > 28 ? form.form_name.slice(0, 28) + "…" : form.form_name}
+                                      </div>
+                                      <div className="text-[10px] text-text3">ID: …{form.form_id.slice(-7)}</div>
                                     </div>
-                                    <div className="text-[10px] text-text3">ID: …{form.form_id.slice(-7)}</div>
                                   </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-green/10 text-green">
-                                  FAOL
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 font-semibold text-text">${Math.round(fSpend)}</td>
-                              <td className="px-4 py-3 text-text2">{Math.round(fClicks)}</td>
-                              <td className="px-4 py-3 text-text2">${cpc.toFixed(2)}</td>
-                              <td className="px-4 py-3 font-semibold text-blue">
-                                {form.leads_count > 0 ? fmtNum(form.leads_count) : "0"}
-                              </td>
-                            </tr>
+                                </td>
+                                <td className="px-4 py-3 max-w-[160px]">
+                                  {campName ? (
+                                    <span className="text-[11px] text-text2 truncate block" title={campName}>
+                                      {campName.length > 24 ? campName.slice(0, 24) + "…" : campName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-text3 italic">—</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-green/10 text-green">
+                                    FAOL
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-text">${Math.round(fSpend)}</td>
+                                <td className="px-4 py-3 text-text2">{Math.round(fClicks)}</td>
+                                <td className="px-4 py-3 text-text2">${cpc.toFixed(2)}</td>
+                                <td className="px-4 py-3 font-semibold text-blue">
+                                  {form.leads_count > 0 ? fmtNum(form.leads_count) : "0"}
+                                </td>
+                                <td className="px-4 py-3 font-semibold" style={{ color: (sifatliFormMap.get(form.form_id) ?? 0) > 0 ? "#22c55e" : "var(--text3)" }}>
+                                  {sifatliFormMap.get(form.form_id) ?? 0}
+                                </td>
+                              </tr>
+                              {isExp && (
+                                <tr key={`${form.form_id}-leads`}>
+                                  <td colSpan={8} className="p-0">
+                                    <LeadsSubTable formId={form.form_id} campaignId="" from={fromDate} to={toDate} />
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           );
                         })}
                     </tbody>
                   </table>
-                  {expandedForm && (
-                    <LeadsSubTable formId={expandedForm} campaignId="" from={fromDate} to={toDate} />
-                  )}
                 </>
               )}
 
@@ -671,12 +1240,233 @@ export default function KampaniyalarPage() {
                 </div>
               )}
 
-              {/* ── Tasdiqlash tab ── */}
-              {tab === "tasdiqlash" && (
-                <div className="py-12 text-center text-text3 text-[12.5px]">
-                  Tasdiqlash funksiyasi tez orada qo'shiladi
-                </div>
-              )}
+              {/* ── Creative tab ── */}
+              {tab === "creative" && (() => {
+                const creatives = creativesQ.data?.creatives ?? [];
+                const filtered = creatives
+                  .filter(r => !filterCampaign  || r.campaign_name === filterCampaign)
+                  .filter(r => !filterAdset     || r.adset_name    === filterAdset)
+                  .filter(r => !filterCreative  || r.ad_name       === filterCreative);
+
+                // Group: campaign → adset → ads
+                const campMap = new Map<string, Map<string, typeof filtered>>();
+                for (const r of filtered) {
+                  if (!campMap.has(r.campaign_name)) campMap.set(r.campaign_name, new Map());
+                  const adsetMap = campMap.get(r.campaign_name)!;
+                  if (!adsetMap.has(r.adset_name)) adsetMap.set(r.adset_name, []);
+                  adsetMap.get(r.adset_name)!.push(r);
+                }
+
+                const agg = (rows: typeof filtered) => ({
+                  spend:         rows.reduce((a, r) => a + r.spend, 0),
+                  meta_leads:    rows.reduce((a, r) => a + r.meta_leads, 0),
+                  in_bitrix:     rows.reduce((a, r) => a + r.in_bitrix, 0),
+                  sifatli:            rows.reduce((a, r) => a + r.sifatli, 0),
+                  konsultatsiya_otdi: rows.reduce((a, r) => a + (r.konsultatsiya_otdi ?? 0), 0),
+                  sotuv_boldi:        rows.reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
+                  sifatsiz:      rows.reduce((a, r) => a + r.sifatsiz, 0),
+                  bekor_boldi:   rows.reduce((a, r) => a + r.bekor_boldi, 0),
+                  not_in_bitrix: rows.reduce((a, r) => a + r.not_in_bitrix, 0),
+                });
+
+                const TH = "px-3 py-2.5 text-left text-[10px] font-bold text-text3 tracking-wider whitespace-nowrap";
+                const TD = "px-3 py-2.5 text-[12px]";
+
+                const SifatBar = ({ rate }: { rate: number }) => (
+                  <div className="flex items-center justify-end gap-1.5">
+                    <div className="w-14 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${rate}%`, background: rate >= 50 ? "#22c55e" : rate >= 25 ? "#f59e0b" : "#ef4444" }} />
+                    </div>
+                    <span className={`text-[11px] font-semibold ${rate >= 50 ? "text-green" : rate >= 25 ? "text-amber" : "text-red"}`}>{rate}%</span>
+                  </div>
+                );
+
+                const totals = agg(filtered);
+
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[12px]" style={{ borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr className="bg-bg3 border-b border-border">
+                          <th className={TH} style={{ width: 320 }}>KAMPANIYA / ADSET / CREATIVE</th>
+                          <th className={`${TH} text-right`}>SARF</th>
+                          <th className={`${TH} text-right`}>META LIDLAR</th>
+                          <th className={`${TH} text-right`}>BITRIX24</th>
+                          <th className={`${TH} text-right`}>SIFATLI</th>
+                          <th className={`${TH} text-right`}>KONSULT.</th>
+                          <th className={`${TH} text-right`}>SOTUV BO'LDI</th>
+                          <th className={`${TH} text-right`}>SIFATSIZ</th>
+                          <th className={`${TH} text-right`}>BEKOR</th>
+                          <th className={`${TH} text-right`}>YO'Q</th>
+                          <th className={`${TH} text-right`}>SIFAT %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {creativesQ.isLoading ? (
+                          Array.from({ length: 5 }).map((_, i) => (
+                            <tr key={i} className="border-b border-border">
+                              {Array.from({ length: 9 }).map((__, j) => (
+                                <td key={j} className={TD}><Skeleton className="h-3 w-14" /></td>
+                              ))}
+                            </tr>
+                          ))
+                        ) : campMap.size === 0 ? (
+                          <tr><td colSpan={9} className="px-4 py-10 text-center text-text3">Ma'lumot topilmadi</td></tr>
+                        ) : Array.from(campMap.entries()).map(([campName, adsetMap]) => {
+                          const campRows = Array.from(adsetMap.values()).flat();
+                          const ca = agg(campRows);
+                          const campKey = campName;
+                          const campExp = expandedCamps.has(campKey);
+                          const campCpl = ca.meta_leads > 0 ? ca.spend / ca.meta_leads : 0;
+                          const campSifat = ca.in_bitrix > 0 ? Math.round(ca.sifatli / ca.in_bitrix * 100) : 0;
+                          return (
+                            <>
+                              {/* ── CAMPAIGN ROW ── */}
+                              <tr key={campKey}
+                                className="border-b border-border cursor-pointer select-none"
+                                style={{ background: "rgba(59,130,246,0.06)" }}
+                                onClick={() => toggleCamp(campKey)}>
+                                <td className={TD}>
+                                  <div className="flex items-center gap-2">
+                                    <ChevronDown size={13} className={`text-blue shrink-0 transition-transform ${campExp ? "rotate-180" : ""}`} />
+                                    <span className="font-bold text-text text-[12px] truncate max-w-[280px]" title={campName}>{campName}</span>
+                                    <span className="text-[10px] text-text3 shrink-0">({campRows.length} ad)</span>
+                                  </div>
+                                </td>
+                                <td className={`${TD} text-right font-bold text-text`}>
+                                  {ca.spend > 0 ? `$${Math.round(ca.spend)}` : <span className="text-text3">—</span>}
+                                  {campCpl > 0 && <div className="text-[10px] text-text3 font-normal">${campCpl.toFixed(2)} CPL</div>}
+                                </td>
+                                <td className={`${TD} text-right font-bold text-text2`}>{ca.meta_leads}</td>
+                                <td className={`${TD} text-right font-bold text-blue`}>{ca.in_bitrix}</td>
+                                <td className={`${TD} text-right font-bold text-green`}>{ca.sifatli}</td>
+                                <td className={`${TD} text-right font-bold`} style={{ color: "#a78bfa" }}>{ca.konsultatsiya_otdi || "—"}</td>
+                                <td className={`${TD} text-right font-bold`} style={{ color: "#22c55e" }}>{ca.sotuv_boldi || "—"}</td>
+                                <td className={`${TD} text-right font-bold text-red/80`}>{ca.sifatsiz}</td>
+                                <td className={`${TD} text-right font-bold text-amber`}>{ca.bekor_boldi}</td>
+                                <td className={`${TD} text-right text-text3`}>{ca.not_in_bitrix || "—"}</td>
+                                <td className={TD}><SifatBar rate={campSifat} /></td>
+                              </tr>
+
+                              {campExp && Array.from(adsetMap.entries()).map(([adsetName, ads]) => {
+                                const aa = agg(ads);
+                                const adsetKey = `${campKey}::${adsetName}`;
+                                const adsetExp = expandedAdsets.has(adsetKey);
+                                const adsetCpl = aa.meta_leads > 0 ? aa.spend / aa.meta_leads : 0;
+                                const adsetSifat = aa.in_bitrix > 0 ? Math.round(aa.sifatli / aa.in_bitrix * 100) : 0;
+                                return (
+                                  <>
+                                    {/* ── ADSET ROW ── */}
+                                    <tr key={adsetKey}
+                                      className="border-b border-border cursor-pointer select-none"
+                                      style={{ background: "rgba(34,197,94,0.04)" }}
+                                      onClick={() => toggleAdset(adsetKey)}>
+                                      <td className={TD}>
+                                        <div className="flex items-center gap-2" style={{ paddingLeft: 20 }}>
+                                          <ChevronDown size={12} className={`text-green/70 shrink-0 transition-transform ${adsetExp ? "rotate-180" : ""}`} />
+                                          <span className="font-semibold text-text2 text-[11.5px] truncate max-w-[260px]" title={adsetName}>{adsetName}</span>
+                                          <span className="text-[10px] text-text3 shrink-0">({ads.length} ad)</span>
+                                        </div>
+                                      </td>
+                                      <td className={`${TD} text-right text-text`}>
+                                        {aa.spend > 0 ? `$${Math.round(aa.spend)}` : <span className="text-text3">—</span>}
+                                        {adsetCpl > 0 && <div className="text-[10px] text-text3">${adsetCpl.toFixed(2)} CPL</div>}
+                                      </td>
+                                      <td className={`${TD} text-right text-text2`}>{aa.meta_leads}</td>
+                                      <td className={`${TD} text-right text-blue`}>{aa.in_bitrix}</td>
+                                      <td className={`${TD} text-right text-green`}>{aa.sifatli}</td>
+                                      <td className={`${TD} text-right`} style={{ color: "#a78bfa" }}>{aa.konsultatsiya_otdi || "—"}</td>
+                                      <td className={`${TD} text-right`} style={{ color: "#22c55e" }}>{aa.sotuv_boldi || "—"}</td>
+                                      <td className={`${TD} text-right text-red/80`}>{aa.sifatsiz}</td>
+                                      <td className={`${TD} text-right text-amber`}>{aa.bekor_boldi}</td>
+                                      <td className={`${TD} text-right text-text3`}>{aa.not_in_bitrix || "—"}</td>
+                                      <td className={TD}><SifatBar rate={adsetSifat} /></td>
+                                    </tr>
+
+                                    {adsetExp && ads.map((r, ri) => {
+                                      const cpl = r.meta_leads > 0 ? r.spend / r.meta_leads : 0;
+                                      const adKey = `${adsetKey}::${ri}`;
+                                      const isExpAd    = expandedCreative === adKey;
+                                      const isExpSotuv = expandedSotuv    === adKey;
+                                      return (
+                                        <>
+                                        <tr key={ri}
+                                          className={`border-b border-border/50 hover:bg-bg3/30 cursor-pointer ${isExpAd ? "bg-bg3/20" : ""}`}
+                                          onClick={() => { setExpandedCreative(isExpAd ? null : adKey); setExpandedSotuv(null); }}>
+                                          <td className={TD}>
+                                            <div className="flex items-center gap-1.5" style={{ paddingLeft: 40 }}>
+                                              <ChevronDown size={11} className={`text-text3 shrink-0 transition-transform ${isExpAd ? "rotate-180" : ""}`} />
+                                              <div className="flex flex-col gap-0.5 min-w-0">
+                                                {r.ad_name ? (
+                                                  <a href={r.post_url ?? undefined} target="_blank" rel="noreferrer"
+                                                    onClick={e => e.stopPropagation()}
+                                                    className="text-blue hover:underline text-[11px] truncate max-w-[230px] block" title={r.ad_name}>
+                                                    {r.ad_name}
+                                                  </a>
+                                                ) : (
+                                                  <span className="text-text3 text-[11px] italic">Nomsiz ad</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </td>
+                                          <td className={`${TD} text-right text-[11px] text-text`}>
+                                            {r.spend > 0 ? `$${Math.round(r.spend)}` : <span className="text-text3">—</span>}
+                                            {cpl > 0 && <div className="text-[10px] text-text3">${cpl.toFixed(2)}</div>}
+                                          </td>
+                                          <td className={`${TD} text-right text-[11px] text-text2`}>{r.meta_leads}</td>
+                                          <td className={`${TD} text-right text-[11px]`}><span className={r.in_bitrix > 0 ? "text-blue" : "text-text3"}>{r.in_bitrix}</span></td>
+                                          <td className={`${TD} text-right text-[11px]`}><span className={r.sifatli > 0 ? "text-green" : "text-text3"}>{r.sifatli}</span></td>
+                                          <td className={`${TD} text-right text-[11px]`}><span className={(r.konsultatsiya_otdi ?? 0) > 0 ? "" : "text-text3"} style={(r.konsultatsiya_otdi ?? 0) > 0 ? { color: "#a78bfa" } : {}}>{(r.konsultatsiya_otdi ?? 0) || "—"}</span></td>
+                                          <td className={`${TD} text-right text-[11px]`}
+                                            onClick={e => {
+                                              e.stopPropagation();
+                                              if ((r.sotuv_boldi ?? 0) > 0) {
+                                                setExpandedSotuv(isExpSotuv ? null : adKey);
+                                                setExpandedCreative(null);
+                                              }
+                                            }}>
+                                            <span className={`${((r.sotuv_boldi ?? 0) > 0) ? "text-[#22c55e] underline underline-offset-2 cursor-pointer hover:opacity-70" : "text-text3"}`}>
+                                              {(r.sotuv_boldi ?? 0) || "—"}
+                                            </span>
+                                          </td>
+                                          <td className={`${TD} text-right text-[11px]`}><span className={r.sifatsiz > 0 ? "text-red/80" : "text-text3"}>{r.sifatsiz}</span></td>
+                                          <td className={`${TD} text-right text-[11px]`}><span className={r.bekor_boldi > 0 ? "text-amber" : "text-text3"}>{r.bekor_boldi}</span></td>
+                                          <td className={`${TD} text-right text-[11px] text-text3`}>{r.not_in_bitrix || "—"}</td>
+                                          <td className={TD}><SifatBar rate={r.sifat_rate} /></td>
+                                        </tr>
+                                        {isExpAd    && <CreativeLeadsPanel key={`panel-${adKey}`}  adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
+                                        {isExpSotuv && <SotuvDealsPanel    key={`sotuv-${adKey}`}  adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
+                                        </>
+                                      );
+                                    })}
+                                  </>
+                                );
+                              })}
+                            </>
+                          );
+                        })}
+                      </tbody>
+                      {filtered.length > 0 && (
+                        <tfoot>
+                          <tr className="border-t-2 border-border bg-bg3/50">
+                            <td className={`${TD} font-bold text-text`}>JAMI</td>
+                            <td className={`${TD} text-right font-bold text-text`}>${Math.round(totals.spend)}</td>
+                            <td className={`${TD} text-right font-bold text-text2`}>{totals.meta_leads}</td>
+                            <td className={`${TD} text-right font-bold text-blue`}>{totals.in_bitrix}</td>
+                            <td className={`${TD} text-right font-bold text-green`}>{totals.sifatli}</td>
+                            <td className={`${TD} text-right font-bold`} style={{ color: "#a78bfa" }}>{totals.konsultatsiya_otdi}</td>
+                            <td className={`${TD} text-right font-bold`} style={{ color: "#22c55e" }}>{totals.sotuv_boldi}</td>
+                            <td className={`${TD} text-right text-red/80`}>{totals.sifatsiz}</td>
+                            <td className={`${TD} text-right text-amber`}>{totals.bekor_boldi}</td>
+                            <td className={`${TD} text-right text-text3`}>{totals.not_in_bitrix}</td>
+                            <td className={TD} />
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* RIGHT: dark leaderboard */}

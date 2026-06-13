@@ -5,9 +5,7 @@ import {
   Briefcase,
   TrendingUp,
   LayoutDashboard,
-  DollarSign,
   GanttChart,
-  ClipboardList,
   Wallet,
   Settings,
   ChevronLeft,
@@ -44,9 +42,7 @@ const MAIN_NAV: NavItem[] = [
   { to: "/call-statistikasi",  label: "Call statistikasi",  icon: Phone,      roles: MKT },
   { to: "/kampaniyalar",       label: "Kampaniyalar",        icon: TrendingUp, roles: MKT },
   { to: "/kunlik-hisobot",  label: "Kunlik hisobot",  icon: LayoutDashboard, roles: MKT },
-  { to: "/byudjet",         label: "Byudjet",          icon: DollarSign,      roles: MGMT },
   { to: "/reja",            label: "Reja",             icon: GanttChart,      roles: [...MGMT, "closer", "hunter"] },
-  { to: "/hisobot",         label: "Hisobot",          icon: ClipboardList,   roles: ALL },
   { to: "/sozlamalar",      label: "Sozlamalar",       icon: Settings,        roles: MGMT },
 ];
 

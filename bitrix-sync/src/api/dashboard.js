@@ -29,6 +29,11 @@ function dealModeClause(mode) {
   return '';
 }
 
+function dealDateCond(mode, p1, p2) {
+  const col = mode === 'amocrm' ? 'COALESCE(d.uf_amo_date, d.date_create)' : 'd.date_create';
+  return `($${p1}::date IS NULL OR ${col}::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR ${col}::date <= $${p2}::date)`;
+}
+
 function dealSrcCond(mode, pi) {
   if (mode === 'amocrm') {
     return `EXISTS (
@@ -48,6 +53,7 @@ const SOURCE_NAMES = {
   'UC_H1PMDS': 'Telegram forma',
   'REPEAT_SALE': 'Website forma',
   'CALL': "Qo'ng'iroq",
+  'CALLBACK': "Qayta qo'ng'iroq",
   'Звонок': "Qo'ng'iroq",
   'ADVERTISING': 'Reklama',
   'UC_8BLFVY': "Ko'chadan",
@@ -323,7 +329,8 @@ router.get('/tasks-summary', async (req, res) => {
          COUNT(t.id)                                                                              AS total,
          COUNT(t.id) FILTER (WHERE t.status IN ('pending','in_progress','review'))               AS in_progress,
          COUNT(t.id) FILTER (WHERE t.status = 'completed')                                       AS completed,
-         COUNT(t.id) FILTER (WHERE t.deadline < NOW() AND t.status != 'completed')               AS overdue
+         COUNT(t.id) FILTER (WHERE t.deadline < NOW() AND t.status != 'completed')               AS overdue,
+         COUNT(t.id) FILTER (WHERE t.status = 'completed' AND t.deadline IS NOT NULL AND t.date_closed > t.deadline) AS completed_late
        FROM responsibles r
        LEFT JOIN tasks t ON t.executor_id = r.id
          AND ($1::date IS NULL OR t.date_created >= $1::date)
@@ -502,16 +509,16 @@ router.get('/deals-stats', async (req, res) => {
       `SELECT
          COUNT(d.id)::int AS total,
          COUNT(d.id) FILTER (WHERE s.is_final = false AND s.is_won = false)::int AS yangi,
-         COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
+         COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']))::int AS sotuv_boldi,
          COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int  AS bekor,
-         COALESCE(SUM(d.opportunity) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])), 0)::numeric AS jami_sotuv,
-         COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])), 0), 0)::numeric AS ortacha_chek,
-         ROUND(COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
+         COALESCE(SUM(d.opportunity) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']) AND d.currency_id = 'USD'), 0)::numeric AS jami_sotuv,
+         COALESCE(SUM(d.uf_paid_sum::numeric) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']) AND d.currency_id = 'USD'), 0)::numeric AS tolangan,
+         COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']) AND d.currency_id = 'USD'), 0), 0)::numeric AS ortacha_chek,
+         ROUND(COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']))::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d
-       JOIN stages s ON s.id = d.stage_id
+       LEFT JOIN stages s ON s.id = d.stage_id
        LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
-       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+       WHERE ${dealDateCond(mode, 1, 2)}
          ${dealModeClause(mode)}
          ${extra.join(' ')}`,
       params
@@ -530,9 +537,10 @@ router.get('/deals-list', async (req, res) => {
   const offset = (page - 1) * limit;
 
   const buildWhere = (extra = []) => {
+    const dateCond = dealDateCond(mode, 1, 2);
     const parts = [
-      `($1::date IS NULL OR d.date_create::date >= $1::date)`,
-      `($2::date IS NULL OR d.date_create::date <= $2::date)`,
+      dateCond.split('\n')[0].trim(),
+      dateCond.split('\n')[1].trim().replace(/^AND\s+/i, ''),
       dealModeClause(mode).slice(4)
     ];
     const statusPart =
@@ -573,7 +581,7 @@ router.get('/deals-list', async (req, res) => {
          s.is_won,
          s.is_final
        FROM deals d
-       JOIN stages s ON s.id = d.stage_id
+       LEFT JOIN stages s ON s.id = d.stage_id
        LEFT JOIN responsibles r ON r.id = d.responsible_id
        LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
        ${buildWhere(extra)}
@@ -585,7 +593,7 @@ router.get('/deals-list', async (req, res) => {
     const { rows: countRows } = await pool.query(
       `SELECT COUNT(*)::int AS total
        FROM deals d
-       JOIN stages s ON s.id = d.stage_id
+       LEFT JOIN stages s ON s.id = d.stage_id
        LEFT JOIN responsibles r ON r.id = d.responsible_id
        LEFT JOIN LATERAL (SELECT phone FROM deal_phones WHERE deal_id = d.id LIMIT 1) ph ON true
        ${buildWhere(extra)}`,
@@ -622,11 +630,10 @@ router.get('/deals-conversion', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `WITH fd AS (
-         SELECT d.id, d.responsible_id, d.opportunity, s.is_won, s.is_final, s.bitrix_id AS stage_bid
+         SELECT d.id, d.responsible_id, d.opportunity, d.currency_id, s.is_won, s.is_final, s.bitrix_id AS stage_bid
          FROM deals d
          JOIN stages s ON s.id = d.stage_id
-         WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-           AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         WHERE ${dealDateCond(mode, 1, 2)}
            ${dealModeClause(mode)}
        )
        SELECT
@@ -634,10 +641,10 @@ router.get('/deals-conversion', async (req, res) => {
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
          r.work_position,
          COUNT(fd.id)::int AS total,
-         COUNT(fd.id) FILTER (WHERE NOT fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']) AND NOT fd.is_final)::int AS jarayonda,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE NOT fd.stage_bid = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']) AND NOT fd.is_final)::int AS jarayonda,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']))::int AS sotuv_boldi,
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int AS bekor_boldi,
-         COALESCE(SUM(fd.opportunity) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON'])), 0)::numeric AS jami_sotuv
+         COALESCE(SUM(fd.opportunity) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']) AND fd.currency_id = 'USD'), 0)::numeric AS jami_sotuv
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
        GROUP BY r.id, r.name, r.last_name, r.work_position
@@ -664,8 +671,7 @@ router.get('/deals-responsibles', async (req, res) => {
          SELECT d.id, d.responsible_id, s.bitrix_id AS stage_bid, s.is_won, s.is_final
          FROM deals d
          JOIN stages s ON s.id = d.stage_id
-         WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-           AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+         WHERE ${dealDateCond(mode, 1, 2)}
            ${dealModeClause(mode)}
        )
        SELECT
@@ -676,7 +682,7 @@ router.get('/deals-responsibles', async (req, res) => {
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('NEW','C1:NEW','C1:CONSULTATION_DONE'))::int              AS konsultatsiya,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_W35V62','C1:AGREEMENT'))::int                         AS kelishuv,
          COUNT(fd.id) FILTER (WHERE fd.stage_bid IN ('UC_EHGFKW','UC_3BDUY6'))::int                           AS ish_boshlandi,
-         COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_W35V62','UC_NV0Y4F','UC_EHGFKW','WON','C1:WON']))::int AS sotuv_boldi,
+         COUNT(fd.id) FILTER (WHERE fd.stage_bid = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']))::int AS sotuv_boldi,
          COUNT(fd.id) FILTER (WHERE fd.is_final AND NOT fd.is_won)::int                                        AS bekor_boldi
        FROM responsibles r
        JOIN fd ON fd.responsible_id = r.id
@@ -765,7 +771,8 @@ router.get('/lead-stats', async (req, res) => {
            COUNT(*) FILTER (WHERE NOT s.is_final AND l.date_modify < NOW() - INTERVAL '7 days')::int AS frozen_leads,
            ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0)
              FILTER (WHERE NOT s.is_final), 1)                                                AS avg_age_days,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_bekor_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id = 'UC_F8K4GI')::int                         AS sifatsiz_bekor_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_NAZK5J','RECYCLED'))::int           AS bekor_boldi_count,
            COUNT(l.id) FILTER (WHERE s.bitrix_id IN (
              'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
              'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
@@ -880,7 +887,13 @@ router.get('/lead-conversion', async (req, res) => {
            'NEW','IN_PROCESS','PROCESSED',
            'UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW','UC_L28G68','UC_5G8244'
          ))::int                                                                               AS jarayonda,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (
+           'UC_KXC3ZW','THINKING','UC_L28G68','CONSULTATION',
+           'CONVERTED_CONSULT','CONVERTED','UC_NAZK5J','RECYCLED',
+           'UC_5G8244','NOT_TRANSFERRED','JUNK','ARCHIVE'
+         ))::int                                                                               AS sifatli_lid,
          COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_F8K4GI','JUNK'))::int                AS sifatsiz_lid,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_NAZK5J','RECYCLED'))::int             AS bekor_boldi,
          COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')::int                         AS tashrif_buyurdi
        FROM responsibles r
        LEFT JOIN fl ON fl.responsible_id = r.id
@@ -900,7 +913,13 @@ router.get('/lead-conversion', async (req, res) => {
  * GET /api/dashboard/lead-filter-options
  * Responsibles, lead stages, and sources.  Replaces Python /api/filter-options.
  */
-router.get('/lead-filter-options', async (_req, res) => {
+router.get('/lead-filter-options', async (req, res) => {
+  const { mode } = req.query;
+  const srcExclude = mode === 'bitrix24'
+    ? `AND source_id != 'UC_1WUFJB'`
+    : mode === 'amocrm'
+      ? `AND source_id = 'UC_1WUFJB'`
+      : '';
   try {
     const [respRes, stageRes, srcRes, formRes] = await Promise.all([
       pool.query(
@@ -914,7 +933,7 @@ router.get('/lead-filter-options', async (_req, res) => {
       ),
       pool.query(
         `SELECT DISTINCT source_id FROM leads
-         WHERE source_id IS NOT NULL AND source_id != '' AND source_id != 'UC_1WUFJB'
+         WHERE source_id IS NOT NULL AND source_id != '' ${srcExclude}
          ORDER BY source_id LIMIT 60`
       ),
       pool.query(
@@ -2552,11 +2571,10 @@ router.get('/deals-source-stats', async (req, res) => {
          COUNT(d.id)::int                                                              AS umumiy,
          COUNT(d.id) FILTER (WHERE NOT s.is_won AND NOT s.is_final)::int              AS jarayonda,
          COUNT(d.id) FILTER (WHERE s.is_final AND NOT s.is_won)::int                  AS bekor_boldi,
-         COUNT(d.id) FILTER (WHERE s.is_won)::int                                     AS sotuv_boldi
+         COUNT(d.id) FILTER (WHERE s.bitrix_id = ANY(ARRAY['UC_NV0Y4F','UC_EHGFKW','WON','C1:WON','UC_3BDUY6']))::int AS sotuv_boldi
        FROM deals d
        JOIN stages s ON s.id = d.stage_id
-       WHERE ($1::date IS NULL OR d.date_create::date >= $1::date)
-         AND ($2::date IS NULL OR d.date_create::date <= $2::date)
+       WHERE ${dealDateCond(mode, 1, 2)}
          ${dealModeClause(mode)}
        GROUP BY d.source_id
        ORDER BY umumiy DESC`,

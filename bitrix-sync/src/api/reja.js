@@ -325,8 +325,8 @@ router.get('/plans/:id/distribution', async (req, res) => {
     if (!planRes.rows.length) return res.status(404).json({ error: 'Plan not found' });
     const plan = planRes.rows[0];
 
-    // All responsibles with their targets.
-    // Sort: assigned (target > 0) first, then by name.
+    // Only return responsibles explicitly added to this plan (have a reja_targets record).
+    // "Xodim qo'shish" button uses listAllResponsibles to add new ones.
     const empRes = await pool.query(`
       SELECT
         r.id                                                          AS responsible_id,
@@ -334,18 +334,11 @@ router.get('/plans/:id/distribution', async (req, res) => {
         r.work_position,
         r.active,
         r.photo_url,
-        COALESCE(t.target, 0)::numeric                               AS target
-      FROM responsibles r
-      LEFT JOIN reja_targets t
-        ON  t.plan_id        = $1
-        AND t.responsible_id = r.id
-      WHERE r.active = TRUE
-        AND (
-          r.work_position ILIKE '%hunter%'
-          OR r.work_position ILIKE '%closer%'
-          OR t.target > 0
-        )
-      ORDER BY COALESCE(t.target, 0) DESC, r.name, r.last_name
+        t.target::numeric                                             AS target
+      FROM reja_targets t
+      JOIN responsibles r ON r.id = t.responsible_id
+      WHERE t.plan_id = $1
+      ORDER BY t.target DESC, r.name, r.last_name
     `, [planId]);
 
     // Actual won-deal sales per responsible for the plan period.
@@ -357,9 +350,12 @@ router.get('/plans/:id/distribution', async (req, res) => {
         COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS actual_sales,
         COUNT(*)::int                             AS deal_count
       FROM deals d
+      JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN $2 AND $3
+        AND d.currency_id = 'USD'
+        AND NOT (s.is_final AND NOT s.is_won)
+        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -399,10 +395,10 @@ router.post('/plans/:id/distribution', async (req, res) => {
     // Remove all existing targets for this plan
     await client.query('DELETE FROM reja_targets WHERE plan_id = $1', [planId]);
 
-    // Insert only rows with a positive target
+    // Insert rows with target >= 0
     for (const t of targets) {
       const amt = parseFloat(t.target) || 0;
-      if (amt > 0) {
+      if (amt >= 0) {
         await client.query(
           `INSERT INTO reja_targets (plan_id, responsible_id, target)
            VALUES ($1, $2, $3)
@@ -479,13 +475,16 @@ router.get('/plans/:id/progress', async (req, res) => {
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date::text AS close_date,
-        SUM(d.uf_paid_sum)::numeric                                 AS amount
+        COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date::text AS close_date,
+        SUM(d.uf_paid_sum)::numeric                          AS amount
       FROM deals d
+      JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date
+        AND d.currency_id = 'USD'
+        AND NOT (s.is_final AND NOT s.is_won)
+        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
@@ -554,8 +553,10 @@ router.get('/plans/:id/progress', async (req, res) => {
       const prevActualRes = await pool.query(`
         SELECT COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS total
         FROM deals d
+        JOIN stages s ON s.id = d.stage_id
         WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-          AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN $1 AND $2
+          AND NOT (s.is_final AND NOT s.is_won)
+          AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date BETWEEN $1 AND $2
       `, [pp.period_start, pp.period_end]);
       prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
     }

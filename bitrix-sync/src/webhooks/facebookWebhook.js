@@ -85,8 +85,10 @@ async function createBitrixLead(leadgenId, raw, fields) {
   const utmMedium = raw.is_organic ? 'organic' : 'paid';
 
   const phone = fields.phone_number || fields.phone
+    || fields['telefon_raqamingizni_qoldiring!'] || fields['номер_телефона']
     || fields['telefon_raqamingiz:'] || fields['telefon_raqamingiz'] || null;
   const name  = fields.full_name || fields.name
+    || fields['ismingizni_qoldiring!']
     || fields['ismingiz:'] || fields['ismingiz?'] || fields['ismingiz'] || 'Facebook Lead';
   const email = fields.email || null;
 

@@ -29,6 +29,7 @@ export type DashboardStatsResponse = {
     konsultatsiya_otkazildi_count: number;
     muvaffaqiyatsiz_count: number;
     sifatsiz_bekor_count: number;
+    bekor_boldi_count: number;
   };
   funnel: {
     bitrix_id: string;
@@ -106,7 +107,9 @@ export type ConversionStatsResponse = {
     full_name: string;
     total: number;
     jarayonda: number;
+    sifatli_lid: number;
     sifatsiz_lid: number;
+    bekor_boldi: number;
     tashrif_buyurdi: number;
   }[];
 };
@@ -122,8 +125,8 @@ export function getConversionStats(filter: DashFilter) {
   }, API_URL_CRM);
 }
 
-export function getFilterOptions() {
-  return apiGet<FilterOptions>("/api/dashboard/lead-filter-options", {}, API_URL_CRM);
+export function getFilterOptions(mode?: string) {
+  return apiGet<FilterOptions>("/api/dashboard/lead-filter-options", { mode }, API_URL_CRM);
 }
 
 export type TasksSummaryResponse = {
@@ -134,6 +137,7 @@ export type TasksSummaryResponse = {
     in_progress: number;
     completed: number;
     overdue: number;
+    completed_late: number;
   }[];
 };
 

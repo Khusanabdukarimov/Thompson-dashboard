@@ -3,7 +3,7 @@ const stageResolver = require('./stageResolver');
 
 const CANCEL_REASON_MAP = {
   '1062': "Qimmatlik qildi",
-  '1064': "Puli yo'q",
+  '1064': "Umuman puli yo'q",
   '1068': "Boshqalardan sotib oldi",
   '1490': "Biznes egasi emas",
   '1492': "Maqul kelmadi",
@@ -25,6 +25,13 @@ const JUNK_REASON_MAP = {
   '1136': "Gaplashmasdan boshqa joyga bordi",
   '1138': "Umuman boshqa narsani so'radi",
   '2716': "Qimmatlik qildi",
+  '2948': "Biznes egasi emas",
+  '2950': "Nomi patentdan o'tmaydi",
+  '2952': "Noto'g'ri kontakt",
+  '2954': "Faoliyat to'xtatildi",
+  '2956': "Adashib tushibdi",
+  '2958': "Bizda yo'q xizmat bo'yicha murojaat qilishdi",
+  '3068': "Kerak emas",
 };
 
 const AMOCRM_SEGMENT_MAP = {
@@ -89,8 +96,9 @@ async function upsertLead(r, client) {
   const originalUtmMedium = r.UTM_MEDIUM || null;
 
   // UTM_SOURCE bo'lmasa yoki Bitrix24 forma nomi bo'lsa avto-to'ldirish
-  let utmSource = r.UTM_SOURCE || null;
-  let utmMedium = r.UTM_MEDIUM || null;
+  const nullStr = (v) => (!v || String(v).trim().toLowerCase() === 'null' ? null : String(v).trim());
+  let utmSource = nullStr(r.UTM_SOURCE);
+  let utmMedium = nullStr(r.UTM_MEDIUM);
 
   // Bitrix24 ning o'z forma nomlarini utm_source sifatida saqlamaymiz
   if (utmSource && /leadmaster.*form|webform|instantform/i.test(utmSource)) {

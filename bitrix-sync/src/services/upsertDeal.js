@@ -58,8 +58,8 @@ async function upsertDeal(r, client) {
        source_id, utm_source, date_create, date_modify, closedate,
        uf_sale_date, uf_bp_sale_date, uf_payment_date,
        uf_paid_sum, uf_remaining_sum,
-       uf_cancel_reason, contact_id, begindate, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+       uf_cancel_reason, contact_id, begindate, uf_amo_date, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -70,13 +70,14 @@ async function upsertDeal(r, client) {
        date_modify      = EXCLUDED.date_modify,
        closedate        = EXCLUDED.closedate,
        uf_sale_date     = EXCLUDED.uf_sale_date,
-       uf_bp_sale_date  = EXCLUDED.uf_bp_sale_date,
+       uf_bp_sale_date  = COALESCE(EXCLUDED.uf_bp_sale_date, deals.uf_bp_sale_date),
        uf_payment_date  = EXCLUDED.uf_payment_date,
        uf_paid_sum      = EXCLUDED.uf_paid_sum,
        uf_remaining_sum = EXCLUDED.uf_remaining_sum,
        uf_cancel_reason = EXCLUDED.uf_cancel_reason,
        contact_id       = EXCLUDED.contact_id,
        begindate        = EXCLUDED.begindate,
+       uf_amo_date      = EXCLUDED.uf_amo_date,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -98,6 +99,7 @@ async function upsertDeal(r, client) {
       ufEnum(r.UF_CRM_69EBC105EAA93, DEAL_CANCEL_REASON_MAP),
       contactId,
       parseDate(r.BEGINDATE),
+      parseDate(r.UF_CRM_69FEFD2D71544),
     ]
   );
 

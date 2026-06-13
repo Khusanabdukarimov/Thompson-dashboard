@@ -74,11 +74,14 @@ export const MONTH_LABELS: Record<MonthKey, string> = {
   sentabr: 'Sentabr', oktabr: 'Oktabr', noyabr: 'Noyabr', dekabr: 'Dekabr',
 };
 
-export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string) {
-  // Served by Node.js (port 3001) with PostgreSQL 1-hour cache.
-  // ad_account_id is ignored here (account configured server-side via env).
+export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string, force = false, from?: string, to?: string) {
   void ad_account_id;
-  return apiGet<MetaInsightsResponse>('/api/campaigns/insights', { month, year });
+  return apiGet<MetaInsightsResponse>('/api/campaigns/insights', {
+    month, year,
+    ...(force ? { force: 'true' } : {}),
+    ...(from ? { from } : {}),
+    ...(to   ? { to }   : {}),
+  });
 }
 
 export function getBitrixDaily(month: MonthKey, year: number) {
@@ -145,9 +148,13 @@ export type CampaignsResponse = {
   rows: CampaignAdRow[];
 };
 
-export function getMetaCampaigns(month: MonthKey, year: number) {
-  // Served by Node.js (port 3001) with PostgreSQL 1-hour cache.
-  return apiGet<CampaignsResponse>('/api/campaigns/rows', { month, year });
+export function getMetaCampaigns(month: MonthKey, year: number, force = false, from?: string, to?: string) {
+  return apiGet<CampaignsResponse>('/api/campaigns/rows', {
+    month, year,
+    ...(force ? { force: 'true' } : {}),
+    ...(from ? { from } : {}),
+    ...(to   ? { to }   : {}),
+  });
 }
 
 export function getDashboardDaily(date: string) {
@@ -159,6 +166,7 @@ export type LeadgenForm = {
   form_name: string;
   status: string;
   leads_count: number | null;
+  sifatli_lid: number;
   created_time: string;
   adset_id: string;
   adset_name: string;
@@ -176,10 +184,12 @@ export type CampaignFormsResponse = {
   campaigns: CampaignForms[];
 };
 
-export function getCampaignForms(month?: string, year?: number) {
+export function getCampaignForms(month?: string, year?: number, from?: string, to?: string) {
   const params: Record<string, string | number | undefined> = {};
   if (month) params.month = month;
   if (year)  params.year  = year;
+  if (from)  params.from  = from;
+  if (to)    params.to    = to;
   return apiGet<CampaignFormsResponse>('/api/campaigns/forms', params);
 }
 
@@ -189,6 +199,9 @@ export interface FormLead {
   phone: string;
   email: string;
   created_at: string;
+  bitrix_id: number | null;
+  stage_name: string | null;
+  stage_code: string | null;
   utm_source: string;
   utm_medium: string;
   utm_campaign: string;
@@ -206,10 +219,12 @@ export type PageForm = {
   page_name:    string;
 };
 
-export function getPageForms(month?: string, year?: number) {
+export function getPageForms(month?: string, year?: number, from?: string, to?: string) {
   return apiGet<{ forms: PageForm[] }>('/api/meta/page-forms', {
     ...(month ? { month } : {}),
     ...(year  ? { year: String(year) } : {}),
+    ...(from  ? { from }  : {}),
+    ...(to    ? { to }    : {}),
   });
 }
 
@@ -220,4 +235,75 @@ export function getFormLeads(formId: string, campaignId?: string, from?: string,
     ...(from ? { from } : {}),
     ...(to   ? { to }   : {}),
   });
+}
+
+export type CreativeRow = {
+  adset_name:    string;
+  campaign_name: string;
+  ad_id:         string | null;
+  ad_name:       string | null;
+  post_url:      string | null;
+  spend:         number;
+  meta_leads:    number;
+  in_bitrix:     number;
+  not_in_bitrix: number;
+  sifatli:            number;
+  sifatsiz:           number;
+  bekor_boldi:        number;
+  konsultatsiya_otdi: number;
+  sotuv_boldi:        number;
+  sifat_rate:    number;
+};
+
+export function getCampaignCreatives(month: MonthKey, year: number, from?: string, to?: string) {
+  return apiGet<{ creatives: CreativeRow[] }>('/api/campaigns/creatives', {
+    month, year,
+    ...(from ? { from } : {}),
+    ...(to   ? { to }   : {}),
+  });
+}
+
+export type CreativeLead = {
+  fb_id:        string;
+  full_name:    string;
+  phone:        string;
+  created_time: string;
+  platform:     string;
+  campaign_name: string;
+  bitrix_id:    number | null;
+  stage_name:   string | null;
+  stage_code:   string | null;
+  is_duplicate: boolean;
+};
+
+export type CreativeDeal = {
+  id:          number;
+  phone:       string;
+  responsible: string;
+  opportunity: number;
+  currency:    string;
+  date:        string | null;
+  stage:       string;
+};
+
+export function getCreativeDeals(adset_name: string, month: MonthKey, year: number, from?: string, to?: string) {
+  return apiGet<{ deals: CreativeDeal[] }>(
+    '/api/campaigns/creative-deals',
+    {
+      adset_name, month, year,
+      ...(from ? { from } : {}),
+      ...(to   ? { to }   : {}),
+    },
+  );
+}
+
+export function getCreativeLeads(adset_name: string, month: MonthKey, year: number, from?: string, to?: string) {
+  return apiGet<{ adset_name: string; leads: CreativeLead[] }>(
+    '/api/campaigns/creative-leads',
+    {
+      adset_name, month, year,
+      ...(from ? { from } : {}),
+      ...(to   ? { to }   : {}),
+    },
+  );
 }

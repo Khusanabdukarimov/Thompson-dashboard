@@ -60,7 +60,7 @@ export default function EmployeesPage() {
 
   const employees = (empQ.data?.employees ?? []).filter(e => {
     const ms = !search || e.name.toLowerCase().includes(search.toLowerCase());
-    const mr = !roleFilter   || e.role === roleFilter;
+    const mr = !roleFilter   || e.role.split('+').includes(roleFilter);
     const mst = !statusFilter || e.status === statusFilter;
     return ms && mr && mst;
   });

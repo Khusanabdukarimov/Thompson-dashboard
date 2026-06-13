@@ -19,12 +19,9 @@ const SdelkalarPage    = lazy(() => import("@/pages/marketing/SdelkalarPage"));
 const KampaniyalarPage  = lazy(() => import("@/pages/marketing/KampaniyalarPage"));
 const CallStatistikasi  = lazy(() => import("@/pages/marketing/CallStatistikasi"));
 const KunlikPage       = lazy(() => import("@/pages/marketing/KunlikPage"));
-const ByudjetPage      = lazy(() => import("@/pages/marketing/ByudjetPage"));
-
 // New standalone pages (built step-by-step; show Placeholder until built)
 const RejaNewPage      = lazy(() => import("@/pages/RejaPage"));
 const RejaCreatePage   = lazy(() => import("@/pages/RejaCreatePage"));
-const HisobotNewPage   = lazy(() => import("@/pages/HisobotPage"));
 
 // Payroll
 const PayrollCalcPage  = lazy(() => import("@/pages/payroll/PayrollCalcPage"));
@@ -140,11 +137,6 @@ export default function App() {
             <S><KunlikPage /></S>
           </RoleRoute>
         } />
-        <Route path="/byudjet" element={
-          <RoleRoute roles={MGMT}>
-            <S><ByudjetPage /></S>
-          </RoleRoute>
-        } />
         <Route path="/reja/new" element={
           <RoleRoute roles={[...MGMT, "closer", "hunter"]}>
             <S><RejaCreatePage /></S>
@@ -154,9 +146,6 @@ export default function App() {
           <RoleRoute roles={[...MGMT, "closer", "hunter"]}>
             <S><RejaNewPage /></S>
           </RoleRoute>
-        } />
-        <Route path="/hisobot" element={
-          <S><HisobotNewPage /></S>
         } />
         <Route path="/payroll" element={
           <S><PayrollCalcPage /></S>
@@ -172,7 +161,6 @@ export default function App() {
         <Route path="/marketing/sdelkalar"    element={<Navigate to="/sdelkalar"      replace />} />
         <Route path="/marketing/kampaniyalar" element={<Navigate to="/kampaniyalar"   replace />} />
         <Route path="/marketing/kunlik"       element={<Navigate to="/kunlik-hisobot" replace />} />
-        <Route path="/marketing/byudjet"      element={<Navigate to="/byudjet"        replace />} />
         <Route path="/payroll/payroll"        element={<Navigate to="/payroll"        replace />} />
 
         {/* ── Payroll management (secondary nav, admin/owner) ── */}

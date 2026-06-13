@@ -4,6 +4,7 @@ const http = require('http');
 
 const WEBHOOK_URL = process.env.BITRIX_WEBHOOK_URL;
 const PAGE_DELAY_MS = 600; // 600ms between pages ≈ 1.67 req/s (safe under 2 req/s limit)
+const MAX_CONSEC_FAILURES = 3; // abort fetchAll if this many pages fail in a row
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,23 +81,35 @@ async function fetchAll(method, filter = {}, select = []) {
 
   console.log(`[bitrix] ${method}: total=${total}, pages=${offsets.length + 1}`);
 
+  let consecFailures = 0;
   for (const start of offsets) {
     await sleep(PAGE_DELAY_MS);
     const url = buildUrl(method, { ...params, start });
-    let retries = 3;
-    while (retries-- > 0) {
+    let success = false;
+    const delays = [5000, 15000, 45000]; // exponential backoff
+    for (let attempt = 0; attempt < delays.length; attempt++) {
       try {
-        const page = await httpGet(url);
+        const page = await httpGet(url, 35000);
         if (page.result) {
           all.push(...page.result);
+          success = true;
           break;
         }
-        // rate limit or error — back off
-        await sleep(3000);
+        await sleep(delays[attempt]);
       } catch (err) {
-        console.warn(`[bitrix] page start=${start} error: ${err.message}`);
-        await sleep(3000);
+        console.warn(`[bitrix] page start=${start} attempt=${attempt + 1} error: ${err.message}`);
+        if (attempt < delays.length - 1) await sleep(delays[attempt]);
       }
+    }
+    if (!success) {
+      consecFailures++;
+      console.error(`[bitrix] page start=${start} failed after all retries (consec=${consecFailures})`);
+      if (consecFailures >= MAX_CONSEC_FAILURES) {
+        console.error(`[bitrix] ${method}: ${consecFailures} consecutive page failures — aborting fetch, returning partial ${all.length}/${total}`);
+        break;
+      }
+    } else {
+      consecFailures = 0;
     }
   }
 

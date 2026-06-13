@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  LayoutDashboard, BarChart3, Users, Briefcase, DollarSign,
+  LayoutDashboard, BarChart3, Users, Briefcase,
   TrendingUp, Wallet, ClipboardCheck, Award, GanttChart, Settings,
   Search, ArrowRight, Moon, Sun,
 } from 'lucide-react';
@@ -46,13 +46,12 @@ export function CommandPalette() {
     { id: 'm-kampaniyalar', label: 'Kampaniyalar',         hint: 'Marketing · Meta Ads', icon: TrendingUp, action: () => nav('/marketing/kampaniyalar') },
     { id: 'm-lidlar',       label: 'Lidlar analitika',     hint: 'Marketing · Bitrix CRM', icon: BarChart3, action: () => nav('/marketing/lidlar') },
     { id: 'm-sdelkalar',    label: 'Sdelkalar',            hint: 'Marketing · Bitrix CRM', icon: Briefcase, action: () => nav('/marketing/sdelkalar') },
-    { id: 'm-byudjet',      label: 'Byudjet',              hint: 'Marketing', icon: DollarSign, action: () => nav('/marketing/byudjet') },
     // Payroll
     { id: 'p-dashboard',    label: 'Dashboard',            hint: 'Payroll', icon: LayoutDashboard, action: () => nav('/payroll/dashboard') },
     { id: 'p-reja',         label: 'Reja & Leadlar',       hint: 'Payroll', icon: GanttChart, action: () => nav('/payroll/reja') },
     { id: 'p-employees',    label: 'Xodimlar',             hint: 'Payroll', icon: Users, action: () => nav('/payroll/employees') },
     { id: 'p-attendance',   label: 'Davomat',              hint: 'Payroll · realtime', icon: ClipboardCheck, action: () => nav('/payroll/attendance') },
-    { id: 'p-hisobot',      label: 'Hisobot intizomi',     hint: 'Payroll', icon: ClipboardCheck, action: () => nav('/payroll/hisobot') },
+
     { id: 'p-kpi',          label: 'KPI qoidalar',         hint: 'Payroll', icon: Award, action: () => nav('/payroll/kpi') },
     { id: 'p-bonus',        label: 'Bonuslar',             hint: 'Payroll', icon: Award, action: () => nav('/payroll/bonus') },
     { id: 'p-payroll',      label: 'Oylik hisob',          hint: 'Payroll · breakdown', icon: Wallet, action: () => nav('/payroll/payroll') },

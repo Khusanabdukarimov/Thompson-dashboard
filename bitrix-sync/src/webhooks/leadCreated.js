@@ -3,6 +3,23 @@ const { fetchOne } = require('../services/bitrix');
 const { upsertLead } = require('../services/upsertLead');
 const { distributeLead } = require('../services/distributor');
 
+async function fetchOneWithRetry(method, id, maxRetries = 3) {
+  const delays = [5000, 15000, 45000];
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchOne(method, id);
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delay = delays[attempt] ?? 45000;
+        console.warn(`[leadCreated] fetchOne attempt ${attempt + 1} failed (${err.message}), retry in ${delay / 1000}s`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 const LEAD_SELECT = [
   'ID', 'ASSIGNED_BY_ID', 'STATUS_ID', 'OPPORTUNITY', 'SOURCE_ID',
   'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'UTM_CONTENT', 'UTM_TERM',
@@ -30,7 +47,7 @@ async function leadCreated(req, res) {
       [entityId, JSON.stringify(req.body)]
     );
 
-    const raw = await fetchOne('crm.lead.get', entityId);
+    const raw = await fetchOneWithRetry('crm.lead.get', entityId);
     if (!raw) return;
 
     await upsertLead(raw);

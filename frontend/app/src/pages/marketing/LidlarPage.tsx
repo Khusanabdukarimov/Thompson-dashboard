@@ -2,11 +2,10 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import {
-  RefreshCw, Calendar, Users, Star, TrendingUp, Filter,
+  Calendar, Users, Star, TrendingUp, Filter,
   Percent, ArrowLeftRight, Target, XCircle, ChevronDown, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
-import { Button } from "@/components/Button";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
@@ -23,8 +22,9 @@ const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayISO   = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+const startOfMonthISO = () => { const d = new Date(); d.setDate(1); return localISO(d); };
 
-const getDefaultFilter = (): DashFilter => ({});
+const getDefaultFilter = (): DashFilter => ({ start_date: startOfMonthISO(), end_date: todayISO() });
 
 // ── MultiSelect dropdown component ───────────────────────────────
 function MultiSelect({
@@ -80,7 +80,7 @@ function MultiSelect({
       </button>
       {open && (
         <div style={{
-          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 400,
+          position: "absolute", top: "100%", left: 0, minWidth: "100%", zIndex: 600,
           background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8,
           boxShadow: "0 4px 24px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4,
         }}>
@@ -117,14 +117,9 @@ function MultiSelect({
 const RESPONSIBLE_COLS = [
   { key: "qongiroqlar",             label: "Qo'ng'iroqlar",            color: "#9E9E9E" },
   { key: "yangi_lid",               label: "Yangi lid",                color: "#2196F3" },
-  { key: "propushenniy",            label: "Propushenniy",             color: "#9E9E9E" },
-  { key: "javob_bermadi",           label: "Javob bermadi",            color: "#FF9800" },
-  { key: "qayta_aloqa",             label: "Qayta aloqa",              color: "#00BCD4" },
-  { key: "oylab_koradi",            label: "O'ylab ko'radi",           color: "#E91E63" },
+  { key: "jarayon",                 label: "Jarayon",                  color: "#FF9800" },
   { key: "konsultatsiya",           label: "Konsultatsiya belgilandi", color: "#9C27B0" },
-  { key: "otkazilmadi",             label: "O'tkazilmadi",             color: "#FF00FF" },
   { key: "konsultatsiya_otkazildi", label: "Konsultatsiya o'tkazildi", color: "#4CAF50" },
-  { key: "sandiq",                  label: "Sandiq",                   color: "#42A5F5" },
   { key: "sifatsiz",                label: "Sifatsiz",                 color: "#F44336" },
   { key: "bekor_boldi",             label: "Bekor bo'ldi",             color: "#FFC107" },
 ] as const;
@@ -136,18 +131,6 @@ const AVATAR_COLORS = [
   "#4CAF50","#FF5722","#3F51B5","#009688","#795548",
 ];
 
-function RoleBadge({ role }: { role?: string | null }) {
-  if (!role) return <span style={{ color: "var(--text3)", fontSize: 11 }}>—</span>;
-  const r = role.toLowerCase();
-  const isHunter = r.includes("hunter");
-  const isCloser = r.includes("closer");
-  const color = isHunter && isCloser ? "#9c27b0" : isHunter ? "#2196F3" : isCloser ? "#4caf50" : "#9E9E9E";
-  return (
-    <span style={{ fontSize: 11, fontWeight: 500, color, whiteSpace: "nowrap" }}>
-      {role}
-    </span>
-  );
-}
 
 function AvatarCircle({ name, size = 36 }: { name: string; size?: number }) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -341,7 +324,7 @@ export default function LidlarPage() {
   const isDark = theme === 'dark';
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
-  const [search, setSearch] = useState("");
+  const [search] = useState("");
   const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
 
   const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
@@ -357,8 +340,8 @@ export default function LidlarPage() {
   }, [filterOpen]);
 
   const filterOptsQ = useQuery({
-    queryKey: ["filter-options"],
-    queryFn: getFilterOptions,
+    queryKey: ["filter-options", mode],
+    queryFn: () => getFilterOptions(mode),
     staleTime: 5 * 60 * 1000,
   });
   const filterOpts = filterOptsQ.data;
@@ -450,8 +433,15 @@ export default function LidlarPage() {
   const header       = statsQ.data?.header;
   const responsibles = (respQ.data?.responsibles ?? []).filter((u) => !isExcluded(u.full_name));
 
+  const enrichedResponsibles = useMemo(() =>
+    responsibles.map(u => ({
+      ...u,
+      jarayon: (u.propushenniy ?? 0) + (u.javob_bermadi ?? 0) + (u.qayta_aloqa ?? 0) + (u.oylab_koradi ?? 0) + (u.otkazilmadi ?? 0) + (u.sandiq ?? 0),
+    })), [responsibles]);
+
   const total             = header?.total_leads                    ?? 0;
   const sifatsizBekor     = header?.sifatsiz_bekor_count           ?? 0;
+  const bekorBoldiCount   = header?.bekor_boldi_count              ?? 0;
   const sifatliLid        = header?.sifatli_lid_count              ?? 0;
   const konsultBelgilandi = header?.konsultatsiya_belgilandi_count  ?? 0;
   const konsultOtkazildi  = header?.konsultatsiya_otkazildi_count   ?? 0;
@@ -462,23 +452,23 @@ export default function LidlarPage() {
 
   const byUserFiltered = useMemo(() => {
     const s = search.trim().toLowerCase();
-    return s ? responsibles.filter((u) => u.full_name.toLowerCase().includes(s)) : responsibles;
-  }, [responsibles, search]);
+    return s ? enrichedResponsibles.filter((u) => u.full_name.toLowerCase().includes(s)) : enrichedResponsibles;
+  }, [enrichedResponsibles, search]);
 
   const colMaxes = useMemo(() => {
     const m: Partial<Record<RespColKey, number>> = {};
     for (const col of RESPONSIBLE_COLS)
-      m[col.key] = Math.max(1, ...responsibles.map((u) => (u as unknown as Record<string, number>)[col.key] ?? 0));
+      m[col.key] = Math.max(1, ...enrichedResponsibles.map((u) => (u as unknown as Record<string, number>)[col.key] ?? 0));
     return m;
-  }, [responsibles]);
+  }, [enrichedResponsibles]);
 
   const totalsRow = useMemo(() => {
     const bs: Partial<Record<RespColKey, number>> = {};
-    for (const u of responsibles)
+    for (const u of enrichedResponsibles)
       for (const col of RESPONSIBLE_COLS)
         bs[col.key] = (bs[col.key] ?? 0) + ((u as unknown as Record<string, number>)[col.key] ?? 0);
     return bs;
-  }, [responsibles]);
+  }, [enrichedResponsibles]);
 
   const isLoading = statsQ.isLoading;
 
@@ -490,20 +480,24 @@ export default function LidlarPage() {
   }, [conversionQ.data]);
 
   const convMax = useMemo(() => ({
-    total:    Math.max(1, ...convRows.map((r) => r.total)),
+    total:     Math.max(1, ...convRows.map((r) => r.total)),
     jarayonda: Math.max(1, ...convRows.map((r) => r.jarayonda)),
+    sifatli:   Math.max(1, ...convRows.map((r) => r.sifatli_lid ?? 0)),
     sifatsiz:  Math.max(1, ...convRows.map((r) => r.sifatsiz_lid)),
+    bekor:     Math.max(1, ...convRows.map((r) => r.bekor_boldi ?? 0)),
     otkazildi: Math.max(1, ...convRows.map((r) => r.tashrif_buyurdi)),
   }), [convRows]);
 
   const convTotals = useMemo(() => convRows.reduce(
     (acc, r) => ({
-      total:    acc.total    + r.total,
+      total:     acc.total     + r.total,
       jarayonda: acc.jarayonda + r.jarayonda,
+      sifatli:   acc.sifatli   + (r.sifatli_lid ?? 0),
       sifatsiz:  acc.sifatsiz  + r.sifatsiz_lid,
+      bekor:     acc.bekor     + (r.bekor_boldi ?? 0),
       otkazildi: acc.otkazildi + r.tashrif_buyurdi,
     }),
-    { total: 0, jarayonda: 0, sifatsiz: 0, otkazildi: 0 }
+    { total: 0, jarayonda: 0, sifatli: 0, sifatsiz: 0, bekor: 0, otkazildi: 0 }
   ), [convRows]);
 
   return (
@@ -511,9 +505,20 @@ export default function LidlarPage() {
       <Topbar
         title="Lidlar analitika"
         actions={
-          <Button onClick={() => { statsQ.refetch(); respQ.refetch(); conversionQ.refetch(); sourceQ.refetch(); utmStatsQ.refetch(); utmMediumQ.refetch(); utmCampaignQ.refetch(); utmContentQ.refetch(); utmTermQ.refetch(); utmRespQ.refetch(); }}>
-            <RefreshCw className="w-3.5 h-3.5" /> Yangilash
-          </Button>
+          <div style={{ display: "flex", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 2 }}>
+            <button onClick={() => { setMode('default'); setApplied(getDefaultFilter()); }}
+              style={{ border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer", background: mode === 'default' ? "#3b82f6" : "transparent", color: mode === 'default' ? "#fff" : "var(--text2)", transition: "all 0.2s" }}>
+              Barcha lidlar
+            </button>
+            <button onClick={() => { setMode('bitrix24'); setApplied(getDefaultFilter()); }}
+              style={{ border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer", background: mode === 'bitrix24' ? "#22c55e" : "transparent", color: mode === 'bitrix24' ? "#fff" : "var(--text2)", transition: "all 0.2s" }}>
+              Bitrix24
+            </button>
+            <button onClick={() => { setMode('amocrm'); setApplied(getDefaultFilter()); }}
+              style={{ border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer", background: mode === 'amocrm' ? "#D97706" : "transparent", color: mode === 'amocrm' ? "#fff" : "var(--text2)", transition: "all 0.2s" }}>
+              AmoCRM
+            </button>
+          </div>
         }
       />
 
@@ -534,7 +539,11 @@ export default function LidlarPage() {
             }}
           >
             <Search size={16} style={{ color: "var(--text3)", flexShrink: 0 }} />
-            <span style={{ color: "var(--text3)", flex: 1 }}>Qidirish va filtrlash…</span>
+            <span style={{ color: "var(--text3)", flex: 1 }}>
+              {applied.start_date || applied.end_date
+                ? `Filtr: ${applied.start_date ?? '…'} → ${applied.end_date ?? '…'}`
+                : 'Qidirish va filtrlash…'}
+            </span>
             {mode === 'amocrm' && (
               <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>AmoCRM</span>
             )}
@@ -562,6 +571,7 @@ export default function LidlarPage() {
               position: "absolute", left: 0, right: 0, zIndex: 100,
               background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none",
               borderRadius: "0 0 12px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+              overflow: "visible",
             }}>
               <div style={{ padding: "16px 20px" }}>
                 {/* Quick date presets */}
@@ -645,44 +655,14 @@ export default function LidlarPage() {
                     loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
                   />
                 </div>
-                {/* Bottom row: mode toggle buttons */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => setMode('default')}
-                      style={{
-                        background: mode === 'default' ? "rgba(33,150,243,0.1)" : "transparent",
-                        border: `1px solid ${mode === 'default' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
-                        color: mode === 'default' ? "#2196F3" : "var(--text3)",
-                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      }}>
-                      Barcha lidlar
-                    </button>
-                    <button onClick={() => setMode('bitrix24')}
-                      style={{
-                        background: mode === 'bitrix24' ? "rgba(33,150,243,0.1)" : "transparent",
-                        border: `1px solid ${mode === 'bitrix24' ? "rgba(33,150,243,0.4)" : "var(--border)"}`,
-                        color: mode === 'bitrix24' ? "#2196F3" : "var(--text3)",
-                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      }}>
-                      Bitrix24
-                    </button>
-                    <button onClick={() => setMode('amocrm')}
-                      style={{
-                        background: mode === 'amocrm' ? "rgba(217,119,6,0.1)" : "transparent",
-                        border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`,
-                        color: mode === 'amocrm' ? "#D97706" : "var(--text3)",
-                        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      }}>
-                      AmoCRM
-                    </button>
-                  </div>
-                  {(activeCount > 0 || mode !== 'default') && (
-                    <button onClick={() => { setApplied(getDefaultFilter()); setMode('default'); }}
+                {activeCount > 0 && (
+                  <div style={{ paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={() => setApplied(getDefaultFilter())}
                       style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>
                       Tozalash
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -735,49 +715,75 @@ export default function LidlarPage() {
               </GradCard>
             </div>
 
-            {/* Row 2 — Voronka (3 cols) + Sifatsiz/Bekor (1 col, aligned with Konsultatsiyalar) */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-              {/* Voronka — spans first 3 columns */}
-              <div style={{ gridColumn:"1 / 4", background: isDark ? "linear-gradient(135deg,#0a1628,#0d2240)" : "linear-gradient(135deg,rgba(33,150,243,0.06),rgba(0,188,212,0.04))", border:"1px solid var(--border)", borderRadius:16, padding:16 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-                  <Filter size={15} style={{ color:"var(--text3)" }} />
+            {/* Row 2 — Voronka (3 cols) + Sifatsiz/Bekor (1 col) */}
+            <div style={{ display:"grid", gridTemplateColumns:"3fr 1fr", gap:12, marginBottom:20 }}>
+              {/* Voronka */}
+              <div style={{ background: isDark ? "linear-gradient(135deg,#0a1628,#0d2240)" : "linear-gradient(135deg,rgba(33,150,243,0.06),rgba(0,188,212,0.04))", border:"1px solid var(--border)", borderRadius:16, padding:"20px 24px", display:"flex", flexDirection:"column" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20 }}>
+                  <Filter size={14} style={{ color:"var(--text3)" }} />
                   <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>Voronka samaradorligi</span>
                   <span style={{ fontSize:11, color:"var(--text3)", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1px 1fr 1px 1fr", gap:0, alignItems:"center" }}>
                   {[
-                    { icon:<Percent size={18} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
-                    { icon:<ArrowLeftRight size={18} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
-                    { icon:<Target size={18} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
-                  ].map((m) => (
-                    <div key={m.title} style={{ display:"flex", alignItems:"center", gap:12 }}>
-                      <div style={{ width:36, height:36, borderRadius:"50%", background:m.bg, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
-                      <div>
-                        <div style={{ fontSize:11, fontWeight:600, color:"var(--text)", marginBottom:3 }}>{m.title}</div>
-                        <div style={{ fontSize:24, fontWeight:800, color:m.color, lineHeight:1.1, marginBottom:3 }}>{m.val.toFixed(1)}%</div>
-                        <div style={{ fontSize:10, color:"var(--text3)" }}>{m.sub}</div>
+                    { icon:<Percent size={22} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
+                    { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
+                    { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
+                  ].map((m, i) => (
+                    <>
+                      <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"8px 24px", gap:12 }}>
+                        <div style={{ width:52, height:52, borderRadius:"50%", background:m.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
+                        <div style={{ textAlign:"center" }}>
+                          <div style={{ fontSize:12, fontWeight:600, color:"var(--text2)", marginBottom:6 }}>{m.title}</div>
+                          <div style={{ fontSize:40, fontWeight:800, color:m.color, lineHeight:1 }}>{m.val.toFixed(1)}%</div>
+                          <div style={{ fontSize:11, color:"var(--text3)", marginTop:6 }}>{m.sub}</div>
+                        </div>
                       </div>
-                    </div>
+                      {i < 2 && <div key={`sep-${i}`} style={{ background:"var(--border)", width:1, height:"60%", alignSelf:"center" }} />}
+                    </>
                   ))}
                 </div>
               </div>
-              {/* Sifatsiz/Bekor — 4th column, aligned under Konsultatsiyalar */}
-              <div style={{ background: isDark ? "linear-gradient(135deg,#2a0000,#6e1a1a)" : "linear-gradient(135deg,rgba(244,67,54,0.07),rgba(244,67,54,0.03))",
-                            border: `1px solid ${isDark ? "rgba(244,67,54,0.3)" : "rgba(244,67,54,0.25)"}`,
-                            boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
-                            padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                  <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(244,67,54,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <XCircle size={20} style={{ color:"#F44336" }} />
+
+              {/* Sifatsiz + Bekor bo'ldi — stacked */}
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {/* Sifatsiz */}
+                <div style={{ flex:1, background: isDark ? "linear-gradient(135deg,#2a0000,#6e1a1a)" : "linear-gradient(135deg,rgba(244,67,54,0.07),rgba(244,67,54,0.03))",
+                              border: `1px solid ${isDark ? "rgba(244,67,54,0.3)" : "rgba(244,67,54,0.25)"}`,
+                              boxShadow:"0 4px 20px rgba(244,67,54,0.15)", borderRadius:16,
+                              padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(244,67,54,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <XCircle size={20} style={{ color:"#F44336" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz</div>
+                      <div style={{ fontSize:34, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:2 }}>{fmtNum(sifatsizBekor)}</div>
+                      <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz</div>
-                    <div style={{ fontSize:36, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:3 }}>{fmtNum(sifatsizBekor)}</div>
-                    <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
+                  <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
+                    <Sparkline color="#F44336" variant={0} />
                   </div>
                 </div>
-                <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
-                  <Sparkline color="#F44336" variant={0} />
+                {/* Bekor bo'ldi */}
+                <div style={{ flex:1, background: isDark ? "linear-gradient(135deg,#2a1a00,#6e4a00)" : "linear-gradient(135deg,rgba(255,193,7,0.07),rgba(255,193,7,0.03))",
+                              border: `1px solid ${isDark ? "rgba(255,193,7,0.3)" : "rgba(255,193,7,0.25)"}`,
+                              boxShadow:"0 4px 20px rgba(255,193,7,0.12)", borderRadius:16,
+                              padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,193,7,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <XCircle size={20} style={{ color:"#FFC107" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Bekor bo'ldi</div>
+                      <div style={{ fontSize:34, fontWeight:800, color:"#FFC107", lineHeight:1.1, marginTop:2 }}>{fmtNum(bekorBoldiCount)}</div>
+                      <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor bo'lgan lidlar</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
+                    <Sparkline color="#FFC107" variant={1} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -804,6 +810,8 @@ export default function LidlarPage() {
                   <col />
                   <col />
                   <col />
+                  <col />
+                  <col />
                   <col style={{ width:80 }} />
                 </colgroup>
                 <thead>
@@ -812,7 +820,9 @@ export default function LidlarPage() {
                     <th style={TH("#9E9E9E", 200)}>Menejer</th>
                     <th style={TH("#2196F3")}>Jami Lid</th>
                     <th style={TH("#FF9800")}>Jarayonda</th>
+                    <th style={TH("#00BCD4")}>Sifatli Lid</th>
                     <th style={TH("#F44336")}>Sifatsiz Lid</th>
+                    <th style={TH("#FFC107")}>Bekor Bo'ldi</th>
                     <th style={TH("#4CAF50")}>Konsultatsiya O'tkazildi</th>
                     <th style={{ ...TH("#4CAF50", 80), textAlign:"center" }}>Konversiya</th>
                   </tr>
@@ -857,12 +867,9 @@ export default function LidlarPage() {
                           <td style={{ ...TD, width:200 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <AvatarCircle name={r.full_name || "?"} size={34} />
-                              <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
-                                 target="_blank" rel="noopener noreferrer"
-                                 style={{ fontSize:13, color: isSelected ? "#2196F3" : "var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textDecoration:"none" }}
-                                 onClick={e => e.stopPropagation()}>
+                              <span style={{ fontSize:13, color: isSelected ? "#2196F3" : "var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                                 {r.full_name}
-                              </a>
+                              </span>
                             </div>
                           </td>
                           <td style={TD}>
@@ -874,8 +881,16 @@ export default function LidlarPage() {
                             <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
                           </td>
                           <td style={TD}>
+                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.sifatli_lid ?? 0)}</span>
+                            <MiniBar value={r.sifatli_lid ?? 0} max={convMax.sifatli} color="#00BCD4" />
+                          </td>
+                          <td style={TD}>
                             <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.sifatsiz_lid)}</span>
                             <MiniBar value={r.sifatsiz_lid} max={convMax.sifatsiz} color="#F44336" />
+                          </td>
+                          <td style={TD}>
+                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.bekor_boldi ?? 0)}</span>
+                            <MiniBar value={r.bekor_boldi ?? 0} max={convMax.bekor} color="#FFC107" />
                           </td>
                           <td style={TD}>
                             <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.tashrif_buyurdi)}</span>
@@ -887,7 +902,7 @@ export default function LidlarPage() {
                         </tr>
                         {isSelected && (
                           <tr key={`sub-${r.responsible_id}`}>
-                            <td colSpan={7} style={{ padding: 0, background: "rgba(33,150,243,0.04)", borderBottom: "1px solid var(--border)" }}>
+                            <td colSpan={8} style={{ padding: 0, background: "rgba(33,150,243,0.04)", borderBottom: "1px solid var(--border)" }}>
                               {respLeadsConvQ.isLoading ? (
                                 <div style={{ padding: "14px 20px", color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
                               ) : subLeads.length === 0 ? (
@@ -967,8 +982,16 @@ export default function LidlarPage() {
                       <MiniBar value={1} max={1} color="#FF9800" />
                     </td>
                     <td style={TD}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.sifatli)}</span>
+                      <MiniBar value={1} max={1} color="#00BCD4" />
+                    </td>
+                    <td style={TD}>
                       <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.sifatsiz)}</span>
                       <MiniBar value={1} max={1} color="#F44336" />
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.bekor)}</span>
+                      <MiniBar value={1} max={1} color="#FFC107" />
                     </td>
                     <td style={TD}>
                       <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.otkazildi)}</span>
@@ -988,26 +1011,9 @@ export default function LidlarPage() {
             Lid mas'ullar kesimida table
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
-          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid mas'ullar kesimida</span>
-              <span style={{ fontSize:12, color:"var(--text3)" }}>{byUserFiltered.length} ta xodim</span>
-            </div>
-            {/* Search */}
-            <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
-              <Search size={14} style={{ position:"absolute", left:10, color:"#555", pointerEvents:"none" }} />
-              <input
-                type="text"
-                placeholder="Qidirish…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  paddingLeft:30, paddingRight:12, paddingTop:7, paddingBottom:7,
-                  background:"var(--bg)", border:"1px solid var(--border)", borderRadius:8,
-                  color:"var(--text)", fontSize:12, outline:"none", width:180,
-                }}
-              />
-            </div>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
+            <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid mas'ullar kesimida</span>
+            <span style={{ fontSize:12, color:"var(--text3)" }}>{byUserFiltered.length} ta xodim</span>
           </div>
 
           {respQ.isLoading && !responsibles.length ? (
@@ -1019,7 +1025,6 @@ export default function LidlarPage() {
                   <tr>
                     <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
                     <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
-                    <th style={TH("#9E9E9E", 100)}>Rol</th>
                     {RESPONSIBLE_COLS.map((col) => (
                       <th key={col.key} style={TH(col.color)}>{col.label}</th>
                     ))}
@@ -1051,7 +1056,7 @@ export default function LidlarPage() {
                       CONVERTED_CONSULT: { label: "Tashrif buyurdi", color: "#4CAF50" },
                       CONVERTED: { label: "Tashrif buyurdi", color: "#4CAF50" },
                     };
-                    const colCount = 3 + RESPONSIBLE_COLS.length; // +1 for Rol column
+                    const colCount = 2 + RESPONSIBLE_COLS.length;
                     return (
                       <>
                         <tr key={u.responsible_id}
@@ -1065,15 +1070,11 @@ export default function LidlarPage() {
                           <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                               <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
-                              <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${u.responsible_id}`}
-                                 target="_blank" rel="noopener noreferrer"
-                                 style={{ fontSize:13, color: isSel ? "#2196F3" : "var(--text)", fontWeight:500, whiteSpace:"nowrap", textDecoration:"none" }}
-                                 onClick={e => e.stopPropagation()}>
+                              <span style={{ fontSize:13, color: isSel ? "#2196F3" : "var(--text)", fontWeight:500, whiteSpace:"nowrap" }}>
                                 {u.full_name || `User ${u.responsible_id}`}
-                              </a>
+                              </span>
                             </div>
                           </td>
-                          <td style={{ ...TD, width:100 }}><RoleBadge role={(u as any).work_position} /></td>
                           {RESPONSIBLE_COLS.map((col) => {
                             const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
                             const max = colMaxes[col.key] ?? 1;
@@ -1184,25 +1185,28 @@ export default function LidlarPage() {
         {(() => {
           const taskRows = (tasksQ.data?.tasks ?? []).map((r) => ({
             ...r,
-            total:       parseInt(String(r.total),       10) || 0,
-            in_progress: parseInt(String(r.in_progress), 10) || 0,
-            completed:   parseInt(String(r.completed),   10) || 0,
-            overdue:     parseInt(String(r.overdue),     10) || 0,
+            total:          parseInt(String(r.total),          10) || 0,
+            in_progress:    parseInt(String(r.in_progress),    10) || 0,
+            completed:      parseInt(String(r.completed),      10) || 0,
+            overdue:        parseInt(String(r.overdue),        10) || 0,
+            completed_late: parseInt(String(r.completed_late), 10) || 0,
           }));
           const taskMax = {
-            total:       Math.max(1, ...taskRows.map((r) => r.total)),
-            in_progress: Math.max(1, ...taskRows.map((r) => r.in_progress)),
-            completed:   Math.max(1, ...taskRows.map((r) => r.completed)),
-            overdue:     Math.max(1, ...taskRows.map((r) => r.overdue)),
+            total:          Math.max(1, ...taskRows.map((r) => r.total)),
+            in_progress:    Math.max(1, ...taskRows.map((r) => r.in_progress)),
+            completed:      Math.max(1, ...taskRows.map((r) => r.completed)),
+            overdue:        Math.max(1, ...taskRows.map((r) => r.overdue)),
+            completed_late: Math.max(1, ...taskRows.map((r) => r.completed_late)),
           };
           const taskTotals = taskRows.reduce(
             (acc, r) => ({
-              total:       acc.total       + r.total,
-              in_progress: acc.in_progress + r.in_progress,
-              completed:   acc.completed   + r.completed,
-              overdue:     acc.overdue     + r.overdue,
+              total:          acc.total          + r.total,
+              in_progress:    acc.in_progress    + r.in_progress,
+              completed:      acc.completed      + r.completed,
+              overdue:        acc.overdue        + r.overdue,
+              completed_late: acc.completed_late + r.completed_late,
             }),
-            { total: 0, in_progress: 0, completed: 0, overdue: 0 }
+            { total: 0, in_progress: 0, completed: 0, overdue: 0, completed_late: 0 }
           );
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
@@ -1225,6 +1229,7 @@ export default function LidlarPage() {
                       <col />
                       <col />
                       <col />
+                      <col />
                       <col style={{ width: 90 }} />
                     </colgroup>
                     <thead>
@@ -1235,6 +1240,7 @@ export default function LidlarPage() {
                         <th style={TH("#FF9800")}>Jarayondagi</th>
                         <th style={TH("#4CAF50")}>Tugatilgan</th>
                         <th style={TH("#F44336")}>Muddati O'tgan</th>
+                        <th style={TH("#FF5722")}>Muddati O'tib Bajarilgan</th>
                         <th style={{ ...TH("#2196F3", 90), textAlign: "center" }}>Bajarilish</th>
                       </tr>
                     </thead>
@@ -1252,11 +1258,9 @@ export default function LidlarPage() {
                             <td style={{ ...TD, width: 200 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <AvatarCircle name={r.full_name || "?"} size={34} />
-                                <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&ASSIGNED_BY_ID[0]=${r.responsible_id}`}
-                                   target="_blank" rel="noopener noreferrer"
-                                   style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>
+                                <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {r.full_name}
-                                </a>
+                                </span>
                               </div>
                             </td>
                             <td style={TD}>
@@ -1284,6 +1288,14 @@ export default function LidlarPage() {
                                 <>
                                   <span style={{ fontSize: 14, color: "#F44336" }}>{fmtNum(r.overdue)}</span>
                                   <MiniBar value={r.overdue} max={taskMax.overdue} color="#F44336" />
+                                </>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.completed_late > 0 ? (
+                                <>
+                                  <span style={{ fontSize: 14, color: "#FF5722" }}>{fmtNum(r.completed_late)}</span>
+                                  <MiniBar value={r.completed_late} max={taskMax.completed_late} color="#FF5722" />
                                 </>
                               ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
                             </td>
@@ -1317,6 +1329,12 @@ export default function LidlarPage() {
                             {fmtNum(taskTotals.overdue)}
                           </span>
                           <MiniBar value={1} max={1} color="#F44336" />
+                        </td>
+                        <td style={TD}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: taskTotals.completed_late > 0 ? "#FF5722" : "var(--text)" }}>
+                            {fmtNum(taskTotals.completed_late)}
+                          </span>
+                          <MiniBar value={1} max={1} color="#FF5722" />
                         </td>
                         <td style={{ ...TD, textAlign: "center" }}>
                           <ConversionDonut pct={taskTotals.total > 0 ? (taskTotals.completed / taskTotals.total) * 100 : 0} size={38} />

@@ -2,12 +2,11 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
-  RefreshCw, Search,
+  Search,
   TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
   ChevronDown, Users, BarChart2,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
-import { Button } from "@/components/Button";
 import {
   getDealKpiStats, getDealsList, getDealFilterOptions,
   getDealsConversion, getDealsResponsibles, getDealSourceStats,
@@ -20,6 +19,7 @@ const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayISO = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+const startOfMonthISO = () => { const d = new Date(); d.setDate(1); return localISO(d); };
 
 function fmtMoney(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
@@ -176,7 +176,7 @@ function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
         <ChevronDown size={12} style={{ flexShrink: 0, marginLeft: 4, transform: open ? "rotate(180deg)" : "none" }} />
       </button>
       {open && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 300, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4 }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, minWidth: "100%", zIndex: 500, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4 }}>
           {values.length > 0 && (
             <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
               <button type="button" onClick={() => onChange([])} style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Hammasini olib tashlash</button>
@@ -197,6 +197,131 @@ function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
   );
 }
 
+// ── Operator deals dropdown ───────────────────────────────────────
+const BX_BASE = "https://mountain.bitrix24.kz/crm/deal/details";
+
+function OperatorDealsDropdown({
+  responsibleId, from, to, mode,
+}: { responsibleId: string; from?: string; to?: string; mode: string }) {
+  const q = useQuery({
+    queryKey: ["op-deals", responsibleId, from, to, mode],
+    queryFn: () => getDealsList({ from, to, responsible_id: responsibleId, limit: 200, mode }),
+    staleTime: 5 * 60_000,
+  });
+
+  if (q.isLoading) return (
+    <td colSpan={8} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>
+      Yuklanmoqda…
+    </td>
+  );
+
+  const items = q.data?.items ?? [];
+  if (!items.length) return (
+    <td colSpan={8} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>
+      Deallar topilmadi
+    </td>
+  );
+
+  return (
+    <td colSpan={8} style={{ padding: 0 }}>
+      <div style={{ maxHeight: 280, overflowY: "auto", borderTop: "1px solid var(--border)" }}>
+        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "var(--bg3)", position: "sticky", top: 0 }}>
+              {["#", "Mijoz", "Summa", "Manba", "Bosqich", "Sana"].map(h => (
+                <th key={h} style={{ padding: "6px 12px", textAlign: "left", fontWeight: 600, color: "var(--text3)", fontSize: 11, borderBottom: "1px solid var(--border)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((d, i) => (
+              <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", borderBottom: "1px solid var(--border2)" }}>
+                <td style={{ padding: "5px 12px", color: "var(--text3)", minWidth: 40 }}>
+                  <a href={`${BX_BASE}/${d.id}/`} target="_blank" rel="noreferrer"
+                    style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}
+                    onClick={e => e.stopPropagation()}>
+                    #{d.id}
+                  </a>
+                </td>
+                <td style={{ padding: "5px 12px", color: "var(--text)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.mijoz || "—"}</td>
+                <td style={{ padding: "5px 12px", color: "#00BCD4", fontWeight: 600 }}>{d.summa ? `$${fmtNum(d.summa)}` : "—"}</td>
+                <td style={{ padding: "5px 12px", color: "var(--text3)" }}>{d.manba || "—"}</td>
+                <td style={{ padding: "5px 12px" }}>
+                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: d.is_won ? "#4CAF5022" : d.is_final ? "#F4433622" : "#2196F322", color: d.is_won ? "#4CAF50" : d.is_final ? "#F44336" : "#2196F3", fontWeight: 600 }}>
+                    {d.stage_name || "—"}
+                  </span>
+                </td>
+                <td style={{ padding: "5px 12px", color: "var(--text3)" }}>{d.sana ? d.sana.slice(0, 10) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </td>
+  );
+}
+
+// ── Generic inline deals panel (used in 3 summary tables) ────────
+function DealsInlinePanel({
+  filter, colSpan = 6,
+}: { filter: Parameters<typeof getDealsList>[0]; colSpan?: number }) {
+  const q = useQuery({
+    queryKey: ["inline-deals", JSON.stringify(filter)],
+    queryFn:  () => getDealsList({ ...filter, limit: 200 }),
+    staleTime: 5 * 60_000,
+  });
+
+  if (q.isLoading) return (
+    <td colSpan={colSpan} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Yuklanmoqda…</td>
+  );
+
+  const items = q.data?.items ?? [];
+  if (!items.length) return (
+    <td colSpan={colSpan} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Deallar topilmadi</td>
+  );
+
+  return (
+    <td colSpan={colSpan} style={{ padding: 0 }}>
+      <div style={{ maxHeight: 280, overflowY: "auto", borderTop: "1px solid var(--border)" }}>
+        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "var(--bg3)", position: "sticky", top: 0 }}>
+              {["#", "Mijoz", "Mas'ul", "Summa", "Manba", "Bosqich", "Sana"].map(h => (
+                <th key={h} style={{ padding: "5px 10px", textAlign: "left", fontWeight: 600, color: "var(--text3)", fontSize: 11, borderBottom: "1px solid var(--border)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((d, i) => (
+              <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", borderBottom: "1px solid var(--border2)" }}>
+                <td style={{ padding: "5px 10px", minWidth: 50 }}>
+                  <a href={`${BX_BASE}/${d.id}/`} target="_blank" rel="noreferrer"
+                    style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}
+                    onClick={e => e.stopPropagation()}>
+                    #{d.id}
+                  </a>
+                </td>
+                <td style={{ padding: "5px 10px", color: "var(--text)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.mijoz || "—"}</td>
+                <td style={{ padding: "5px 10px", color: "var(--text2)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.responsible || "—"}</td>
+                <td style={{ padding: "5px 10px", color: "#00BCD4", fontWeight: 600 }}>{d.summa ? `$${fmtNum(d.summa)}` : "—"}</td>
+                <td style={{ padding: "5px 10px", color: "var(--text3)" }}>{d.manba || "—"}</td>
+                <td style={{ padding: "5px 10px" }}>
+                  <span style={{
+                    fontSize: 11, padding: "2px 7px", borderRadius: 10,
+                    background: d.is_won ? "rgba(76,175,80,.15)" : d.is_final ? "rgba(244,67,54,.15)" : "rgba(255,152,0,.15)",
+                    color: d.is_won ? "#4CAF50" : d.is_final ? "#F44336" : "#FF9800",
+                  }}>{d.stage_name}</span>
+                </td>
+                <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{d.sana?.slice(0, 10) || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </td>
+  );
+}
+
 // ── Deal stage columns for "mas'ullar kesimida" table ─────────────
 const RESP_EXCL_LC = ["data365", "data365 support", "abror", "sardor jumayev", "sardor jjumayev", "main (asosiy)", "main"];
 const isRespExcluded = (name: string) => RESP_EXCL_LC.some(ex => (name ?? "").trim().toLowerCase().includes(ex));
@@ -213,9 +338,12 @@ const DEAL_STAGE_COLS = [
 export default function SdelkalarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
+  const [expandedOp,     setExpandedOp]     = useState<string | null>(null);
+  const [expandedResp,   setExpandedResp]   = useState<string | null>(null);
+  const [expandedSource, setExpandedSource] = useState<string | null>(null);
 
   const [filter, setFilter] = useState({
-    from: daysAgoISO(365), to: todayISO(),
+    from: startOfMonthISO(), to: todayISO(),
     responsible_ids: [] as string[],
     stage_ids: [] as string[],
     sources: [] as string[],
@@ -232,10 +360,14 @@ export default function SdelkalarPage() {
     staleTime: 5 * 60_000,
   });
 
+  // AmoCRM mode = historical import, skip date filter so all 1316 deals are visible
+  const apiFrom = mode === 'amocrm' ? undefined : (filter.from || undefined);
+  const apiTo   = mode === 'amocrm' ? undefined : (filter.to   || undefined);
+
   const kpiQ = useQuery({
-    queryKey: ["deals-kpi", filter, mode],
+    queryKey: ["deals-kpi", apiFrom, apiTo, filter.responsible_ids, filter.stage_ids, filter.sources, mode],
     queryFn: () => getDealKpiStats({
-      from: filter.from, to: filter.to,
+      from: apiFrom, to: apiTo,
       responsible_id: filter.responsible_ids.join(',') || undefined,
       stage_id: filter.stage_ids.join(',') || undefined,
       source: filter.sources.join(',') || undefined,
@@ -244,9 +376,9 @@ export default function SdelkalarPage() {
   });
 
   const listQ = useQuery({
-    queryKey: ["deals-list", filter, search, status, page, mode],
+    queryKey: ["deals-list", apiFrom, apiTo, filter.responsible_ids, filter.stage_ids, filter.sources, search, status, page, mode],
     queryFn: () => getDealsList({
-      from: filter.from, to: filter.to,
+      from: apiFrom, to: apiTo,
       responsible_id: filter.responsible_ids.join(',') || undefined,
       stage_id: filter.stage_ids.join(',') || undefined,
       source: filter.sources.join(',') || undefined,
@@ -259,47 +391,39 @@ export default function SdelkalarPage() {
   });
 
   const convQ = useQuery({
-    queryKey: ["deals-conversion", filter.from, filter.to, mode],
-    queryFn: () => getDealsConversion({ from: filter.from || undefined, to: filter.to || undefined, mode }),
+    queryKey: ["deals-conversion", apiFrom, apiTo, mode],
+    queryFn: () => getDealsConversion({ from: apiFrom, to: apiTo, mode }),
     staleTime: 60_000,
   });
 
   const respQ = useQuery({
-    queryKey: ["deals-responsibles", filter.from, filter.to, mode],
-    queryFn: () => getDealsResponsibles({ from: filter.from || undefined, to: filter.to || undefined, mode }),
+    queryKey: ["deals-responsibles", apiFrom, apiTo, mode],
+    queryFn: () => getDealsResponsibles({ from: apiFrom, to: apiTo, mode }),
     staleTime: 60_000,
   });
 
   const cancelQ = useQuery({
-    queryKey: ["stats/deal-cancel-reasons", filter],
+    queryKey: ["stats/deal-cancel-reasons", apiFrom, apiTo, filter.responsible_ids, mode],
     queryFn: () => getDealCancelReasons({
-      start_date: filter.from || undefined,
-      end_date: filter.to || undefined,
+      start_date: apiFrom,
+      end_date: apiTo,
       responsible_ids: filter.responsible_ids.map(Number),
     }),
     staleTime: 60_000,
   });
 
   const sourceStatsQ = useQuery({
-    queryKey: ["deals-source-stats", filter.from, filter.to, mode],
-    queryFn: () => getDealSourceStats({ from: filter.from || undefined, to: filter.to || undefined, mode }),
+    queryKey: ["deals-source-stats", apiFrom, apiTo, mode],
+    queryFn: () => getDealSourceStats({ from: apiFrom, to: apiTo, mode }),
     staleTime: 60_000,
   });
 
   const clearFilter = useCallback(() => {
-    setFilter({ from: daysAgoISO(365), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [] });
+    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [] });
     setSearch("");
     setStatus("");
     setPage(1);
   }, []);
-
-  const refresh = useCallback(() => {
-    kpiQ.refetch();
-    listQ.refetch();
-    convQ.refetch();
-    respQ.refetch();
-    sourceStatsQ.refetch();
-  }, [kpiQ, listQ, convQ, respQ, sourceStatsQ]);
 
   const kpi = kpiQ.data;
 
@@ -307,7 +431,7 @@ export default function SdelkalarPage() {
     filter.responsible_ids.length > 0,
     filter.stage_ids.length > 0,
     filter.sources.length > 0,
-    filter.from !== daysAgoISO(365) || filter.to !== todayISO(),
+    filter.from !== startOfMonthISO() || filter.to !== todayISO(),
   ].filter(Boolean).length;
 
   const respOptions = useMemo(() => (filterQ.data?.responsibles ?? [])
@@ -431,7 +555,6 @@ export default function SdelkalarPage() {
               </button>
             </div>
 
-            <Button onClick={refresh}><RefreshCw className="w-3.5 h-3.5" /> Yangilash</Button>
           </div>
         }
       />
@@ -441,7 +564,7 @@ export default function SdelkalarPage() {
         {/* ── Filter panel ── */}
         <div style={{
           background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10,
-          marginBottom: 16, overflow: "hidden",
+          marginBottom: 16, overflow: filterOpen ? "visible" : "hidden",
           position: "sticky", top: 0, zIndex: 10,
         }}>
           <div
@@ -508,31 +631,17 @@ export default function SdelkalarPage() {
                   onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => { clearFilter(); setMode('default'); }}
-                    style={{ background: mode === 'default' ? "rgba(59,130,246,0.1)" : "transparent", border: `1px solid ${mode === 'default' ? "rgba(59,130,246,0.4)" : "var(--border)"}`, color: mode === 'default' ? "#3b82f6" : "var(--text3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                    Barcha sdelkalar
-                  </button>
-                  <button onClick={() => { clearFilter(); setMode('bitrix24'); }}
-                    style={{ background: mode === 'bitrix24' ? "rgba(34,197,94,0.1)" : "transparent", border: `1px solid ${mode === 'bitrix24' ? "rgba(34,197,94,0.4)" : "var(--border)"}`, color: mode === 'bitrix24' ? "#22c55e" : "var(--text3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                    Bitrix24
-                  </button>
-                  <button onClick={() => { clearFilter(); setMode('amocrm'); }}
-                    style={{ background: mode === 'amocrm' ? "rgba(217,119,6,0.1)" : "transparent", border: `1px solid ${mode === 'amocrm' ? "rgba(217,119,6,0.4)" : "var(--border)"}`, color: mode === 'amocrm' ? "#D97706" : "var(--text3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                    AmoCRM
-                  </button>
-                </div>
-                {activeFilterCount > 0 && (
+              {activeFilterCount > 0 && (
+                <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
                   <button onClick={clearFilter} style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* ── KPI Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 12 }}>
           <KpiCard label="Jami Sdelkalar" value={fmtNum(kpi?.total ?? 0)}
             sub="Barcha kelishuvlar" gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)"
             lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(59,130,246,0.12))"
@@ -545,10 +654,6 @@ export default function SdelkalarPage() {
             sub="Muvaffaqiyatli" gradient="linear-gradient(135deg,#065f46,#10b981)"
             lightGradient="linear-gradient(135deg,rgba(4,150,107,0.07),rgba(16,185,129,0.12))"
             icon={<CheckCircle size={16} />} />
-          <KpiCard label="Jami Sotuv" value={fmtMoney(kpi?.jami_sotuv ?? 0)}
-            sub="Won sdelkalar daromadi" gradient="linear-gradient(135deg,#047857,#34d399)"
-            lightGradient="linear-gradient(135deg,rgba(4,120,87,0.07),rgba(52,211,153,0.12))"
-            icon={<DollarSign size={16} />} />
           <KpiCard label="O'rtacha Chek" value={fmtMoney(kpi?.ortacha_chek ?? 0)}
             sub="Won bo'yicha o'rtacha" gradient="linear-gradient(135deg,#92400e,#f59e0b)"
             lightGradient="linear-gradient(135deg,rgba(146,64,14,0.07),rgba(245,158,11,0.12))"
@@ -558,6 +663,30 @@ export default function SdelkalarPage() {
             lightGradient="linear-gradient(135deg,rgba(91,33,182,0.07),rgba(139,92,246,0.12))"
             icon={<Percent size={16} />} />
         </div>
+
+        {/* ── To'lov kartalari ── */}
+        {(() => {
+          const kutilmoqda = kpi?.jami_sotuv ?? 0;
+          const tolangan   = kpi?.tolangan   ?? 0;
+          const qoldiq     = Math.max(0, kutilmoqda - tolangan);
+          const pct = kutilmoqda > 0 ? Math.round((tolangan / kutilmoqda) * 100) : 0;
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
+              <KpiCard label="Kutilmoqda" value={`$${fmtNum(Math.round(kutilmoqda))}`}
+                sub="Won sdelkalar jami summasi" gradient="linear-gradient(135deg,#0f3460,#1a6fa8)"
+                lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.14))"
+                icon={<DollarSign size={16} />} />
+              <KpiCard label="To'langan" value={`$${fmtNum(Math.round(tolangan))}`}
+                sub={`${pct}% to'landi`} gradient="linear-gradient(135deg,#064e3b,#059669)"
+                lightGradient="linear-gradient(135deg,rgba(5,150,105,0.07),rgba(5,150,105,0.14))"
+                icon={<CheckCircle size={16} />} />
+              <KpiCard label="Qoldiq" value={`$${fmtNum(Math.round(qoldiq))}`}
+                sub="Hali to'lanmagan" gradient="linear-gradient(135deg,#7c2d12,#dc2626)"
+                lightGradient="linear-gradient(135deg,rgba(220,38,38,0.07),rgba(220,38,38,0.14))"
+                icon={<DollarSign size={16} />} />
+            </div>
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════
             Sdelka va Konversiya table
@@ -600,11 +729,15 @@ export default function SdelkalarPage() {
                 <tbody>
                   {convRows.map((r, i) => {
                     const konv = r.total > 0 ? (r.sotuv_boldi / r.total) * 100 : 0;
+                    const opKey = String(r.responsible_id);
+                    const isExp = expandedOp === opKey;
                     return (
+                      <>
                       <tr key={r.responsible_id}
-                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                        style={{ background: isExp ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                        onMouseLeave={e => (e.currentTarget.style.background = isExp ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)")}
+                        onClick={() => setExpandedOp(isExp ? null : opKey)}>
                         <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>
                           {String(i + 1).padStart(2, "0")}
                         </td>
@@ -614,6 +747,7 @@ export default function SdelkalarPage() {
                             <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {r.full_name}
                             </span>
+                            <ChevronDown size={13} style={{ color: "var(--text3)", marginLeft: "auto", transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
                           </div>
                         </td>
                         <td style={TDa}><RoleBadge role={r.work_position} /></td>
@@ -641,6 +775,18 @@ export default function SdelkalarPage() {
                           <ConversionDonut pct={konv} size={38} />
                         </td>
                       </tr>
+                      {isExp && (
+                        <tr key={`${r.responsible_id}-deals`} style={{ background: "var(--bg2, var(--bg))" }}>
+                          <td style={{ padding: 0 }} />
+                          <OperatorDealsDropdown
+                            responsibleId={opKey}
+                            from={apiFrom}
+                            to={apiTo}
+                            mode={mode}
+                          />
+                        </tr>
+                      )}
+                      </>
                     );
                   })}
 
@@ -706,20 +852,25 @@ export default function SdelkalarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dealRespRows.map((u, i) => (
+                  {dealRespRows.map((u, i) => {
+                    const rKey = String(u.responsible_id);
+                    const rExp = expandedResp === rKey;
+                    return (<>
                     <tr key={u.responsible_id}
-                      style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                      style={{ background: rExp ? "rgba(33,150,243,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                      onClick={() => setExpandedResp(rExp ? null : rKey)}
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      onMouseLeave={e => (e.currentTarget.style.background = rExp ? "rgba(33,150,243,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                       <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600, width: 44, position: "sticky", left: 0, background: "var(--bg2)" }}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
                       <td style={{ ...TDa, width: 180, position: "sticky", left: 44, background: "var(--bg2)", zIndex: 2 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <AvatarCircle name={u.full_name || "?"} size={32} />
-                          <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 13, color: rExp ? "#2196F3" : "var(--text)", fontWeight: 500, whiteSpace: "nowrap" }}>
                             {u.full_name}
                           </span>
+                          <ChevronDown size={12} style={{ color: "var(--text3)", transform: rExp ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
                         </div>
                       </td>
                       {DEAL_STAGE_COLS.map(col => {
@@ -739,7 +890,16 @@ export default function SdelkalarPage() {
                         );
                       })}
                     </tr>
-                  ))}
+                    {rExp && (
+                      <tr key={`${rKey}-expand`} style={{ background: "var(--bg2)" }}>
+                        <DealsInlinePanel
+                          filter={{ from: apiFrom, to: apiTo, responsible_id: rKey, mode }}
+                          colSpan={2 + DEAL_STAGE_COLS.length}
+                        />
+                      </tr>
+                    )}
+                    </>);
+                  })}
 
                   {/* JAMI row */}
                   <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
@@ -796,9 +956,14 @@ export default function SdelkalarPage() {
                           <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
                             {r.reason}
                           </span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flexShrink: 0, marginLeft: 8 }}>
+                          <a
+                            href={`https://mountain.bitrix24.kz/crm/deal/list/?preset_filter=Y&find[STAGE_ID]=LOSE`}
+                            target="_blank" rel="noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            style={{ fontSize: 13, fontWeight: 700, color: "#FFC107", flexShrink: 0, marginLeft: 8, textDecoration: "none" }}
+                            title="Bitrix24 da ko'rish">
                             {fmtNum(r.total)}
-                          </span>
+                          </a>
                         </div>
                         <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
                           <div style={{
@@ -853,16 +1018,23 @@ export default function SdelkalarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {srcStatRows.map((r, i) => (
+                  {srcStatRows.map((r, i) => {
+                    const sKey = String(r.source_id);
+                    const sExp = expandedSource === sKey;
+                    return (<>
                     <tr key={r.source_id}
-                      style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                      style={{ background: sExp ? "rgba(156,39,176,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                      onClick={() => setExpandedSource(sExp ? null : sKey)}
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      onMouseLeave={e => (e.currentTarget.style.background = sExp ? "rgba(156,39,176,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                       <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>
                         {String(i + 1).padStart(2, "0")}
                       </td>
-                      <td style={{ ...TDa, fontSize: 13, color: "var(--text)", fontWeight: 500 }}>
-                        {r.source_name}
+                      <td style={{ ...TDa, fontSize: 13, color: sExp ? "#9C27B0" : "var(--text)", fontWeight: 500 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {r.source_name}
+                          <ChevronDown size={12} style={{ color: "var(--text3)", transform: sExp ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
+                        </div>
                       </td>
                       <td style={TDa}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy)}</span>
@@ -881,7 +1053,16 @@ export default function SdelkalarPage() {
                         <MiniBar value={r.sotuv_boldi} max={srcStatMax.sotuv_boldi} color="#4CAF50" />
                       </td>
                     </tr>
-                  ))}
+                    {sExp && (
+                      <tr key={`${sKey}-expand`} style={{ background: "var(--bg2)" }}>
+                        <DealsInlinePanel
+                          filter={{ from: apiFrom, to: apiTo, source: sKey, mode }}
+                          colSpan={6}
+                        />
+                      </tr>
+                    )}
+                    </>);
+                  })}
 
                   {/* JAMI row */}
                   <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>

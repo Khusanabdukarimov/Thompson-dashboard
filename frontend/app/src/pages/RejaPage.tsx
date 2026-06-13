@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3 } from 'lucide-react';
+import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, Pencil, X } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, updateRejaPlan, deleteRejaPlan, createRejaPlan,
@@ -71,7 +71,7 @@ function initials(name: string): string {
 
 // ── Distribution view ──────────────────────────────────────────────
 
-function DistributionView({ planId, onDeleted, initialEditMode }: { planId: number; onDeleted: () => void; initialEditMode?: boolean }) {
+function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: () => void }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['reja/distribution', planId],
@@ -84,7 +84,7 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
   const [targets,          setTargets]          = useState<Record<number, string>>({});
   const [search,           setSearch]           = useState('');
   const [dirty,            setDirty]            = useState(false);
-  const [showAll,          setShowAll]          = useState(initialEditMode ?? false);
+  const [showAll, setShowAll] = useState(false);
   const [totalInput,       setTotalInput]       = useState('');
   const [nameInput,        setNameInput]        = useState('');
   const [addOpen,          setAddOpen]          = useState(false);
@@ -126,23 +126,25 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
     [employees],
   );
 
-  // Employees with a saved target (from DB) — shown by default
+  // Employees in the plan (target >= 0 means they have a reja_targets record)
+  const inPlanEmployees = useMemo(
+    () => employees.filter(e => !removedIds.has(e.responsible_id)),
+    [employees, removedIds],
+  );
+  // Employees with actual target > 0 — shown in view mode
   const assignedEmployees = useMemo(
-    () => employees.filter(e => parseFloat(String(e.target)) > 0),
-    [employees],
+    () => inPlanEmployees.filter(e => parseFloat(String(e.target)) > 0),
+    [inPlanEmployees],
   );
   const hasAnyTarget = assignedEmployees.length > 0;
 
-  // When no targets saved yet → show all employees so user can assign
-  // When targets exist → always show only assigned + pending - removed (in both view and edit mode)
+  // edit mode → everyone in plan + pending; view mode → only target > 0
   const filtered = useMemo(() => {
-    const base = !hasAnyTarget
-      ? [...employees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id))]
-      : [...assignedEmployees.filter(e => !removedIds.has(e.responsible_id)), ...pendingEmployees.filter(p => !assignedEmployees.some(e => e.responsible_id === p.responsible_id))];
+    const base = [...inPlanEmployees, ...pendingEmployees.filter(p => !inPlanEmployees.some(e => e.responsible_id === p.responsible_id))];
     if (!search.trim()) return base;
     const q = search.toLowerCase();
     return base.filter(e => e.full_name.toLowerCase().includes(q) || (e.work_position ?? '').toLowerCase().includes(q));
-  }, [employees, assignedEmployees, pendingEmployees, removedIds, search, hasAnyTarget]);
+  }, [showAll, inPlanEmployees, assignedEmployees, pendingEmployees, removedIds, search, hasAnyTarget]);
 
   // IDs already visible in the table — used to exclude them from "Xodim qo'shish" dropdown
   const employeeIds = useMemo(
@@ -156,20 +158,12 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
     [allRespQ.data, employeeIds],
   );
 
-  // All employees to include in save — removed ones get target=0 (clears them from plan)
-  const allForSave = useMemo(
-    () => [
-      ...employees,
-      ...pendingEmployees.filter(p => !employees.some(e => e.responsible_id === p.responsible_id)),
-    ],
-    [employees, pendingEmployees],
-  );
 
   const saveMutation = useMutation({
-    mutationFn: () => saveRejaDistribution(planId, allForSave.map(e => ({
+    mutationFn: () => saveRejaDistribution(planId, filtered.map(e => ({
       responsible_id: e.responsible_id,
-      target: removedIds.has(e.responsible_id) ? 0 : parseNum(targets[e.responsible_id] ?? ''),
-    }))),
+      target: removedIds.has(e.responsible_id) ? -1 : parseNum(targets[e.responsible_id] ?? ''),
+    })).filter(e => e.target >= 0)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reja/distribution', planId] });
       qc.invalidateQueries({ queryKey: ['reja/plans'] });
@@ -348,7 +342,6 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
                         setPendingEmployees(prev => [...prev, { responsible_id: r.id, full_name: r.full_name, work_position: null, active: true, photo_url: null, target: 0, actual_sales: 0, deal_count: 0 }]);
                         setTarget(r.id, '');
                         setRemovedIds(prev => { const s = new Set(prev); s.delete(r.id); return s; });
-                        setShowAll(true);
                         setAddOpen(false);
                       }}
                       style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}
@@ -375,33 +368,9 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
                 style={{ paddingLeft: 30, paddingRight: 12, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg2)', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }}
               />
             </div>
-            {/* Pencil — open: enter edit mode | close: save + exit */}
-            <button
-              onClick={() => {
-                if (showAll) {
-                  if (dirty) saveMutation.mutate();
-                  setShowAll(false);
-                  setRemovedIds(new Set());
-                  setPendingEmployees([]);
-                } else {
-                  setShowAll(true);
-                }
-              }}
-              title={showAll ? 'Saqlash va yopish' : 'Tahrirlash'}
-              style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.12)' : 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M15.529 2.857l-1.403-1.404c-0.565-0.566-1.555-0.566-2.122 0l-9.057 9.058-1.722 5.288 5.248-1.765 9.055-9.056c0.586-0.584 0.586-1.536 0.001-2.121zM3.094 13.294l0.645-1.979 1.934 1.935-1.963 0.66-0.616-0.616zM4.355 10.518l5.493-5.493 2.111 2.11-5.494 5.494-2.11-2.111zM10.555 4.317l0.729-0.729 2.111 2.11-0.729 0.729-2.111-2.11zM14.822 4.271l-0.72 0.72-2.111-2.11 0.72-0.721c0.189-0.189 0.518-0.189 0.707 0l1.403 1.404c0.196 0.196 0.196 0.512 0.001 0.707z" fill={showAll ? '#2563eb' : 'var(--text2)'} />
-              </svg>
-            </button>
-            {showAll && dirty && (
+            {dirty && (
               <button
-                onClick={() => {
-                  saveMutation.mutate();
-                  setShowAll(false);
-                  setRemovedIds(new Set());
-                  setPendingEmployees([]);
-                }}
+                onClick={() => { saveMutation.mutate(); setPendingEmployees([]); }}
                 disabled={saveMutation.isPending}
                 style={{ height: 34, padding: '0 14px', borderRadius: 8, border: 0, background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
@@ -409,14 +378,19 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
                 {saveMutation.isPending ? 'Saqlanmoqda…' : 'Saqlash'}
               </button>
             )}
-            {showAll && (
-              <button
-                onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
-                style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
+            <button
+              onClick={() => setShowAll(v => !v)}
+              title={showAll ? "Tahrirlashni yopish" : "Tahrirlash"}
+              style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${showAll ? '#2563eb' : 'var(--border)'}`, background: showAll ? 'rgba(37,99,235,0.12)' : 'transparent', color: showAll ? '#2563eb' : 'var(--text2)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            >
+              {showAll ? <X size={14} /> : <Pencil size={14} />}
+            </button>
+            <button
+              onClick={() => { if (confirm("Rejani o'chirishni tasdiqlaysizmi?")) deleteMutation.mutate(); }}
+              style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         </div>
 
@@ -484,11 +458,14 @@ function DistributionView({ planId, onDeleted, initialEditMode }: { planId: numb
                 {showAll ? (
                   <div style={{ position: 'relative' }}>
                     <input
-                      type="number" min={0} step={1000}
+                      type="text" inputMode="numeric"
                       value={targets[emp.responsible_id] ?? ''}
-                      onChange={e => setTarget(emp.responsible_id, e.target.value)}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, '');
+                        setTarget(emp.responsible_id, v);
+                      }}
                       placeholder="0"
-                      style={{ width: '100%', padding: '8px 22px 8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box', WebkitAppearance: 'none' }}
+                      style={{ width: '100%', padding: '8px 22px 8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
                     />
                     <span style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text3)', pointerEvents: 'none' }}>{CURRENCY_SIGN}</span>
                   </div>
@@ -972,7 +949,7 @@ function SummaryRow({ employees, subperiods, summary }: SummaryRowProps) {
         </div>
         <div style={{ flex: 1, padding: '12px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly' }}>
           {[...employees]
-            .sort((a, b) => b.pct - a.pct)
+            .sort((a, b) => b.total_actual - a.total_actual)
             .slice(0, 5)
             .map((emp, i) => {
               const barColor = emp.pct >= 100 ? '#16a34a' : emp.pct >= 70 ? '#f59e0b' : '#ef4444';
@@ -1039,7 +1016,7 @@ export default function RejaPage() {
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1); // 1-12
   const [nameFilter, setNameFilter] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
-  const [newPlanId, setNewPlanId] = useState<number | null>(null);
+  const [, setNewPlanId] = useState<number | null>(null);
 
   const plansQ = useQuery({ queryKey: ['reja/plans'], queryFn: getRejaPlans });
   const plans  = plansQ.data ?? [];
@@ -1170,7 +1147,7 @@ export default function RejaPage() {
           </div>
         ) : (
           <>
-            <DistributionView key={selectedPlan.id} planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); setNewPlanId(null); }} initialEditMode={selectedPlan.id === newPlanId} />
+            <DistributionView key={selectedPlan.id} planId={selectedPlan.id} onDeleted={() => { didAutoSelect.current = false; setSelectedPlan(null); setNewPlanId(null); }} />
             <ProgressView planId={selectedPlan.id} />
           </>
         )}

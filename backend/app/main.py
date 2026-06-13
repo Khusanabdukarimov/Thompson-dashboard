@@ -9,7 +9,7 @@ _log = logging.getLogger(__name__)
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -430,9 +430,14 @@ MONTH_NAMES_MAP = {
 }
 
 @app.get("/api/meta/page-forms")
-def api_meta_page_forms(month: Optional[str] = None, year: Optional[int] = None):
+def api_meta_page_forms(
+    month: Optional[str] = None,
+    year:  Optional[int] = None,
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date:   Optional[str] = Query(None, alias="to"),
+):
     """Return per-form lead counts sourced from our facebook_leads DB table,
-    optionally filtered by month/year (same filter as the rest of the page).
+    filtered by from/to date range (preferred) or month/year fallback.
     """
     import requests as _req
     token = meta_svc._token()
@@ -441,7 +446,11 @@ def api_meta_page_forms(month: Optional[str] = None, year: Optional[int] = None)
     # ── Build date filter ────────────────────────────────────────────
     date_filter = ""
     date_params: dict = {}
-    if month and year:
+    if from_date and to_date:
+        # Explicit date range takes priority
+        date_params = {"since": from_date, "until": to_date}
+        date_filter = "AND created_time::date BETWEEN :since AND :until"
+    elif month and year:
         m = MONTH_NAMES_MAP.get(month.lower())
         if m:
             import calendar
@@ -919,6 +928,82 @@ def api_marketing_kunlik_override(body: KunlikOverrideBody):
                 ))
         s.commit()
     return {"ok": True}
+
+
+@app.api_route("/api/v1/tolov", methods=["GET", "POST"])
+def api_tolov(
+    id:    Optional[str] = None,
+    sana:  Optional[str] = None,
+    turi:  Optional[str] = None,
+    summa: Optional[str] = None,
+):
+    """
+    Bitrix24 outgoing webhook chaqiradi.
+    Faqat bizning DB ni yangilaydi — Bitrix24 ga hech narsa yubormaydi.
+
+    Params:
+      id    — deal ID
+      sana  — to'lov sanasi, format: "02.06.2026 18:17:00" → uf_bp_sale_date
+      turi  — to'lov turi (Karta, Hisob, ...) — saqlanadi, filtrlash uchun ishlatilmaydi
+      summa — "5000000|UZS" yoki "333|USD" formatida
+    """
+    if not id:
+        raise HTTPException(status_code=400, detail="id majburiy")
+
+    try:
+        deal_id = int(id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="id raqam bo'lishi kerak")
+
+    # Parse sana: "02.06.2026 18:17:00" (Bitrix24 + → space URL decode qiladi)
+    paid_dt = None
+    if sana:
+        from dateutil import parser as _dparser
+        try:
+            paid_dt = _dparser.parse(sana.replace("+", " "), dayfirst=True)
+        except Exception:
+            pass
+
+    # Parse summa: "5000000|UZS" yoki "333|USD"
+    paid_usd = None
+    if summa:
+        try:
+            parts = str(summa).strip().split("|")
+            raw_amount = float(parts[0].replace(" ", "").replace(",", "."))
+            currency = parts[1].strip().upper() if len(parts) > 1 else "UZS"
+            UZS_RATE = 12100
+            if currency == "USD":
+                paid_usd = round(raw_amount, 2)
+            else:
+                paid_usd = round(raw_amount / UZS_RATE, 2)
+        except Exception:
+            pass
+
+    sets = []
+    params: dict = {"deal_id": deal_id}
+
+    if paid_dt:
+        sets.append("uf_bp_sale_date = :paid_dt")
+        params["paid_dt"] = paid_dt
+
+    if paid_usd is not None:
+        sets.append("uf_paid_sum = :paid_usd")
+        params["paid_usd"] = paid_usd
+
+    if not sets:
+        return {"ok": True, "updated": False, "reason": "yangilanadigan ma'lumot yo'q"}
+
+    with bx_engine.connect() as conn:
+        result = conn.execute(
+            text(f"UPDATE deals SET {', '.join(sets)} WHERE id = :deal_id"),
+            params,
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"Deal {deal_id} topilmadi")
+
+    _log.info("[tolov] deal=%s sana=%s turi=%s summa_usd=%s", deal_id, paid_dt, turi, paid_usd)
+    return {"ok": True, "deal_id": deal_id, "paid_usd": paid_usd}
 
 
 @app.api_route("/install", methods=["GET", "POST", "HEAD"], response_class=HTMLResponse)

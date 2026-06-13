@@ -171,16 +171,40 @@ router.get('/kunlik', async (req, res) => {
         result[src].deals_sum[i] = Math.round((result[src].deals_sum[i] + opp) * 100) / 100;
       }
 
-      // Sotuvlar = won deals
-      if (row.is_won) {
-        result[src].sales_count[i]++;
-        result[src].sales_sum[i] = Math.round((result[src].sales_sum[i] + opp) * 100) / 100;
-      }
-
       // Bekor bo'ldi = final + not won
       if (row.is_final && !row.is_won) {
         result[src].cancelled[i]++;
       }
+    }
+
+    // ── 4. Sales metrics: by uf_bp_sale_date (actual payment date) ──
+    //    Only deals from FB/IG sources (source_id classification).
+    //    sales_count = deals WHERE uf_bp_sale_date IS NOT NULL, grouped by payment day
+    //    sales_sum   = sum of uf_paid_sum for those deals
+    const salesRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM d.uf_bp_sale_date AT TIME ZONE 'Asia/Tashkent')::int AS day,
+        CASE
+          WHEN d.source_id IN ('UC_O9BLGT') THEN 'target'
+          WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
+          ELSE NULL
+        END AS src,
+        COUNT(*)::int AS cnt,
+        COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS paid_sum
+      FROM deals d
+      WHERE d.uf_bp_sale_date IS NOT NULL
+        AND d.uf_bp_sale_date >= $1
+        AND d.uf_bp_sale_date <= $2
+        AND d.source_id IN ('UC_O9BLGT','UC_3O8GTF','UC_89FPH6')
+      GROUP BY day, src
+    `, [since, until]);
+
+    for (const row of salesRes.rows) {
+      if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
+      const i   = row.day - 1;
+      const src = row.src;
+      result[src].sales_count[i] += row.cnt;
+      result[src].sales_sum[i]    = Math.round((result[src].sales_sum[i] + parseFloat(row.paid_sum)) * 100) / 100;
     }
 
     res.json({ month: monthKey, year, data: result });

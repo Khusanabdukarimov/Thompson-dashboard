@@ -3,6 +3,23 @@ const { fetchOne } = require('../services/bitrix');
 const { upsertLead } = require('../services/upsertLead');
 const { sendQualifiedLead } = require('../services/metaConversions');
 
+async function fetchOneWithRetry(method, id, maxRetries = 3) {
+  const delays = [5000, 15000, 45000];
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchOne(method, id);
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delay = delays[attempt] ?? 45000;
+        console.warn(`[leadUpdated] fetchOne attempt ${attempt + 1} failed (${err.message}), retry in ${delay / 1000}s`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 // Bitrix24 da "sifatli" hisoblanadigan bosqichlar
 const SIFATLI_BOSQICHLAR = new Set([
   'UC_KXC3ZW', 'THINKING',            // O'ylab ko'radi
@@ -33,7 +50,7 @@ async function leadUpdated(req, res) {
     const before = await pool.query('SELECT stage_id FROM leads WHERE id = $1', [entityId]);
     const prevStageId = before.rows[0]?.stage_id || null;
 
-    const raw = await fetchOne('crm.lead.get', entityId);
+    const raw = await fetchOneWithRetry('crm.lead.get', entityId);
     if (!raw) return;
 
     await upsertLead(raw);

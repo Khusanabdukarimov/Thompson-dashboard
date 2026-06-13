@@ -61,6 +61,7 @@ export type DealKpiStats = {
   sotuv_boldi: number;
   bekor: number;
   jami_sotuv: number;
+  tolangan: number;
   ortacha_chek: number;
   konversiya: number;
 };
