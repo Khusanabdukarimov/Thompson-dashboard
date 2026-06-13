@@ -1014,7 +1014,9 @@ router.get('/creative-leads', async (req, res) => {
         l.id            AS bitrix_id,
         s.name          AS stage_name,
         s.bitrix_id     AS stage_code,
-        (dp.last9 IS NOT NULL) AS is_duplicate
+        (dp.last9 IS NOT NULL) AS is_duplicate,
+        MIN(d.id)       AS deal_id,
+        (SELECT name FROM stages WHERE id = (SELECT stage_id FROM deals WHERE id = MIN(d.id))) AS deal_stage_name
       FROM facebook_leads fl
       LEFT JOIN dup_phones dp
         ON RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9) = dp.last9
@@ -1023,9 +1025,15 @@ router.get('/creative-leads', async (req, res) => {
          = RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
       LEFT JOIN leads  l ON l.id = lp.lead_id
       LEFT JOIN stages s ON s.id = l.stage_id
+      LEFT JOIN deal_phones dp2
+        ON RIGHT(REGEXP_REPLACE(dp2.phone, '[^0-9]', '', 'g'), 9)
+         = RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
+      LEFT JOIN deals d ON d.id = dp2.deal_id
       WHERE fl.adset_name = $1
         AND fl.created_time >= $2::date
         AND fl.created_time <  ($3::date + INTERVAL '1 day')
+      GROUP BY fl.id, fl.full_name, fl.phone, fl.created_time, fl.platform, fl.campaign_name,
+               l.id, s.name, s.bitrix_id, dp.last9
       ORDER BY fl.created_time DESC
     `, [adset_name, since, until]);
 
@@ -1036,16 +1044,18 @@ router.get('/creative-leads', async (req, res) => {
       if (seen.has(r.fb_id)) continue;
       seen.add(r.fb_id);
       leads.push({
-        fb_id:         r.fb_id,
-        full_name:     r.full_name || '—',
-        phone:         r.phone    || '—',
-        created_time:  r.created_time,
-        platform:      r.platform,
-        campaign_name: r.campaign_name,
-        bitrix_id:     r.bitrix_id || null,
-        stage_name:    r.stage_name || null,
-        stage_code:    r.stage_code || null,
-        is_duplicate:  r.is_duplicate || false,
+        fb_id:          r.fb_id,
+        full_name:      r.full_name || '—',
+        phone:          r.phone    || '—',
+        created_time:   r.created_time,
+        platform:       r.platform,
+        campaign_name:  r.campaign_name,
+        bitrix_id:      r.bitrix_id || null,
+        stage_name:     r.stage_name || null,
+        stage_code:     r.stage_code || null,
+        is_duplicate:   r.is_duplicate || false,
+        deal_id:        r.deal_id ? parseInt(r.deal_id) : null,
+        deal_stage_name: r.deal_stage_name || null,
       });
     }
 

@@ -264,16 +264,18 @@ export function getCampaignCreatives(month: MonthKey, year: number, from?: strin
 }
 
 export type CreativeLead = {
-  fb_id:        string;
-  full_name:    string;
-  phone:        string;
-  created_time: string;
-  platform:     string;
-  campaign_name: string;
-  bitrix_id:    number | null;
-  stage_name:   string | null;
-  stage_code:   string | null;
-  is_duplicate: boolean;
+  fb_id:           string;
+  full_name:       string;
+  phone:           string;
+  created_time:    string;
+  platform:        string;
+  campaign_name:   string;
+  bitrix_id:       number | null;
+  stage_name:      string | null;
+  stage_code:      string | null;
+  is_duplicate:    boolean;
+  deal_id:         number | null;
+  deal_stage_name: string | null;
 };
 
 export type CreativeDeal = {

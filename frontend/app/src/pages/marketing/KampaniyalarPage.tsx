@@ -57,21 +57,30 @@ function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: s
           <tbody>
             {leads.map(l => {
               const stageColor = l.stage_code ? (STAGE_COLOR[l.stage_code] ?? "#94a3b8") : "#64748b";
-              const isSifatli = l.stage_code && !["UC_F8K4GI","UC_NAZK5J","JUNK"].includes(l.stage_code);
               const reason = !l.bitrix_id ? notInBitrixReason(l.phone, l.is_duplicate) : null;
               const reasonColor = reason === 'Telefon noto\'g\'ri' ? '#ef4444' : reason === 'Duplikat' ? '#f59e0b' : '#64748b';
+              const hasDeal = !!l.deal_id;
               return (
-                <tr key={l.fb_id} className="border-b border-border/20 hover:bg-bg3/40">
+                <tr key={l.fb_id} className={`border-b border-border/20 hover:bg-bg3/40 ${hasDeal ? "bg-[#22c55e]/5" : ""}`}>
                   <td className="px-4 py-2.5 font-medium text-text">{l.full_name}</td>
                   <td className="px-4 py-2.5 text-text2 font-mono">{l.phone}</td>
                   <td className="px-4 py-2.5"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.platform === "instagram" ? "bg-[#e91e8c]/15 text-[#e91e8c]" : "bg-blue/15 text-blue"}`}>{l.platform === "instagram" ? "IG" : "FB"}</span></td>
                   <td className="px-4 py-2.5 text-text3">{l.created_time ? new Date(l.created_time).toLocaleDateString("ru-RU") : "—"}</td>
                   <td className="px-4 py-2.5">
-                    {l.stage_name ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>{l.stage_name}</span>
-                      : <div className="flex flex-col gap-0.5"><span className="text-[10.5px] text-text3 italic">Bitrix24 da yo'q</span>{reason !== "Bitrix24 da yo'q" && <span className="text-[10px] font-semibold px-1 py-0.5 rounded w-fit" style={{ color: reasonColor, background: reasonColor + "22" }}>{reason}</span>}</div>}
+                    {hasDeal
+                      ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: "#22c55e", background: "#22c55e22" }}>{l.deal_stage_name || "Sdelka"}</span>
+                      : l.stage_name
+                        ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>{l.stage_name}</span>
+                        : <div className="flex flex-col gap-0.5"><span className="text-[10.5px] text-text3 italic">Bitrix24 da yo'q</span>{reason !== "Bitrix24 da yo'q" && <span className="text-[10px] font-semibold px-1 py-0.5 rounded w-fit" style={{ color: reasonColor, background: reasonColor + "22" }}>{reason}</span>}</div>
+                    }
                   </td>
                   <td className="px-4 py-2.5">
-                    {l.bitrix_id ? <a href={`${BX_URL}/${l.bitrix_id}/`} target="_blank" rel="noopener noreferrer" className={`text-[11px] font-semibold underline underline-offset-2 ${isSifatli ? "text-green" : "text-blue"} hover:opacity-80`}>#{l.bitrix_id} →</a> : <span className="text-[11px] text-text3/60">—</span>}
+                    {hasDeal
+                      ? <a href={`https://mountain.bitrix24.kz/crm/deal/details/${l.deal_id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold underline underline-offset-2 text-[#22c55e] hover:opacity-80">Sdelka #{l.deal_id} →</a>
+                      : l.bitrix_id
+                        ? <a href={`${BX_URL}/${l.bitrix_id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold underline underline-offset-2 text-blue hover:opacity-80">#{l.bitrix_id} →</a>
+                        : <span className="text-[11px] text-text3/60">—</span>
+                    }
                   </td>
                 </tr>
               );
