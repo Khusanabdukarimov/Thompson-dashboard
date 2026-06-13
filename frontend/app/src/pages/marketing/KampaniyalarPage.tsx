@@ -333,7 +333,7 @@ export default function KampaniyalarPage() {
   // ── Bitrix CRM cross-channel metrics ────────────────────────────────────────
   const kData = kunlikQ.data?.data;
   const totalDeals = kData
-    ? sumArr(kData.target.deals) + sumArr(kData.instagram.deals)
+    ? sumArr(kData.target.sales_count) + sumArr(kData.instagram.sales_count)
     : 0;
   const totalQualLids = kData
     ? sumArr(kData.target.qual_leads) + sumArr(kData.instagram.qual_leads)
