@@ -890,6 +890,7 @@ router.get('/creatives', async (req, res) => {
   const since = req.query.from || `${yearParam}-${localPad(monthNum)}-01`;
   const until = req.query.to   || `${yearParam}-${localPad(monthNum)}-${localPad(days)}`;
   // Optional separate sotuv date range; falls back to lead date range if not provided
+  const hasSeparateSotuv = !!(req.query.sotuv_from || req.query.sotuv_to);
   const sotuvFrom = req.query.sotuv_from || since;
   const sotuvTo   = req.query.sotuv_to   || until;
 
@@ -934,6 +935,30 @@ router.get('/creatives', async (req, res) => {
       ORDER BY meta_leads DESC
     `, [since, until, sotuvFrom, sotuvTo]);
 
+    // 1b. When sotuv dates differ from lead dates, run a separate query without
+    //     the fl.created_time constraint so we can count WON deals sold in the
+    //     sotuv period regardless of when the original facebook lead was created.
+    let sotuvByAdset = {};
+    if (hasSeparateSotuv) {
+      const { rows: sotuvRows } = await pool.query(`
+        SELECT
+          COALESCE(fl.adset_name, 'N/A') AS adset_name,
+          COUNT(DISTINCT d.id)::int      AS sotuv_boldi
+        FROM facebook_leads fl
+        JOIN deal_phones dp
+          ON RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
+           = RIGHT(REGEXP_REPLACE(fl.phone,  '[^0-9]', '', 'g'), 9)
+        JOIN deals  d  ON d.id = dp.deal_id
+        JOIN stages ds ON ds.id = d.stage_id AND ds.is_won = true
+        WHERE d.uf_bp_sale_date >= $1::date
+          AND d.uf_bp_sale_date <= $2::date
+        GROUP BY fl.adset_name
+      `, [sotuvFrom, sotuvTo]);
+      for (const row of sotuvRows) {
+        sotuvByAdset[row.adset_name ?? 'N/A'] = row.sotuv_boldi;
+      }
+    }
+
     // 2. Spend per adset from meta_ad_daily (date range aware)
     const { rows: cacheRows } = await pool.query(`
       SELECT adset_name, SUM(spend)::numeric AS spend
@@ -974,7 +999,7 @@ router.get('/creatives', async (req, res) => {
       sifatsiz:           r.sifatsiz,
       bekor_boldi:        r.bekor_boldi,
       konsultatsiya_otdi: r.konsultatsiya_otdi,
-      sotuv_boldi:        r.sotuv_boldi,
+      sotuv_boldi:        hasSeparateSotuv ? (sotuvByAdset[r.adset_name] ?? 0) : r.sotuv_boldi,
       sifat_rate:    r.in_bitrix > 0
         ? Math.round((r.sifatli / r.in_bitrix) * 100)
         : 0,
@@ -1002,34 +1027,60 @@ router.get('/creative-deals', async (req, res) => {
   const days = new Date(yearNum, monthNum, 0).getDate();
   const since = req.query.from || `${yearNum}-${pad(monthNum)}-01`;
   const until = req.query.to   || `${yearNum}-${pad(monthNum)}-${pad(days)}`;
+  const hasSeparateSotuv = !!(req.query.sotuv_from || req.query.sotuv_to);
   const sotuvFrom = req.query.sotuv_from || since;
   const sotuvTo   = req.query.sotuv_to   || until;
 
   try {
-    const { rows } = await pool.query(`
-      SELECT DISTINCT ON (d.id)
-        d.id,
-        fl.phone,
-        r.name || ' ' || COALESCE(r.last_name, '') AS responsible,
-        d.opportunity,
-        d.currency_id,
-        d.date_create,
-        s.name AS stage_name
-      FROM facebook_leads fl
-      JOIN deal_phones dp
-        ON RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
-         = RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
-      JOIN deals  d  ON d.id = dp.deal_id
-      JOIN stages ds ON ds.id = d.stage_id AND ds.is_won = true
-      LEFT JOIN stages s ON s.id = d.stage_id
-      LEFT JOIN responsibles r ON r.id = d.responsible_id
-      WHERE fl.created_time >= $1::date
-        AND fl.created_time <  ($2::date + INTERVAL '1 day')
-        AND d.uf_bp_sale_date >= $3::date
-        AND d.uf_bp_sale_date <= $4::date
-        ${adset_name    ? "AND fl.adset_name    = $5" : "AND fl.campaign_name = $5"}
-      ORDER BY d.id, d.date_create DESC
-    `, [since, until, sotuvFrom, sotuvTo, adset_name || campaign_name]);
+    // When sotuv dates are separate, skip the fl.created_time filter so we can
+    // show deals sold in the sotuv period regardless of when the lead arrived.
+    const { rows } = hasSeparateSotuv
+      ? await pool.query(`
+          SELECT DISTINCT ON (d.id)
+            d.id,
+            fl.phone,
+            r.name || ' ' || COALESCE(r.last_name, '') AS responsible,
+            d.opportunity,
+            d.currency_id,
+            d.date_create,
+            s.name AS stage_name
+          FROM facebook_leads fl
+          JOIN deal_phones dp
+            ON RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
+             = RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
+          JOIN deals  d  ON d.id = dp.deal_id
+          JOIN stages ds ON ds.id = d.stage_id AND ds.is_won = true
+          LEFT JOIN stages s ON s.id = d.stage_id
+          LEFT JOIN responsibles r ON r.id = d.responsible_id
+          WHERE d.uf_bp_sale_date >= $1::date
+            AND d.uf_bp_sale_date <= $2::date
+            ${adset_name ? "AND fl.adset_name = $3" : "AND fl.campaign_name = $3"}
+          ORDER BY d.id, d.date_create DESC
+        `, [sotuvFrom, sotuvTo, adset_name || campaign_name])
+      : await pool.query(`
+          SELECT DISTINCT ON (d.id)
+            d.id,
+            fl.phone,
+            r.name || ' ' || COALESCE(r.last_name, '') AS responsible,
+            d.opportunity,
+            d.currency_id,
+            d.date_create,
+            s.name AS stage_name
+          FROM facebook_leads fl
+          JOIN deal_phones dp
+            ON RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
+             = RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
+          JOIN deals  d  ON d.id = dp.deal_id
+          JOIN stages ds ON ds.id = d.stage_id AND ds.is_won = true
+          LEFT JOIN stages s ON s.id = d.stage_id
+          LEFT JOIN responsibles r ON r.id = d.responsible_id
+          WHERE fl.created_time >= $1::date
+            AND fl.created_time <  ($2::date + INTERVAL '1 day')
+            AND d.uf_bp_sale_date >= $3::date
+            AND d.uf_bp_sale_date <= $4::date
+            ${adset_name ? "AND fl.adset_name = $5" : "AND fl.campaign_name = $5"}
+          ORDER BY d.id, d.date_create DESC
+        `, [since, until, sotuvFrom, sotuvTo, adset_name || campaign_name]);
 
     res.json({
       deals: rows.map(r => ({
