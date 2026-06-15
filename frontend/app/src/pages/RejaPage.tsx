@@ -13,6 +13,25 @@ import {
   type RejaPlan, type RejaEmployee,
 } from '@/lib/api/reja';
 
+// ── To'lov mapping (from to'lov.csv, Bitrix CRM type 1042) ───────
+const TOLOV_MAP: Record<string, number[]> = {
+  "Samandar Samadov":      [110, 66, 64, 62, 60],
+  "Shahzod Yormamatov":    [132, 130, 128, 104, 102, 100, 98, 96, 94, 92, 90, 88, 86, 84, 82, 80, 74, 72, 68],
+  "Davlatyor":             [136, 126, 58, 48, 46],
+  "Muhriddin Atoullayev":  [134, 124, 122, 120, 118, 114, 112, 106],
+  "Shaxzod Turanov":       [138, 78],
+  "Temurmalik Xoshimjonov":[116],
+};
+const TOLOV_BASE = "https://mountain.bitrix24.kz/crm/type/1042/details/";
+
+function getTolovIds(fullName: string): number[] {
+  for (const [key, ids] of Object.entries(TOLOV_MAP)) {
+    if (fullName.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(fullName.toLowerCase().split(' ')[0].toLowerCase()))
+      return ids;
+  }
+  return [];
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 const MONTH_NAMES = [
@@ -426,7 +445,7 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                 borderBottom: isLast ? 'none' : '1px solid var(--border)',
               }}
             >
-              {/* Avatar + name + deal count */}
+              {/* Avatar + name + deal count + to'lov links */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
                 <div style={{
                   width: 46, height: 46, borderRadius: 10, flexShrink: 0,
@@ -445,6 +464,32 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                       ? <span style={{ color: '#16a34a' }}>{emp.deal_count} ta sotuv</span>
                       : '0 ta sotuv'}
                   </div>
+                  {(() => {
+                    const ids = getTolovIds(emp.full_name);
+                    if (!ids.length) return null;
+                    return (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                        {ids.map(id => (
+                          <a
+                            key={id}
+                            href={`${TOLOV_BASE}${id}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                              fontSize: 10, fontWeight: 600,
+                              color: '#2563eb', background: 'rgba(37,99,235,0.1)',
+                              border: '1px solid rgba(37,99,235,0.25)',
+                              borderRadius: 4, padding: '1px 6px',
+                              textDecoration: 'none', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            #{id}
+                          </a>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
