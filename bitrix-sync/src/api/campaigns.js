@@ -899,7 +899,8 @@ router.get('/creatives', async (req, res) => {
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_F8K4GI'                                   THEN fl.id END)::int AS sifatsiz,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_NAZK5J'                                   THEN fl.id END)::int AS bekor_boldi,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'CONVERTED'                                   THEN fl.id END)::int AS konsultatsiya_otdi,
-        COUNT(DISTINCT CASE WHEN ds.bitrix_id = ANY(ARRAY['UC_NV0Y4F','WON','C1:WON']) THEN fl.id END)::int AS sotuv_boldi,
+        COUNT(DISTINCT CASE WHEN ds.bitrix_id = ANY(ARRAY['UC_NV0Y4F','WON','C1:WON'])
+          AND d.uf_bp_sale_date >= $1::date AND d.uf_bp_sale_date <= $2::date        THEN fl.id END)::int AS sotuv_boldi,
         COUNT(DISTINCT CASE WHEN lp.lead_id IS NOT NULL AND s.id IS NULL               THEN fl.id END)::int AS stage_unknown
       FROM facebook_leads fl
       LEFT JOIN lead_phones lp
@@ -1007,6 +1008,8 @@ router.get('/creative-deals', async (req, res) => {
       LEFT JOIN responsibles r ON r.id = d.responsible_id
       WHERE fl.created_time >= $1::date
         AND fl.created_time <  ($2::date + INTERVAL '1 day')
+        AND d.uf_bp_sale_date >= $1::date
+        AND d.uf_bp_sale_date <= $2::date
         ${adset_name    ? "AND fl.adset_name    = $3" : "AND fl.campaign_name = $3"}
       ORDER BY d.id, d.date_create DESC
     `, [since, until, adset_name || campaign_name]);
