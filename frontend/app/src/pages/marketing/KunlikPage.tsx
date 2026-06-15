@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { X, Plus, Trash2 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
@@ -8,6 +8,7 @@ import {
   getMetaInsights, getKunlikHisobot, getKunlikMeta,
   saveKunlikPlan, saveKunlikOverride,
   getKunlikSections, createKunlikSection, deleteKunlikSection, getKunlikSegment,
+  getUfFieldOptions,
   MONTH_KEYS, MONTH_LABELS,
 } from "@/lib/api/meta";
 import type { MonthKey, KunlikCustomSection } from "@/lib/api/meta";
@@ -20,9 +21,6 @@ const DEFAULT_YEAR  = now.getFullYear();
 type Section = string;
 
 const CUSTOM_COLORS = ["#6366f1", "#0891b2", "#059669", "#d97706", "#dc2626", "#7c3aed", "#be185d"];
-const UF_FIELD_LABELS: Record<string, string> = {
-  "UF_CRM_1775824803703": "Xizmat turi",
-};
 
 type MetricKey =
   | "budget" | "leads" | "qual_leads" | "meetings"
@@ -330,29 +328,27 @@ export default function KunlikPage() {
 }
 
 function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [title,       setTitle]       = useState("");
-  const [ufField,     setUfField]     = useState("UF_CRM_1775824803703");
-  const [ufFieldDeal, setUfFieldDeal] = useState("UF_CRM_69D8F71700936");
-  const [names,       setNames]       = useState<string[]>([""]);
-  const [color,       setColor]       = useState(CUSTOM_COLORS[0]);
-  const [saving,      setSaving]      = useState(false);
+  const [selected, setSelected] = useState("");
+  const [color,    setColor]    = useState(CUSTOM_COLORS[0]);
+  const [saving,   setSaving]   = useState(false);
 
-  useEffect(() => {
-    if (ufField === "UF_CRM_1775824803703") setUfFieldDeal("UF_CRM_69D8F71700936");
-  }, [ufField]);
+  const { data: optData, isLoading: optLoading } = useQuery({
+    queryKey: ["uf-field-options", "UF_CRM_1775824803703"],
+    queryFn:  () => getUfFieldOptions("UF_CRM_1775824803703"),
+    staleTime: Infinity,
+  });
+  const options = optData?.options ?? [];
 
-  const addName = () => setNames(n => [...n, ""]);
-  const removeName = (i: number) => setNames(n => n.filter((_, j) => j !== i));
-  const setName = (i: number, v: string) => setNames(n => n.map((x, j) => j === i ? v : x));
+  const selectedLabel = options.find(o => o.id === selected)?.label ?? "";
 
   const handleSubmit = async () => {
-    if (!title.trim()) return;
+    if (!selected || !selectedLabel) return;
     setSaving(true);
     await createKunlikSection({
-      title: title.trim(),
-      uf_field: ufField,
-      uf_field_deal: ufFieldDeal,
-      source_names: names.map(n => n.trim()).filter(Boolean),
+      title:         selectedLabel,
+      uf_field:      "UF_CRM_1775824803703",
+      uf_field_deal: "UF_CRM_69D8F71700936",
+      source_names:  [selected],
       color,
     });
     onCreated();
@@ -360,70 +356,29 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[420px] max-w-[95vw] p-5"
+      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[340px] max-w-[95vw] p-5"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <div className="text-[14px] font-bold text-text">Yangi bo'lim qo'shish</div>
+          <div className="text-[14px] font-bold text-text">Xizmat turi bo'lim</div>
           <button onClick={onClose} className="text-text3 hover:text-text"><X size={16} /></button>
         </div>
 
-        <div className="space-y-3 text-[12.5px]">
-          {/* Title */}
+        <div className="space-y-4 text-[12.5px]">
+          {/* Single select */}
           <div>
-            <label className="block text-text3 mb-1">Sarlavha</label>
-            <input
-              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text outline-none focus:border-blue"
-              placeholder="Masalan: Til kurslari"
-              value={title} onChange={e => setTitle(e.target.value)}
-            />
-          </div>
-
-          {/* UF field */}
-          <div>
-            <label className="block text-text3 mb-1">Bitrix24 maydon (lidlar)</label>
-            <input
-              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text font-mono outline-none focus:border-blue"
-              value={ufField} onChange={e => setUfField(e.target.value)}
-            />
-            {UF_FIELD_LABELS[ufField] && (
-              <div className="text-text3 text-[11px] mt-0.5">→ {UF_FIELD_LABELS[ufField]}</div>
+            <label className="block text-text3 mb-1.5">Xizmat turini tanlang</label>
+            {optLoading ? (
+              <div className="text-text3 text-[11.5px]">Yuklanmoqda…</div>
+            ) : (
+              <select
+                className="w-full bg-bg3 border border-border rounded px-3 py-2 text-text outline-none focus:border-blue text-[12.5px]"
+                value={selected} onChange={e => setSelected(e.target.value)}>
+                <option value="">— Tanlang —</option>
+                {options.map(o => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
             )}
-          </div>
-
-          {/* UF field deal */}
-          <div>
-            <label className="block text-text3 mb-1">Bitrix24 maydon (kelishuvlar)</label>
-            <input
-              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text font-mono outline-none focus:border-blue"
-              value={ufFieldDeal} onChange={e => setUfFieldDeal(e.target.value)}
-            />
-          </div>
-
-          {/* Source names */}
-          <div>
-            <label className="block text-text3 mb-1">
-              Qiymatlar ({UF_FIELD_LABELS[ufField] ?? ufField})
-            </label>
-            <div className="space-y-1.5">
-              {names.map((n, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <input
-                    className="flex-1 bg-bg3 border border-border rounded px-3 py-1.5 text-text outline-none focus:border-blue"
-                    placeholder={`Qiymat ${i + 1}`}
-                    value={n} onChange={e => setName(i, e.target.value)}
-                  />
-                  {names.length > 1 && (
-                    <button onClick={() => removeName(i)} className="text-text3 hover:text-red-400">
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button onClick={addName}
-                className="text-blue text-[11.5px] hover:underline flex items-center gap-1">
-                <Plus size={11} /> Qiymat qo'shish
-              </button>
-            </div>
           </div>
 
           {/* Color */}
@@ -432,7 +387,8 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
             <div className="flex gap-2">
               {CUSTOM_COLORS.map(c => (
                 <button key={c} onClick={() => setColor(c)}
-                  className={cn("w-6 h-6 rounded-full border-2 transition-all", color === c ? "border-white scale-110" : "border-transparent")}
+                  className={cn("w-6 h-6 rounded-full border-2 transition-all",
+                    color === c ? "border-white scale-110" : "border-transparent opacity-70")}
                   style={{ background: c }} />
               ))}
             </div>
@@ -444,7 +400,7 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
             className="px-4 py-1.5 rounded-lg border border-border text-text2 text-[12.5px] hover:bg-bg3">
             Bekor
           </button>
-          <button onClick={() => void handleSubmit()} disabled={saving || !title.trim()}
+          <button onClick={() => void handleSubmit()} disabled={saving || !selected}
             className="px-4 py-1.5 rounded-lg bg-blue text-white text-[12.5px] font-semibold disabled:opacity-50">
             {saving ? "Saqlanmoqda…" : "Qo'shish"}
           </button>

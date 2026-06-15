@@ -1431,4 +1431,22 @@ setInterval(async () => {
 
 console.log('[meta_ad_daily] 1-min (today) + 30-min (30 days) sync scheduled');
 
+// ── /uf-field-options — enum values for a Bitrix24 list field ──────
+router.get('/uf-field-options', async (req, res) => {
+  const { field = 'UF_CRM_1775824803703' } = req.query;
+  try {
+    if (!BX_WEBHOOK) return res.json({ options: [] });
+    const { data } = await axios.get(`${BX_WEBHOOK}/crm.lead.fields`, { timeout: 10000 });
+    const fieldDef = data?.result?.[field];
+    if (!fieldDef?.items) return res.json({ options: [] });
+    const options = fieldDef.items
+      .filter(it => it.ID && it.VALUE)
+      .map(it => ({ id: String(it.ID), label: String(it.VALUE) }));
+    res.json({ options });
+  } catch (err) {
+    console.error('[uf-field-options]', err.message);
+    res.json({ options: [] });
+  }
+});
+
 module.exports = router;

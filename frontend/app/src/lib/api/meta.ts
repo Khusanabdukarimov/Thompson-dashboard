@@ -127,6 +127,10 @@ export function getKunlikMeta(month: MonthKey, year: number) {
   return apiGet<KunlikMeta>('/api/marketing/kunlik-meta', { month, year });
 }
 
+export function getUfFieldOptions(field = 'UF_CRM_1775824803703') {
+  return apiGet<{ options: { id: string; label: string }[] }>('/api/campaigns/uf-field-options', { field });
+}
+
 export function getKunlikSections() {
   return apiGet<{ sections: KunlikCustomSection[] }>('/api/marketing/kunlik-sections', {});
 }
