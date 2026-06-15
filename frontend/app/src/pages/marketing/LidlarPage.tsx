@@ -440,6 +440,7 @@ export default function LidlarPage() {
     })), [responsibles]);
 
   const total             = header?.total_leads                    ?? 0;
+  const jarayondaCount    = header?.in_process                     ?? 0;
   const sifatsizBekor     = header?.sifatsiz_bekor_count           ?? 0;
   const bekorBoldiCount   = header?.bekor_boldi_count              ?? 0;
   const sifatliLid        = header?.sifatli_lid_count              ?? 0;
@@ -745,8 +746,27 @@ export default function LidlarPage() {
                 </div>
               </div>
 
-              {/* Sifatsiz + Bekor bo'ldi — stacked */}
+              {/* Jarayonda + Sifatsiz + Bekor bo'ldi — stacked */}
               <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {/* Jarayonda */}
+                <div style={{ flex:1, background: isDark ? "linear-gradient(135deg,#2a1500,#6e3d00)" : "linear-gradient(135deg,rgba(255,152,0,0.07),rgba(255,152,0,0.03))",
+                              border: `1px solid ${isDark ? "rgba(255,152,0,0.3)" : "rgba(255,152,0,0.25)"}`,
+                              boxShadow:"0 4px 20px rgba(255,152,0,0.12)", borderRadius:16,
+                              padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,152,0,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <ArrowLeftRight size={20} style={{ color:"#FF9800" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Jarayonda</div>
+                      <div style={{ fontSize:34, fontWeight:800, color:"#FF9800", lineHeight:1.1, marginTop:2 }}>{fmtNum(jarayondaCount)}</div>
+                      <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Jarayondagi lidlar</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
+                    <Sparkline color="#FF9800" variant={2} />
+                  </div>
+                </div>
                 {/* Sifatsiz */}
                 <div style={{ flex:1, background: isDark ? "linear-gradient(135deg,#2a0000,#6e1a1a)" : "linear-gradient(135deg,rgba(244,67,54,0.07),rgba(244,67,54,0.03))",
                               border: `1px solid ${isDark ? "rgba(244,67,54,0.3)" : "rgba(244,67,54,0.25)"}`,
