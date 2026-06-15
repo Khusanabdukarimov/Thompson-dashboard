@@ -793,6 +793,18 @@ router.get('/sync-leads', (_req, res) => {
   res.json({ running: syncRunning });
 });
 
+// POST /api/campaigns/sync-creatives — force re-sync all creative post URLs
+router.post('/sync-creatives', async (_req, res) => {
+  res.json({ ok: true, message: 'Creative cache reset and sync started' });
+  try {
+    // Reset synced_at so all ads get re-fetched
+    await pool.query(`UPDATE meta_creative_cache SET synced_at = '2000-01-01' WHERE creative_id IS NOT NULL`);
+    await syncCreativeNames();
+  } catch (e) {
+    console.error('[sync-creatives]', e.message);
+  }
+});
+
 // GET /api/campaigns/leads?form_id=123&campaign_id=456&from=2026-05-01&to=2026-05-31
 router.get('/leads', async (req, res) => {
   const { form_id, campaign_id, from, to } = req.query;
@@ -1229,41 +1241,67 @@ setTimeout(() => {
   syncMetaAdDaily(daysAgoStr(30), todayStr()).catch(e => console.error('[meta_ad_daily] startup sync error:', e.message));
 }, 10_000);
 
-// ── Meta creative name cache sync ─────────────────────────────────────────────
+// ── Build post URL from effective_object_story_id ({page_id}_{post_id}) ───────
+function buildPostUrl(storyId) {
+  if (!storyId || !storyId.includes('_')) return null;
+  const idx    = storyId.indexOf('_');
+  const pageId = storyId.slice(0, idx);
+  const postId = storyId.slice(idx + 1);
+  // Preferred: direct post link; works for page posts and reel/video posts
+  return `https://www.facebook.com/${pageId}/posts/${postId}`;
+}
+
+// ── Meta creative cache sync ──────────────────────────────────────────────────
+// Flow per ad:
+//   1. GET /{ad_id}?fields=creative,account_id  → creative.id + account_id
+//   2. GET /{creative_id}?fields=name,effective_object_story_id,object_story_id,video_id
+//   3. Build post URL from effective_object_story_id (most reliable)
+//   4. If video_id present: fetch title + permalink_url as fallback post URL
 async function syncCreativeNames() {
   try {
     const { rows: adRows } = await pool.query(`
       SELECT DISTINCT ad_id FROM facebook_leads
       WHERE ad_id IS NOT NULL AND ad_id != ''
-        AND ad_id NOT IN (SELECT ad_id FROM meta_creative_cache WHERE synced_at > NOW() - INTERVAL '1 hour')
+        AND ad_id NOT IN (
+          SELECT ad_id FROM meta_creative_cache
+          WHERE synced_at > NOW() - INTERVAL '1 hour'
+            AND creative_id IS NOT NULL
+        )
       LIMIT 30
     `);
     if (!adRows.length) return;
 
     const tok = token();
+    let synced = 0;
+
     for (const { ad_id } of adRows) {
       try {
+        // Step 1: get creative ID + account from the ad
         const adRes = await axios.get(`${BASE}/${ad_id}`, {
-          params: { fields: 'adcreatives,account_id', access_token: tok }, timeout: 8000
+          params: { fields: 'creative,account_id', access_token: tok }, timeout: 8000
         });
-        const accountId = adRes.data?.account_id || null;
-        const crIds = (adRes.data?.adcreatives?.data || []).map(c => c.id);
-        if (!crIds.length) continue;
+        const accountId  = adRes.data?.account_id || null;
+        const creativeId = adRes.data?.creative?.id || null;
+        if (!creativeId) {
+          // Mark attempted so we don't hammer it
+          await pool.query(
+            `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
+             ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
+          ).catch(() => {});
+          continue;
+        }
 
-        const crRes = await axios.get(`${BASE}/${crIds[0]}`, {
-          params: { fields: 'name,object_story_id,effective_object_story_id,video_id', access_token: tok }, timeout: 8000
+        // Step 2: get creative details
+        const crRes = await axios.get(`${BASE}/${creativeId}`, {
+          params: { fields: 'name,effective_object_story_id,object_story_id,video_id', access_token: tok }, timeout: 8000
         });
         const cr = crRes.data;
 
-        const storyId = cr.object_story_id || cr.effective_object_story_id || '';
-        let postUrl = null;
-        if (storyId && storyId.includes('_')) {
-          const parts = storyId.split('_');
-          const pageId = parts[0];
-          const pid    = parts.slice(1).join('_');
-          postUrl = `https://www.facebook.com/permalink.php?story_fbid=${pid}&id=${pageId}`;
-        }
+        // Step 3: build post URL — prefer effective_object_story_id (includes page reposts)
+        const storyId = cr.effective_object_story_id || cr.object_story_id || '';
+        let postUrl   = buildPostUrl(storyId);
 
+        // Step 4: video fallback
         let videoTitle = null;
         if (cr.video_id) {
           try {
@@ -1272,7 +1310,9 @@ async function syncCreativeNames() {
             });
             videoTitle = vidRes.data?.title || null;
             if (!postUrl && vidRes.data?.permalink_url) {
-              postUrl = 'https://www.facebook.com' + vidRes.data.permalink_url;
+              // permalink_url is a relative path like /videos/123456789/
+              const rel = vidRes.data.permalink_url;
+              postUrl = rel.startsWith('http') ? rel : `https://www.facebook.com${rel}`;
             }
           } catch (_) {}
         }
@@ -1282,29 +1322,49 @@ async function syncCreativeNames() {
           : null;
 
         await pool.query(`
-          INSERT INTO meta_creative_cache (ad_id, creative_id, creative_name, video_id, video_title, post_url, ads_manager_url, synced_at)
+          INSERT INTO meta_creative_cache
+            (ad_id, creative_id, creative_name, video_id, video_title, post_url, ads_manager_url, synced_at)
           VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
           ON CONFLICT (ad_id) DO UPDATE SET
-            creative_id=EXCLUDED.creative_id, creative_name=EXCLUDED.creative_name,
-            video_id=EXCLUDED.video_id, video_title=EXCLUDED.video_title,
-            post_url=EXCLUDED.post_url, ads_manager_url=EXCLUDED.ads_manager_url, synced_at=NOW()
-        `, [ad_id, crIds[0], cr.name || null, cr.video_id || null, videoTitle, postUrl, adsManagerUrl]);
+            creative_id     = EXCLUDED.creative_id,
+            creative_name   = EXCLUDED.creative_name,
+            video_id        = EXCLUDED.video_id,
+            video_title     = EXCLUDED.video_title,
+            post_url        = EXCLUDED.post_url,
+            ads_manager_url = EXCLUDED.ads_manager_url,
+            synced_at       = NOW()
+        `, [ad_id, creativeId, cr.name || null, cr.video_id || null, videoTitle, postUrl, adsManagerUrl]);
+        synced++;
       } catch (e) {
-        // mark as attempted so we don't retry immediately
-        await pool.query(`
-          INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
-          ON CONFLICT (ad_id) DO UPDATE SET synced_at=NOW()
-        `, [ad_id]).catch(() => {});
+        console.error(`[creative-cache] ad ${ad_id}:`, e.response?.data?.error?.message || e.message);
+        await pool.query(
+          `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
+           ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
+        ).catch(() => {});
       }
     }
-    console.log(`[creative-cache] synced ${adRows.length} ad creatives`);
+    if (synced) console.log(`[creative-cache] synced ${synced}/${adRows.length} ad creatives`);
   } catch (e) {
     console.error('[creative-cache] sync error:', e.message);
   }
 }
 
+// Force re-sync ads that have no post_url and no video_id (likely bad cached data)
+async function resyncMissingPostUrls() {
+  try {
+    await pool.query(`
+      UPDATE meta_creative_cache
+      SET synced_at = '2000-01-01'
+      WHERE post_url IS NULL AND creative_id IS NOT NULL
+    `);
+  } catch (_) {}
+}
+
 // Sync creative names: on startup after 15s, then every 15 minutes
-setTimeout(() => syncCreativeNames().catch(() => {}), 15_000);
+setTimeout(async () => {
+  await resyncMissingPostUrls();
+  syncCreativeNames().catch(() => {});
+}, 15_000);
 setInterval(() => syncCreativeNames().catch(() => {}), 15 * 60_000);
 
 console.log('[meta_ad_daily] 1-min (today) + 30-min (30 days) sync scheduled');
