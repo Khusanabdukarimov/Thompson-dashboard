@@ -329,6 +329,7 @@ export default function KunlikPage() {
 
 function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [selected, setSelected] = useState("");
+  const [name,     setName]     = useState("");
   const [color,    setColor]    = useState(CUSTOM_COLORS[0]);
   const [saving,   setSaving]   = useState(false);
 
@@ -339,13 +340,22 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
   });
   const options = optData?.options ?? [];
 
-  const selectedLabel = options.find(o => o.id === selected)?.label ?? "";
+  const selectedOpt = options.find(o => o.id === selected);
+
+  // Auto-fill name when option selected
+  const handleSelect = (id: string) => {
+    setSelected(id);
+    const lbl = options.find(o => o.id === id)?.label ?? "";
+    if (!name || name === options.find(o => o.id === selected)?.label) {
+      setName(lbl);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!selected || !selectedLabel) return;
+    if (!selected || !name.trim()) return;
     setSaving(true);
     await createKunlikSection({
-      title:         selectedLabel,
+      title:         name.trim(),
       uf_field:      "UF_CRM_1775824803703",
       uf_field_deal: "UF_CRM_69D8F71700936",
       source_names:  [selected],
@@ -356,29 +366,45 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[340px] max-w-[95vw] p-5"
+      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[360px] max-w-[95vw] p-5"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <div className="text-[14px] font-bold text-text">Xizmat turi bo'lim</div>
+          <div className="text-[14px] font-bold text-text">Yangi bo'lim</div>
           <button onClick={onClose} className="text-text3 hover:text-text"><X size={16} /></button>
         </div>
 
-        <div className="space-y-4 text-[12.5px]">
-          {/* Single select */}
+        <div className="space-y-3 text-[12.5px]">
+          {/* Xizmat turi select */}
           <div>
-            <label className="block text-text3 mb-1.5">Xizmat turini tanlang</label>
+            <label className="block text-text3 mb-1">Xizmat turi</label>
             {optLoading ? (
-              <div className="text-text3 text-[11.5px]">Yuklanmoqda…</div>
+              <div className="text-text3 py-2">Yuklanmoqda…</div>
             ) : (
               <select
-                className="w-full bg-bg3 border border-border rounded px-3 py-2 text-text outline-none focus:border-blue text-[12.5px]"
-                value={selected} onChange={e => setSelected(e.target.value)}>
+                className="w-full bg-bg3 border border-border rounded px-3 py-2 text-text outline-none focus:border-blue"
+                value={selected} onChange={e => handleSelect(e.target.value)}>
                 <option value="">— Tanlang —</option>
                 {options.map(o => (
                   <option key={o.id} value={o.id}>{o.label}</option>
                 ))}
               </select>
             )}
+            {/* source_name preview */}
+            {selectedOpt && (
+              <div className="mt-1 text-[11px] text-text3 font-mono">
+                source_name: "{selectedOpt.label}" (id: {selectedOpt.id})
+              </div>
+            )}
+          </div>
+
+          {/* Section name */}
+          <div>
+            <label className="block text-text3 mb-1">Bo'lim nomi</label>
+            <input
+              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text outline-none focus:border-blue"
+              placeholder="Masalan: Patentlash"
+              value={name} onChange={e => setName(e.target.value)}
+            />
           </div>
 
           {/* Color */}
@@ -400,7 +426,7 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
             className="px-4 py-1.5 rounded-lg border border-border text-text2 text-[12.5px] hover:bg-bg3">
             Bekor
           </button>
-          <button onClick={() => void handleSubmit()} disabled={saving || !selected}
+          <button onClick={() => void handleSubmit()} disabled={saving || !selected || !name.trim()}
             className="px-4 py-1.5 rounded-lg bg-blue text-white text-[12.5px] font-semibold disabled:opacity-50">
             {saving ? "Saqlanmoqda…" : "Qo'shish"}
           </button>
