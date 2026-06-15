@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  RefreshCw, Search, ChevronDown, TrendingUp,
+  RefreshCw, Search, ChevronDown, TrendingUp, Filter, X,
 } from "lucide-react";
 import { Skeleton } from "@/components/Skeleton";
 import {
@@ -15,6 +15,58 @@ import { fmtNum } from "@/lib/utils";
 
 
 type Tab = "kampaniyalar" | "formalar" | "lidlar" | "creative";
+
+// ── MultiSelect dropdown ──────────────────────────────────────────────────────
+function MultiSelect({ label, options, values, onChange }: {
+  label: string;
+  options: string[];
+  values: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  const toggle = (v: string) => onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
+  const display = values.length === 0 ? "Barchasi" : values.length === 1 ? values[0].slice(0, 24) : `${values.length} ta tanlangan`;
+  const selStyle: React.CSSProperties = {
+    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+    background: "var(--bg3)", border: `1px solid ${values.length > 0 ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
+    borderRadius: 8, color: values.length > 0 ? "#3b82f6" : "var(--text3)",
+    fontSize: 12, padding: "8px 10px", cursor: "pointer", boxSizing: "border-box",
+  };
+  return (
+    <div ref={ref} style={{ flex: "1 1 180px", minWidth: 160, position: "relative" }}>
+      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>{label}</div>
+      <button type="button" onClick={() => setOpen(o => !o)} style={selStyle as React.CSSProperties}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{display}</span>
+        <ChevronDown size={12} style={{ flexShrink: 0, marginLeft: 4, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, minWidth: "100%", zIndex: 700, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 4px 24px rgba(0,0,0,0.5)", maxHeight: 240, overflowY: "auto" }}>
+          {values.length > 0 && (
+            <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
+              <button type="button" onClick={() => onChange([])} style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Hammasini olib tashlash</button>
+            </div>
+          )}
+          {options.map(o => {
+            const checked = values.includes(o);
+            return (
+              <label key={o} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", background: checked ? "rgba(59,130,246,0.08)" : "transparent" }}>
+                <input type="checkbox" checked={checked} onChange={() => toggle(o)} style={{ accentColor: "#3b82f6", flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Creative leads sub-table ──────────────────────────────────────────────────
 const BX_URL = "https://mountain.bitrix24.kz/crm/lead/details";
@@ -250,11 +302,11 @@ export default function KampaniyalarPage() {
   const [expandedForm, setExpandedForm]   = useState<string | null>(null);
   const [expandedCamp, setExpandedCamp]   = useState<string | null>(null);
   const [refreshing, setRefreshing]       = useState(false);
-  const [filterCampaign,  setFilterCampaign]  = useState("");
-  const [filterPlatform,  setFilterPlatform]  = useState("");
+  const [filterCampaigns, setFilterCampaigns] = useState<string[]>([]);
+  const [filterPlatforms, setFilterPlatforms] = useState<string[]>([]);
   const [filterForm,      setFilterForm]      = useState("");
   const [filterAdset,     setFilterAdset]     = useState("");
-  const [filterCreative,  setFilterCreative]  = useState("");
+  const [filterCreatives, setFilterCreatives] = useState<string[]>([]);
   const [expandedCreative, setExpandedCreative] = useState<string | null>(null);
   const [expandedSotuv,   setExpandedSotuv]   = useState<string | null>(null);
 
@@ -280,47 +332,47 @@ export default function KampaniyalarPage() {
 
   // Sub-filter hierarchy: Campaign → Platform → Adset
   const optPlatforms = useMemo(() => [...new Set(allRows
-    .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
+    .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
     .map(r => r.platform)
-  )].sort(), [allRows, filterCampaign]);
+  )].sort(), [allRows, filterCampaigns]);
 
   const optAdsets = useMemo(() => [...new Set(allRows
-    .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
-    .filter(r => !filterPlatform || r.platform === filterPlatform)
+    .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
+    .filter(r => filterPlatforms.length === 0  || filterPlatforms.includes(r.platform))
     .map(r => r.adset_name)
-  )].sort(), [allRows, filterCampaign, filterPlatform]);
+  )].sort(), [allRows, filterCampaigns, filterPlatforms]);
 
   const optForms = useMemo(() => {
     const names: string[] = [];
     for (const camp of formsQ.data?.campaigns ?? []) {
-      if (filterCampaign && camp.campaign_name !== filterCampaign) continue;
+      if (filterCampaigns.length > 0 && !filterCampaigns.includes(camp.campaign_name)) continue;
       for (const f of camp.forms) {
         if (f.status === "ACTIVE" && !names.includes(f.form_name)) names.push(f.form_name);
       }
     }
     return names.sort();
-  }, [formsQ.data, filterCampaign]);
+  }, [formsQ.data, filterCampaigns]);
 
   const optCreatives = useMemo(() => {
     const creatives = creativesQ.data?.creatives ?? [];
     return [...new Set(
       creatives
-        .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
-        .filter(r => !filterAdset    || r.adset_name    === filterAdset)
+        .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
+        .filter(r => !filterAdset || r.adset_name === filterAdset)
         .map(r => r.ad_name)
         .filter(Boolean) as string[]
     )].sort();
-  }, [creativesQ.data, filterCampaign, filterAdset]);
+  }, [creativesQ.data, filterCampaigns, filterAdset]);
 
   // ── filtered rows (apply campaign / platform / adset filters) ──────────────
   const rows = useMemo(() => allRows
-    .filter(r => !filterCampaign || r.campaign_name === filterCampaign)
-    .filter(r => !filterPlatform || r.platform === filterPlatform)
-    .filter(r => !filterAdset    || r.adset_name  === filterAdset),
-  [allRows, filterCampaign, filterPlatform, filterAdset]);
+    .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
+    .filter(r => filterPlatforms.length === 0  || filterPlatforms.includes(r.platform))
+    .filter(r => !filterAdset || r.adset_name === filterAdset),
+  [allRows, filterCampaigns, filterPlatforms, filterAdset]);
 
   // ── aggregate KPIs from filtered rows (date-range + filter aware) ────────────
-  const isFiltered = !!(filterCampaign || filterPlatform || filterAdset || filterForm);
+  const isFiltered = !!(filterCampaigns.length || filterPlatforms.length || filterAdset || filterForm);
 
   const totalSpend  = rows.reduce((a, r) => a + r.spend,       0);
   const totalClicks = rows.reduce((a, r) => a + r.clicks,      0);
@@ -384,13 +436,13 @@ export default function KampaniyalarPage() {
       .filter(f => !search || f.form_name.toLowerCase().includes(search.toLowerCase()))
       .filter(f => !filterForm || f.form_name === filterForm)
       .filter(f => {
-        if (!filterCampaign) return true;
+        if (filterCampaigns.length === 0) return true;
         return (formsQ.data?.campaigns ?? []).some(c =>
-          c.campaign_name === filterCampaign && c.forms.some(cf => cf.form_id === f.form_id)
+          filterCampaigns.includes(c.campaign_name) && c.forms.some(cf => cf.form_id === f.form_id)
         );
       })
       .sort((a, b) => (b.leads_count ?? 0) - (a.leads_count ?? 0));
-  }, [formsQ.data, pageFormsQ.data, search, filterForm, filterCampaign]);
+  }, [formsQ.data, pageFormsQ.data, search, filterForm, filterCampaigns]);
 
   const pendingLeads = uniqueForms.reduce((a, f) => a + (f.leads_count ?? 0), 0);
 
@@ -452,22 +504,26 @@ export default function KampaniyalarPage() {
         </div>
       </div>
 
-      {/* ── Inline filter panel (Sdelka-style) ──────────────────────────────── */}
+      {/* ── Filter panel ─────────────────────────────────────────────────────── */}
       {(() => {
-        const hasExtra = !!(filterCampaign || filterPlatform || filterForm || filterAdset || filterCreative);
+        const hasExtra = !!(filterCampaigns.length || filterPlatforms.length || filterForm || filterAdset || filterCreatives.length);
         const selStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 };
+        const clearAll = () => { setFilterCampaigns([]); setFilterPlatforms([]); setFilterForm(""); setFilterAdset(""); setFilterCreatives([]); };
         return (
           <div style={{ background: "var(--bg2)", borderBottom: "1px solid var(--border)", overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
             <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
               onClick={() => setFilterOpen(o => !o)}>
-              <Search size={14} style={{ color: "var(--text3)" }} />
+              <Filter size={13} style={{ color: hasExtra ? "#3b82f6" : "var(--text3)", flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, color: "var(--text3)", flex: 1 }}>
-                {`Filtr: ${fromDate} → ${toDate}${hasExtra ? " · qo'shimcha filtrlar" : ""}`}
+                {`Filtr: ${fromDate} → ${toDate}${hasExtra ? " · filtr faol" : ""}`}
               </span>
               {hasExtra && (
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#3b82f6", color: "#fff" }}>filtr</span>
+                <button onClick={e => { e.stopPropagation(); clearAll(); }}
+                  style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", cursor: "pointer" }}>
+                  <X size={11} /> Tozalash
+                </button>
               )}
-              <ChevronDown size={14} style={{ color: "var(--text3)", transform: filterOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+              <ChevronDown size={14} style={{ color: "var(--text3)", transform: filterOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
             </div>
 
             {filterOpen && (
@@ -498,24 +554,15 @@ export default function KampaniyalarPage() {
                   </div>
                 </div>
 
-                {/* Dropdown filters */}
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: hasExtra ? 10 : 0 }}>
+                {/* Multi-select filters row 1 */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                  <MultiSelect label="Kampaniya" options={optCampaigns} values={filterCampaigns}
+                    onChange={v => { setFilterCampaigns(v); setFilterPlatforms([]); setFilterAdset(""); setFilterForm(""); }} />
+                  <MultiSelect label="Platforma" options={optPlatforms.map(p => p === "facebook" ? "Facebook" : "Instagram")}
+                    values={filterPlatforms.map(p => p === "facebook" ? "Facebook" : "Instagram")}
+                    onChange={v => setFilterPlatforms(v.map(p => p === "Facebook" ? "facebook" : "instagram"))} />
                   <div style={{ flex: "1 1 180px", minWidth: 160 }}>
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Kampaniya</div>
-                    <select value={filterCampaign} onChange={e => { setFilterCampaign(e.target.value); setFilterPlatform(""); setFilterAdset(""); setFilterForm(""); }} style={selStyle}>
-                      <option value="">Barchasi</option>
-                      {optCampaigns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ flex: "1 1 140px", minWidth: 120 }}>
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Platforma</div>
-                    <select value={filterPlatform} onChange={e => { setFilterPlatform(e.target.value); setFilterAdset(""); }} style={selStyle}>
-                      <option value="">Barchasi</option>
-                      {optPlatforms.map(p => <option key={p} value={p}>{p === "facebook" ? "Facebook" : "Instagram"}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ flex: "1 1 180px", minWidth: 160 }}>
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Formalar</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Forma</div>
                     <select value={filterForm} onChange={e => setFilterForm(e.target.value)} style={selStyle}>
                       <option value="">Barchasi</option>
                       {optForms.map(f => <option key={f} value={f}>{f}</option>)}
@@ -528,21 +575,20 @@ export default function KampaniyalarPage() {
                       {optAdsets.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
-                  {tab === "creative" && (
-                    <div style={{ flex: "1 1 180px", minWidth: 160 }}>
-                      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Creative</div>
-                      <select value={filterCreative} onChange={e => setFilterCreative(e.target.value)} style={selStyle}>
-                        <option value="">Barchasi</option>
-                        {optCreatives.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  )}
+                </div>
+
+                {/* Creative filter — always visible */}
+                <div style={{ display: "flex", gap: 12 }}>
+                  <MultiSelect label="Creative nomi" options={optCreatives} values={filterCreatives} onChange={setFilterCreatives} />
+                  <div style={{ flex: "2 1 0" }} />
                 </div>
 
                 {hasExtra && (
-                  <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
-                    <button onClick={() => { setFilterCampaign(""); setFilterPlatform(""); setFilterForm(""); setFilterAdset(""); setFilterCreative(""); }}
-                      style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
+                  <div style={{ paddingTop: 12, marginTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={clearAll}
+                      style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      <X size={12} /> Barcha filtrlarni tozalash
+                    </button>
                   </div>
                 )}
               </div>
@@ -868,9 +914,9 @@ export default function KampaniyalarPage() {
               {tab === "creative" && (() => {
                 const creatives = creativesQ.data?.creatives ?? [];
                 const filtered = creatives
-                  .filter(r => !filterCampaign  || r.campaign_name === filterCampaign)
-                  .filter(r => !filterAdset     || r.adset_name    === filterAdset)
-                  .filter(r => !filterCreative  || r.ad_name       === filterCreative);
+                  .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
+                  .filter(r => !filterAdset    || r.adset_name === filterAdset)
+                  .filter(r => filterCreatives.length === 0  || filterCreatives.includes(r.ad_name ?? ""));
 
                 const agg = (rows: typeof filtered) => ({
                   spend:              rows.reduce((a, r) => a + r.spend, 0),
