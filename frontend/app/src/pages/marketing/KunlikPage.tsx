@@ -73,12 +73,34 @@ function varPct(fakt: number, plan: number | undefined): number | null {
   return Math.round((fakt / plan) * 100);
 }
 
+const LS_HIDDEN_KEY = "kunlik_hidden_metrics";
+
 export default function KunlikPage() {
   const [month,   setMonth]   = useState<MonthKey>(DEFAULT_MONTH);
   const [year,    setYear]    = useState(DEFAULT_YEAR);
   const [active,  setActive]  = useState<string>("target");
   const [showModal, setShowModal] = useState(false);
+  const [hiddenMetrics, setHiddenMetrics] = useState<Set<MetricKey>>(() => {
+    try {
+      const s = localStorage.getItem(LS_HIDDEN_KEY);
+      return new Set(s ? JSON.parse(s) : []);
+    } catch { return new Set(); }
+  });
   const qc = useQueryClient();
+
+  const hideMetric = useCallback((key: MetricKey) => {
+    setHiddenMetrics(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      localStorage.setItem(LS_HIDDEN_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const restoreMetrics = useCallback(() => {
+    setHiddenMetrics(new Set());
+    localStorage.removeItem(LS_HIDDEN_KEY);
+  }, []);
 
   const todayDay  = now.getDate();
   const days      = daysInMonth(month, year);
@@ -249,11 +271,14 @@ export default function KunlikPage() {
           <ChartCardSkeleton height={520} />
         ) : (
           <div className="bg-bg2 border border-border rounded-xl shadow overflow-hidden">
-            <div className="px-5 py-4 border-b border-border">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div className="text-[16px] font-bold text-text">Targeted Ads Metrics</div>
-              <div className="text-[11.5px] text-text3 mt-0.5">
-                Byudjet — Meta Ads · Qolganlar — Bitrix24 CRM · Bugun ustun ko'k bilan ajratilgan
-              </div>
+              {hiddenMetrics.size > 0 && (
+                <button onClick={restoreMetrics}
+                  className="text-[11px] text-text3 hover:text-text border border-border rounded px-2 py-1 transition-colors">
+                  Metrikalarni tiklash ({hiddenMetrics.size})
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -285,7 +310,7 @@ export default function KunlikPage() {
                     <SectionRows
                       key={sec.key}
                       section={sec}
-                      metrics={METRICS}
+                      metrics={METRICS.filter(m => !hiddenMetrics.has(m.key))}
                       days={days}
                       isCurrent={isCurrent}
                       todayDay={todayDay}
@@ -306,6 +331,7 @@ export default function KunlikPage() {
                         void qc.invalidateQueries({ queryKey: ["kunlik-sections"] });
                         setActive("target");
                       } : undefined}
+                      onHideMetric={hideMetric}
                     />
                   ))}
                 </tbody>
@@ -484,20 +510,21 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
 
 function SectionRows({
   section, metrics, days, isCurrent, todayDay, plans, overrides,
-  cellValue, faktTotal, onPlanSave, onCellSave, onDelete,
+  cellValue, faktTotal, onPlanSave, onCellSave, onDelete, onHideMetric,
 }: {
-  section:    { key: Section; label: string; color: string; isCustom?: boolean };
-  metrics:    MetricDef[];
-  days:       number;
-  isCurrent:  boolean;
-  todayDay:   number;
-  plans:      Partial<Record<string, number>>;
-  overrides:  Partial<Record<string, Record<number, number>>>;
-  cellValue:  (m: MetricDef, i: number) => number;
-  onDelete?:  () => Promise<void>;
-  faktTotal:  (m: MetricDef) => number;
-  onPlanSave: (key: string, val: number) => Promise<void>;
-  onCellSave: (key: string, day: number, val: number | null) => Promise<void>;
+  section:       { key: Section; label: string; color: string; isCustom?: boolean };
+  metrics:       MetricDef[];
+  days:          number;
+  isCurrent:     boolean;
+  todayDay:      number;
+  plans:         Partial<Record<string, number>>;
+  overrides:     Partial<Record<string, Record<number, number>>>;
+  cellValue:     (m: MetricDef, i: number) => number;
+  onDelete?:     () => Promise<void>;
+  faktTotal:     (m: MetricDef) => number;
+  onPlanSave:    (key: string, val: number) => Promise<void>;
+  onCellSave:    (key: string, day: number, val: number | null) => Promise<void>;
+  onHideMetric?: (key: MetricKey) => void;
 }) {
   const totalCols = days + 4; // name + reja + fakt + var%
   return (
@@ -533,6 +560,7 @@ function SectionRows({
           cellValue={cellValue}
           onPlanSave={(val) => onPlanSave(metric.key, val)}
           onCellSave={(day, val) => onCellSave(metric.key, day, val)}
+          onHide={onHideMetric ? () => onHideMetric(metric.key) : undefined}
         />
       ))}
     </>
@@ -542,7 +570,7 @@ function SectionRows({
 function MetricRow({
   metric, days, isCurrent, todayDay,
   planValue, faktValue, overrides, cellValue,
-  onPlanSave, onCellSave,
+  onPlanSave, onCellSave, onHide,
 }: {
   metric:      MetricDef;
   days:        number;
@@ -554,6 +582,7 @@ function MetricRow({
   cellValue:   (m: MetricDef, i: number) => number;
   onPlanSave:  (val: number) => Promise<void>;
   onCellSave:  (day: number, val: number | null) => Promise<void>;
+  onHide?:     () => void;
 }) {
   const [editingPlan, setEditingPlan] = useState(false);
   const [planDraft,   setPlanDraft]   = useState("");
@@ -607,11 +636,21 @@ function MetricRow({
   const hasFakt = faktValue > 0;
 
   return (
-    <tr className="border-b border-border last:border-b-0 hover:bg-bg3/30 transition-colors">
+    <tr className="group border-b border-border last:border-b-0 hover:bg-bg3/30 transition-colors">
 
       {/* Metric name */}
       <td className="px-4 py-2 sticky left-0 bg-bg2 z-[1] border-r border-border whitespace-nowrap font-medium text-[12.5px]">
-        {metric.label}
+        <div className="flex items-center justify-between gap-2">
+          <span>{metric.label}</span>
+          {onHide && (
+            <button
+              onClick={onHide}
+              title="Yashirish"
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-text3 hover:text-red-400 shrink-0">
+              <X size={11} />
+            </button>
+          )}
+        </div>
       </td>
 
       {/* Oylik reja */}
