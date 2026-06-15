@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, Pencil, X, ChevronDown } from 'lucide-react';
+import { Search, Plus, Trash2, Scale, CheckCircle2, BarChart3, Pencil, X } from 'lucide-react';
 import { Topbar } from '@/components/Topbar';
 import {
   getRejaPlans, updateRejaPlan, deleteRejaPlan, createRejaPlan,
@@ -13,138 +13,6 @@ import {
   type RejaPlan, type RejaEmployee,
 } from '@/lib/api/reja';
 
-// ── To'lov data (from to'lov.csv, Bitrix CRM type 1042) ──────────
-type TolovEntry = { id: number; sum: string; date: string };
-const TOLOV_DATA: Record<string, TolovEntry[]> = {
-  "Samandar Samadov": [
-    { id: 110, sum: "6 300 000 UZS", date: "09.06.2026" },
-    { id: 66,  sum: "$900.00",       date: "05.06.2026" },
-    { id: 64,  sum: "$83.00",        date: "05.06.2026" },
-    { id: 62,  sum: "$3,913.00",     date: "08.06.2026" },
-    { id: 60,  sum: "$3,913.00",     date: "08.06.2026" },
-  ],
-  "Shahzod Yormamatov": [
-    { id: 132, sum: "$1,000.00",  date: "12.06.2026" },
-    { id: 130, sum: "$583.00",    date: "11.06.2026" },
-    { id: 128, sum: "$2,300.00",  date: "11.06.2026" },
-    { id: 104, sum: "$250.00",    date: "09.06.2026" },
-    { id: 102, sum: "$159.00",    date: "08.06.2026" },
-    { id: 100, sum: "$1,600.00",  date: "09.06.2026" },
-    { id: 98,  sum: "$3,400.00",  date: "08.06.2026" },
-    { id: 96,  sum: "$1,358.00",  date: "06.06.2026" },
-    { id: 94,  sum: "$833.00",    date: "08.06.2026" },
-    { id: 92,  sum: "$3,081.00",  date: "05.06.2026" },
-    { id: 90,  sum: "$3,312.00",  date: "05.06.2026" },
-    { id: 88,  sum: "$100.00",    date: "04.06.2026" },
-    { id: 86,  sum: "$500.00",    date: "08.06.2026" },
-    { id: 84,  sum: "$500.00",    date: "01.06.2026" },
-    { id: 82,  sum: "$1,306.00",  date: "03.06.2026" },
-    { id: 80,  sum: "$1,200.00",  date: "01.06.2026" },
-    { id: 74,  sum: "$300.00",    date: "09.06.2026" },
-    { id: 72,  sum: "$500.00",    date: "04.06.2026" },
-    { id: 68,  sum: "$4,266.00",  date: "01.06.2026" },
-  ],
-  "Davlatyor": [
-    { id: 136, sum: "$3,500.00",        date: "21.05.2026" },
-    { id: 126, sum: "14 000 000 UZS",   date: "10.06.2026" },
-    { id: 58,  sum: "5 000 000 UZS",    date: "06.06.2026" },
-    { id: 48,  sum: "233 UZS",          date: "05.06.2026" },
-    { id: 46,  sum: "$333.00",          date: "01.06.2026" },
-  ],
-  "Muhriddin Atoullayev": [
-    { id: 134, sum: "$1,000.00",       date: "12.06.2026" },
-    { id: 124, sum: "1 500 000 UZS",   date: "10.06.2026" },
-    { id: 122, sum: "5 000 000 UZS",   date: "10.06.2026" },
-    { id: 120, sum: "1 500 000 UZS",   date: "10.06.2026" },
-    { id: 118, sum: "$2,404.00",       date: "10.06.2026" },
-    { id: 114, sum: "$1,000.00",       date: "07.05.2026" },
-    { id: 112, sum: "$800.00",         date: "09.06.2026" },
-    { id: 106, sum: "$140.00",         date: "08.06.2026" },
-  ],
-  "Shaxzod Turanov": [
-    { id: 138, sum: "$2,190.00", date: "12.06.2026" },
-    { id: 78,  sum: "$317.00",   date: "02.06.2026" },
-  ],
-  "Temurmalik Xoshimjonov": [
-    { id: 116, sum: "$100.00", date: "08.06.2026" },
-  ],
-};
-const TOLOV_BASE = "https://mountain.bitrix24.kz/crm/type/1042/details/";
-
-function getTolovEntries(fullName: string): TolovEntry[] {
-  for (const [key, entries] of Object.entries(TOLOV_DATA)) {
-    if (fullName.toLowerCase().includes(key.toLowerCase().split(' ')[0].toLowerCase()))
-      return entries;
-  }
-  return [];
-}
-
-function TolovDropdown({ fullName }: { fullName: string }) {
-  const entries = getTolovEntries(fullName);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-
-  if (!entries.length) return null;
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block', marginTop: 5 }}>
-      <button
-        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          fontSize: 10, fontWeight: 600, color: '#2563eb',
-          background: 'rgba(37,99,235,0.1)', border: '1px solid rgba(37,99,235,0.25)',
-          borderRadius: 4, padding: '2px 7px', cursor: 'pointer',
-        }}
-      >
-        {entries.length} ta to'lov
-        <ChevronDown size={10} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, zIndex: 200, marginTop: 4,
-          background: 'var(--bg2)', border: '1px solid var(--border)',
-          borderRadius: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-          minWidth: 220, overflow: 'hidden',
-        }}>
-          {entries.map((t, i) => (
-            <a
-              key={t.id}
-              href={`${TOLOV_BASE}${t.id}/`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '7px 12px', textDecoration: 'none',
-                borderBottom: i < entries.length - 1 ? '1px solid var(--border)' : 'none',
-                background: 'transparent',
-                gap: 12,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap' }}>
-                To'lov #{t.id}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{t.date}</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap' }}>{t.sum}</span>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -578,7 +446,6 @@ function DistributionView({ planId, onDeleted }: { planId: number; onDeleted: ()
                       ? <span style={{ color: '#16a34a' }}>{emp.deal_count} ta sotuv</span>
                       : '0 ta sotuv'}
                   </div>
-                  <TolovDropdown fullName={emp.full_name} />
                 </div>
               </div>
 
