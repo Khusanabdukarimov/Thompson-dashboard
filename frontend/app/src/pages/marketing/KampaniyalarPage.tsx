@@ -325,23 +325,9 @@ export default function KampaniyalarPage() {
   const isFiltered = !!(filterCampaign || filterPlatform || filterAdset || filterForm);
 
   const totalSpend  = rows.reduce((a, r) => a + r.spend,       0);
-  const totalLeads  = rows.reduce((a, r) => a + r.leads,       0);
   const totalClicks = rows.reduce((a, r) => a + r.clicks,      0);
   const totalImpr   = rows.reduce((a, r) => a + r.impressions, 0);
   const avgCPC      = totalClicks > 0 ? totalSpend / totalClicks : 0;
-  const avgCPL      = totalLeads  > 0 ? totalSpend / totalLeads  : 0;
-
-  // ── Bitrix CRM cross-channel metrics ────────────────────────────────────────
-  const kData = kunlikQ.data?.data;
-  const totalDeals = kData
-    ? sumArr(kData.target.sales_count) + sumArr(kData.instagram.sales_count)
-    : 0;
-  const totalQualLids = kData
-    ? sumArr(kData.target.qual_leads) + sumArr(kData.instagram.qual_leads)
-    : 0;
-
-  const maqsadliLidNarxi = totalQualLids > 0 ? totalSpend / totalQualLids : 0;
-  const mijozNarxi       = totalDeals    > 0 ? totalSpend / totalDeals    : 0;
 
   // ── leaderboard ─────────────────────────────────────────────────────────────
   const leaderboard = useMemo(() => {
@@ -436,6 +422,18 @@ export default function KampaniyalarPage() {
     }
     return m;
   }, [formsQ.data]);
+
+  // ── form-lead-based KPIs (all derived from facebook_leads DB, not Meta Ads) ──
+  const totalSifatliFromForms = useMemo(() => {
+    let sum = 0;
+    for (const v of sifatliFormMap.values()) sum += v;
+    return sum;
+  }, [sifatliFormMap]);
+
+  const totalSotuvFromCreatives = useMemo(
+    () => (creativesQ.data?.creatives ?? []).reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
+    [creativesQ.data],
+  );
 
   async function refresh() {
     setRefreshing(true);
@@ -579,9 +577,9 @@ export default function KampaniyalarPage() {
           {(isLoading || kunlikQ.isLoading) ? Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           )) : ([
-            { label: "JAMI LIDLAR",    value: fmtNum(totalLeads),    sub: "Meta formalar",       color: "text-text"  },
-            { label: "SIFATLI LIDLAR", value: fmtNum(totalQualLids), sub: "Bitrix24 sifatlilar", color: "text-green" },
-            { label: "SOTUV",          value: fmtNum(totalDeals),    sub: "Yutilgan sdelkalar",  color: "text-blue"  },
+            { label: "JAMI LIDLAR",    value: fmtNum(pendingLeads),              sub: "Forma lidlari",            color: "text-text"  },
+            { label: "SIFATLI LIDLAR", value: fmtNum(totalSifatliFromForms),     sub: "Forma sifatlilar",         color: "text-green" },
+            { label: "SOTUV",          value: fmtNum(totalSotuvFromCreatives),   sub: "Forma lidlaridan sotuvlar", color: "text-blue"  },
           ]).map(c => (
             <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
               <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
@@ -598,9 +596,9 @@ export default function KampaniyalarPage() {
           {isLoading ? Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           )) : ([
-            { label: "JAMI SARF",         value: `$${fmtNum(Math.round(totalSpend))}`,                            sub: "Meta Ads sarfi",           formula: null,                                                                color: "text-text"  },
-            { label: "SIFATLI LID NARXI", value: maqsadliLidNarxi > 0 ? `$${maqsadliLidNarxi.toFixed(2)}` : "—", sub: "Byudjet ÷ Sifatli lidlar", formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${fmtNum(totalQualLids)}`,  color: "text-blue"  },
-            { label: "MIJOZ NARXI",       value: mijozNarxi > 0 ? `$${mijozNarxi.toFixed(2)}` : "—",              sub: "Byudjet ÷ Sotuvlar soni",  formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${totalDeals}`,               color: "text-amber" },
+            { label: "JAMI SARF",         value: `$${fmtNum(Math.round(totalSpend))}`,                                                                                      sub: "Meta Ads sarfi",           formula: null,                                                                                   color: "text-text"  },
+            { label: "SIFATLI LID NARXI", value: totalSifatliFromForms > 0 ? `$${(totalSpend / totalSifatliFromForms).toFixed(2)}` : "—",                         sub: "Byudjet ÷ Sifatli lidlar", formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${fmtNum(totalSifatliFromForms)}`,      color: "text-blue"  },
+            { label: "MIJOZ NARXI",       value: totalSotuvFromCreatives > 0 ? `$${(totalSpend / totalSotuvFromCreatives).toFixed(2)}` : "—",                      sub: "Byudjet ÷ Sotuvlar soni",  formula: `$${fmtNum(Math.round(totalSpend))} ÷ ${totalSotuvFromCreatives}`,               color: "text-amber" },
           ]).map(c => (
             <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
               <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
@@ -618,9 +616,9 @@ export default function KampaniyalarPage() {
           {isLoading ? Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           )) : ([
-            { label: "IMPRESSIYALAR",     value: fmtNum(totalImpr),                               sub: "Jami ko'rishlar", color: "text-text" },
-            { label: "CLICK NARXI (CPC)", value: `$${avgCPC.toFixed(2)}`,                         sub: "Cost per click",  color: "text-text" },
-            { label: "LEAD NARXI (CPL)",  value: totalLeads > 0 ? `$${avgCPL.toFixed(2)}` : "—", sub: "Cost per lead",   color: "text-text" },
+            { label: "IMPRESSIYALAR",     value: fmtNum(totalImpr),                                                            sub: "Jami ko'rishlar", color: "text-text" },
+            { label: "CLICK NARXI (CPC)", value: `$${avgCPC.toFixed(2)}`,                                                       sub: "Cost per click",  color: "text-text" },
+            { label: "LEAD NARXI (CPL)",  value: pendingLeads > 0 ? `$${(totalSpend / pendingLeads).toFixed(2)}` : "—",          sub: "Cost per lead",   color: "text-text" },
           ]).map(c => (
             <div key={c.label} className="bg-bg2 border border-border rounded-xl p-4">
               <div className="text-[10px] font-bold text-text3 tracking-wider mb-2">{c.label}</div>
