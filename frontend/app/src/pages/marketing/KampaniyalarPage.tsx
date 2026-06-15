@@ -324,10 +324,15 @@ export default function KampaniyalarPage() {
   const isFiltered = !!(filterCampaign || filterPlatform || filterAdset || filterForm);
 
   const totalSpend  = rows.reduce((a, r) => a + r.spend,       0);
-  const totalLeads  = rows.reduce((a, r) => a + r.leads,       0);
   const totalClicks = rows.reduce((a, r) => a + r.clicks,      0);
   const totalImpr   = rows.reduce((a, r) => a + r.impressions, 0);
   const avgCPC      = totalClicks > 0 ? totalSpend / totalClicks : 0;
+
+  // JAMI LIDLAR: use facebook_leads table count (actual form submissions)
+  const creativeRows = creativesQ.data?.creatives ?? [];
+  const filteredCreatives = creativeRows
+    .filter(r => !filterCampaign || r.campaign_name === filterCampaign);
+  const totalLeads  = filteredCreatives.reduce((a, r) => a + r.meta_leads, 0);
   const avgCPL      = totalLeads  > 0 ? totalSpend / totalLeads  : 0;
 
   // ── Bitrix CRM cross-channel metrics ────────────────────────────────────────
@@ -357,10 +362,21 @@ export default function KampaniyalarPage() {
       .slice(0, 3);
   }, [rows]);
 
-  // ── campaign rows ────────────────────────────────────────────────────────────
+  // ── active campaign names (from formsQ — campaigns with active forms) ────────
+  const activeCampNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const camp of formsQ.data?.campaigns ?? []) {
+      if (camp.forms.some(f => f.status === "ACTIVE")) names.add(camp.campaign_name);
+    }
+    return names;
+  }, [formsQ.data]);
+
+  // ── campaign rows (active only) ───────────────────────────────────────────────
   const campRows = useMemo(() => {
     const map = new Map<string, { name: string; plat: string; spend: number; clicks: number; leads: number; impr: number }>();
     for (const r of rows) {
+      // skip campaigns not in active set (when formsQ data is loaded)
+      if (activeCampNames.size > 0 && !activeCampNames.has(r.campaign_name)) continue;
       const k = `${r.campaign_name}:${r.platform}`;
       const c = map.get(k) ?? { name: r.campaign_name, plat: r.platform, spend: 0, clicks: 0, leads: 0, impr: 0 };
       c.spend += r.spend; c.clicks += r.clicks; c.leads += r.leads; c.impr += r.impressions;
@@ -369,7 +385,7 @@ export default function KampaniyalarPage() {
     return [...map.values()]
       .filter(r => !search || r.name.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => b.spend - a.spend);
-  }, [rows, search]);
+  }, [rows, search, activeCampNames]);
 
   // ── deduplicated unique forms (ACTIVE only) with real leads_count ───────────
   const uniqueForms = useMemo<PageForm[]>(() => {
