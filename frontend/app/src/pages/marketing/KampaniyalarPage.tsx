@@ -681,8 +681,8 @@ export default function KampaniyalarPage() {
             ))}
           </div>
 
-          {/* 2-column layout */}
-          <div className="grid grid-cols-[1fr_320px] gap-4 mt-4">
+          {/* Content */}
+          <div className="mt-4">
 
             {/* LEFT: content table */}
             <div className="bg-bg2 border border-border rounded-xl overflow-hidden">
@@ -1053,8 +1053,8 @@ export default function KampaniyalarPage() {
               })()}
             </div>
 
-            {/* RIGHT: dark leaderboard */}
-            <div className="rounded-xl overflow-hidden flex flex-col" style={{ background: "#0d1b2a" }}>
+            {/* RIGHT: dark leaderboard — REMOVED */}
+            {false && <div className="rounded-xl overflow-hidden flex flex-col" style={{ background: "#0d1b2a" }}>
               <div className="px-4 py-4 border-b border-white/10">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-green/20 flex items-center justify-center shrink-0">
@@ -1131,7 +1131,7 @@ export default function KampaniyalarPage() {
                   })()}
                 </div>
               </div>
-            </div>
+            </div>}
           </div>
         </div>
       </div>
