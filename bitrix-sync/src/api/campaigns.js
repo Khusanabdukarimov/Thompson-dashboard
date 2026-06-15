@@ -1275,15 +1275,21 @@ async function syncCreativeNames() {
     let synced = 0;
 
     for (const { ad_id } of adRows) {
+      // Throttle: 600ms between calls to avoid Meta rate limits
+      await new Promise(r => setTimeout(r, 600));
       try {
-        // Step 1: get creative ID + account from the ad
+        // Single call: nested creative fields saves one round-trip per ad
         const adRes = await axios.get(`${BASE}/${ad_id}`, {
-          params: { fields: 'creative,account_id', access_token: tok }, timeout: 8000
+          params: {
+            fields: 'account_id,creative{id,name,effective_object_story_id,object_story_id,video_id}',
+            access_token: tok,
+          },
+          timeout: 10000,
         });
         const accountId  = adRes.data?.account_id || null;
-        const creativeId = adRes.data?.creative?.id || null;
+        const cr         = adRes.data?.creative || null;
+        const creativeId = cr?.id || null;
         if (!creativeId) {
-          // Mark attempted so we don't hammer it
           await pool.query(
             `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
              ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
@@ -1291,17 +1297,11 @@ async function syncCreativeNames() {
           continue;
         }
 
-        // Step 2: get creative details
-        const crRes = await axios.get(`${BASE}/${creativeId}`, {
-          params: { fields: 'name,effective_object_story_id,object_story_id,video_id', access_token: tok }, timeout: 8000
-        });
-        const cr = crRes.data;
-
-        // Step 3: build post URL — prefer effective_object_story_id (includes page reposts)
+        // Build post URL — prefer effective_object_story_id (includes page reposts)
         const storyId = cr.effective_object_story_id || cr.object_story_id || '';
         let postUrl   = buildPostUrl(storyId);
 
-        // Step 4: video fallback
+        // Video fallback
         let videoTitle = null;
         if (cr.video_id) {
           try {
@@ -1360,12 +1360,16 @@ async function resyncMissingPostUrls() {
   } catch (_) {}
 }
 
-// Sync creative names: on startup after 15s, then every 15 minutes
+// Sync creative names: on startup after 30s, then every 15 minutes
+// resyncMissingPostUrls resets stale entries so they get re-fetched each cycle
 setTimeout(async () => {
   await resyncMissingPostUrls();
   syncCreativeNames().catch(() => {});
-}, 15_000);
-setInterval(() => syncCreativeNames().catch(() => {}), 15 * 60_000);
+}, 30_000);
+setInterval(async () => {
+  await resyncMissingPostUrls();
+  syncCreativeNames().catch(() => {});
+}, 15 * 60_000);
 
 console.log('[meta_ad_daily] 1-min (today) + 30-min (30 days) sync scheduled');
 
