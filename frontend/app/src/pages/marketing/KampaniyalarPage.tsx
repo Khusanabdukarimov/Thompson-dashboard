@@ -14,9 +14,6 @@ import { fmtNum } from "@/lib/utils";
 
 
 
-// ── helpers ────────────────────────────────────────────────────────────────────
-function sumArr(arr: number[]) { return arr.reduce((a, b) => a + b, 0); }
-
 type Tab = "kampaniyalar" | "formalar" | "lidlar" | "creative";
 
 // ── Creative leads sub-table ──────────────────────────────────────────────────
@@ -350,22 +347,6 @@ export default function KampaniyalarPage() {
     const names = activeCampNamesQ.data?.campaigns ?? [];
     return new Set(names);
   }, [activeCampNamesQ.data]);
-
-  // ── campaign rows (active only) ───────────────────────────────────────────────
-  const campRows = useMemo(() => {
-    const map = new Map<string, { name: string; plat: string; spend: number; clicks: number; leads: number; impr: number }>();
-    for (const r of rows) {
-      // skip campaigns not active (when active names are loaded)
-      if (activeCampNames.size > 0 && !activeCampNames.has(r.campaign_name)) continue;
-      const k = `${r.campaign_name}:${r.platform}`;
-      const c = map.get(k) ?? { name: r.campaign_name, plat: r.platform, spend: 0, clicks: 0, leads: 0, impr: 0 };
-      c.spend += r.spend; c.clicks += r.clicks; c.leads += r.leads; c.impr += r.impressions;
-      map.set(k, c);
-    }
-    return [...map.values()]
-      .filter(r => !search || r.name.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) => b.spend - a.spend);
-  }, [rows, search, activeCampNames]);
 
   // ── deduplicated unique forms (ACTIVE only) with real leads_count ───────────
   const uniqueForms = useMemo<PageForm[]>(() => {
