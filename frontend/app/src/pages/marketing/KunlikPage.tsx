@@ -248,17 +248,36 @@ export default function KunlikPage() {
         {/* Toggle */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
           {allSections.map(sec => (
-            <button key={sec.key}
-              onClick={() => setActive(sec.key)}
-              className={cn(
-                "px-4 py-1.5 rounded-lg text-[12.5px] font-semibold border transition-all",
-                active === sec.key
-                  ? "border-transparent text-white"
-                  : "bg-bg2 border-border text-text2 hover:bg-bg3",
+            <div key={sec.key} className="relative group/tab flex items-center">
+              <button
+                onClick={() => setActive(sec.key)}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-[12.5px] font-semibold border transition-all",
+                  active === sec.key
+                    ? "border-transparent text-white"
+                    : "bg-bg2 border-border text-text2 hover:bg-bg3",
+                  sec.isCustom && "pr-7",
+                )}
+                style={active === sec.key ? { background: sec.color, borderColor: sec.color } : {}}>
+                {sec.label}
+              </button>
+              {sec.isCustom && sec.customId != null && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    await deleteKunlikSection(sec.customId!);
+                    void qc.invalidateQueries({ queryKey: ["kunlik-sections"] });
+                    if (active === sec.key) setActive("target");
+                  }}
+                  className={cn(
+                    "absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/tab:opacity-100 transition-opacity",
+                    active === sec.key ? "text-white/70 hover:text-white" : "text-text3 hover:text-red-400",
+                  )}
+                  title="O'chirish">
+                  <X size={11} />
+                </button>
               )}
-              style={active === sec.key ? { background: sec.color, borderColor: sec.color } : {}}>
-              {sec.label}
-            </button>
+            </div>
           ))}
           <button
             onClick={() => setShowModal(true)}
