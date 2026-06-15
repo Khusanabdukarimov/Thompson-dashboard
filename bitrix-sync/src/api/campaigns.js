@@ -1265,7 +1265,6 @@ async function syncCreativeNames() {
         AND ad_id NOT IN (
           SELECT ad_id FROM meta_creative_cache
           WHERE synced_at > NOW() - INTERVAL '1 hour'
-            AND creative_id IS NOT NULL
         )
       LIMIT 30
     `);
@@ -1336,11 +1335,14 @@ async function syncCreativeNames() {
         `, [ad_id, creativeId, cr.name || null, cr.video_id || null, videoTitle, postUrl, adsManagerUrl]);
         synced++;
       } catch (e) {
-        console.error(`[creative-cache] ad ${ad_id}:`, e.response?.data?.error?.message || e.message);
+        const msg = e.response?.data?.error?.message || e.message || '';
+        console.error(`[creative-cache] ad ${ad_id}:`, msg);
         await pool.query(
           `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
            ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
         ).catch(() => {});
+        // Abort entire batch on rate limit — avoid burning remaining quota
+        if (msg.includes('too many calls') || msg.includes('rate limit')) break;
       }
     }
     if (synced) console.log(`[creative-cache] synced ${synced}/${adRows.length} ad creatives`);
