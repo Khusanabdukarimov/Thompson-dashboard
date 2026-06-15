@@ -178,15 +178,17 @@ router.get('/kunlik', async (req, res) => {
     }
 
     // ── 4. Sales metrics: by uf_bp_sale_date (actual payment date) ──
-    //    Platform determined by utm_source (facebook/fb → target, instagram/ig → instagram)
-    //    sales_count = deals WHERE uf_bp_sale_date IS NOT NULL, grouped by payment day
-    //    sales_sum   = sum of uf_paid_sum for those deals
+    //    Filter by FB/IG source_ids. UC_O9BLGT → target unless utm_source = ig/instagram
+    //    (meaning the target ad ran on instagram placement → goes to instagram section).
+    //    UC_3O8GTF + UC_89FPH6 always → instagram.
     const salesRes = await pool.query(`
       SELECT
         EXTRACT(DAY FROM d.uf_bp_sale_date AT TIME ZONE 'Asia/Tashkent')::int AS day,
         CASE
-          WHEN LOWER(TRIM(d.utm_source)) IN ('facebook','fb') THEN 'target'
-          WHEN LOWER(TRIM(d.utm_source)) IN ('instagram','ig') THEN 'instagram'
+          WHEN d.source_id = 'UC_O9BLGT'
+            AND LOWER(TRIM(d.utm_source)) IN ('instagram','ig') THEN 'instagram'
+          WHEN d.source_id = 'UC_O9BLGT' THEN 'target'
+          WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
           ELSE NULL
         END AS src,
         COUNT(*)::int AS cnt,
@@ -195,7 +197,7 @@ router.get('/kunlik', async (req, res) => {
       WHERE d.uf_bp_sale_date IS NOT NULL
         AND d.uf_bp_sale_date >= $1
         AND d.uf_bp_sale_date <= $2
-        AND LOWER(TRIM(d.utm_source)) IN ('facebook','fb','instagram','ig')
+        AND d.source_id IN ('UC_O9BLGT','UC_3O8GTF','UC_89FPH6')
       GROUP BY day, src
     `, [since, until]);
 
