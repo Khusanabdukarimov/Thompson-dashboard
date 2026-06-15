@@ -914,7 +914,7 @@ router.get('/creatives', async (req, res) => {
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_F8K4GI'                                   THEN fl.id END)::int AS sifatsiz,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_NAZK5J'                                   THEN fl.id END)::int AS bekor_boldi,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'CONVERTED'                                   THEN fl.id END)::int AS konsultatsiya_otdi,
-        COUNT(DISTINCT CASE WHEN ds.bitrix_id = ANY(ARRAY['UC_NV0Y4F','WON','C1:WON'])
+        COUNT(DISTINCT CASE WHEN ds.is_won = true
           AND d.uf_bp_sale_date >= $3::date AND d.uf_bp_sale_date <= $4::date        THEN fl.id END)::int AS sotuv_boldi,
         COUNT(DISTINCT CASE WHEN lp.lead_id IS NOT NULL AND s.id IS NULL               THEN fl.id END)::int AS stage_unknown
       FROM facebook_leads fl
@@ -1020,7 +1020,7 @@ router.get('/creative-deals', async (req, res) => {
         ON RIGHT(REGEXP_REPLACE(dp.phone, '[^0-9]', '', 'g'), 9)
          = RIGHT(REGEXP_REPLACE(fl.phone, '[^0-9]', '', 'g'), 9)
       JOIN deals  d  ON d.id = dp.deal_id
-      JOIN stages ds ON ds.id = d.stage_id AND ds.bitrix_id = ANY(ARRAY['UC_NV0Y4F','WON','C1:WON'])
+      JOIN stages ds ON ds.id = d.stage_id AND ds.is_won = true
       LEFT JOIN stages s ON s.id = d.stage_id
       LEFT JOIN responsibles r ON r.id = d.responsible_id
       WHERE fl.created_time >= $1::date
