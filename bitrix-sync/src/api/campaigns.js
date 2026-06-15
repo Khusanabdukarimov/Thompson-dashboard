@@ -962,7 +962,7 @@ router.get('/creatives', async (req, res) => {
       campaign_name: r.campaign_name,
       ad_id:         r.ad_id || null,
       ad_name:       displayName,
-      post_url:      cr.ads_manager_url || cr.post_url || null,
+      post_url:      cr.post_url || cr.ads_manager_url || null,
       spend:         spendMap[r.adset_name] ?? 0,
       meta_leads:    r.meta_leads,
       in_bitrix:     r.in_bitrix,
