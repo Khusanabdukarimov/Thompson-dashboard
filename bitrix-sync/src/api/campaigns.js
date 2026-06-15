@@ -259,6 +259,38 @@ router.get('/active-names', async (req, res) => {
   }
 });
 
+// GET /api/campaigns/form-stats?from=2026-06-01&to=2026-06-15
+router.get('/form-stats', async (req, res) => {
+  const from = req.query.from || null;
+  const to   = req.query.to   || null;
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        fl.campaign_name,
+        COUNT(DISTINCT fl.id)::int                                                                                        AS jami_lid,
+        COUNT(DISTINCT CASE WHEN le.id IS NOT NULL THEN fl.id END)::int                                                  AS bitrixda_bor,
+        COUNT(DISTINCT CASE WHEN le.id IS NULL THEN fl.id END)::int                                                      AS bitrixda_yoq,
+        COUNT(DISTINCT CASE WHEN le.id IS NOT NULL AND s.bitrix_id NOT IN ('JUNK','UC_F8K4GI','UC_NAZK5J') THEN fl.id END)::int AS sifatli,
+        COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_F8K4GI' THEN fl.id END)::int                                         AS sifatsiz,
+        COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_NAZK5J' THEN fl.id END)::int                                         AS bekor_boldi,
+        COUNT(DISTINCT CASE WHEN s.is_won = true OR s.bitrix_id IN ('UC_NV0Y4F','WON','C1:WON') THEN fl.id END)::int    AS sotuv_boldi
+      FROM facebook_leads fl
+      LEFT JOIN lead_phones lp ON RIGHT(REGEXP_REPLACE(lp.phone,'[^0-9]','','g'),9) = RIGHT(REGEXP_REPLACE(fl.phone,'[^0-9]','','g'),9)
+      LEFT JOIN leads le ON le.id = lp.lead_id
+      LEFT JOIN stages s  ON s.id  = le.stage_id
+      WHERE fl.campaign_name IS NOT NULL
+        ${from ? `AND fl.created_time >= $1` : ''}
+        ${to   ? `AND fl.created_time <  ${ from ? '$2' : '$1' }::date + interval '1 day'` : ''}
+      GROUP BY fl.campaign_name
+      ORDER BY jami_lid DESC
+    `, [from, to].filter(Boolean));
+    res.json({ rows });
+  } catch (err) {
+    console.error('[campaigns/form-stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/campaigns/rows?month=may&year=2026[&from=2026-06-01&to=2026-06-11]
 router.get('/rows', async (req, res) => {
   const month    = (req.query.month || '').toLowerCase();

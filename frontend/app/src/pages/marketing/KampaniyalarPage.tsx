@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/Skeleton";
 import {
   getMetaInsights, getMetaCampaigns, getCampaignForms, getFormLeads,
   getPageForms, getKunlikHisobot, getCampaignCreatives, getCreativeLeads, getCreativeDeals,
-  getActiveCampaignNames, MONTH_KEYS,
+  getActiveCampaignNames, getCampaignFormStats, MONTH_KEYS,
 } from "@/lib/api/meta";
 import type { MonthKey, PageForm } from "@/lib/api/meta";
 import { fmtNum } from "@/lib/utils";
@@ -274,6 +274,7 @@ export default function KampaniyalarPage() {
   const kunlikQ          = useQuery({ queryKey: ["kunlik-hisobot",  month, year],                   queryFn: () => getKunlikHisobot(month, year),                                      staleTime: 60_000, refetchInterval: AUTO_REFRESH });
   const creativesQ       = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate),                staleTime: 30_000, refetchInterval: AUTO_REFRESH });
   const activeCampNamesQ = useQuery({ queryKey: ["active-campaign-names"],                          queryFn: getActiveCampaignNames,                                                   staleTime: 5 * 60_000 });
+  const formStatsQ       = useQuery({ queryKey: ["campaign-form-stats", fromDate, toDate],          queryFn: () => getCampaignFormStats(fromDate, toDate),                             staleTime: 60_000, refetchInterval: AUTO_REFRESH });
 
   const allRows = campaignsQ.data?.rows ?? [];
 
@@ -774,44 +775,87 @@ export default function KampaniyalarPage() {
               )}
 
               {/* ── Kampaniyalar tab ── */}
-              {tab === "kampaniyalar" && (
-                <table className="w-full text-[12.5px]">
-                  <thead>
-                    <tr className="bg-bg3 border-b border-border">
-                      {["#", "KAMPANIYA", "PLATFORMA", "SARF", "KLIKLAR", "LIDLAR", "CPL"].map(h => (
-                        <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campaignsQ.isLoading ? (
-                      Array.from({ length: 5 }).map((_, i) => (
-                        <tr key={i} className="border-b border-border">
-                          {Array.from({ length: 7 }).map((__, j) => (
-                            <td key={j} className="px-4 py-3"><Skeleton className="h-3.5 w-16" /></td>
-                          ))}
-                        </tr>
-                      ))
-                    ) : campRows.map((r, i) => (
-                      <tr key={`${r.name}:${r.plat}`} className="border-b border-border hover:bg-bg3/50">
-                        <td className="px-4 py-3 text-text3 font-mono text-[11px]">{String(i + 1).padStart(2, "0")}</td>
-                        <td className="px-4 py-3 font-medium text-text max-w-[200px] truncate" title={r.name}>{r.name}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            r.plat === "facebook" ? "bg-blue/10 text-blue" : "bg-[#e91e8c]/10 text-[#e91e8c]"
-                          }`}>
-                            {r.plat === "facebook" ? "FB" : "IG"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-text">${Math.round(r.spend)}</td>
-                        <td className="px-4 py-3 text-text2">{fmtNum(r.clicks)}</td>
-                        <td className="px-4 py-3 font-semibold text-blue">{r.leads}</td>
-                        <td className="px-4 py-3 text-text2">{r.leads > 0 ? `$${(r.spend / r.leads).toFixed(2)}` : "—"}</td>
+              {tab === "kampaniyalar" && (() => {
+                // merge Meta Ads spend/clicks with form-lead stats per campaign
+                const spendMap = new Map<string, { spend: number; clicks: number }>();
+                for (const r of rows) {
+                  const cur = spendMap.get(r.campaign_name) ?? { spend: 0, clicks: 0 };
+                  cur.spend  += r.spend;
+                  cur.clicks += r.clicks;
+                  spendMap.set(r.campaign_name, cur);
+                }
+                const fsRows = (formStatsQ.data?.rows ?? [])
+                  .filter(r => activeCampNames.size === 0 || activeCampNames.has(r.campaign_name))
+                  .filter(r => !search || r.campaign_name.toLowerCase().includes(search.toLowerCase()));
+
+                const totals = fsRows.reduce(
+                  (a, r) => ({ jami: a.jami + r.jami_lid, sifatli: a.sifatli + r.sifatli, sifatsiz: a.sifatsiz + r.sifatsiz, bekor: a.bekor + r.bekor_boldi, sotuv: a.sotuv + r.sotuv_boldi, spend: a.spend + (spendMap.get(r.campaign_name)?.spend ?? 0) }),
+                  { jami: 0, sifatli: 0, sifatsiz: 0, bekor: 0, sotuv: 0, spend: 0 },
+                );
+
+                return (
+                  <table className="w-full text-[12.5px]">
+                    <thead>
+                      <tr className="bg-bg3 border-b border-border">
+                        {["#", "KAMPANIYA", "SARF", "JAMI LID", "SIFATLI", "SIFATSIZ", "BEKOR", "SOTUV", "SIFAT %"].map(h => (
+                          <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold text-text3 tracking-wider">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody>
+                      {(campaignsQ.isLoading || formStatsQ.isLoading) ? (
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <tr key={i} className="border-b border-border">
+                            {Array.from({ length: 9 }).map((__, j) => (
+                              <td key={j} className="px-4 py-3"><Skeleton className="h-3.5 w-16" /></td>
+                            ))}
+                          </tr>
+                        ))
+                      ) : fsRows.length === 0 ? (
+                        <tr><td colSpan={9} className="px-4 py-10 text-center text-text3">Ma'lumot topilmadi</td></tr>
+                      ) : fsRows.map((r, i) => {
+                        const meta = spendMap.get(r.campaign_name);
+                        const sifatPct = r.jami_lid > 0 ? Math.round((r.sifatli / r.jami_lid) * 100) : 0;
+                        const sifatColor = sifatPct >= 50 ? "#22c55e" : sifatPct >= 30 ? "#f59e0b" : "#ef4444";
+                        return (
+                          <tr key={r.campaign_name} className="border-b border-border hover:bg-bg3/50">
+                            <td className="px-4 py-3 text-text3 font-mono text-[11px]">{String(i + 1).padStart(2, "0")}</td>
+                            <td className="px-4 py-3 font-medium text-text max-w-[220px] truncate" title={r.campaign_name}>{r.campaign_name}</td>
+                            <td className="px-4 py-3 font-semibold text-text">{meta ? `$${Math.round(meta.spend)}` : "—"}</td>
+                            <td className="px-4 py-3 font-bold text-blue">{r.jami_lid}</td>
+                            <td className="px-4 py-3 font-semibold text-green">{r.sifatli}</td>
+                            <td className="px-4 py-3 text-red/80">{r.sifatsiz || "—"}</td>
+                            <td className="px-4 py-3 text-amber">{r.bekor_boldi || "—"}</td>
+                            <td className="px-4 py-3 font-bold" style={{ color: r.sotuv_boldi > 0 ? "#22c55e" : "var(--text3)" }}>{r.sotuv_boldi || "—"}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-12 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${sifatPct}%`, background: sifatColor }} />
+                                </div>
+                                <span className="text-[11px] font-semibold" style={{ color: sifatColor }}>{sifatPct}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {fsRows.length > 0 && (
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-bg3/50">
+                          <td className="px-4 py-2.5 text-[11px] font-bold text-text" colSpan={2}>JAMI</td>
+                          <td className="px-4 py-2.5 font-bold text-text">${Math.round(totals.spend)}</td>
+                          <td className="px-4 py-2.5 font-bold text-blue">{totals.jami}</td>
+                          <td className="px-4 py-2.5 font-bold text-green">{totals.sifatli}</td>
+                          <td className="px-4 py-2.5 text-red/80">{totals.sifatsiz}</td>
+                          <td className="px-4 py-2.5 text-amber">{totals.bekor}</td>
+                          <td className="px-4 py-2.5 font-bold" style={{ color: "#22c55e" }}>{totals.sotuv}</td>
+                          <td className="px-4 py-2.5" />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                );
+              })()}
 
               {/* ── Lidlar tab ── */}
               {tab === "lidlar" && (

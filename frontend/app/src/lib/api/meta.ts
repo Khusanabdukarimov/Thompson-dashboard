@@ -303,6 +303,24 @@ export function getActiveCampaignNames() {
   return apiGet<{ campaigns: string[] }>('/api/campaigns/active-names', {});
 }
 
+export type CampaignFormStat = {
+  campaign_name: string;
+  jami_lid:      number;
+  bitrixda_bor:  number;
+  bitrixda_yoq:  number;
+  sifatli:       number;
+  sifatsiz:      number;
+  bekor_boldi:   number;
+  sotuv_boldi:   number;
+};
+
+export function getCampaignFormStats(from?: string, to?: string) {
+  return apiGet<{ rows: CampaignFormStat[] }>('/api/campaigns/form-stats', {
+    ...(from ? { from } : {}),
+    ...(to   ? { to }   : {}),
+  });
+}
+
 export function getCreativeLeads(adset_name: string, month: MonthKey, year: number, from?: string, to?: string) {
   return apiGet<{ adset_name: string; leads: CreativeLead[] }>(
     '/api/campaigns/creative-leads',
