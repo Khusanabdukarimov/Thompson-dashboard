@@ -94,12 +94,57 @@ export function getKunlikHisobot(month: MonthKey, year: number) {
 
 export type KunlikMeta = {
   month: string; year: number;
-  plans:     { target: Partial<Record<string, number>>; instagram: Partial<Record<string, number>> };
-  overrides: { target: Partial<Record<string, Record<number, number>>>; instagram: Partial<Record<string, Record<number, number>>> };
+  plans:     Record<string, Partial<Record<string, number>>>;
+  overrides: Record<string, Partial<Record<string, Record<number, number>>>>;
+};
+
+export type KunlikCustomSection = {
+  id: number;
+  title: string;
+  uf_field: string;
+  uf_field_deal: string;
+  source_names: string[];
+  color: string;
+};
+
+export type KunlikSegmentResponse = {
+  month: string;
+  year: number;
+  section_id: number;
+  data: {
+    leads: number[];
+    qual_leads: number[];
+    meetings: number[];
+    deals: number[];
+    deals_sum: number[];
+    sales_count: number[];
+    sales_sum: number[];
+    cancelled: number[];
+  };
 };
 
 export function getKunlikMeta(month: MonthKey, year: number) {
   return apiGet<KunlikMeta>('/api/marketing/kunlik-meta', { month, year });
+}
+
+export function getKunlikSections() {
+  return apiGet<{ sections: KunlikCustomSection[] }>('/api/marketing/kunlik-sections', {});
+}
+
+export function createKunlikSection(body: Omit<KunlikCustomSection, 'id'>) {
+  return authedFetch('/api/marketing/kunlik-sections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteKunlikSection(id: number) {
+  return authedFetch(`/api/marketing/kunlik-sections/${id}`, { method: 'DELETE' });
+}
+
+export function getKunlikSegment(section_id: number, month: MonthKey, year: number) {
+  return apiGet<KunlikSegmentResponse>('/api/marketing/kunlik-segment', { section_id, month, year });
 }
 
 export function saveKunlikPlan(section: string, metric_key: string, month: MonthKey, year: number, value: number) {

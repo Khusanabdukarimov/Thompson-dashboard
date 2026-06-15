@@ -205,6 +205,22 @@ class Tarif(SQLModel, table=True):
 # payroll_approvals — finalized/approved monthly payroll per employee
 # ────────────────────────────────────────────────────────────────────
 # ────────────────────────────────────────────────────────────────────
+# kunlik_custom_sections — user-defined metric sections by CRM field
+# ────────────────────────────────────────────────────────────────────
+class KunlikCustomSection(SQLModel, table=True):
+    __tablename__ = "kunlik_custom_sections"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    uf_field: str = Field(default="UF_CRM_1775824803703")       # leads UF field ID
+    uf_field_deal: str = Field(default="UF_CRM_69D8F71700936")  # deals UF field ID
+    source_names: List[Any] = Field(default_factory=list, sa_column=Column(JSON))  # filter values
+    color: str = Field(default="#6366f1")
+    sort_order: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ────────────────────────────────────────────────────────────────────
 # kunlik_plans — monthly plan targets per section/metric
 # ────────────────────────────────────────────────────────────────────
 class KunlikPlan(SQLModel, table=True):

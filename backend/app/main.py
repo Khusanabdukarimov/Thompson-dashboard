@@ -20,6 +20,7 @@ BACKEND_DIR = APP_DIR.parent                       # backend/
 load_dotenv(BACKEND_DIR / ".env")
 
 from datetime import date
+from typing import List
 
 from app.api.routes import payroll as payroll_routes
 from app.api.routes import call_stats as call_stats_routes
@@ -850,16 +851,18 @@ def api_marketing_kunlik_meta(month: str, year: int):
 
     plans: dict = {"target": {}, "instagram": {}}
     for row in plans_rows:
-        if row.section in plans:
-            plans[row.section][row.metric_key] = row.value
+        if row.section not in plans:
+            plans[row.section] = {}
+        plans[row.section][row.metric_key] = row.value
 
     overrides: dict = {"target": {}, "instagram": {}}
     for row in override_rows:
-        if row.section in overrides:
-            sec = overrides[row.section]
-            if row.metric_key not in sec:
-                sec[row.metric_key] = {}
-            sec[row.metric_key][row.day] = row.value
+        if row.section not in overrides:
+            overrides[row.section] = {}
+        sec = overrides[row.section]
+        if row.metric_key not in sec:
+            sec[row.metric_key] = {}
+        sec[row.metric_key][row.day] = row.value
 
     return {"plans": plans, "overrides": overrides}
 
@@ -936,6 +939,166 @@ def api_marketing_kunlik_override(body: KunlikOverrideBody):
                 ))
         s.commit()
     return {"ok": True}
+
+
+# ── Custom metric sections ──────────────────────────────────────────
+
+# Map Bitrix24 UF field ID → leads/deals DB column name
+_UF_LEAD_COL = {"UF_CRM_1775824803703": "uf_service"}
+_UF_DEAL_COL = {"UF_CRM_69D8F71700936": "uf_service"}
+
+
+@app.get("/api/marketing/kunlik-sections")
+def list_kunlik_sections():
+    from app.models import KunlikCustomSection
+    with _Session(_db_engine) as s:
+        rows = s.exec(sql_select(KunlikCustomSection).order_by(KunlikCustomSection.sort_order, KunlikCustomSection.id)).all()
+    return {"sections": [
+        {"id": r.id, "title": r.title, "uf_field": r.uf_field, "uf_field_deal": r.uf_field_deal,
+         "source_names": r.source_names, "color": r.color}
+        for r in rows
+    ]}
+
+
+class KunlikSectionBody(BaseModel):
+    title: str
+    uf_field: str = "UF_CRM_1775824803703"
+    uf_field_deal: str = "UF_CRM_69D8F71700936"
+    source_names: List[str] = []
+    color: str = "#6366f1"
+
+
+@app.post("/api/marketing/kunlik-sections")
+def create_kunlik_section(body: KunlikSectionBody):
+    from app.models import KunlikCustomSection
+    with _Session(_db_engine) as s:
+        sec = KunlikCustomSection(
+            title=body.title,
+            uf_field=body.uf_field,
+            uf_field_deal=body.uf_field_deal,
+            source_names=body.source_names,
+            color=body.color,
+        )
+        s.add(sec)
+        s.commit()
+        s.refresh(sec)
+        return {"id": sec.id, "title": sec.title, "uf_field": sec.uf_field,
+                "uf_field_deal": sec.uf_field_deal, "source_names": sec.source_names, "color": sec.color}
+
+
+@app.delete("/api/marketing/kunlik-sections/{section_id}")
+def delete_kunlik_section(section_id: int):
+    from app.models import KunlikCustomSection
+    with _Session(_db_engine) as s:
+        sec = s.get(KunlikCustomSection, section_id)
+        if not sec:
+            raise HTTPException(status_code=404, detail="Section not found")
+        s.delete(sec)
+        s.commit()
+    return {"ok": True}
+
+
+@app.get("/api/marketing/kunlik-segment")
+def api_marketing_kunlik_segment(section_id: int, month: str, year: int):
+    """Return per-day metrics for a custom section filtered by uf_service values."""
+    from app.models import KunlikCustomSection
+    from app.db_bx import bx_engine as _bxe
+    from sqlalchemy import text as _text
+
+    with _Session(_db_engine) as s:
+        sec = s.get(KunlikCustomSection, section_id)
+    if not sec:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+    source_names: list = sec.source_names or []
+    lead_col = _UF_LEAD_COL.get(sec.uf_field)
+    deal_col = _UF_DEAL_COL.get(sec.uf_field_deal)
+
+    month_key = month.lower()
+    month_num = meta_svc.MONTH_NAMES.get(month_key)
+    if not month_num:
+        raise HTTPException(status_code=400, detail=f"Unknown month: {month}")
+
+    days_in_month = _calendar.monthrange(year, month_num)[1]
+    since = f"{year}-{month_num:02d}-01"
+    until = f"{year}-{month_num:02d}-{days_in_month:02d}"
+
+    _METRICS = ["leads", "qual_leads", "meetings", "deals", "deals_sum", "sales_count", "sales_sum", "cancelled"]
+    result = {m: [0.0] * days_in_month for m in _METRICS}
+
+    _QUAL_STAGES = {"IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68", "CONVERTED"}
+    _CANCEL_STAGES = {"UC_NAZK5J", "JUNK"}
+
+    with _bxe.connect() as conn:
+        # ── Lead metrics ───────────────────────────────────────────
+        if lead_col and source_names:
+            lead_sql = _text(f"""
+                SELECT
+                    EXTRACT(DAY FROM l.date_create)::int AS day,
+                    s.bitrix_id AS stage_bid,
+                    COUNT(*) AS cnt
+                FROM leads l
+                JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
+                WHERE l.date_create::date BETWEEN :since AND :until
+                  AND l.{lead_col} = ANY(:names)
+                GROUP BY 1, 2
+            """)
+            for day, stage_bid, cnt in conn.execute(lead_sql, {"since": since, "until": until, "names": source_names}):
+                if day < 1 or day > days_in_month:
+                    continue
+                idx = int(day) - 1
+                result["leads"][idx] += int(cnt)
+                if stage_bid in _QUAL_STAGES:
+                    result["qual_leads"][idx] += int(cnt)
+                if stage_bid in _CANCEL_STAGES:
+                    result["cancelled"][idx] += int(cnt)
+
+        # ── Deal metrics: meetings + kelishuv (by date_create) ────
+        if deal_col and source_names:
+            deal_sql = _text(f"""
+                SELECT
+                    EXTRACT(DAY FROM d.date_create)::int AS day,
+                    s.bitrix_id AS stage_bid,
+                    COALESCE(d.opportunity, 0) AS opp
+                FROM deals d
+                JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
+                WHERE d.date_create::date BETWEEN :since AND :until
+                  AND d.{deal_col} = ANY(:names)
+            """)
+            for day, stage_bid, opp in conn.execute(deal_sql, {"since": since, "until": until, "names": source_names}):
+                if day < 1 or day > days_in_month:
+                    continue
+                idx = int(day) - 1
+                if stage_bid == "NEW":
+                    result["meetings"][idx] += 1
+                if stage_bid == "UC_W35V62":
+                    result["deals"][idx] += 1
+                    result["deals_sum"][idx] += float(opp)
+
+        # ── Sales metrics by actual sale date ─────────────────────
+        if deal_col and source_names:
+            sales_sql = _text(f"""
+                SELECT
+                    EXTRACT(DAY FROM COALESCE(d.uf_bp_sale_date, d.uf_payment_date))::int AS day,
+                    COALESCE(d.uf_paid_sum, 0) AS paid
+                FROM deals d
+                WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+                  AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date) IS NOT NULL
+                  AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN :since AND :until
+                  AND d.{deal_col} = ANY(:names)
+            """)
+            for day, paid in conn.execute(sales_sql, {"since": since, "until": until, "names": source_names}):
+                if day < 1 or day > days_in_month:
+                    continue
+                idx = int(day) - 1
+                result["sales_count"][idx] += 1
+                result["sales_sum"][idx] += float(paid)
+
+    int_keys = {"leads", "qual_leads", "meetings", "deals", "sales_count", "cancelled"}
+    for k in int_keys:
+        result[k] = [int(v) for v in result[k]]
+
+    return {"month": month, "year": year, "section_id": section_id, "data": result}
 
 
 @app.api_route("/api/v1/tolov", methods=["GET", "POST"])

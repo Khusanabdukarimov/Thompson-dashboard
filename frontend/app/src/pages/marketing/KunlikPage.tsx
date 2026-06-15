@@ -1,21 +1,28 @@
-import { useMemo, useState, useRef, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
+import { X, Plus, Trash2 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
 import { ChartCardSkeleton } from "@/components/Skeleton";
 import {
   getMetaInsights, getKunlikHisobot, getKunlikMeta,
   saveKunlikPlan, saveKunlikOverride,
+  getKunlikSections, createKunlikSection, deleteKunlikSection, getKunlikSegment,
   MONTH_KEYS, MONTH_LABELS,
 } from "@/lib/api/meta";
-import type { MonthKey } from "@/lib/api/meta";
+import type { MonthKey, KunlikCustomSection } from "@/lib/api/meta";
 import { fmtNum, fmtMoney, fmtPct, cn } from "@/lib/utils";
 
 const now           = new Date();
 const DEFAULT_MONTH = MONTH_KEYS[now.getMonth()];
 const DEFAULT_YEAR  = now.getFullYear();
 
-type Section = "target" | "instagram";
+type Section = string;
+
+const CUSTOM_COLORS = ["#6366f1", "#0891b2", "#059669", "#d97706", "#dc2626", "#7c3aed", "#be185d"];
+const UF_FIELD_LABELS: Record<string, string> = {
+  "UF_CRM_1775824803703": "Xizmat turi",
+};
 
 type MetricKey =
   | "budget" | "leads" | "qual_leads" | "meetings"
@@ -71,20 +78,36 @@ function varPct(fakt: number, plan: number | undefined): number | null {
 export default function KunlikPage() {
   const [month,   setMonth]   = useState<MonthKey>(DEFAULT_MONTH);
   const [year,    setYear]    = useState(DEFAULT_YEAR);
-  const [active,  setActive]  = useState<"all" | Section>("target");
+  const [active,  setActive]  = useState<string>("target");
+  const [showModal, setShowModal] = useState(false);
   const qc = useQueryClient();
 
   const todayDay  = now.getDate();
   const days      = daysInMonth(month, year);
   const isCurrent = isCurrentMonth(month, year);
 
-  const qMeta = useQuery({ queryKey: ["meta/insights",       month, year], queryFn: () => getMetaInsights(month, year) });
-  const qCrm  = useQuery({ queryKey: ["marketing/kunlik",    month, year], queryFn: () => getKunlikHisobot(month, year) });
-  const qPlan = useQuery({ queryKey: ["marketing/kunlik-meta", month, year], queryFn: () => getKunlikMeta(month, year) });
+  const qMeta     = useQuery({ queryKey: ["meta/insights",       month, year], queryFn: () => getMetaInsights(month, year) });
+  const qCrm      = useQuery({ queryKey: ["marketing/kunlik",    month, year], queryFn: () => getKunlikHisobot(month, year) });
+  const qPlan     = useQuery({ queryKey: ["marketing/kunlik-meta", month, year], queryFn: () => getKunlikMeta(month, year) });
+  const qSections = useQuery({ queryKey: ["kunlik-sections"], queryFn: getKunlikSections, staleTime: Infinity });
+
+  const customSections: KunlikCustomSection[] = qSections.data?.sections ?? [];
+
+  const customSegmentQueries = useQueries({
+    queries: customSections.map(sec => ({
+      queryKey: ["kunlik-segment", sec.id, month, year],
+      queryFn:  () => getKunlikSegment(sec.id, month, year),
+      staleTime: 30_000,
+    })),
+  });
 
   const autoData = useMemo(() => {
     const empty = () => Array(days).fill(0) as number[];
-    const build = (src: Section) => {
+    type DataMap = {
+      budget: number[]; leads: number[]; qual_leads: number[]; meetings: number[];
+      deals: number[]; deals_sum: number[]; sales_count: number[]; sales_sum: number[]; cancelled: number[];
+    };
+    const build = (src: "target" | "instagram"): DataMap => {
       const meta = qMeta.data?.data?.[src];
       const crm  = qCrm.data?.data?.[src];
       return {
@@ -99,14 +122,36 @@ export default function KunlikPage() {
         cancelled:   (crm?.cancelled   ?? empty()) as number[],
       };
     };
-    return { target: build("target"), instagram: build("instagram") };
-  }, [qMeta.data, qCrm.data, days]);
+    const buildCustom = (d: ReturnType<typeof getKunlikSegment> extends Promise<{ data: infer D }> ? D : never): DataMap => ({
+      budget:      empty(),
+      leads:       ((d as { leads?: number[] })?.leads       ?? empty()) as number[],
+      qual_leads:  ((d as { qual_leads?: number[] })?.qual_leads  ?? empty()) as number[],
+      meetings:    ((d as { meetings?: number[] })?.meetings    ?? empty()) as number[],
+      deals:       ((d as { deals?: number[] })?.deals       ?? empty()) as number[],
+      deals_sum:   ((d as { deals_sum?: number[] })?.deals_sum   ?? empty()) as number[],
+      sales_count: ((d as { sales_count?: number[] })?.sales_count ?? empty()) as number[],
+      sales_sum:   ((d as { sales_sum?: number[] })?.sales_sum   ?? empty()) as number[],
+      cancelled:   ((d as { cancelled?: number[] })?.cancelled   ?? empty()) as number[],
+    });
+    const result: Record<string, DataMap> = {
+      target:    build("target"),
+      instagram: build("instagram"),
+    };
+    customSections.forEach((sec, idx) => {
+      const d = customSegmentQueries[idx]?.data?.data;
+      result[String(sec.id)] = d ? buildCustom(d as never) : {
+        budget: empty(), leads: empty(), qual_leads: empty(), meetings: empty(),
+        deals: empty(), deals_sum: empty(), sales_count: empty(), sales_sum: empty(), cancelled: empty(),
+      };
+    });
+    return result;
+  }, [qMeta.data, qCrm.data, days, customSections, customSegmentQueries]);
 
-  const plans    = qPlan.data?.plans    ?? { target: {}, instagram: {} };
-  const overrides = qPlan.data?.overrides ?? { target: {}, instagram: {} };
+  const plans    = (qPlan.data?.plans    ?? {}) as Record<string, Partial<Record<string, number>>>;
+  const overrides = (qPlan.data?.overrides ?? {}) as Record<string, Partial<Record<string, Record<number, number>>>>;
 
   function cellValue(src: Section, metric: MetricDef, i: number): number {
-    const b  = autoData[src];
+    const b  = autoData[src] ?? { budget: [], leads: [], qual_leads: [], meetings: [], deals: [], deals_sum: [], sales_count: [], sales_sum: [], cancelled: [] };
     const ov = overrides[src]?.[metric.key];
     const day = i + 1;
     if (!metric.computed && ov?.[day] !== undefined) return ov[day];
@@ -130,8 +175,8 @@ export default function KunlikPage() {
     return 0;
   }
 
-  function faktTotal(src: Section, metric: MetricDef): number {
-    const b = autoData[src];
+  function faktTotal(src: string, metric: MetricDef): number {
+    const b = autoData[src] ?? { budget: [], leads: [], qual_leads: [], meetings: [], deals: [], deals_sum: [], sales_count: [], sales_sum: [], cancelled: [] };
     switch (metric.key) {
       case "roas":
         { const s = b.sales_sum.reduce((a,v)=>a+v,0), bg = b.budget.reduce((a,v)=>a+v,0);
@@ -147,7 +192,13 @@ export default function KunlikPage() {
     }
   }
 
-  const visibleSections = SECTIONS.filter(s => active === "all" || s.key === active);
+  const allSections: { key: string; label: string; color: string; isCustom?: boolean; customId?: number }[] = [
+    ...SECTIONS.map(s => ({ ...s, isCustom: false })),
+    ...customSections.map((cs, idx) => ({
+      key: String(cs.id), label: cs.title, color: cs.color || CUSTOM_COLORS[idx % CUSTOM_COLORS.length], isCustom: true, customId: cs.id,
+    })),
+  ];
+  const visibleSections = allSections.filter(s => active === "all" || s.key === active);
   const isLoading = (qMeta.isLoading && !qMeta.data) || (qCrm.isLoading && !qCrm.data);
   const yearOptions = [DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2];
 
@@ -175,21 +226,25 @@ export default function KunlikPage() {
 
       <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         {/* Toggle */}
-        <div className="flex items-center gap-2 mb-4">
-          {([
-            { id: "target",    label: "Facebook" },
-            { id: "instagram", label: "Instagram"      },
-          ] as { id: "all" | Section; label: string }[]).map(opt => (
-            <button key={opt.id} onClick={() => setActive(opt.id)}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          {allSections.map(sec => (
+            <button key={sec.key}
+              onClick={() => setActive(sec.key)}
               className={cn(
                 "px-4 py-1.5 rounded-lg text-[12.5px] font-semibold border transition-all",
-                active === opt.id
-                  ? "bg-blue border-blue text-white"
+                active === sec.key
+                  ? "border-transparent text-white"
                   : "bg-bg2 border-border text-text2 hover:bg-bg3",
-              )}>
-              {opt.label}
+              )}
+              style={active === sec.key ? { background: sec.color, borderColor: sec.color } : {}}>
+              {sec.label}
             </button>
           ))}
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold border border-dashed border-border text-text3 hover:bg-bg3 transition-all">
+            <Plus size={13} /> Qo'shish
+          </button>
         </div>
 
         {isLoading ? (
@@ -236,8 +291,8 @@ export default function KunlikPage() {
                       days={days}
                       isCurrent={isCurrent}
                       todayDay={todayDay}
-                      plans={plans[sec.key]}
-                      overrides={overrides[sec.key]}
+                      plans={plans[sec.key] ?? {}}
+                      overrides={overrides[sec.key] ?? {}}
                       cellValue={(m, i) => cellValue(sec.key, m, i)}
                       faktTotal={(m) => faktTotal(sec.key, m)}
                       onPlanSave={async (key, val) => {
@@ -248,6 +303,11 @@ export default function KunlikPage() {
                         await saveKunlikOverride(sec.key, key, month, year, day, val);
                         void qc.invalidateQueries({ queryKey: ["marketing/kunlik-meta", month, year] });
                       }}
+                      onDelete={sec.isCustom && sec.customId != null ? async () => {
+                        await deleteKunlikSection(sec.customId!);
+                        void qc.invalidateQueries({ queryKey: ["kunlik-sections"] });
+                        setActive("target");
+                      } : undefined}
                     />
                   ))}
                 </tbody>
@@ -256,15 +316,149 @@ export default function KunlikPage() {
           </div>
         )}
       </div>
+      {showModal && (
+        <CreateSectionModal
+          onClose={() => setShowModal(false)}
+          onCreated={() => {
+            void qc.invalidateQueries({ queryKey: ["kunlik-sections"] });
+            setShowModal(false);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [title,       setTitle]       = useState("");
+  const [ufField,     setUfField]     = useState("UF_CRM_1775824803703");
+  const [ufFieldDeal, setUfFieldDeal] = useState("UF_CRM_69D8F71700936");
+  const [names,       setNames]       = useState<string[]>([""]);
+  const [color,       setColor]       = useState(CUSTOM_COLORS[0]);
+  const [saving,      setSaving]      = useState(false);
+
+  useEffect(() => {
+    if (ufField === "UF_CRM_1775824803703") setUfFieldDeal("UF_CRM_69D8F71700936");
+  }, [ufField]);
+
+  const addName = () => setNames(n => [...n, ""]);
+  const removeName = (i: number) => setNames(n => n.filter((_, j) => j !== i));
+  const setName = (i: number, v: string) => setNames(n => n.map((x, j) => j === i ? v : x));
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    await createKunlikSection({
+      title: title.trim(),
+      uf_field: ufField,
+      uf_field_deal: ufFieldDeal,
+      source_names: names.map(n => n.trim()).filter(Boolean),
+      color,
+    });
+    onCreated();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[420px] max-w-[95vw] p-5"
+           onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[14px] font-bold text-text">Yangi bo'lim qo'shish</div>
+          <button onClick={onClose} className="text-text3 hover:text-text"><X size={16} /></button>
+        </div>
+
+        <div className="space-y-3 text-[12.5px]">
+          {/* Title */}
+          <div>
+            <label className="block text-text3 mb-1">Sarlavha</label>
+            <input
+              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text outline-none focus:border-blue"
+              placeholder="Masalan: Til kurslari"
+              value={title} onChange={e => setTitle(e.target.value)}
+            />
+          </div>
+
+          {/* UF field */}
+          <div>
+            <label className="block text-text3 mb-1">Bitrix24 maydon (lidlar)</label>
+            <input
+              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text font-mono outline-none focus:border-blue"
+              value={ufField} onChange={e => setUfField(e.target.value)}
+            />
+            {UF_FIELD_LABELS[ufField] && (
+              <div className="text-text3 text-[11px] mt-0.5">→ {UF_FIELD_LABELS[ufField]}</div>
+            )}
+          </div>
+
+          {/* UF field deal */}
+          <div>
+            <label className="block text-text3 mb-1">Bitrix24 maydon (kelishuvlar)</label>
+            <input
+              className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text font-mono outline-none focus:border-blue"
+              value={ufFieldDeal} onChange={e => setUfFieldDeal(e.target.value)}
+            />
+          </div>
+
+          {/* Source names */}
+          <div>
+            <label className="block text-text3 mb-1">
+              Qiymatlar ({UF_FIELD_LABELS[ufField] ?? ufField})
+            </label>
+            <div className="space-y-1.5">
+              {names.map((n, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input
+                    className="flex-1 bg-bg3 border border-border rounded px-3 py-1.5 text-text outline-none focus:border-blue"
+                    placeholder={`Qiymat ${i + 1}`}
+                    value={n} onChange={e => setName(i, e.target.value)}
+                  />
+                  {names.length > 1 && (
+                    <button onClick={() => removeName(i)} className="text-text3 hover:text-red-400">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button onClick={addName}
+                className="text-blue text-[11.5px] hover:underline flex items-center gap-1">
+                <Plus size={11} /> Qiymat qo'shish
+              </button>
+            </div>
+          </div>
+
+          {/* Color */}
+          <div>
+            <label className="block text-text3 mb-1.5">Rang</label>
+            <div className="flex gap-2">
+              {CUSTOM_COLORS.map(c => (
+                <button key={c} onClick={() => setColor(c)}
+                  className={cn("w-6 h-6 rounded-full border-2 transition-all", color === c ? "border-white scale-110" : "border-transparent")}
+                  style={{ background: c }} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-5 justify-end">
+          <button onClick={onClose}
+            className="px-4 py-1.5 rounded-lg border border-border text-text2 text-[12.5px] hover:bg-bg3">
+            Bekor
+          </button>
+          <button onClick={() => void handleSubmit()} disabled={saving || !title.trim()}
+            className="px-4 py-1.5 rounded-lg bg-blue text-white text-[12.5px] font-semibold disabled:opacity-50">
+            {saving ? "Saqlanmoqda…" : "Qo'shish"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function SectionRows({
   section, metrics, days, isCurrent, todayDay, plans, overrides,
-  cellValue, faktTotal, onPlanSave, onCellSave,
+  cellValue, faktTotal, onPlanSave, onCellSave, onDelete,
 }: {
-  section:    { key: Section; label: string; color: string };
+  section:    { key: Section; label: string; color: string; isCustom?: boolean };
   metrics:    MetricDef[];
   days:       number;
   isCurrent:  boolean;
@@ -272,6 +466,7 @@ function SectionRows({
   plans:      Partial<Record<string, number>>;
   overrides:  Partial<Record<string, Record<number, number>>>;
   cellValue:  (m: MetricDef, i: number) => number;
+  onDelete?:  () => Promise<void>;
   faktTotal:  (m: MetricDef) => number;
   onPlanSave: (key: string, val: number) => Promise<void>;
   onCellSave: (key: string, day: number, val: number | null) => Promise<void>;
@@ -284,7 +479,16 @@ function SectionRows({
         <td colSpan={totalCols}
           className="px-4 py-2 text-white font-bold text-[11px] uppercase tracking-widest"
           style={{ background: section.color }}>
-          {section.label}
+          <div className="flex items-center justify-between">
+            <span>{section.label}</span>
+            {onDelete && (
+              <button onClick={() => void onDelete()}
+                className="text-white/60 hover:text-white transition-colors ml-2"
+                title="Bo'limni o'chirish">
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
         </td>
       </tr>
 
