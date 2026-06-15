@@ -1436,6 +1436,20 @@ router.get('/uf-field-options', async (req, res) => {
   const { field = 'UF_CRM_1775824803703' } = req.query;
   try {
     if (!BX_WEBHOOK) return res.json({ options: [] });
+
+    // SOURCE_ID is a crm_status type — use crm.status.list instead of crm.lead.fields
+    if (field === 'SOURCE_ID') {
+      const { data } = await axios.get(`${BX_WEBHOOK}/crm.status.list`, {
+        params: { 'filter[ENTITY_ID]': 'SOURCE' },
+        timeout: 10000,
+      });
+      const items = data?.result ?? [];
+      const options = items
+        .filter(it => it.STATUS_ID && it.NAME)
+        .map(it => ({ id: String(it.STATUS_ID), label: String(it.NAME) }));
+      return res.json({ options });
+    }
+
     const { data } = await axios.get(`${BX_WEBHOOK}/crm.lead.fields`, { timeout: 10000 });
     const fieldDef = data?.result?.[field];
     if (!fieldDef?.items) return res.json({ options: [] });

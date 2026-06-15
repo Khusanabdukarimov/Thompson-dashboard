@@ -327,37 +327,66 @@ export default function KunlikPage() {
   );
 }
 
-function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [selected, setSelected] = useState("");
-  const [name,     setName]     = useState("");
-  const [color,    setColor]    = useState(CUSTOM_COLORS[0]);
-  const [saving,   setSaving]   = useState(false);
+type FilterType = "manba" | "xizmat";
 
-  const { data: optData, isLoading: optLoading } = useQuery({
+function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [filterType, setFilterType] = useState<FilterType>("manba");
+  const [selected,   setSelected]   = useState("");
+  const [name,       setName]       = useState("");
+  const [color,      setColor]      = useState(CUSTOM_COLORS[0]);
+  const [saving,     setSaving]     = useState(false);
+
+  // Source options for Manba
+  const { data: manbaData, isLoading: manbaLoading } = useQuery({
+    queryKey: ["uf-field-options", "SOURCE_ID"],
+    queryFn:  () => getUfFieldOptions("SOURCE_ID"),
+    staleTime: Infinity,
+  });
+  const { data: dbSources } = useQuery({
+    queryKey: ["lead-sources"],
+    queryFn:  () => fetch("/api/marketing/lead-sources").then(r => r.json()) as Promise<{ sources: { id: string; count: number }[] }>,
+    staleTime: Infinity,
+  });
+  const manbaOptions: { id: string; label: string }[] = useMemo(() => {
+    const bx = manbaData?.options ?? [];
+    if (bx.length > 0) return bx;
+    return (dbSources?.sources ?? []).map(s => ({ id: s.id, label: s.id }));
+  }, [manbaData, dbSources]);
+
+  // Xizmat turi options
+  const { data: xizmatData, isLoading: xizmatLoading } = useQuery({
     queryKey: ["uf-field-options", "UF_CRM_1775824803703"],
     queryFn:  () => getUfFieldOptions("UF_CRM_1775824803703"),
     staleTime: Infinity,
   });
-  const options = optData?.options ?? [];
+  const xizmatOptions = xizmatData?.options ?? [];
 
+  const options     = filterType === "manba" ? manbaOptions : xizmatOptions;
+  const isLoading   = filterType === "manba" ? manbaLoading : xizmatLoading;
   const selectedOpt = options.find(o => o.id === selected);
 
-  // Auto-fill name when option selected
+  const handleFilterType = (t: FilterType) => {
+    setFilterType(t);
+    setSelected("");
+    setName("");
+  };
+
   const handleSelect = (id: string) => {
+    const prevLabel = options.find(o => o.id === selected)?.label ?? "";
     setSelected(id);
     const lbl = options.find(o => o.id === id)?.label ?? "";
-    if (!name || name === options.find(o => o.id === selected)?.label) {
-      setName(lbl);
-    }
+    if (!name || name === prevLabel) setName(lbl);
   };
 
   const handleSubmit = async () => {
     if (!selected || !name.trim()) return;
     setSaving(true);
+    const ufField     = filterType === "manba" ? "SOURCE_ID" : "UF_CRM_1775824803703";
+    const ufFieldDeal = filterType === "manba" ? "SOURCE_ID" : "UF_CRM_69D8F71700936";
     await createKunlikSection({
       title:         name.trim(),
-      uf_field:      "UF_CRM_1775824803703",
-      uf_field_deal: "UF_CRM_69D8F71700936",
+      uf_field:      ufField,
+      uf_field_deal: ufFieldDeal,
       source_names:  [selected],
       color,
     });
@@ -366,7 +395,7 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[360px] max-w-[95vw] p-5"
+      <div className="bg-bg2 border border-border rounded-xl shadow-xl w-[380px] max-w-[95vw] p-5"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className="text-[14px] font-bold text-text">Yangi bo'lim</div>
@@ -374,10 +403,28 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
         </div>
 
         <div className="space-y-3 text-[12.5px]">
-          {/* Xizmat turi select */}
+          {/* Filter type toggle */}
           <div>
-            <label className="block text-text3 mb-1">Xizmat turi</label>
-            {optLoading ? (
+            <label className="block text-text3 mb-1.5">Filter turi</label>
+            <div className="flex gap-2">
+              {(["manba", "xizmat"] as FilterType[]).map(t => (
+                <button key={t} onClick={() => handleFilterType(t)}
+                  className={cn("px-3 py-1 rounded text-[12px] border transition-all",
+                    filterType === t
+                      ? "bg-blue border-blue text-white"
+                      : "border-border text-text2 hover:bg-bg3")}>
+                  {t === "manba" ? "Manba (Источник)" : "Xizmat turi"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dropdown */}
+          <div>
+            <label className="block text-text3 mb-1">
+              {filterType === "manba" ? "Manba" : "Xizmat turi"}
+            </label>
+            {isLoading ? (
               <div className="text-text3 py-2">Yuklanmoqda…</div>
             ) : (
               <select
@@ -389,10 +436,9 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
                 ))}
               </select>
             )}
-            {/* source_name preview */}
             {selectedOpt && (
               <div className="mt-1 text-[11px] text-text3 font-mono">
-                source_name: "{selectedOpt.label}" (id: {selectedOpt.id})
+                id: {selectedOpt.id}
               </div>
             )}
           </div>
@@ -402,7 +448,7 @@ function CreateSectionModal({ onClose, onCreated }: { onClose: () => void; onCre
             <label className="block text-text3 mb-1">Bo'lim nomi</label>
             <input
               className="w-full bg-bg3 border border-border rounded px-3 py-1.5 text-text outline-none focus:border-blue"
-              placeholder="Masalan: Patentlash"
+              placeholder="Masalan: Ko'chadan"
               value={name} onChange={e => setName(e.target.value)}
             />
           </div>

@@ -943,9 +943,28 @@ def api_marketing_kunlik_override(body: KunlikOverrideBody):
 
 # ── Custom metric sections ──────────────────────────────────────────
 
+@app.get("/api/marketing/lead-sources")
+def api_lead_sources():
+    """Return distinct source_id values from leads table with counts."""
+    with bx_engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT source_id, COUNT(*) AS cnt
+            FROM leads
+            WHERE source_id IS NOT NULL AND source_id != ''
+            GROUP BY source_id
+            ORDER BY cnt DESC
+        """)).fetchall()
+    return {"sources": [{"id": r[0], "count": int(r[1])} for r in rows]}
+
 # Map Bitrix24 UF field ID → leads/deals DB column name
-_UF_LEAD_COL = {"UF_CRM_1775824803703": "uf_service"}
-_UF_DEAL_COL = {"UF_CRM_69D8F71700936": "uf_service"}
+_UF_LEAD_COL = {
+    "UF_CRM_1775824803703": "uf_service",
+    "SOURCE_ID": "source_id",
+}
+_UF_DEAL_COL = {
+    "UF_CRM_69D8F71700936": "uf_service",
+    "SOURCE_ID": "source_id",
+}
 
 
 @app.get("/api/marketing/kunlik-sections")
@@ -962,8 +981,8 @@ def list_kunlik_sections():
 
 class KunlikSectionBody(BaseModel):
     title: str
-    uf_field: str = "UF_CRM_1775824803703"
-    uf_field_deal: str = "UF_CRM_69D8F71700936"
+    uf_field: str = "SOURCE_ID"
+    uf_field_deal: str = "SOURCE_ID"
     source_names: List[str] = []
     color: str = "#6366f1"
 
