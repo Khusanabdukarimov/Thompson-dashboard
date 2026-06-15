@@ -141,10 +141,10 @@ function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: s
   );
 }
 
-function SotuvDealsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
+function SotuvDealsPanel({ adsetName, month, year, from, to, sotuvFrom, sotuvTo }: { adsetName: string; month: MonthKey; year: number; from: string; to: string; sotuvFrom?: string; sotuvTo?: string }) {
   const q = useQuery({
-    queryKey: ["creative-deals", adsetName, month, year, from, to],
-    queryFn: () => getCreativeDeals(adsetName, month, year, from, to),
+    queryKey: ["creative-deals", adsetName, month, year, from, to, sotuvFrom, sotuvTo],
+    queryFn: () => getCreativeDeals(adsetName, month, year, from, to, sotuvFrom, sotuvTo),
     staleTime: 2 * 60_000,
   });
   if (q.isLoading) return <tr><td colSpan={10} className="px-6 py-4"><div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div></td></tr>;
@@ -296,6 +296,8 @@ const KAMP_PRESETS = [
 export default function KampaniyalarPage() {
   const [fromDate, setFromDate]     = useState(getFirstOfMonth);
   const [toDate,   setToDate]       = useState(getTodayIso);
+  const [sotuvFrom, setSotuvFrom]   = useState("");
+  const [sotuvTo,   setSotuvTo]     = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [tab, setTab]               = useState<Tab>("formalar");
   const [search, setSearch]         = useState("");
@@ -321,7 +323,7 @@ export default function KampaniyalarPage() {
   const formsQ           = useQuery({ queryKey: ["campaign-forms",  month, year, fromDate, toDate], queryFn: () => getCampaignForms(month, year, fromDate, toDate),                    staleTime: 30_000, refetchInterval: AUTO_REFRESH });
   const pageFormsQ       = useQuery({ queryKey: ["page-forms", month, year, fromDate, toDate], queryFn: () => getPageForms(month, year, fromDate, toDate), staleTime: 30_000, refetchInterval: AUTO_REFRESH });
   const kunlikQ          = useQuery({ queryKey: ["kunlik-hisobot",  month, year],                   queryFn: () => getKunlikHisobot(month, year),                                      staleTime: 60_000, refetchInterval: AUTO_REFRESH });
-  const creativesQ       = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate),                staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const creativesQ       = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate, sotuvFrom, sotuvTo], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate, sotuvFrom || undefined, sotuvTo || undefined), staleTime: 30_000, refetchInterval: AUTO_REFRESH });
   const activeCampNamesQ = useQuery({ queryKey: ["active-campaign-names"],                          queryFn: getActiveCampaignNames,                                                   staleTime: 5 * 60_000 });
   const formStatsQ       = useQuery({ queryKey: ["campaign-form-stats", fromDate, toDate],          queryFn: () => getCampaignFormStats(fromDate, toDate),                             staleTime: 60_000, refetchInterval: AUTO_REFRESH });
 
@@ -508,7 +510,7 @@ export default function KampaniyalarPage() {
       {(() => {
         const hasExtra = !!(filterCampaigns.length || filterPlatforms.length || filterForm || filterAdset || filterCreatives.length);
         const selStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 };
-        const clearAll = () => { setFilterCampaigns([]); setFilterPlatforms([]); setFilterForm(""); setFilterAdset(""); setFilterCreatives([]); };
+        const clearAll = () => { setFilterCampaigns([]); setFilterPlatforms([]); setFilterForm(""); setFilterAdset(""); setFilterCreatives([]); setSotuvFrom(""); setSotuvTo(""); };
         return (
           <div style={{ background: "var(--bg2)", borderBottom: "1px solid var(--border)", overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
             <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
@@ -542,7 +544,7 @@ export default function KampaniyalarPage() {
                   })}
                 </div>
 
-                {/* Date inputs */}
+                {/* Date inputs — lead date range */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                   <div>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Dan (boshlanish)</div>
@@ -551,6 +553,25 @@ export default function KampaniyalarPage() {
                   <div>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Gacha (tugash)</div>
                     <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={selStyle} />
+                  </div>
+                </div>
+
+                {/* Sotuv date range — optional, decoupled from lead dates */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    Sotuv sanasi (alohida)
+                    {(sotuvFrom || sotuvTo) && (
+                      <button onClick={() => { setSotuvFrom(""); setSotuvTo(""); }}
+                        style={{ fontSize: 10, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                        tozala
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <input type="date" value={sotuvFrom} onChange={e => setSotuvFrom(e.target.value)}
+                      placeholder="dan" style={selStyle} />
+                    <input type="date" value={sotuvTo} onChange={e => setSotuvTo(e.target.value)}
+                      placeholder="gacha" style={selStyle} />
                   </div>
                 </div>
 
@@ -1025,7 +1046,7 @@ export default function KampaniyalarPage() {
                                 <td className={TD}><SifatBar rate={r.sifat_rate} /></td>
                               </tr>
                               {isExpAd    && <CreativeLeadsPanel key={`panel-${adKey}`} adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
-                              {isExpSotuv && <SotuvDealsPanel    key={`sotuv-${adKey}`} adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} />}
+                              {isExpSotuv && <SotuvDealsPanel    key={`sotuv-${adKey}`} adsetName={r.adset_name} month={month} year={year} from={fromDate} to={toDate} sotuvFrom={sotuvFrom || undefined} sotuvTo={sotuvTo || undefined} />}
                             </>
                           );
                         })}

@@ -889,6 +889,9 @@ router.get('/creatives', async (req, res) => {
   const days = new Date(yearParam, monthNum, 0).getDate();
   const since = req.query.from || `${yearParam}-${localPad(monthNum)}-01`;
   const until = req.query.to   || `${yearParam}-${localPad(monthNum)}-${localPad(days)}`;
+  // Optional separate sotuv date range; falls back to lead date range if not provided
+  const sotuvFrom = req.query.sotuv_from || since;
+  const sotuvTo   = req.query.sotuv_to   || until;
 
   try {
     // 1. Lead quality stats — match facebook_leads → Bitrix24 leads by phone (last 9 digits)
@@ -912,7 +915,7 @@ router.get('/creatives', async (req, res) => {
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'UC_NAZK5J'                                   THEN fl.id END)::int AS bekor_boldi,
         COUNT(DISTINCT CASE WHEN s.bitrix_id = 'CONVERTED'                                   THEN fl.id END)::int AS konsultatsiya_otdi,
         COUNT(DISTINCT CASE WHEN ds.bitrix_id = ANY(ARRAY['UC_NV0Y4F','WON','C1:WON'])
-          AND d.uf_bp_sale_date >= $1::date AND d.uf_bp_sale_date <= $2::date        THEN fl.id END)::int AS sotuv_boldi,
+          AND d.uf_bp_sale_date >= $3::date AND d.uf_bp_sale_date <= $4::date        THEN fl.id END)::int AS sotuv_boldi,
         COUNT(DISTINCT CASE WHEN lp.lead_id IS NOT NULL AND s.id IS NULL               THEN fl.id END)::int AS stage_unknown
       FROM facebook_leads fl
       LEFT JOIN lead_phones lp
@@ -929,7 +932,7 @@ router.get('/creatives', async (req, res) => {
         AND fl.created_time <  ($2::date + INTERVAL '1 day')
       GROUP BY fl.adset_name, fl.campaign_name
       ORDER BY meta_leads DESC
-    `, [since, until]);
+    `, [since, until, sotuvFrom, sotuvTo]);
 
     // 2. Spend per adset from meta_ad_daily (date range aware)
     const { rows: cacheRows } = await pool.query(`
@@ -999,6 +1002,8 @@ router.get('/creative-deals', async (req, res) => {
   const days = new Date(yearNum, monthNum, 0).getDate();
   const since = req.query.from || `${yearNum}-${pad(monthNum)}-01`;
   const until = req.query.to   || `${yearNum}-${pad(monthNum)}-${pad(days)}`;
+  const sotuvFrom = req.query.sotuv_from || since;
+  const sotuvTo   = req.query.sotuv_to   || until;
 
   try {
     const { rows } = await pool.query(`
@@ -1020,11 +1025,11 @@ router.get('/creative-deals', async (req, res) => {
       LEFT JOIN responsibles r ON r.id = d.responsible_id
       WHERE fl.created_time >= $1::date
         AND fl.created_time <  ($2::date + INTERVAL '1 day')
-        AND d.uf_bp_sale_date >= $1::date
-        AND d.uf_bp_sale_date <= $2::date
-        ${adset_name    ? "AND fl.adset_name    = $3" : "AND fl.campaign_name = $3"}
+        AND d.uf_bp_sale_date >= $3::date
+        AND d.uf_bp_sale_date <= $4::date
+        ${adset_name    ? "AND fl.adset_name    = $5" : "AND fl.campaign_name = $5"}
       ORDER BY d.id, d.date_create DESC
-    `, [since, until, adset_name || campaign_name]);
+    `, [since, until, sotuvFrom, sotuvTo, adset_name || campaign_name]);
 
     res.json({
       deals: rows.map(r => ({

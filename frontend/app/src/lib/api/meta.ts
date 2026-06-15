@@ -255,11 +255,13 @@ export type CreativeRow = {
   sifat_rate:    number;
 };
 
-export function getCampaignCreatives(month: MonthKey, year: number, from?: string, to?: string) {
+export function getCampaignCreatives(month: MonthKey, year: number, from?: string, to?: string, sotuvFrom?: string, sotuvTo?: string) {
   return apiGet<{ creatives: CreativeRow[] }>('/api/campaigns/creatives', {
     month, year,
-    ...(from ? { from } : {}),
-    ...(to   ? { to }   : {}),
+    ...(from      ? { from }               : {}),
+    ...(to        ? { to }                 : {}),
+    ...(sotuvFrom ? { sotuv_from: sotuvFrom } : {}),
+    ...(sotuvTo   ? { sotuv_to:   sotuvTo }   : {}),
   });
 }
 
@@ -288,13 +290,15 @@ export type CreativeDeal = {
   stage:       string;
 };
 
-export function getCreativeDeals(adset_name: string, month: MonthKey, year: number, from?: string, to?: string) {
+export function getCreativeDeals(adset_name: string, month: MonthKey, year: number, from?: string, to?: string, sotuvFrom?: string, sotuvTo?: string) {
   return apiGet<{ deals: CreativeDeal[] }>(
     '/api/campaigns/creative-deals',
     {
       adset_name, month, year,
-      ...(from ? { from } : {}),
-      ...(to   ? { to }   : {}),
+      ...(from      ? { from }               : {}),
+      ...(to        ? { to }                 : {}),
+      ...(sotuvFrom ? { sotuv_from: sotuvFrom } : {}),
+      ...(sotuvTo   ? { sotuv_to:   sotuvTo }   : {}),
     },
   );
 }
