@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/Skeleton";
 import {
   getMetaInsights, getMetaCampaigns, getCampaignForms, getFormLeads,
   getPageForms, getKunlikHisobot, getCampaignCreatives, getCreativeLeads, getCreativeDeals,
-  MONTH_KEYS,
+  getActiveCampaignNames, MONTH_KEYS,
 } from "@/lib/api/meta";
 import type { MonthKey, PageForm } from "@/lib/api/meta";
 import { fmtNum } from "@/lib/utils";
@@ -267,12 +267,13 @@ export default function KampaniyalarPage() {
   const year  = fromD.getFullYear();
 
   const AUTO_REFRESH = 60_000; // 1 minute — meta_ad_daily syncs every minute
-  const insightsQ   = useQuery({ queryKey: ["meta-insights",   month, year, fromDate, toDate], queryFn: () => getMetaInsights(month, year, undefined, false, fromDate, toDate),  staleTime: 30_000, refetchInterval: AUTO_REFRESH });
-  const campaignsQ  = useQuery({ queryKey: ["meta-campaigns",  month, year, fromDate, toDate], queryFn: () => getMetaCampaigns(month, year, false, fromDate, toDate),             staleTime: 30_000, refetchInterval: AUTO_REFRESH });
-  const formsQ      = useQuery({ queryKey: ["campaign-forms",  month, year, fromDate, toDate], queryFn: () => getCampaignForms(month, year, fromDate, toDate),                    staleTime: 30_000, refetchInterval: AUTO_REFRESH });
-  const pageFormsQ  = useQuery({ queryKey: ["page-forms", month, year, fromDate, toDate], queryFn: () => getPageForms(month, year, fromDate, toDate), staleTime: 30_000, refetchInterval: AUTO_REFRESH });
-  const kunlikQ     = useQuery({ queryKey: ["kunlik-hisobot",  month, year],                   queryFn: () => getKunlikHisobot(month, year),                                      staleTime: 60_000, refetchInterval: AUTO_REFRESH });
-  const creativesQ  = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate),                staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const insightsQ        = useQuery({ queryKey: ["meta-insights",   month, year, fromDate, toDate], queryFn: () => getMetaInsights(month, year, undefined, false, fromDate, toDate),  staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const campaignsQ       = useQuery({ queryKey: ["meta-campaigns",  month, year, fromDate, toDate], queryFn: () => getMetaCampaigns(month, year, false, fromDate, toDate),             staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const formsQ           = useQuery({ queryKey: ["campaign-forms",  month, year, fromDate, toDate], queryFn: () => getCampaignForms(month, year, fromDate, toDate),                    staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const pageFormsQ       = useQuery({ queryKey: ["page-forms", month, year, fromDate, toDate], queryFn: () => getPageForms(month, year, fromDate, toDate), staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const kunlikQ          = useQuery({ queryKey: ["kunlik-hisobot",  month, year],                   queryFn: () => getKunlikHisobot(month, year),                                      staleTime: 60_000, refetchInterval: AUTO_REFRESH });
+  const creativesQ       = useQuery({ queryKey: ["creatives",       month, year, fromDate, toDate], queryFn: () => getCampaignCreatives(month, year, fromDate, toDate),                staleTime: 30_000, refetchInterval: AUTO_REFRESH });
+  const activeCampNamesQ = useQuery({ queryKey: ["active-campaign-names"],                          queryFn: getActiveCampaignNames,                                                   staleTime: 5 * 60_000 });
 
   const allRows = campaignsQ.data?.rows ?? [];
 
@@ -324,15 +325,10 @@ export default function KampaniyalarPage() {
   const isFiltered = !!(filterCampaign || filterPlatform || filterAdset || filterForm);
 
   const totalSpend  = rows.reduce((a, r) => a + r.spend,       0);
+  const totalLeads  = rows.reduce((a, r) => a + r.leads,       0);
   const totalClicks = rows.reduce((a, r) => a + r.clicks,      0);
   const totalImpr   = rows.reduce((a, r) => a + r.impressions, 0);
   const avgCPC      = totalClicks > 0 ? totalSpend / totalClicks : 0;
-
-  // JAMI LIDLAR: use facebook_leads table count (actual form submissions)
-  const creativeRows = creativesQ.data?.creatives ?? [];
-  const filteredCreatives = creativeRows
-    .filter(r => !filterCampaign || r.campaign_name === filterCampaign);
-  const totalLeads  = filteredCreatives.reduce((a, r) => a + r.meta_leads, 0);
   const avgCPL      = totalLeads  > 0 ? totalSpend / totalLeads  : 0;
 
   // ── Bitrix CRM cross-channel metrics ────────────────────────────────────────
@@ -362,20 +358,17 @@ export default function KampaniyalarPage() {
       .slice(0, 3);
   }, [rows]);
 
-  // ── active campaign names (from formsQ — campaigns with active forms) ────────
+  // ── active campaign names (campaigns with spend on most recent date in DB) ────
   const activeCampNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const camp of formsQ.data?.campaigns ?? []) {
-      if (camp.forms.some(f => f.status === "ACTIVE")) names.add(camp.campaign_name);
-    }
-    return names;
-  }, [formsQ.data]);
+    const names = activeCampNamesQ.data?.campaigns ?? [];
+    return new Set(names);
+  }, [activeCampNamesQ.data]);
 
   // ── campaign rows (active only) ───────────────────────────────────────────────
   const campRows = useMemo(() => {
     const map = new Map<string, { name: string; plat: string; spend: number; clicks: number; leads: number; impr: number }>();
     for (const r of rows) {
-      // skip campaigns not in active set (when formsQ data is loaded)
+      // skip campaigns not active (when active names are loaded)
       if (activeCampNames.size > 0 && !activeCampNames.has(r.campaign_name)) continue;
       const k = `${r.campaign_name}:${r.platform}`;
       const c = map.get(k) ?? { name: r.campaign_name, plat: r.platform, spend: 0, clicks: 0, leads: 0, impr: 0 };

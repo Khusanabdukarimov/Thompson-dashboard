@@ -299,6 +299,10 @@ export function getCreativeDeals(adset_name: string, month: MonthKey, year: numb
   );
 }
 
+export function getActiveCampaignNames() {
+  return apiGet<{ campaigns: string[] }>('/api/campaigns/active-names', {});
+}
+
 export function getCreativeLeads(adset_name: string, month: MonthKey, year: number, from?: string, to?: string) {
   return apiGet<{ adset_name: string; leads: CreativeLead[] }>(
     '/api/campaigns/creative-leads',

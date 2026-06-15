@@ -242,6 +242,23 @@ function buildInsights(rawRows, monthKey, year) {
 
 // ── Routes ─────────────────────────────────────────────────────
 
+// GET /api/campaigns/active-names — campaigns with data on the most recent date in the DB
+router.get('/active-names', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT DISTINCT campaign_name
+      FROM meta_ad_daily
+      WHERE date = (SELECT MAX(date) FROM meta_ad_daily)
+        AND spend > 0
+      ORDER BY campaign_name
+    `);
+    res.json({ campaigns: rows.map(r => r.campaign_name) });
+  } catch (err) {
+    console.error('[campaigns/active-names]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/campaigns/rows?month=may&year=2026[&from=2026-06-01&to=2026-06-11]
 router.get('/rows', async (req, res) => {
   const month    = (req.query.month || '').toLowerCase();
