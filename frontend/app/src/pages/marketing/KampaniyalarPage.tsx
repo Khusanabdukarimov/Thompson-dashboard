@@ -510,7 +510,7 @@ export default function KampaniyalarPage() {
       {(() => {
         const hasExtra = !!(filterCampaigns.length || filterPlatforms.length || filterForm || filterAdset || filterCreatives.length);
         const selStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 };
-        const clearAll = () => { setFilterCampaigns([]); setFilterPlatforms([]); setFilterForm(""); setFilterAdset(""); setFilterCreatives([]); setSotuvFrom(""); setSotuvTo(""); };
+        const clearAll = () => { setFilterCampaigns([]); setFilterPlatforms([]); setFilterForm(""); setFilterAdset(""); setFilterCreatives([]); setSotuvFrom(""); setSotuvTo(""); setFromDate(getFirstOfMonth()); setToDate(getTodayIso()); };
         return (
           <div style={{ background: "var(--bg2)", borderBottom: "1px solid var(--border)", overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
             <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
