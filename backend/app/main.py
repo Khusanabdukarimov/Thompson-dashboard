@@ -794,11 +794,19 @@ def api_marketing_kunlik(month: str, year: int):
 
         # ── DEAL metrics: sales by REAL sale date ───
         # uf_bp_sale_date (BP field) takes priority; fallback to uf_payment_date (to'lov sanasi)
+        # Platform: utm_source first. For FB/IG source_ids (UC_O9BLGT/UC_3O8GTF/UC_89FPH6) without
+        # utm_source, classify by source_id — UC_O9BLGT→target unless utm=ig, UC_3O8GTF/UC_89FPH6→instagram.
         sales_sql = _text(f"""
             WITH src AS (
                 SELECT
                     EXTRACT(DAY FROM COALESCE(d.uf_bp_sale_date, d.uf_payment_date))::int AS day,
-                    ({deal_expr}) AS bucket,
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(d.utm_source,''))) IN ('facebook','fb','meta','facebook_ads','fb_ads','target','target_ads') THEN 'target'
+                        WHEN LOWER(TRIM(COALESCE(d.utm_source,''))) IN ('instagram','ig','instagram_ads','ig_ads') THEN 'instagram'
+                        WHEN d.source_id = 'UC_O9BLGT' THEN 'target'
+                        WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
+                        ELSE NULL
+                    END AS bucket,
                     COALESCE(d.uf_paid_sum, 0) AS opp
                 FROM deals d
                 WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
