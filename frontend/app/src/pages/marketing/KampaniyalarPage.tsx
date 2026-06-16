@@ -477,10 +477,8 @@ export default function KampaniyalarPage() {
       .sort((a, b) => (b.leads_count ?? 0) - (a.leads_count ?? 0));
   }, [formsQ.data, pageFormsQ.data, search, filterForm, filterCampaigns]);
 
-  const pendingLeads = uniqueForms.reduce((a, f) => a + (f.leads_count ?? 0), 0);
-
-  // sifatli_lid per form_id from formsQ (LeadgenForm has it).
-  // Respects Kampaniya + Forma filters, matching uniqueForms' scope.
+  // sifatli_lid per form_id from formsQ (LeadgenForm has it) — used by the
+  // per-form row in the Formalar tab table (display only, not the top KPIs).
   const sifatliFormMap = useMemo(() => {
     const m = new Map<string, number>();
     for (const camp of formsQ.data?.campaigns ?? []) {
@@ -493,21 +491,36 @@ export default function KampaniyalarPage() {
     return m;
   }, [formsQ.data, filterCampaigns, filterForm]);
 
-  // ── form-lead-based KPIs (all derived from facebook_leads DB, not Meta Ads) ──
-  const totalSifatliFromForms = useMemo(() => {
-    let sum = 0;
-    for (const v of sifatliFormMap.values()) sum += v;
-    return sum;
-  }, [sifatliFormMap]);
-
-  // Respects Kampaniya + Adset + Creative filters, matching the Creative tab's own scope.
-  const totalSotuvFromCreatives = useMemo(
+  // ── Top KPI cards (Jami Lidlar / Sifatli Lidlar / Sotuv) ───────────────────
+  // Sourced from /api/campaigns/creatives, which cross-references facebook_leads
+  // (Meta raw submissions, with phone numbers) against Bitrix24 leads/deals via
+  // phone match — a DB-verified count, not just Meta's self-reported total.
+  // This single filtered list respects Kampaniya + Adset + Creative + Forma
+  // (Forma resolved to its adset_name set, since creatives has no form_id).
+  // Platform cannot apply here — creatives has no platform field (an adset can
+  // run on both Facebook + Instagram placements at once).
+  const filteredCreativesForKpi = useMemo(
     () => (creativesQ.data?.creatives ?? [])
       .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
       .filter(r => !filterAdset || r.adset_name === filterAdset)
       .filter(r => filterCreatives.length === 0 || filterCreatives.includes(r.ad_name ?? ""))
-      .reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
-    [creativesQ.data, filterCampaigns, filterAdset, filterCreatives],
+      .filter(r => !formAdsetNames || formAdsetNames.has(r.adset_name)),
+    [creativesQ.data, filterCampaigns, filterAdset, filterCreatives, formAdsetNames],
+  );
+
+  const pendingLeads = useMemo(
+    () => filteredCreativesForKpi.reduce((a, r) => a + (r.meta_leads ?? 0), 0),
+    [filteredCreativesForKpi],
+  );
+
+  const totalSifatliFromForms = useMemo(
+    () => filteredCreativesForKpi.reduce((a, r) => a + (r.sifatli ?? 0), 0),
+    [filteredCreativesForKpi],
+  );
+
+  const totalSotuvFromCreatives = useMemo(
+    () => filteredCreativesForKpi.reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
+    [filteredCreativesForKpi],
   );
 
   async function refresh() {
