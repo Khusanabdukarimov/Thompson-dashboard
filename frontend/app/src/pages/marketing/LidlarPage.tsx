@@ -117,10 +117,15 @@ function MultiSelect({
 const RESPONSIBLE_COLS = [
   { key: "qongiroqlar",             label: "Qo'ng'iroqlar",            color: "#9E9E9E" },
   { key: "yangi_lid",               label: "Yangi lid",                color: "#2196F3" },
-  { key: "jarayon",                 label: "Jarayon",                  color: "#FF9800" },
+  { key: "propushenniy",            label: "Propushenniy",             color: "#9E9E9E" },
+  { key: "javob_bermadi",           label: "Javob bermadi",            color: "#FF9800" },
+  { key: "qayta_aloqa",             label: "Qayta aloqa",              color: "#00BCD4" },
+  { key: "oylab_koradi",            label: "O'ylab ko'radi",           color: "#E91E63" },
   { key: "konsultatsiya",           label: "Konsultatsiya belgilandi", color: "#9C27B0" },
-  { key: "konsultatsiya_otkazildi", label: "Konsultatsiya o'tkazildi", color: "#4CAF50" },
+  { key: "otkazilmadi",             label: "O'tkazilmadi",             color: "#FF00FF" },
+  { key: "sandiq",                  label: "Sandiq",                   color: "#42A5F5" },
   { key: "sifatsiz",                label: "Sifatsiz",                 color: "#F44336" },
+  { key: "konsultatsiya_otkazildi", label: "Konsultatsiya o'tkazildi", color: "#4CAF50" },
   { key: "bekor_boldi",             label: "Bekor bo'ldi",             color: "#FFC107" },
 ] as const;
 type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
@@ -433,11 +438,7 @@ export default function LidlarPage() {
   const header       = statsQ.data?.header;
   const responsibles = (respQ.data?.responsibles ?? []).filter((u) => !isExcluded(u.full_name));
 
-  const enrichedResponsibles = useMemo(() =>
-    responsibles.map(u => ({
-      ...u,
-      jarayon: (u.propushenniy ?? 0) + (u.javob_bermadi ?? 0) + (u.qayta_aloqa ?? 0) + (u.oylab_koradi ?? 0) + (u.otkazilmadi ?? 0) + (u.sandiq ?? 0),
-    })), [responsibles]);
+  const enrichedResponsibles = responsibles;
 
   const total             = header?.total_leads                    ?? 0;
   const jarayondaCount    = header?.in_process                     ?? 0;
