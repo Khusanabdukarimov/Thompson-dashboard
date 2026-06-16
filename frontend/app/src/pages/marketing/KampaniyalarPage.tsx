@@ -367,6 +367,9 @@ export default function KampaniyalarPage() {
   }, [creativesQ.data, filterCampaigns, filterAdset]);
 
   // ── filtered rows (apply campaign / platform / adset filters) ──────────────
+  // NOTE: rows come from meta_ad_daily (date-range mode), which only stores
+  // adset-level granularity — ad_name is always empty here, so a Creative-name
+  // filter cannot apply to spend/impressions/clicks (no per-ad data exists).
   const rows = useMemo(() => allRows
     .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
     .filter(r => filterPlatforms.length === 0  || filterPlatforms.includes(r.platform))
@@ -448,16 +451,19 @@ export default function KampaniyalarPage() {
 
   const pendingLeads = uniqueForms.reduce((a, f) => a + (f.leads_count ?? 0), 0);
 
-  // sifatli_lid per form_id from formsQ (LeadgenForm has it)
+  // sifatli_lid per form_id from formsQ (LeadgenForm has it).
+  // Respects Kampaniya + Forma filters, matching uniqueForms' scope.
   const sifatliFormMap = useMemo(() => {
     const m = new Map<string, number>();
     for (const camp of formsQ.data?.campaigns ?? []) {
+      if (filterCampaigns.length > 0 && !filterCampaigns.includes(camp.campaign_name)) continue;
       for (const f of camp.forms) {
+        if (filterForm && f.form_name !== filterForm) continue;
         if (!m.has(f.form_id)) m.set(f.form_id, f.sifatli_lid ?? 0);
       }
     }
     return m;
-  }, [formsQ.data]);
+  }, [formsQ.data, filterCampaigns, filterForm]);
 
   // ── form-lead-based KPIs (all derived from facebook_leads DB, not Meta Ads) ──
   const totalSifatliFromForms = useMemo(() => {
@@ -466,9 +472,14 @@ export default function KampaniyalarPage() {
     return sum;
   }, [sifatliFormMap]);
 
+  // Respects Kampaniya + Adset + Creative filters, matching the Creative tab's own scope.
   const totalSotuvFromCreatives = useMemo(
-    () => (creativesQ.data?.creatives ?? []).reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
-    [creativesQ.data],
+    () => (creativesQ.data?.creatives ?? [])
+      .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
+      .filter(r => !filterAdset || r.adset_name === filterAdset)
+      .filter(r => filterCreatives.length === 0 || filterCreatives.includes(r.ad_name ?? ""))
+      .reduce((a, r) => a + (r.sotuv_boldi ?? 0), 0),
+    [creativesQ.data, filterCampaigns, filterAdset, filterCreatives],
   );
 
   async function refresh() {
