@@ -849,7 +849,7 @@ export default function LidlarPage() {
                 </thead>
                 <tbody>
                   {convRows.map((r, i) => {
-                    const konv = r.total > 0 ? (r.tashrif_buyurdi / r.total) * 100 : 0;
+                    const konv = (r.sifatli_lid ?? 0) > 0 ? (r.tashrif_buyurdi / (r.sifatli_lid ?? 0)) * 100 : 0;
                     const isSelected = selectedRespConv?.id === r.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSelected ? (respLeadsConvQ.data ?? []) : [];
                     const STAGE_MAP_INLINE: Record<string, { label: string; color: string }> = {
@@ -1018,7 +1018,7 @@ export default function LidlarPage() {
                       <MiniBar value={1} max={1} color="#4CAF50" />
                     </td>
                     <td style={{ ...TD, textAlign:"center" }}>
-                      <ConversionDonut pct={convTotals.total > 0 ? (convTotals.otkazildi / convTotals.total) * 100 : 0} size={38} />
+                      <ConversionDonut pct={convTotals.sifatli > 0 ? (convTotals.otkazildi / convTotals.sifatli) * 100 : 0} size={38} />
                     </td>
                   </tr>
                 </tbody>
