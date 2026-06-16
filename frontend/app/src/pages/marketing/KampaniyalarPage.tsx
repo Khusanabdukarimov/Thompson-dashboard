@@ -482,7 +482,7 @@ export default function KampaniyalarPage() {
   // instead of Meta's self-reported leads_count/sifatli_lid.
   // A form can span several (campaign, adset) pairs; we sum creativesQ
   // (facebook_leads ↔ Bitrix24 phone-matched) over all of them.
-  const formDbStatsMap = useMemo(() => {
+  const formAdsetsMap = useMemo(() => {
     const formAdsets = new Map<string, Set<string>>(); // form_id -> adset_name set
     for (const camp of formsQ.data?.campaigns ?? []) {
       if (filterCampaigns.length > 0 && !filterCampaigns.includes(camp.campaign_name)) continue;
@@ -493,19 +493,33 @@ export default function KampaniyalarPage() {
         formAdsets.get(f.form_id)!.add(f.adset_name);
       }
     }
+    return formAdsets;
+  }, [formsQ.data, filterCampaigns, filterForm]);
+
+  const formDbStatsMap = useMemo(() => {
     const creatives = creativesQ.data?.creatives ?? [];
-    const m = new Map<string, { leads: number; sifatli: number }>();
-    for (const [formId, adsetNames] of formAdsets) {
-      let leads = 0, sifatli = 0;
+    // spend/clicks come from `allRows` (Meta Insights, real adset-level data) —
+    // NOT split evenly across a campaign's "active form count" (the old method
+    // dumped a campaign's entire spend onto whichever form happened to be the
+    // only ACTIVE one, hugely overstating spend for forms that only used a
+    // fraction of that campaign's adsets).
+    const m = new Map<string, { leads: number; sifatli: number; spend: number; clicks: number }>();
+    for (const [formId, adsetNames] of formAdsetsMap) {
+      let leads = 0, sifatli = 0, spend = 0, clicks = 0;
       for (const c of creatives) {
         if (!adsetNames.has(c.adset_name)) continue;
         leads   += c.meta_leads ?? 0;
         sifatli += c.sifatli ?? 0;
       }
-      m.set(formId, { leads, sifatli });
+      for (const r of allRows) {
+        if (!adsetNames.has(r.adset_name)) continue;
+        spend  += r.spend;
+        clicks += r.clicks;
+      }
+      m.set(formId, { leads, sifatli, spend, clicks });
     }
     return m;
-  }, [formsQ.data, creativesQ.data, filterCampaigns, filterForm]);
+  }, [formAdsetsMap, creativesQ.data, allRows]);
 
   // ── Top KPI cards (Jami Lidlar / Sifatli Lidlar / Sotuv) ───────────────────
   // Sourced from /api/campaigns/creatives, which cross-references facebook_leads
@@ -822,16 +836,11 @@ export default function KampaniyalarPage() {
                             c.forms.some(f => f.form_id === form.form_id),
                           );
                           const campName = fCamps.length > 0 ? fCamps[0].campaign_name : null;
-                          const fSpend  = fCamps.reduce((acc, c) => {
-                            const campRow = rows.filter(r => r.campaign_name === c.campaign_name);
-                            const n = Math.max(c.forms.filter(f => f.status === "ACTIVE").length, 1);
-                            return acc + campRow.reduce((s, r) => s + r.spend,  0) / n;
-                          }, 0);
-                          const fClicks = fCamps.reduce((acc, c) => {
-                            const campRow = rows.filter(r => r.campaign_name === c.campaign_name);
-                            const n = Math.max(c.forms.filter(f => f.status === "ACTIVE").length, 1);
-                            return acc + campRow.reduce((s, r) => s + r.clicks, 0) / n;
-                          }, 0);
+                          // Real adset-level spend/clicks for this form (see formDbStatsMap) —
+                          // not an even split of the whole campaign's spend across "active form count".
+                          const dbStats = formDbStatsMap.get(form.form_id);
+                          const fSpend  = dbStats?.spend  ?? 0;
+                          const fClicks = dbStats?.clicks ?? 0;
                           const cpc = fClicks > 0 ? fSpend / fClicks : 0;
                           return (
                             <>
