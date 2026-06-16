@@ -477,19 +477,35 @@ export default function KampaniyalarPage() {
       .sort((a, b) => (b.leads_count ?? 0) - (a.leads_count ?? 0));
   }, [formsQ.data, pageFormsQ.data, search, filterForm, filterCampaigns]);
 
-  // sifatli_lid per form_id from formsQ (LeadgenForm has it) — used by the
-  // per-form row in the Formalar tab table (display only, not the top KPIs).
-  const sifatliFormMap = useMemo(() => {
-    const m = new Map<string, number>();
+  // DB-verified (leads, sifatli) per form_id — used by the Formalar/Lidlar
+  // tabs so the per-form table matches the top KPI cards' methodology
+  // instead of Meta's self-reported leads_count/sifatli_lid.
+  // A form can span several (campaign, adset) pairs; we sum creativesQ
+  // (facebook_leads ↔ Bitrix24 phone-matched) over all of them.
+  const formDbStatsMap = useMemo(() => {
+    const formAdsets = new Map<string, Set<string>>(); // form_id -> adset_name set
     for (const camp of formsQ.data?.campaigns ?? []) {
       if (filterCampaigns.length > 0 && !filterCampaigns.includes(camp.campaign_name)) continue;
       for (const f of camp.forms) {
         if (filterForm && f.form_name !== filterForm) continue;
-        if (!m.has(f.form_id)) m.set(f.form_id, f.sifatli_lid ?? 0);
+        if (!f.adset_name) continue;
+        if (!formAdsets.has(f.form_id)) formAdsets.set(f.form_id, new Set());
+        formAdsets.get(f.form_id)!.add(f.adset_name);
       }
     }
+    const creatives = creativesQ.data?.creatives ?? [];
+    const m = new Map<string, { leads: number; sifatli: number }>();
+    for (const [formId, adsetNames] of formAdsets) {
+      let leads = 0, sifatli = 0;
+      for (const c of creatives) {
+        if (!adsetNames.has(c.adset_name)) continue;
+        leads   += c.meta_leads ?? 0;
+        sifatli += c.sifatli ?? 0;
+      }
+      m.set(formId, { leads, sifatli });
+    }
     return m;
-  }, [formsQ.data, filterCampaigns, filterForm]);
+  }, [formsQ.data, creativesQ.data, filterCampaigns, filterForm]);
 
   // ── Top KPI cards (Jami Lidlar / Sifatli Lidlar / Sotuv) ───────────────────
   // Sourced from /api/campaigns/creatives, which cross-references facebook_leads
@@ -853,10 +869,10 @@ export default function KampaniyalarPage() {
                                 <td className="px-4 py-3 text-text2">{Math.round(fClicks)}</td>
                                 <td className="px-4 py-3 text-text2">${cpc.toFixed(2)}</td>
                                 <td className="px-4 py-3 font-semibold text-blue">
-                                  {form.leads_count > 0 ? fmtNum(form.leads_count) : "0"}
+                                  {fmtNum(formDbStatsMap.get(form.form_id)?.leads ?? 0)}
                                 </td>
-                                <td className="px-4 py-3 font-semibold" style={{ color: (sifatliFormMap.get(form.form_id) ?? 0) > 0 ? "#22c55e" : "var(--text3)" }}>
-                                  {sifatliFormMap.get(form.form_id) ?? 0}
+                                <td className="px-4 py-3 font-semibold" style={{ color: (formDbStatsMap.get(form.form_id)?.sifatli ?? 0) > 0 ? "#22c55e" : "var(--text3)" }}>
+                                  {formDbStatsMap.get(form.form_id)?.sifatli ?? 0}
                                 </td>
                               </tr>
                               {isExp && (
@@ -972,7 +988,7 @@ export default function KampaniyalarPage() {
                       >
                         <span className="w-2 h-2 rounded-full bg-blue shrink-0" />
                         <span className="text-[13px] font-semibold text-text flex-1">{form.form_name}</span>
-                        <span className="text-[11.5px] text-blue font-bold">{fmtNum(form.leads_count)} lid</span>
+                        <span className="text-[11.5px] text-blue font-bold">{fmtNum(formDbStatsMap.get(form.form_id)?.leads ?? 0)} lid</span>
                         <ChevronDown className={`w-4 h-4 text-text3 transition-transform ${expandedCamp === form.form_id ? "rotate-180" : ""}`} />
                       </button>
                       {expandedCamp === form.form_id && (
