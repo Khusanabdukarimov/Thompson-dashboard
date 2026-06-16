@@ -654,7 +654,7 @@ export default function SdelkalarPage() {
             sub="Muvaffaqiyatli" gradient="linear-gradient(135deg,#065f46,#10b981)"
             lightGradient="linear-gradient(135deg,rgba(4,150,107,0.07),rgba(16,185,129,0.12))"
             icon={<CheckCircle size={16} />} />
-          <KpiCard label="O'rtacha Chek" value={fmtMoney(kpi?.ortacha_chek ?? 0)}
+          <KpiCard label="O'rtacha Chek" value={`$${fmtNum(Math.round(kpi?.ortacha_chek ?? 0))}`}
             sub="Won bo'yicha o'rtacha" gradient="linear-gradient(135deg,#92400e,#f59e0b)"
             lightGradient="linear-gradient(135deg,rgba(146,64,14,0.07),rgba(245,158,11,0.12))"
             icon={<ShoppingCart size={16} />} />
