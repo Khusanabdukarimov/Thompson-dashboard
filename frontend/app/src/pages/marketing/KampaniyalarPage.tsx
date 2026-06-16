@@ -366,15 +366,43 @@ export default function KampaniyalarPage() {
     )].sort();
   }, [creativesQ.data, filterCampaigns, filterAdset]);
 
-  // ── filtered rows (apply campaign / platform / adset filters) ──────────────
+  // Adset names linked to the selected Forma (campaign-forms tells us which
+  // adsets feed each lead form), so the Forma filter can reach rows/creatives
+  // even though those data sources have no form_id of their own.
+  const formAdsetNames = useMemo(() => {
+    if (!filterForm) return null;
+    const set = new Set<string>();
+    for (const camp of formsQ.data?.campaigns ?? []) {
+      for (const f of camp.forms) {
+        if (f.form_name === filterForm && f.adset_name) set.add(f.adset_name);
+      }
+    }
+    return set;
+  }, [formsQ.data, filterForm]);
+
+  // Adset names linked to the selected Creative(s) (creativesQ carries both
+  // ad_name and adset_name), so the Creative filter can reach rows too —
+  // rows itself has no ad_name in date-range mode (see note below).
+  const creativeAdsetNames = useMemo(() => {
+    if (filterCreatives.length === 0) return null;
+    const set = new Set<string>();
+    for (const c of creativesQ.data?.creatives ?? []) {
+      if (filterCreatives.includes(c.ad_name ?? "") && c.adset_name) set.add(c.adset_name);
+    }
+    return set;
+  }, [creativesQ.data, filterCreatives]);
+
+  // ── filtered rows (apply campaign / platform / adset / forma / creative) ───
   // NOTE: rows come from meta_ad_daily (date-range mode), which only stores
-  // adset-level granularity — ad_name is always empty here, so a Creative-name
-  // filter cannot apply to spend/impressions/clicks (no per-ad data exists).
+  // adset-level granularity — ad_name is always empty here, so Forma/Creative
+  // filters are applied indirectly via their associated adset_name(s).
   const rows = useMemo(() => allRows
     .filter(r => filterCampaigns.length === 0 || filterCampaigns.includes(r.campaign_name))
     .filter(r => filterPlatforms.length === 0  || filterPlatforms.includes(r.platform))
-    .filter(r => !filterAdset || r.adset_name === filterAdset),
-  [allRows, filterCampaigns, filterPlatforms, filterAdset]);
+    .filter(r => !filterAdset || r.adset_name === filterAdset)
+    .filter(r => !formAdsetNames || formAdsetNames.has(r.adset_name))
+    .filter(r => !creativeAdsetNames || creativeAdsetNames.has(r.adset_name)),
+  [allRows, filterCampaigns, filterPlatforms, filterAdset, formAdsetNames, creativeAdsetNames]);
 
   // ── aggregate KPIs from filtered rows (date-range + filter aware) ────────────
   const isFiltered = !!(filterCampaigns.length || filterPlatforms.length || filterAdset || filterForm || filterCreatives.length);
