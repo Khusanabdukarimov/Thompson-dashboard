@@ -55,16 +55,30 @@ pool.query(`
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS meta_creative_cache (
-    ad_id            TEXT        PRIMARY KEY,
-    creative_id      TEXT,
-    creative_name    TEXT,
-    video_id         TEXT,
-    video_title      TEXT,
-    post_url         TEXT,
-    ads_manager_url  TEXT,
+    ad_id                       TEXT        PRIMARY KEY,
+    creative_id                 TEXT,
+    creative_name                TEXT,
+    video_id                    TEXT,
+    video_title                 TEXT,
+    post_url                    TEXT,
+    ads_manager_url              TEXT,
+    creative_platform            TEXT,        -- 'instagram' | 'facebook' | 'unpublished'
+    facebook_post_url            TEXT,
+    instagram_post_url           TEXT,
+    video_source_url             TEXT,
+    effective_object_story_id    TEXT,
+    effective_instagram_media_id TEXT,
     synced_at        TIMESTAMPTZ DEFAULT NOW()
   );
 `).catch(err => console.error('[campaigns] meta_creative_cache init:', err.message));
+pool.query(`
+  ALTER TABLE meta_creative_cache ADD COLUMN IF NOT EXISTS creative_platform            TEXT;
+  ALTER TABLE meta_creative_cache ADD COLUMN IF NOT EXISTS facebook_post_url            TEXT;
+  ALTER TABLE meta_creative_cache ADD COLUMN IF NOT EXISTS instagram_post_url           TEXT;
+  ALTER TABLE meta_creative_cache ADD COLUMN IF NOT EXISTS video_source_url             TEXT;
+  ALTER TABLE meta_creative_cache ADD COLUMN IF NOT EXISTS effective_object_story_id    TEXT;
+  ALTER TABLE meta_creative_cache ADD COLUMN IF NOT EXISTS effective_instagram_media_id TEXT;
+`).catch(err => console.error('[campaigns] meta_creative_cache migration:', err.message));
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS meta_ad_daily (
@@ -978,7 +992,7 @@ router.get('/creatives', async (req, res) => {
     const creativeMap = {};
     if (adIds.length) {
       const { rows: crRows } = await pool.query(
-        `SELECT ad_id, creative_name, video_title, post_url, ads_manager_url FROM meta_creative_cache WHERE ad_id = ANY($1)`,
+        `SELECT ad_id, creative_name, video_title, post_url, ads_manager_url, creative_platform FROM meta_creative_cache WHERE ad_id = ANY($1)`,
         [adIds]
       );
       for (const cr of crRows) creativeMap[cr.ad_id] = cr;
@@ -994,6 +1008,7 @@ router.get('/creatives', async (req, res) => {
       ad_name:       displayName,
       post_url:        cr.post_url || null,
       ads_manager_url: cr.ads_manager_url || null,
+      creative_platform: cr.creative_platform || null,
       spend:         spendMap[`${r.adset_name}|${r.campaign_name}`] ?? 0,
       meta_leads:    r.meta_leads,
       in_bitrix:     r.in_bitrix,
@@ -1311,16 +1326,22 @@ function buildPostUrl(storyId) {
 }
 
 // ── Meta creative cache sync ──────────────────────────────────────────────────
-// Flow per ad:
-//   1. GET /{ad_id}?fields=creative,account_id  → creative.id + account_id
-//   2. GET /{creative_id}?fields=name,effective_object_story_id,object_story_id,video_id
-//   3. Build post URL from effective_object_story_id (most reliable)
-//   4. If video_id present: fetch title + permalink_url as fallback post URL
-// Uses Meta's `ids=` batch parameter to fetch up to 30 ads (and later, their
-// videos) in ONE request each — instead of one request per ad. The previous
-// per-ad-loop burned through the account's rate limit after ~10-20 ads,
-// leaving the rest of the batch (and the next 30, and the next...) stuck
-// retrying every 15 minutes, so most active creatives never got a post_url.
+// Resolution strategy — not every creative has a public Facebook permalink.
+// Ads can be Facebook posts, Instagram posts, or unpublished "dark posts"
+// (ad-only creative, never posted to either page/profile). Building
+// facebook.com/{page}/posts/{post} blindly from effective_object_story_id
+// breaks for Instagram-origin and dark-post creatives ("content isn't
+// available"). Priority, per ad:
+//   1. effective_instagram_media_id → IG permalink (most specific, when set)
+//   2. effective_object_story_id    → Facebook post URL
+//   3. video_id                     → video source URL (often the only public
+//                                      asset for a dark post)
+//   4. none of the above            → platform='unpublished', post_url=null
+//                                      (NOT an error — expected Meta behavior)
+//
+// Uses Meta's `ids=` batch parameter (up to 50 ads / IG media / videos per
+// call) instead of one request per ad — keeps this well under the account's
+// rate limit even for large backlogs.
 async function syncCreativeNames() {
   try {
     // Never-cached ad_ids go first (cc.ad_id IS NULL), so a backlog of brand-new
@@ -1345,7 +1366,7 @@ async function syncCreativeNames() {
       const res = await axios.get(`${BASE}/`, {
         params: {
           ids: ids.join(','),
-          fields: 'account_id,creative{id,name,effective_object_story_id,object_story_id,video_id}',
+          fields: 'account_id,creative{id,name,effective_object_story_id,effective_instagram_media_id,object_story_id,video_id}',
           access_token: tok,
         },
         timeout: 20000,
@@ -1357,8 +1378,8 @@ async function syncCreativeNames() {
       return; // leave synced_at untouched — retried next cycle
     }
 
-    // Stage 1: resolve per-ad creative info, collect video_ids needing a lookup
-    const staged = []; // { ad_id, creativeId, name, video_id, postUrl, adsManagerUrl }
+    // Stage 1: resolve per-ad creative info, collect IG media ids + video ids needing a lookup
+    const staged = []; // { ad_id, creativeId, name, video_id, igMediaId, storyId, adsManagerUrl }
     const noCreative = [];
     for (const ad_id of ids) {
       const adData = adsData[ad_id];
@@ -1369,23 +1390,39 @@ async function syncCreativeNames() {
         noCreative.push(ad_id);
         continue;
       }
-      const storyId = cr.effective_object_story_id || cr.object_story_id || '';
       const adsManagerUrl = accountId
         ? `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${accountId}&selected_ad_ids=${ad_id}`
         : null;
       staged.push({
         ad_id, creativeId, name: cr.name || null, video_id: cr.video_id || null,
-        postUrl: buildPostUrl(storyId), adsManagerUrl,
+        igMediaId: cr.effective_instagram_media_id || null,
+        storyId: cr.effective_object_story_id || cr.object_story_id || null,
+        adsManagerUrl,
       });
     }
 
-    // Stage 2: batch-fetch video titles/permalinks for any creative backed by a video
+    // Stage 2a: batch-fetch Instagram permalinks (highest priority)
+    const igIds = [...new Set(staged.map(s => s.igMediaId).filter(Boolean))];
+    let igData = {};
+    if (igIds.length) {
+      try {
+        const res = await axios.get(`${BASE}/`, {
+          params: { ids: igIds.join(','), fields: 'permalink', access_token: tok },
+          timeout: 15000,
+        });
+        igData = res.data || {};
+      } catch (e) {
+        console.error('[creative-cache] batch IG permalink fetch failed:', e.response?.data?.error?.message || e.message);
+      }
+    }
+
+    // Stage 2b: batch-fetch video titles/source urls (3rd priority, also stored standalone)
     const videoIds = [...new Set(staged.map(s => s.video_id).filter(Boolean))];
     let videosData = {};
     if (videoIds.length) {
       try {
         const res = await axios.get(`${BASE}/`, {
-          params: { ids: videoIds.join(','), fields: 'title,permalink_url', access_token: tok },
+          params: { ids: videoIds.join(','), fields: 'title,source,permalink_url', access_token: tok },
           timeout: 15000,
         });
         videosData = res.data || {};
@@ -1396,30 +1433,45 @@ async function syncCreativeNames() {
 
     let synced = 0;
     for (const s of staged) {
-      let postUrl = s.postUrl;
-      let videoTitle = null;
       const vid = s.video_id ? videosData[s.video_id] : null;
-      if (vid) {
-        videoTitle = vid.title || null;
-        if (!postUrl && vid.permalink_url) {
-          postUrl = vid.permalink_url.startsWith('http')
-            ? vid.permalink_url
-            : `https://www.facebook.com${vid.permalink_url}`;
-        }
-      }
+      const videoTitle     = vid?.title  || null;
+      const videoSourceUrl = vid?.source || null;
+
+      const instagramPostUrl = s.igMediaId ? (igData[s.igMediaId]?.permalink || null) : null;
+      const facebookPostUrl  = buildPostUrl(s.storyId)
+        || (vid?.permalink_url ? (vid.permalink_url.startsWith('http') ? vid.permalink_url : `https://www.facebook.com${vid.permalink_url}`) : null);
+
+      let platform, postUrl;
+      if (instagramPostUrl)      { platform = 'instagram';   postUrl = instagramPostUrl; }
+      else if (facebookPostUrl)  { platform = 'facebook';     postUrl = facebookPostUrl;  }
+      else if (videoSourceUrl)   { platform = 'unpublished';  postUrl = videoSourceUrl;   } // dark post — video file is the only public asset
+      else                       { platform = 'unpublished';  postUrl = null;             } // expected for many dark posts — not an error
+
       await pool.query(`
         INSERT INTO meta_creative_cache
-          (ad_id, creative_id, creative_name, video_id, video_title, post_url, ads_manager_url, synced_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+          (ad_id, creative_id, creative_name, video_id, video_title, post_url, ads_manager_url,
+           creative_platform, facebook_post_url, instagram_post_url, video_source_url,
+           effective_object_story_id, effective_instagram_media_id, synced_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
         ON CONFLICT (ad_id) DO UPDATE SET
-          creative_id     = EXCLUDED.creative_id,
-          creative_name   = EXCLUDED.creative_name,
-          video_id        = EXCLUDED.video_id,
-          video_title     = EXCLUDED.video_title,
-          post_url        = EXCLUDED.post_url,
-          ads_manager_url = EXCLUDED.ads_manager_url,
-          synced_at       = NOW()
-      `, [s.ad_id, s.creativeId, s.name, s.video_id, videoTitle, postUrl, s.adsManagerUrl]).catch(() => {});
+          creative_id                  = EXCLUDED.creative_id,
+          creative_name                = EXCLUDED.creative_name,
+          video_id                     = EXCLUDED.video_id,
+          video_title                  = EXCLUDED.video_title,
+          post_url                     = EXCLUDED.post_url,
+          ads_manager_url               = EXCLUDED.ads_manager_url,
+          creative_platform            = EXCLUDED.creative_platform,
+          facebook_post_url            = EXCLUDED.facebook_post_url,
+          instagram_post_url           = EXCLUDED.instagram_post_url,
+          video_source_url             = EXCLUDED.video_source_url,
+          effective_object_story_id    = EXCLUDED.effective_object_story_id,
+          effective_instagram_media_id = EXCLUDED.effective_instagram_media_id,
+          synced_at                    = NOW()
+      `, [
+        s.ad_id, s.creativeId, s.name, s.video_id, videoTitle, postUrl, s.adsManagerUrl,
+        platform, facebookPostUrl, instagramPostUrl, videoSourceUrl,
+        s.storyId, s.igMediaId,
+      ]).catch(() => {});
       synced++;
     }
 
@@ -1430,7 +1482,7 @@ async function syncCreativeNames() {
       ).catch(() => {});
     }
 
-    if (synced) console.log(`[creative-cache] synced ${synced}/${adRows.length} ad creatives (batched, 2 API calls)`);
+    if (synced) console.log(`[creative-cache] synced ${synced}/${adRows.length} ad creatives (batched)`);
   } catch (e) {
     console.error('[creative-cache] sync error:', e.message);
   }
