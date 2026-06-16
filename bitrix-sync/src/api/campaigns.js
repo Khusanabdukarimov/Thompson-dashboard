@@ -992,7 +992,8 @@ router.get('/creatives', async (req, res) => {
       campaign_name: r.campaign_name,
       ad_id:         r.ad_id || null,
       ad_name:       displayName,
-      post_url:      cr.post_url || cr.ads_manager_url || null,
+      post_url:        cr.post_url || null,
+      ads_manager_url: cr.ads_manager_url || null,
       spend:         spendMap[`${r.adset_name}|${r.campaign_name}`] ?? 0,
       meta_leads:    r.meta_leads,
       in_bitrix:     r.in_bitrix,
@@ -1315,6 +1316,11 @@ function buildPostUrl(storyId) {
 //   2. GET /{creative_id}?fields=name,effective_object_story_id,object_story_id,video_id
 //   3. Build post URL from effective_object_story_id (most reliable)
 //   4. If video_id present: fetch title + permalink_url as fallback post URL
+// Uses Meta's `ids=` batch parameter to fetch up to 30 ads (and later, their
+// videos) in ONE request each — instead of one request per ad. The previous
+// per-ad-loop burned through the account's rate limit after ~10-20 ads,
+// leaving the rest of the batch (and the next 30, and the next...) stuck
+// retrying every 15 minutes, so most active creatives never got a post_url.
 async function syncCreativeNames() {
   try {
     const { rows: adRows } = await pool.query(`
@@ -1324,86 +1330,104 @@ async function syncCreativeNames() {
           SELECT ad_id FROM meta_creative_cache
           WHERE synced_at > NOW() - INTERVAL '1 hour'
         )
-      LIMIT 30
+      LIMIT 50
     `);
     if (!adRows.length) return;
 
     const tok = token();
-    let synced = 0;
+    const ids = adRows.map(r => r.ad_id);
 
-    for (const { ad_id } of adRows) {
-      // Throttle: 600ms between calls to avoid Meta rate limits
-      await new Promise(r => setTimeout(r, 600));
+    let adsData;
+    try {
+      const res = await axios.get(`${BASE}/`, {
+        params: {
+          ids: ids.join(','),
+          fields: 'account_id,creative{id,name,effective_object_story_id,object_story_id,video_id}',
+          access_token: tok,
+        },
+        timeout: 20000,
+      });
+      adsData = res.data || {};
+    } catch (e) {
+      const msg = e.response?.data?.error?.message || e.message || '';
+      console.error('[creative-cache] batch ads fetch failed:', msg);
+      return; // leave synced_at untouched — retried next cycle
+    }
+
+    // Stage 1: resolve per-ad creative info, collect video_ids needing a lookup
+    const staged = []; // { ad_id, creativeId, name, video_id, postUrl, adsManagerUrl }
+    const noCreative = [];
+    for (const ad_id of ids) {
+      const adData = adsData[ad_id];
+      const accountId  = adData?.account_id || null;
+      const cr         = adData?.creative || null;
+      const creativeId = cr?.id || null;
+      if (!adData || adData.error || !creativeId) {
+        noCreative.push(ad_id);
+        continue;
+      }
+      const storyId = cr.effective_object_story_id || cr.object_story_id || '';
+      const adsManagerUrl = accountId
+        ? `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${accountId}&selected_ad_ids=${ad_id}`
+        : null;
+      staged.push({
+        ad_id, creativeId, name: cr.name || null, video_id: cr.video_id || null,
+        postUrl: buildPostUrl(storyId), adsManagerUrl,
+      });
+    }
+
+    // Stage 2: batch-fetch video titles/permalinks for any creative backed by a video
+    const videoIds = [...new Set(staged.map(s => s.video_id).filter(Boolean))];
+    let videosData = {};
+    if (videoIds.length) {
       try {
-        // Single call: nested creative fields saves one round-trip per ad
-        const adRes = await axios.get(`${BASE}/${ad_id}`, {
-          params: {
-            fields: 'account_id,creative{id,name,effective_object_story_id,object_story_id,video_id}',
-            access_token: tok,
-          },
-          timeout: 10000,
+        const res = await axios.get(`${BASE}/`, {
+          params: { ids: videoIds.join(','), fields: 'title,permalink_url', access_token: tok },
+          timeout: 15000,
         });
-        const accountId  = adRes.data?.account_id || null;
-        const cr         = adRes.data?.creative || null;
-        const creativeId = cr?.id || null;
-        if (!creativeId) {
-          await pool.query(
-            `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
-             ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
-          ).catch(() => {});
-          continue;
-        }
-
-        // Build post URL — prefer effective_object_story_id (includes page reposts)
-        const storyId = cr.effective_object_story_id || cr.object_story_id || '';
-        let postUrl   = buildPostUrl(storyId);
-
-        // Video fallback
-        let videoTitle = null;
-        if (cr.video_id) {
-          try {
-            const vidRes = await axios.get(`${BASE}/${cr.video_id}`, {
-              params: { fields: 'title,permalink_url', access_token: tok }, timeout: 8000
-            });
-            videoTitle = vidRes.data?.title || null;
-            if (!postUrl && vidRes.data?.permalink_url) {
-              // permalink_url is a relative path like /videos/123456789/
-              const rel = vidRes.data.permalink_url;
-              postUrl = rel.startsWith('http') ? rel : `https://www.facebook.com${rel}`;
-            }
-          } catch (_) {}
-        }
-
-        const adsManagerUrl = accountId
-          ? `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${accountId}&selected_ad_ids=${ad_id}`
-          : null;
-
-        await pool.query(`
-          INSERT INTO meta_creative_cache
-            (ad_id, creative_id, creative_name, video_id, video_title, post_url, ads_manager_url, synced_at)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
-          ON CONFLICT (ad_id) DO UPDATE SET
-            creative_id     = EXCLUDED.creative_id,
-            creative_name   = EXCLUDED.creative_name,
-            video_id        = EXCLUDED.video_id,
-            video_title     = EXCLUDED.video_title,
-            post_url        = EXCLUDED.post_url,
-            ads_manager_url = EXCLUDED.ads_manager_url,
-            synced_at       = NOW()
-        `, [ad_id, creativeId, cr.name || null, cr.video_id || null, videoTitle, postUrl, adsManagerUrl]);
-        synced++;
+        videosData = res.data || {};
       } catch (e) {
-        const msg = e.response?.data?.error?.message || e.message || '';
-        console.error(`[creative-cache] ad ${ad_id}:`, msg);
-        await pool.query(
-          `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
-           ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
-        ).catch(() => {});
-        // Abort entire batch on rate limit — avoid burning remaining quota
-        if (msg.includes('too many calls') || msg.includes('rate limit')) break;
+        console.error('[creative-cache] batch video fetch failed:', e.response?.data?.error?.message || e.message);
       }
     }
-    if (synced) console.log(`[creative-cache] synced ${synced}/${adRows.length} ad creatives`);
+
+    let synced = 0;
+    for (const s of staged) {
+      let postUrl = s.postUrl;
+      let videoTitle = null;
+      const vid = s.video_id ? videosData[s.video_id] : null;
+      if (vid) {
+        videoTitle = vid.title || null;
+        if (!postUrl && vid.permalink_url) {
+          postUrl = vid.permalink_url.startsWith('http')
+            ? vid.permalink_url
+            : `https://www.facebook.com${vid.permalink_url}`;
+        }
+      }
+      await pool.query(`
+        INSERT INTO meta_creative_cache
+          (ad_id, creative_id, creative_name, video_id, video_title, post_url, ads_manager_url, synced_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        ON CONFLICT (ad_id) DO UPDATE SET
+          creative_id     = EXCLUDED.creative_id,
+          creative_name   = EXCLUDED.creative_name,
+          video_id        = EXCLUDED.video_id,
+          video_title     = EXCLUDED.video_title,
+          post_url        = EXCLUDED.post_url,
+          ads_manager_url = EXCLUDED.ads_manager_url,
+          synced_at       = NOW()
+      `, [s.ad_id, s.creativeId, s.name, s.video_id, videoTitle, postUrl, s.adsManagerUrl]).catch(() => {});
+      synced++;
+    }
+
+    for (const ad_id of noCreative) {
+      await pool.query(
+        `INSERT INTO meta_creative_cache (ad_id, synced_at) VALUES ($1, NOW())
+         ON CONFLICT (ad_id) DO UPDATE SET synced_at = NOW()`, [ad_id]
+      ).catch(() => {});
+    }
+
+    if (synced) console.log(`[creative-cache] synced ${synced}/${adRows.length} ad creatives (batched, 2 API calls)`);
   } catch (e) {
     console.error('[creative-cache] sync error:', e.message);
   }
@@ -1420,7 +1444,9 @@ async function resyncMissingPostUrls() {
   } catch (_) {}
 }
 
-// Sync creative names: on startup after 30s, then every 15 minutes
+// Sync creative names: on startup after 30s, then every 5 minutes.
+// Now batched (2 API calls per cycle instead of up to ~60), so a tighter
+// interval no longer risks the account-level rate limit.
 // resyncMissingPostUrls resets stale entries so they get re-fetched each cycle
 setTimeout(async () => {
   await resyncMissingPostUrls();
@@ -1429,7 +1455,7 @@ setTimeout(async () => {
 setInterval(async () => {
   await resyncMissingPostUrls();
   syncCreativeNames().catch(() => {});
-}, 15 * 60_000);
+}, 5 * 60_000);
 
 console.log('[meta_ad_daily] 1-min (today) + 30-min (30 days) sync scheduled');
 
