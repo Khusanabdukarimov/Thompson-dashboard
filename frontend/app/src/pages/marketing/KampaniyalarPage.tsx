@@ -374,7 +374,7 @@ export default function KampaniyalarPage() {
   [allRows, filterCampaigns, filterPlatforms, filterAdset]);
 
   // ── aggregate KPIs from filtered rows (date-range + filter aware) ────────────
-  const isFiltered = !!(filterCampaigns.length || filterPlatforms.length || filterAdset || filterForm);
+  const isFiltered = !!(filterCampaigns.length || filterPlatforms.length || filterAdset || filterForm || filterCreatives.length);
 
   const totalSpend  = rows.reduce((a, r) => a + r.spend,       0);
   const totalClicks = rows.reduce((a, r) => a + r.clicks,      0);
@@ -578,10 +578,10 @@ export default function KampaniyalarPage() {
                 {/* Multi-select filters row 1 */}
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
                   <MultiSelect label="Kampaniya" options={optCampaigns} values={filterCampaigns}
-                    onChange={v => { setFilterCampaigns(v); setFilterPlatforms([]); setFilterAdset(""); setFilterForm(""); }} />
+                    onChange={v => { setFilterCampaigns(v); setFilterPlatforms([]); setFilterAdset(""); setFilterForm(""); setFilterCreatives([]); }} />
                   <MultiSelect label="Platforma" options={optPlatforms.map(p => p === "facebook" ? "Facebook" : "Instagram")}
                     values={filterPlatforms.map(p => p === "facebook" ? "Facebook" : "Instagram")}
-                    onChange={v => setFilterPlatforms(v.map(p => p === "Facebook" ? "facebook" : "instagram"))} />
+                    onChange={v => { setFilterPlatforms(v.map(p => p === "Facebook" ? "facebook" : "instagram")); setFilterAdset(""); setFilterCreatives([]); }} />
                   <div style={{ flex: "1 1 180px", minWidth: 160 }}>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Forma</div>
                     <select value={filterForm} onChange={e => setFilterForm(e.target.value)} style={selStyle}>
@@ -591,7 +591,7 @@ export default function KampaniyalarPage() {
                   </div>
                   <div style={{ flex: "1 1 180px", minWidth: 160 }}>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Adset</div>
-                    <select value={filterAdset} onChange={e => setFilterAdset(e.target.value)} style={selStyle}>
+                    <select value={filterAdset} onChange={e => { setFilterAdset(e.target.value); setFilterCreatives([]); }} style={selStyle}>
                       <option value="">Barchasi</option>
                       {optAdsets.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
