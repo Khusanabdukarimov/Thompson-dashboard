@@ -1323,13 +1323,16 @@ function buildPostUrl(storyId) {
 // retrying every 15 minutes, so most active creatives never got a post_url.
 async function syncCreativeNames() {
   try {
+    // Never-cached ad_ids go first (cc.ad_id IS NULL), so a backlog of brand-new
+    // ads is never starved by ads stuck retrying for an unavailable post_url
+    // (e.g. dynamic/Advantage+ creatives with no effective_object_story_id).
     const { rows: adRows } = await pool.query(`
-      SELECT DISTINCT ad_id FROM facebook_leads
-      WHERE ad_id IS NOT NULL AND ad_id != ''
-        AND ad_id NOT IN (
-          SELECT ad_id FROM meta_creative_cache
-          WHERE synced_at > NOW() - INTERVAL '1 hour'
-        )
+      SELECT DISTINCT fl.ad_id, (cc.ad_id IS NULL) AS is_new
+      FROM facebook_leads fl
+      LEFT JOIN meta_creative_cache cc ON cc.ad_id = fl.ad_id
+      WHERE fl.ad_id IS NOT NULL AND fl.ad_id != ''
+        AND (cc.ad_id IS NULL OR cc.synced_at < NOW() - INTERVAL '1 hour')
+      ORDER BY is_new DESC
       LIMIT 50
     `);
     if (!adRows.length) return;
@@ -1433,13 +1436,18 @@ async function syncCreativeNames() {
   }
 }
 
-// Force re-sync ads that have no post_url and no video_id (likely bad cached data)
+// Force re-sync ads that have no post_url (likely bad cached data, or Meta
+// simply has no effective_object_story_id for this ad — e.g. dynamic /
+// Advantage+ creatives). Only retries entries untouched for 6h+, so this
+// can't dominate every 5-min cycle and starve genuinely new ads (the main
+// query in syncCreativeNames already prioritizes never-cached ad_ids too).
 async function resyncMissingPostUrls() {
   try {
     await pool.query(`
       UPDATE meta_creative_cache
       SET synced_at = '2000-01-01'
       WHERE post_url IS NULL AND creative_id IS NOT NULL
+        AND synced_at < NOW() - INTERVAL '6 hours'
     `);
   } catch (_) {}
 }
