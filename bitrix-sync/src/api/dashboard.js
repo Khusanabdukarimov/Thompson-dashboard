@@ -334,7 +334,7 @@ router.get('/tasks-summary', async (req, res) => {
        FROM responsibles r
        LEFT JOIN tasks t ON t.executor_id = r.id
          AND ($1::date IS NULL OR t.date_created >= $1::date)
-         AND ($2::date IS NULL OR t.date_created <= $2::date)
+         AND ($2::date IS NULL OR t.date_created < $2::date + INTERVAL '1 day')
          ${leadFilter}
        WHERE r.active = TRUE
        GROUP BY r.id, r.name, r.last_name
