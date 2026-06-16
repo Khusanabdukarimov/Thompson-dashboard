@@ -23,17 +23,6 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Powered by badge */}
-      <a
-        href="https://www.data365.uz/en"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-2 rounded-2xl text-[13px] font-medium transition-all hover:scale-105"
-        style={{ background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 4px 24px rgba(0,0,0,0.08), 0 0 0 1px rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.5)', color: '#374151' }}
-      >
-        <span style={{ color: '#9ca3af', fontWeight: 400 }}>Powered by</span>
-        <span style={{ fontWeight: 700, color: '#111827' }}>data365.uz</span>
-      </a>
       <Sidebar
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed(c => !c)}
