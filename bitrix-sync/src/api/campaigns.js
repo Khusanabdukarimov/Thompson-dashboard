@@ -959,17 +959,19 @@ router.get('/creatives', async (req, res) => {
       }
     }
 
-    // 2. Spend per adset from meta_ad_daily (date range aware)
+    // 2. Spend per adset+campaign from meta_ad_daily (date range aware).
+    // Grouping by adset_name alone would double-count spend when the same
+    // adset_name is reused across multiple campaigns.
     const { rows: cacheRows } = await pool.query(`
-      SELECT adset_name, SUM(spend)::numeric AS spend
+      SELECT adset_name, campaign_name, SUM(spend)::numeric AS spend
       FROM meta_ad_daily
       WHERE date >= $1::date AND date <= $2::date
         AND adset_name IS NOT NULL
-      GROUP BY adset_name
+      GROUP BY adset_name, campaign_name
     `, [since, until]);
 
     const spendMap = {};
-    for (const r of cacheRows) spendMap[r.adset_name] = parseFloat(r.spend) || 0;
+    for (const r of cacheRows) spendMap[`${r.adset_name}|${r.campaign_name}`] = parseFloat(r.spend) || 0;
 
     // 3. Creative name cache
     const adIds = qualRows.map(r => r.ad_id).filter(Boolean);
@@ -991,7 +993,7 @@ router.get('/creatives', async (req, res) => {
       ad_id:         r.ad_id || null,
       ad_name:       displayName,
       post_url:      cr.post_url || cr.ads_manager_url || null,
-      spend:         spendMap[r.adset_name] ?? 0,
+      spend:         spendMap[`${r.adset_name}|${r.campaign_name}`] ?? 0,
       meta_leads:    r.meta_leads,
       in_bitrix:     r.in_bitrix,
       not_in_bitrix: r.not_in_bitrix,
