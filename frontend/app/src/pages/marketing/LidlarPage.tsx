@@ -692,20 +692,12 @@ export default function LidlarPage() {
                 <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Sifatli Lid</div>
               </GradCard>
-              <GradCard gradient="linear-gradient(135deg,#1a0033,#3d1a6e)" lightGradient="linear-gradient(135deg,rgba(156,39,176,0.07),rgba(156,39,176,0.03))"
-                        border="rgba(156,39,176,0.3)" lightBorder="rgba(156,39,176,0.25)"
-                        shadow="0 4px 20px rgba(156,39,176,0.15)" icon={<Calendar size={20} style={{ color:"#9C27B0" }} />}
-                        title="Konsultatsiyalar" sparkColor="#9C27B0" sparkVariant={2}>
-                <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginBottom:3 }}>
-                  <span style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
-                  <span style={{ fontSize:24, fontWeight:700, color: isDark ? "#9E9E9E" : "var(--text3)" }}>/</span>
-                  <span style={{ fontSize:36, fontWeight:800, color:"#4CAF50" }}>{fmtNum(konsultOtkazildi)}</span>
-                </div>
-                <div style={{ fontSize:10 }}>
-                  <span style={{ color: isDark ? "#9E9E9E" : "var(--text3)" }}>Belgilandi</span>
-                  <span style={{ color: isDark ? "#555" : "var(--text3)" }}> / </span>
-                  <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
-                </div>
+              <GradCard gradient="linear-gradient(135deg,#2a1500,#6e3d00)" lightGradient="linear-gradient(135deg,rgba(255,152,0,0.07),rgba(255,152,0,0.03))"
+                        border="rgba(255,152,0,0.3)" lightBorder="rgba(255,152,0,0.25)"
+                        shadow="0 4px 20px rgba(255,152,0,0.15)" icon={<ArrowLeftRight size={20} style={{ color:"#FF9800" }} />}
+                        title="Jarayonda" sparkColor="#FF9800" sparkVariant={2}>
+                <div style={{ fontSize:36, fontWeight:800, color:"#FF9800", lineHeight:1.1, marginBottom:3 }}>{fmtNum(jarayondaCount)}</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Jarayondagi lidlar</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" lightGradient="linear-gradient(135deg,rgba(76,175,80,0.07),rgba(76,175,80,0.03))"
                         border="rgba(76,175,80,0.3)" lightBorder="rgba(76,175,80,0.25)"
@@ -725,11 +717,12 @@ export default function LidlarPage() {
                   <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>Voronka samaradorligi</span>
                   <span style={{ fontSize:11, color:"var(--text3)", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
                 </div>
-                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1px 1fr 1px 1fr", gap:0, alignItems:"center" }}>
+                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1px 1fr 1px 1fr 1px 1fr", gap:0, alignItems:"center" }}>
                   {[
                     { icon:<Percent size={22} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
                     { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
                     { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
+                    { icon:<Target size={22} style={{ color:"#3F51B5" }} />, bg:"rgba(63,81,181,0.15)", val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0, color:"#3F51B5", title:"Sifatli → Uchrashuv", sub:"Sifatli / O'tkazildi" },
                   ].map((m, i) => (
                     <>
                       <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"8px 24px", gap:12 }}>
@@ -740,7 +733,7 @@ export default function LidlarPage() {
                           <div style={{ fontSize:11, color:"var(--text3)", marginTop:6 }}>{m.sub}</div>
                         </div>
                       </div>
-                      {i < 2 && <div key={`sep-${i}`} style={{ background:"var(--border)", width:1, height:"60%", alignSelf:"center" }} />}
+                      {i < 3 && <div key={`sep-${i}`} style={{ background:"var(--border)", width:1, height:"60%", alignSelf:"center" }} />}
                     </>
                   ))}
                 </div>
@@ -748,23 +741,31 @@ export default function LidlarPage() {
 
               {/* Jarayonda + Sifatsiz + Bekor bo'ldi — stacked */}
               <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                {/* Jarayonda */}
-                <div style={{ flex:1, background: isDark ? "linear-gradient(135deg,#2a1500,#6e3d00)" : "linear-gradient(135deg,rgba(255,152,0,0.07),rgba(255,152,0,0.03))",
-                              border: `1px solid ${isDark ? "rgba(255,152,0,0.3)" : "rgba(255,152,0,0.25)"}`,
-                              boxShadow:"0 4px 20px rgba(255,152,0,0.12)", borderRadius:16,
+                {/* Konsultatsiyalar */}
+                <div style={{ flex:1, background: isDark ? "linear-gradient(135deg,#1a0033,#3d1a6e)" : "linear-gradient(135deg,rgba(156,39,176,0.07),rgba(156,39,176,0.03))",
+                              border: `1px solid ${isDark ? "rgba(156,39,176,0.3)" : "rgba(156,39,176,0.25)"}`,
+                              boxShadow:"0 4px 20px rgba(156,39,176,0.12)", borderRadius:16,
                               padding:"16px 16px 0 16px", display:"flex", flexDirection:"column", overflow:"hidden" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                    <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,152,0,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      <ArrowLeftRight size={20} style={{ color:"#FF9800" }} />
+                    <div style={{ width:40, height:40, borderRadius:"50%", background:"rgba(156,39,176,0.2)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <Calendar size={20} style={{ color:"#9C27B0" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Jarayonda</div>
-                      <div style={{ fontSize:34, fontWeight:800, color:"#FF9800", lineHeight:1.1, marginTop:2 }}>{fmtNum(jarayondaCount)}</div>
-                      <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Jarayondagi lidlar</div>
+                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Konsultatsiyalar</div>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginTop:2 }}>
+                        <span style={{ fontSize:34, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
+                        <span style={{ fontSize:20, fontWeight:700, color: isDark ? "#9E9E9E" : "var(--text3)" }}>/</span>
+                        <span style={{ fontSize:34, fontWeight:800, color:"#4CAF50" }}>{fmtNum(konsultOtkazildi)}</span>
+                      </div>
+                      <div style={{ fontSize:11, marginTop:2 }}>
+                        <span style={{ color: isDark ? "#9E9E9E" : "var(--text3)" }}>Belgilandi</span>
+                        <span style={{ color: isDark ? "#555" : "var(--text3)" }}> / </span>
+                        <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
+                      </div>
                     </div>
                   </div>
                   <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
-                    <Sparkline color="#FF9800" variant={2} />
+                    <Sparkline color="#9C27B0" variant={2} />
                   </div>
                 </div>
                 {/* Sifatsiz */}
