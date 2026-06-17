@@ -51,95 +51,60 @@ router.get('/kunlik', async (req, res) => {
   const since = `${year}-${String(monthNum).padStart(2,'0')}-01 00:00:00`;
   const until = `${year}-${String(monthNum).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')} 23:59:59`;
 
-  const SRCS    = ['target', 'instagram'];
   const METRICS = ['leads','qual_leads','meetings','deals','deals_sum','sales_count','sales_sum','cancelled'];
 
-  const result = {};
-  for (const src of SRCS) {
-    result[src] = {};
-    for (const m of METRICS) result[src][m] = makeEmpty(daysInMonth);
-  }
+  const result = { target: {} };
+  for (const m of METRICS) result.target[m] = makeEmpty(daysInMonth);
+
+  // "Target" source_id in Bitrix24 = UC_89FPH6
+  const TARGET_SRC = 'UC_89FPH6';
 
   try {
-    // ── 1. facebook_leads: count ALL submissions per day+platform ─
-    //    Lidlar soni = total facebook form submissions
-    const fbLeadsRes = await pool.query(`
+    // ── 1. Leads count: from Bitrix leads where source_id = UC_89FPH6 ──
+    const leadsRes = await pool.query(`
       SELECT
-        EXTRACT(DAY FROM created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
-        (${PLATFORM_CASE}) AS src,
+        EXTRACT(DAY FROM date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
         COUNT(*)::int AS cnt
-      FROM facebook_leads
-      WHERE created_time >= $1 AND created_time <= $2
-      GROUP BY day, src
-    `, [since, until]);
+      FROM leads
+      WHERE date_create >= $1 AND date_create <= $2
+        AND source_id = $3
+      GROUP BY day
+    `, [since, until, TARGET_SRC]);
 
-    for (const row of fbLeadsRes.rows) {
+    for (const row of leadsRes.rows) {
       if (row.day >= 1 && row.day <= daysInMonth) {
-        result[row.src].leads[row.day - 1] += row.cnt;
+        result.target.leads[row.day - 1] += row.cnt;
       }
     }
 
-    // ── 2. Match facebook_leads → Bitrix leads by phone ──────────
-    //    Used for: qual_leads, meetings (from stage history), cancelled
-    const fbLeadMatchRes = await pool.query(`
-      WITH fb AS (
-        SELECT
-          fl.id,
-          EXTRACT(DAY FROM fl.created_time AT TIME ZONE 'Asia/Tashkent')::int AS day,
-          (${PLATFORM_CASE.replace(/adset_name/g,'fl.adset_name').replace(/campaign_name/g,'fl.campaign_name')}) AS src,
-          ${normExpr('COALESCE(fl.phone,\'\')')} AS phone_norm
-        FROM facebook_leads fl
-        WHERE fl.created_time >= $1 AND fl.created_time <= $2
-          AND LENGTH(REGEXP_REPLACE(COALESCE(fl.phone,''), '[^0-9]', '', 'g')) >= 7
-      )
-      SELECT DISTINCT ON (f.id)
-        f.id      AS fb_id,
-        f.day,
-        f.src,
-        l.id      AS lead_id,
-        s.bitrix_id AS stage_bitrix_id,
+    // ── 2. Qual leads + cancelled (lead-level) from Bitrix leads ──
+    const qualLeadsRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM l.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
+        s.bitrix_id AS stage_bid,
         s.is_final,
         s.is_won
-      FROM fb f
-      JOIN lead_phones lp
-        ON ${normExpr('lp.phone')} = f.phone_norm
-      JOIN leads l ON l.id = lp.lead_id
+      FROM leads l
       LEFT JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
-      ORDER BY f.id, l.date_create DESC
-    `, [since, until]);
+      WHERE l.date_create >= $1 AND l.date_create <= $2
+        AND l.source_id = $3
+    `, [since, until, TARGET_SRC]);
 
-    for (const row of fbLeadMatchRes.rows) {
+    for (const row of qualLeadsRes.rows) {
       if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
-      const i   = row.day - 1;
-      const src = row.src;
-
-      if (QUAL_STAGES.includes(row.stage_bitrix_id)) {
-        result[src].qual_leads[i]++;
+      const i = row.day - 1;
+      if (QUAL_STAGES.includes(row.stage_bid)) {
+        result.target.qual_leads[i]++;
       }
       if (row.is_final && !row.is_won) {
-        result[src].cancelled[i]++;
+        result.target.cancelled[i]++;
       }
     }
 
-    // ── 3. Deal-based metrics: direct query from deals table ─────
-    //    meetings    = Uchrashuvlar soni  = deals in NEW stage (Uchrashuv o'tkazildi)
-    //    deals       = Kelishuv bo'ldi    = deals in UC_W35V62 stage
-    //    deals_sum   = Kelishuv summasi   = opportunity sum for UC_W35V62 deals
-    //    sales_count = Sotuvlar soni      = won deals (is_won)
-    //    sales_sum   = Sotuvlar summasi   = opportunity sum for won deals
-    //    cancelled   = Bekor bo'ldi       = is_final AND NOT is_won deals
-    //
-    //    Source classification by deal.source_id:
-    //      target    = UC_O9BLGT (Facebook/Target ads)
-    //      instagram = UC_3O8GTF | UC_89FPH6 (Instagram)
+    // ── 3. Deal-based metrics: meetings, deals, deals_sum, cancelled ──
     const dealMetricsRes = await pool.query(`
       SELECT
         EXTRACT(DAY FROM d.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
-        CASE
-          WHEN d.source_id IN ('UC_O9BLGT') THEN 'target'
-          WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
-          ELSE NULL
-        END AS src,
         s.bitrix_id AS stage_bid,
         s.is_won,
         s.is_final,
@@ -147,66 +112,45 @@ router.get('/kunlik', async (req, res) => {
       FROM deals d
       LEFT JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
       WHERE d.date_create >= $1 AND d.date_create <= $2
-        AND CASE
-              WHEN d.source_id IN ('UC_O9BLGT') THEN 'target'
-              WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
-              ELSE NULL
-            END IS NOT NULL
-    `, [since, until]);
+        AND d.source_id = $3
+    `, [since, until, TARGET_SRC]);
 
     for (const row of dealMetricsRes.rows) {
       if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
       const i   = row.day - 1;
-      const src = row.src;
       const opp = parseFloat(row.opp) || 0;
 
-      // Uchrashuvlar soni = deals in NEW stage (Uchrashuv o'tkazildi)
       if (row.stage_bid === 'NEW') {
-        result[src].meetings[i]++;
+        result.target.meetings[i]++;
       }
-
-      // Kelishuv bo'ldi = deals in UC_W35V62 (Kelishuv bo'ldi) stage
       if (row.stage_bid === 'UC_W35V62') {
-        result[src].deals[i]++;
-        result[src].deals_sum[i] = Math.round((result[src].deals_sum[i] + opp) * 100) / 100;
+        result.target.deals[i]++;
+        result.target.deals_sum[i] = Math.round((result.target.deals_sum[i] + opp) * 100) / 100;
       }
-
-      // Bekor bo'ldi = final + not won
       if (row.is_final && !row.is_won) {
-        result[src].cancelled[i]++;
+        result.target.cancelled[i]++;
       }
     }
 
-    // ── 4. Sales metrics: by uf_bp_sale_date (actual payment date) ──
-    //    Filter by FB/IG source_ids. UC_O9BLGT → target unless utm_source = ig/instagram
-    //    (meaning the target ad ran on instagram placement → goes to instagram section).
-    //    UC_3O8GTF + UC_89FPH6 always → instagram.
+    // ── 4. Sales metrics: by uf_bp_sale_date ──
     const salesRes = await pool.query(`
       SELECT
         EXTRACT(DAY FROM d.uf_bp_sale_date AT TIME ZONE 'Asia/Tashkent')::int AS day,
-        CASE
-          WHEN d.source_id = 'UC_O9BLGT'
-            AND LOWER(TRIM(d.utm_source)) IN ('instagram','ig') THEN 'instagram'
-          WHEN d.source_id = 'UC_O9BLGT' THEN 'target'
-          WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
-          ELSE NULL
-        END AS src,
         COUNT(*)::int AS cnt,
         COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS paid_sum
       FROM deals d
       WHERE d.uf_bp_sale_date IS NOT NULL
         AND d.uf_bp_sale_date >= $1
         AND d.uf_bp_sale_date <= $2
-        AND d.source_id IN ('UC_O9BLGT','UC_3O8GTF','UC_89FPH6')
-      GROUP BY day, src
-    `, [since, until]);
+        AND d.source_id = $3
+      GROUP BY day
+    `, [since, until, TARGET_SRC]);
 
     for (const row of salesRes.rows) {
       if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
-      const i   = row.day - 1;
-      const src = row.src;
-      result[src].sales_count[i] += row.cnt;
-      result[src].sales_sum[i]    = Math.round((result[src].sales_sum[i] + parseFloat(row.paid_sum)) * 100) / 100;
+      const i = row.day - 1;
+      result.target.sales_count[i] += row.cnt;
+      result.target.sales_sum[i]    = Math.round((result.target.sales_sum[i] + parseFloat(row.paid_sum)) * 100) / 100;
     }
 
     res.json({ month: monthKey, year, data: result });

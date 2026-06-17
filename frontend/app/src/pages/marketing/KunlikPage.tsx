@@ -126,11 +126,16 @@ export default function KunlikPage() {
       budget: number[]; leads: number[]; qual_leads: number[]; meetings: number[];
       deals: number[]; deals_sum: number[]; sales_count: number[]; sales_sum: number[]; cancelled: number[];
     };
-    const build = (src: "target" | "instagram"): DataMap => {
-      const meta = qMeta.data?.data?.[src];
-      const crm  = qCrm.data?.data?.[src];
+    const buildTarget = (): DataMap => {
+      const metaFb = qMeta.data?.data?.['target'];
+      const metaIg = qMeta.data?.data?.['instagram'];
+      const crm    = qCrm.data?.data?.['target'];
+      // Budget = sum of all Meta spend (Facebook + Instagram platforms)
+      const combinedBudget = Array.from({ length: days }, (_, i) =>
+        ((metaFb?.budget as number[] | undefined)?.[i] ?? 0) + ((metaIg?.budget as number[] | undefined)?.[i] ?? 0)
+      );
       return {
-        budget:      (meta?.budget     ?? empty()) as number[],
+        budget:      combinedBudget,
         leads:       (crm?.leads       ?? empty()) as number[],
         qual_leads:  (crm?.qual_leads  ?? empty()) as number[],
         meetings:    (crm?.meetings    ?? empty()) as number[],
@@ -153,8 +158,7 @@ export default function KunlikPage() {
       cancelled:   ((d as { cancelled?: number[] })?.cancelled   ?? empty()) as number[],
     });
     const result: Record<string, DataMap> = {
-      target:    build("target"),
-      instagram: build("instagram"),
+      target: buildTarget(),
     };
     customSections.forEach((sec, idx) => {
       const d = customSegmentQueries[idx]?.data?.data;
