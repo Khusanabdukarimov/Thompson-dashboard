@@ -127,30 +127,14 @@ router.get('/kunlik', async (req, res) => {
         result.target.deals[i]++;
         result.target.deals_sum[i] = Math.round((result.target.deals_sum[i] + opp) * 100) / 100;
       }
+      // Sotuv bo'ldi = won deals by date_create (matches Bitrix kanban count)
+      if (row.is_won) {
+        result.target.sales_count[i]++;
+        result.target.sales_sum[i] = Math.round((result.target.sales_sum[i] + opp) * 100) / 100;
+      }
       if (row.is_final && !row.is_won) {
         result.target.cancelled[i]++;
       }
-    }
-
-    // ── 4. Sales metrics: by uf_bp_sale_date ──
-    const salesRes = await pool.query(`
-      SELECT
-        EXTRACT(DAY FROM d.uf_bp_sale_date AT TIME ZONE 'Asia/Tashkent')::int AS day,
-        COUNT(*)::int AS cnt,
-        COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS paid_sum
-      FROM deals d
-      WHERE d.uf_bp_sale_date IS NOT NULL
-        AND d.uf_bp_sale_date >= $1
-        AND d.uf_bp_sale_date <= $2
-        AND d.source_id = $3
-      GROUP BY day
-    `, [since, until, TARGET_SRC]);
-
-    for (const row of salesRes.rows) {
-      if (!row.day || row.day < 1 || row.day > daysInMonth) continue;
-      const i = row.day - 1;
-      result.target.sales_count[i] += row.cnt;
-      result.target.sales_sum[i]    = Math.round((result.target.sales_sum[i] + parseFloat(row.paid_sum)) * 100) / 100;
     }
 
     res.json({ month: monthKey, year, data: result });
