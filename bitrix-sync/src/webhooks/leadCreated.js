@@ -49,7 +49,10 @@ async function leadCreated(req, res) {
     );
 
     const raw = await fetchOneWithRetry('crm.lead.get', entityId);
-    if (!raw) return;
+    if (!raw) {
+      console.error(`[leadCreated] crm.lead.get returned null for lead ${entityId} — BITRIX_WEBHOOK_URL may be invalid`);
+      return;
+    }
 
     await upsertLead(raw);
 
