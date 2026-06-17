@@ -727,101 +727,65 @@ def api_marketing_kunlik(month: str, year: int):
     until = f"{year}-{month_num:02d}-{days_in_month:02d}"
 
     _METRICS = ["leads", "qual_leads", "meetings", "deals", "deals_sum", "sales_count", "sales_sum", "cancelled"]
-    result = {sec: {m: [0.0] * days_in_month for m in _METRICS} for sec in ("target", "instagram")}
+    result = {"target": {m: [0.0] * days_in_month for m in _METRICS}}
 
-    # SQL: utm_source → bucket, with source_id fallback
-    def _src_expr(utm_col: str, sid_col: str) -> str:
-        return f"""
-        CASE
-            WHEN LOWER(COALESCE({utm_col},'')) IN ('instagram','ig','instagram_ads','ig_ads') THEN 'instagram'
-            WHEN LOWER(COALESCE({utm_col},'')) IN ('facebook','fb','meta','target','facebook_ads','fb_ads','target_ads') THEN 'target'
-            WHEN UPPER(COALESCE({sid_col},'')) IN ('INSTAGRAM','IG') THEN 'instagram'
-            WHEN UPPER(COALESCE({sid_col},'')) IN ('FACEBOOK','FB','META','TARGET') THEN 'target'
-        END
-        """
+    # Target source_id in Bitrix24 = UC_89FPH6
+    TARGET_SRC = "UC_89FPH6"
 
     with _bxe.connect() as conn:
-        # ── LEAD metrics ───────────────────────────────────────────────
-        lead_expr = _src_expr("l.utm_source", "l.source_id")
-        lead_sql = _text(f"""
-            WITH src AS (
-                SELECT
-                    EXTRACT(DAY FROM l.date_create)::int AS day,
-                    ({lead_expr}) AS bucket,
-                    s.bitrix_id AS stage_bid,
-                    COUNT(*) AS cnt
-                FROM leads l
-                JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
-                WHERE l.date_create::date BETWEEN :since AND :until
-                GROUP BY 1, 2, 3
-            )
-            SELECT day, bucket, stage_bid, cnt FROM src WHERE bucket IS NOT NULL
+        # ── LEAD metrics: all leads where source_id = UC_89FPH6 ──────
+        lead_sql = _text("""
+            SELECT
+                EXTRACT(DAY FROM l.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
+                s.bitrix_id AS stage_bid,
+                s.is_final,
+                s.is_won,
+                COUNT(*) AS cnt
+            FROM leads l
+            LEFT JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
+            WHERE l.date_create::date BETWEEN :since AND :until
+              AND l.source_id = :src
+            GROUP BY 1, 2, 3, 4
         """)
-        for day, bucket, stage_bid, cnt in conn.execute(lead_sql, {"since": since, "until": until}):
-            if bucket not in result or day < 1 or day > days_in_month:
+        for day, stage_bid, is_final, is_won, cnt in conn.execute(lead_sql, {"since": since, "until": until, "src": TARGET_SRC}):
+            if day is None or day < 1 or day > days_in_month:
                 continue
             idx = int(day) - 1
-            result[bucket]["leads"][idx] += int(cnt)
+            result["target"]["leads"][idx] += int(cnt)
             if stage_bid in {"IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68", "CONVERTED"}:
-                result[bucket]["qual_leads"][idx] += int(cnt)
-            if stage_bid in {"UC_NAZK5J", "JUNK"}:
-                result[bucket]["cancelled"][idx] += int(cnt)
+                result["target"]["qual_leads"][idx] += int(cnt)
+            if is_final and not is_won:
+                result["target"]["cancelled"][idx] += int(cnt)
 
-        # ── DEAL metrics: meetings + kelishuv (by date_create) ────────
-        deal_expr = _src_expr("d.utm_source", "d.source_id")
-        deal_sql = _text(f"""
-            WITH src AS (
-                SELECT
-                    EXTRACT(DAY FROM d.date_create)::int AS day,
-                    ({deal_expr}) AS bucket,
-                    s.bitrix_id AS stage_bid,
-                    COALESCE(d.opportunity, 0) AS opp
-                FROM deals d
-                JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
-                WHERE d.date_create::date BETWEEN :since AND :until
-            )
-            SELECT day, bucket, stage_bid, opp FROM src WHERE bucket IS NOT NULL
+        # ── DEAL metrics: meetings, kelishuv, sales by date_create ───
+        deal_sql = _text("""
+            SELECT
+                EXTRACT(DAY FROM d.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
+                s.bitrix_id AS stage_bid,
+                s.is_won,
+                s.is_final,
+                COALESCE(d.opportunity, 0) AS opp
+            FROM deals d
+            LEFT JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
+            WHERE d.date_create::date BETWEEN :since AND :until
+              AND d.source_id = :src
         """)
-        for day, bucket, stage_bid, opp in conn.execute(deal_sql, {"since": since, "until": until}):
-            if bucket not in result or day < 1 or day > days_in_month:
+        for day, stage_bid, is_won, is_final, opp in conn.execute(deal_sql, {"since": since, "until": until, "src": TARGET_SRC}):
+            if day is None or day < 1 or day > days_in_month:
                 continue
             idx = int(day) - 1
             opp_f = float(opp)
             if stage_bid == "NEW":
-                result[bucket]["meetings"][idx] += 1
+                result["target"]["meetings"][idx] += 1
             if stage_bid == "UC_W35V62":
-                result[bucket]["deals"][idx] += 1
-                result[bucket]["deals_sum"][idx] += opp_f
-
-        # ── DEAL metrics: sales by REAL sale date ───
-        # uf_bp_sale_date (BP field) takes priority; fallback to uf_payment_date (to'lov sanasi)
-        # Platform: utm_source first. For FB/IG source_ids (UC_O9BLGT/UC_3O8GTF/UC_89FPH6) without
-        # utm_source, classify by source_id — UC_O9BLGT→target unless utm=ig, UC_3O8GTF/UC_89FPH6→instagram.
-        sales_sql = _text(f"""
-            WITH src AS (
-                SELECT
-                    EXTRACT(DAY FROM COALESCE(d.uf_bp_sale_date, d.uf_payment_date))::int AS day,
-                    CASE
-                        WHEN LOWER(TRIM(COALESCE(d.utm_source,''))) IN ('facebook','fb','meta','facebook_ads','fb_ads','target','target_ads') THEN 'target'
-                        WHEN LOWER(TRIM(COALESCE(d.utm_source,''))) IN ('instagram','ig','instagram_ads','ig_ads') THEN 'instagram'
-                        WHEN d.source_id = 'UC_O9BLGT' THEN 'target'
-                        WHEN d.source_id IN ('UC_3O8GTF','UC_89FPH6') THEN 'instagram'
-                        ELSE NULL
-                    END AS bucket,
-                    COALESCE(d.uf_paid_sum, 0) AS opp
-                FROM deals d
-                WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-                  AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date) IS NOT NULL
-                  AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date)::date BETWEEN :since AND :until
-            )
-            SELECT day, bucket, opp FROM src WHERE bucket IS NOT NULL
-        """)
-        for day, bucket, opp in conn.execute(sales_sql, {"since": since, "until": until}):
-            if bucket not in result or day < 1 or day > days_in_month:
-                continue
-            idx = int(day) - 1
-            result[bucket]["sales_count"][idx] += 1
-            result[bucket]["sales_sum"][idx] += float(opp)
+                result["target"]["deals"][idx] += 1
+                result["target"]["deals_sum"][idx] += opp_f
+            # Sotuv bo'ldi = won deals by date_create (matches Bitrix kanban)
+            if is_won:
+                result["target"]["sales_count"][idx] += 1
+                result["target"]["sales_sum"][idx] += opp_f
+            if is_final and not is_won:
+                result["target"]["cancelled"][idx] += 1
 
     # Convert float arrays to int where appropriate
     int_keys = {"leads", "qual_leads", "meetings", "deals", "sales_count", "cancelled"}
