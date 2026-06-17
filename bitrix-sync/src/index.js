@@ -94,6 +94,45 @@ Promise.all([
   app.listen(PORT, () => {
     startCallsAutoSync();
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
+
+    // Check Meta access token expiry on startup
+    (async () => {
+      try {
+        const appId     = process.env.FB_APP_ID;
+        const appSecret = process.env.FB_APP_SECRET;
+        const token     = process.env.META_ACCESS_TOKEN || process.env.FB_ACCESS_TOKEN;
+        if (!appId || !appSecret || !token) {
+          console.warn('[meta-token] FB_APP_ID / FB_APP_SECRET / token not set — skipping expiry check');
+          return;
+        }
+        const url = `https://graph.facebook.com/debug_token?input_token=${token}&access_token=${appId}|${appSecret}`;
+        const res = await fetch(url);
+        const { data } = await res.json();
+        if (!data) { console.warn('[meta-token] Could not inspect token'); return; }
+        if (data.is_valid === false) {
+          console.error('[meta-token] ❌ Token is INVALID — leads will NOT sync. Renew the token!');
+          return;
+        }
+        if (data.expires_at && data.expires_at > 0) {
+          const expiresDate = new Date(data.expires_at * 1000).toISOString().split('T')[0];
+          const daysLeft = Math.floor((data.expires_at * 1000 - Date.now()) / 86400000);
+          if (daysLeft <= 7) {
+            console.error(`[meta-token] ⚠️  Token expires in ${daysLeft} day(s) on ${expiresDate} — renew now!`);
+          } else {
+            console.log(`[meta-token] ✅ Token valid, expires ${expiresDate} (${daysLeft} days)`);
+          }
+        } else {
+          console.log('[meta-token] ✅ Token valid (no expiry — System User or long-lived)');
+        }
+        if (!process.env.FB_WEBHOOK_VERIFY_TOKEN) {
+          console.warn('[meta-token] ⚠️  FB_WEBHOOK_VERIFY_TOKEN not set — webhook verification will fail!');
+        } else {
+          console.log(`[meta-token] ✅ FB_WEBHOOK_VERIFY_TOKEN set`);
+        }
+      } catch (e) {
+        console.warn('[meta-token] Token check failed:', e.message);
+      }
+    })();
   console.log(`  POST /webhook/lead/created`);
   console.log(`  POST /webhook/lead/updated`);
   console.log(`  POST /webhook/lead/deleted`);
