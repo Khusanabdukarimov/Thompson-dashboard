@@ -784,39 +784,21 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
                 result["target"]["cancelled"][idx] += int(cnt)
 
         # ── DEAL metrics ──────────────────────────────────────────────
-        # Deals don't have a title field — join via leads using contact/company or
-        # use UTM fields. For now filter deals by source_id only (same as before)
-        # when no targetolog is selected. When targetolog is set, filter deals
-        # by matching the lead that was converted (via utm_campaign patterns).
+        # Filter deals by utm_campaign (set when lead converts to deal via Bitrix24)
+        _UTM_PATTERNS: dict[str, list[str]] = {
+            "islomiddin": ["Lead & N", "Nishonchi", "Re-target"],
+            "abdujabbor":  ["RM", "Filter", "Filtr"],
+            "dilmurod":    ["DU -", "DU-", "Test Otkir"],
+        }
         deal_title_filter = ""
         deal_params: dict = {"since": since, "until": until, "src": TARGET_SRC}
 
         if title_patterns:
-            # Map targetolog → utm_campaign patterns from campaign names
-            _UTM_PATTERNS: dict[str, list[str]] = {
-                "islomiddin": ["Lead & N", "Nishonchi", "Re-target"],
-                "abdujabbor":  ["RM", "Filter", "Filtr"],
-                "dilmurod":    ["DU -", "DU-", "Test Otkir"],
-            }
             utm_pats = _UTM_PATTERNS.get(targ_key, [])
             if utm_pats:
                 conds = " OR ".join(f"d.utm_campaign ILIKE :uc{i}" for i in range(len(utm_pats)))
                 deal_title_filter = f"AND ({conds})"
                 deal_params.update({f"uc{i}": f"%{p}%" for i, p in enumerate(utm_pats)})
-                # Also try to match via lead title through a sub-select on converted leads
-                lead_conds = " OR ".join(f"l2.title ILIKE :ltp{i}" for i in range(len(title_patterns)))
-                deal_title_filter = f"""AND (
-                    ({conds})
-                    OR d.id IN (
-                        SELECT d2.id FROM deals d2
-                        JOIN leads l2 ON l2.source_id = d2.source_id
-                            AND ABS(EXTRACT(EPOCH FROM (d2.date_create - l2.date_create))) < 86400
-                            AND ({lead_conds})
-                        WHERE d2.source_id = :src
-                          AND d2.date_create::date BETWEEN :since AND :until
-                    )
-                )"""
-                deal_params.update({f"ltp{i}": f"%{p}%" for i, p in enumerate(title_patterns)})
 
         deal_sql = _text(f"""
             SELECT
