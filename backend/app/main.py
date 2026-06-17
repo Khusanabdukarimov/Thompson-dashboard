@@ -784,21 +784,14 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
                 result["target"]["cancelled"][idx] += int(cnt)
 
         # ── DEAL metrics ──────────────────────────────────────────────
-        # Filter deals by utm_campaign (set when lead converts to deal via Bitrix24)
-        _UTM_PATTERNS: dict[str, list[str]] = {
-            "islomiddin": ["Lead & N", "Nishonchi", "Re-target"],
-            "abdujabbor":  ["RM", "Filter", "Filtr"],
-            "dilmurod":    ["DU -", "DU-", "Test Otkir"],
-        }
-        deal_title_filter = ""
+        # Deals don't store form/campaign info — filter by source_id only.
+        # Lead-level targetolog filter above gives the per-person lead breakdown.
         deal_params: dict = {"since": since, "until": until, "src": TARGET_SRC}
 
         if title_patterns:
-            utm_pats = _UTM_PATTERNS.get(targ_key, [])
-            if utm_pats:
-                conds = " OR ".join(f"d.utm_campaign ILIKE :uc{i}" for i in range(len(utm_pats)))
-                deal_title_filter = f"AND ({conds})"
-                deal_params.update({f"uc{i}": f"%{p}%" for i, p in enumerate(utm_pats)})
+            # Filter deals by utm_source (Facebook/Instagram) as a rough proxy
+            deal_params["utm"] = "Facebook"
+        deal_title_filter = ""
 
         deal_sql = _text(f"""
             SELECT
