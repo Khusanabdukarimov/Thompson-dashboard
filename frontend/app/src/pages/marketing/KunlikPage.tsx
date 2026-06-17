@@ -50,8 +50,7 @@ const METRICS: MetricDef[] = [
 ];
 
 const SECTIONS: { key: Section; label: string; color: string }[] = [
-  { key: "target",    label: "Facebook", color: "#1877f2" },
-  { key: "instagram", label: "Instagram", color: "#d63384" },
+  { key: "target", label: "Target", color: "#1877f2" },
 ];
 
 function daysInMonth(month: MonthKey, year: number) {
