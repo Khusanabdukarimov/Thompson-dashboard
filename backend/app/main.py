@@ -754,7 +754,7 @@ def api_marketing_kunlik(month: str, year: int):
             result["target"]["leads"][idx] += int(cnt)
             if stage_bid in {"IN_PROCESS", "PROCESSED", "UC_1KPATX", "UC_Q2U9EL", "UC_KXC3ZW", "UC_L28G68", "CONVERTED"}:
                 result["target"]["qual_leads"][idx] += int(cnt)
-            if is_final and not is_won:
+            if stage_bid in {"UC_NAZK5J", "JUNK"}:
                 result["target"]["cancelled"][idx] += int(cnt)
 
         # ── DEAL metrics: meetings, kelishuv, sales by date_create ───
@@ -784,8 +784,6 @@ def api_marketing_kunlik(month: str, year: int):
             if is_won:
                 result["target"]["sales_count"][idx] += 1
                 result["target"]["sales_sum"][idx] += opp_f
-            if is_final and not is_won:
-                result["target"]["cancelled"][idx] += 1
 
     # Convert float arrays to int where appropriate
     int_keys = {"leads", "qual_leads", "meetings", "deals", "sales_count", "cancelled"}
