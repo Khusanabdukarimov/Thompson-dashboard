@@ -735,9 +735,12 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
     TARGET_SRC = "UC_89FPH6"
 
     # Targetolog → form title patterns (matched against leads.title)
+    # NOTE: All Bitrix24 CRM form leads have titles like:
+    #   'Заполнение CRM-формы "Form Name"'
+    # Patterns must match the form name specifically, not generic substrings like "RM"
     _TARGETOLOG_TITLES: dict[str, list[str]] = {
-        "islomiddin": ["Mountain | Nishonchi", "Nishonchi"],
-        "abdujabbor":  ["Filter", "RM"],
+        "islomiddin": ["Nishonchi"],
+        "abdujabbor":  ['"Filter"', '"Filtr"'],
         "dilmurod":    ["DU - Mountain", "DU - Bepul Patent", "DU - Qurilish", "Test Otkir"],
     }
 
