@@ -75,9 +75,10 @@ function varPct(fakt: number, plan: number | undefined): number | null {
 const LS_HIDDEN_KEY = "kunlik_hidden_metrics";
 
 export default function KunlikPage() {
-  const [month,   setMonth]   = useState<MonthKey>(DEFAULT_MONTH);
-  const [year,    setYear]    = useState(DEFAULT_YEAR);
-  const [active,  setActive]  = useState<string>("target");
+  const [month,        setMonth]        = useState<MonthKey>(DEFAULT_MONTH);
+  const [year,         setYear]         = useState(DEFAULT_YEAR);
+  const [active,       setActive]       = useState<string>("target");
+  const [targetolog,   setTargetolog]   = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [hiddenMetrics, setHiddenMetrics] = useState<Set<MetricKey>>(() => {
     try {
@@ -106,7 +107,7 @@ export default function KunlikPage() {
   const isCurrent = isCurrentMonth(month, year);
 
   const qMeta     = useQuery({ queryKey: ["meta/insights",       month, year], queryFn: () => getMetaInsights(month, year) });
-  const qCrm      = useQuery({ queryKey: ["marketing/kunlik",    month, year], queryFn: () => getKunlikHisobot(month, year) });
+  const qCrm      = useQuery({ queryKey: ["marketing/kunlik",    month, year, targetolog], queryFn: () => getKunlikHisobot(month, year, targetolog) });
   const qPlan     = useQuery({ queryKey: ["marketing/kunlik-meta", month, year], queryFn: () => getKunlikMeta(month, year) });
   const qSections = useQuery({ queryKey: ["kunlik-sections"], queryFn: getKunlikSections, staleTime: Infinity });
 
@@ -232,6 +233,13 @@ export default function KunlikPage() {
         sub={`${MONTH_LABELS[month]} ${year} — kundalik ko'rsatkichlar jadvali`}
         actions={
           <>
+            <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
+              value={targetolog} onChange={e => setTargetolog(e.target.value)}>
+              <option value="all">Barcha targetolog</option>
+              <option value="islomiddin">Islomiddin</option>
+              <option value="abdujabbor">Abdujabbor</option>
+              <option value="dilmurod">Dilmurod</option>
+            </select>
             <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
               value={month} onChange={e => setMonth(e.target.value as MonthKey)}>
               {MONTH_KEYS.map(mm => <option key={mm} value={mm}>{MONTH_LABELS[mm]}</option>)}

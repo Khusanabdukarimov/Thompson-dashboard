@@ -88,8 +88,8 @@ export function getBitrixDaily(month: MonthKey, year: number) {
   return apiGet<BitrixDailyResponse>('/api/marketing/bitrix-daily', { month, year });
 }
 
-export function getKunlikHisobot(month: MonthKey, year: number) {
-  return apiGet<KunlikResponse>('/api/marketing/kunlik', { month, year });
+export function getKunlikHisobot(month: MonthKey, year: number, targetolog = 'all') {
+  return apiGet<KunlikResponse>('/api/marketing/kunlik', { month, year, targetolog });
 }
 
 export type KunlikMeta = {

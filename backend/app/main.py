@@ -701,7 +701,7 @@ def api_marketing_bitrix_daily(month: str, year: int):
 
 
 @app.get("/api/marketing/kunlik")
-def api_marketing_kunlik(month: str, year: int):
+def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
     """Daily CRM metrics from Bitrix24 — Facebook (target) and Instagram only.
 
     Metrics per section (target / instagram), per day array:
@@ -713,6 +713,8 @@ def api_marketing_kunlik(month: str, year: int):
       sales_count  — deals at "Ish boshlandi"/"Sotuv bo'ldi" stages
       sales_sum    — opportunity sum at Sotuv/Ish boshlandi stages
       cancelled    — leads at "Bekor bo'ldi" stage
+
+    targetolog: "all" | "islomiddin" | "abdujabbor" | "dilmurod"
     """
     from app.db_bx import bx_engine as _bxe
     from sqlalchemy import text as _text
@@ -732,9 +734,31 @@ def api_marketing_kunlik(month: str, year: int):
     # Target source_id in Bitrix24 = UC_89FPH6
     TARGET_SRC = "UC_89FPH6"
 
+    # Targetolog → form title patterns (matched against leads.title)
+    _TARGETOLOG_TITLES: dict[str, list[str]] = {
+        "islomiddin": ["Mountain | Nishonchi", "Nishonchi"],
+        "abdujabbor":  ["Filter", "RM"],
+        "dilmurod":    ["DU - Mountain", "DU - Bepul Patent", "DU - Qurilish", "Test Otkir"],
+    }
+
+    # Build extra WHERE clause for leads.title if a targetolog is selected
+    targ_key = targetolog.lower().strip()
+    title_patterns = _TARGETOLOG_TITLES.get(targ_key)  # None means "all"
+
+    def _title_filter_sql(alias: str) -> str:
+        if not title_patterns:
+            return ""
+        conditions = " OR ".join(f"{alias}.title ILIKE :tp{i}" for i in range(len(title_patterns)))
+        return f"AND ({conditions})"
+
+    def _title_params() -> dict:
+        if not title_patterns:
+            return {}
+        return {f"tp{i}": f"%{p}%" for i, p in enumerate(title_patterns)}
+
     with _bxe.connect() as conn:
-        # ── LEAD metrics: all leads where source_id = UC_89FPH6 ──────
-        lead_sql = _text("""
+        # ── LEAD metrics ──────────────────────────────────────────────
+        lead_sql = _text(f"""
             SELECT
                 EXTRACT(DAY FROM l.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
                 s.bitrix_id AS stage_bid,
@@ -745,9 +769,11 @@ def api_marketing_kunlik(month: str, year: int):
             LEFT JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
             WHERE l.date_create::date BETWEEN :since AND :until
               AND l.source_id = :src
+              {_title_filter_sql('l')}
             GROUP BY 1, 2, 3, 4
         """)
-        for day, stage_bid, is_final, is_won, cnt in conn.execute(lead_sql, {"since": since, "until": until, "src": TARGET_SRC}):
+        params = {"since": since, "until": until, "src": TARGET_SRC, **_title_params()}
+        for day, stage_bid, is_final, is_won, cnt in conn.execute(lead_sql, params):
             if day is None or day < 1 or day > days_in_month:
                 continue
             idx = int(day) - 1
@@ -757,8 +783,42 @@ def api_marketing_kunlik(month: str, year: int):
             if stage_bid in {"UC_NAZK5J", "JUNK"}:
                 result["target"]["cancelled"][idx] += int(cnt)
 
-        # ── DEAL metrics: meetings, kelishuv, sales by date_create ───
-        deal_sql = _text("""
+        # ── DEAL metrics ──────────────────────────────────────────────
+        # Deals don't have a title field — join via leads using contact/company or
+        # use UTM fields. For now filter deals by source_id only (same as before)
+        # when no targetolog is selected. When targetolog is set, filter deals
+        # by matching the lead that was converted (via utm_campaign patterns).
+        deal_title_filter = ""
+        deal_params: dict = {"since": since, "until": until, "src": TARGET_SRC}
+
+        if title_patterns:
+            # Map targetolog → utm_campaign patterns from campaign names
+            _UTM_PATTERNS: dict[str, list[str]] = {
+                "islomiddin": ["Lead & N", "Nishonchi", "Re-target"],
+                "abdujabbor":  ["RM", "Filter", "Filtr"],
+                "dilmurod":    ["DU -", "DU-", "Test Otkir"],
+            }
+            utm_pats = _UTM_PATTERNS.get(targ_key, [])
+            if utm_pats:
+                conds = " OR ".join(f"d.utm_campaign ILIKE :uc{i}" for i in range(len(utm_pats)))
+                deal_title_filter = f"AND ({conds})"
+                deal_params.update({f"uc{i}": f"%{p}%" for i, p in enumerate(utm_pats)})
+                # Also try to match via lead title through a sub-select on converted leads
+                lead_conds = " OR ".join(f"l2.title ILIKE :ltp{i}" for i in range(len(title_patterns)))
+                deal_title_filter = f"""AND (
+                    ({conds})
+                    OR d.id IN (
+                        SELECT d2.id FROM deals d2
+                        JOIN leads l2 ON l2.source_id = d2.source_id
+                            AND ABS(EXTRACT(EPOCH FROM (d2.date_create - l2.date_create))) < 86400
+                            AND ({lead_conds})
+                        WHERE d2.source_id = :src
+                          AND d2.date_create::date BETWEEN :since AND :until
+                    )
+                )"""
+                deal_params.update({f"ltp{i}": f"%{p}%" for i, p in enumerate(title_patterns)})
+
+        deal_sql = _text(f"""
             SELECT
                 EXTRACT(DAY FROM d.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
                 s.bitrix_id AS stage_bid,
@@ -769,8 +829,9 @@ def api_marketing_kunlik(month: str, year: int):
             LEFT JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
             WHERE d.date_create::date BETWEEN :since AND :until
               AND d.source_id = :src
+              {deal_title_filter}
         """)
-        for day, stage_bid, is_won, is_final, opp in conn.execute(deal_sql, {"since": since, "until": until, "src": TARGET_SRC}):
+        for day, stage_bid, is_won, is_final, opp in conn.execute(deal_sql, deal_params):
             if day is None or day < 1 or day > days_in_month:
                 continue
             idx = int(day) - 1
@@ -780,7 +841,6 @@ def api_marketing_kunlik(month: str, year: int):
             if stage_bid == "UC_W35V62":
                 result["target"]["deals"][idx] += 1
                 result["target"]["deals_sum"][idx] += opp_f
-            # Sotuv bo'ldi = won deals by date_create (matches Bitrix kanban)
             if is_won:
                 result["target"]["sales_count"][idx] += 1
                 result["target"]["sales_sum"][idx] += opp_f

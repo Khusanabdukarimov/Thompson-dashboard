@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-17T11:18:28.094Z",
+  "generated_at": "2026-06-17T12:28:08.158Z",
   "since": "2026-06-01",
   "until": "2026-06-17",
   "accounts": [
@@ -51,10 +51,10 @@
       "actor_name": "Dilmurod Usarov",
       "email": "dilmurod.usarov555@gmail.com",
       "role": "known_user",
-      "spend": 1678.24,
-      "leads": 654,
-      "impressions": 875753,
-      "clicks": 4798,
+      "spend": 1686.1,
+      "leads": 312,
+      "impressions": 878074,
+      "clicks": 4806,
       "campaigns": {
         "120242727344600655": "DU - Leads - ABO - 22.01.26",
         "120247274219000655": "DU - Engagement - ABO - 28.04.26",
@@ -68,67 +68,67 @@
       "daily": {
         "2026-06-01": {
           "spend": 176.84,
-          "leads": 96
+          "leads": 45
         },
         "2026-06-02": {
           "spend": 36.5,
-          "leads": 16
+          "leads": 7
         },
         "2026-06-04": {
           "spend": 0,
-          "leads": 2
+          "leads": 1
         },
         "2026-06-05": {
           "spend": 109.37,
-          "leads": 51
+          "leads": 24
         },
         "2026-06-06": {
           "spend": 108.99,
-          "leads": 29
+          "leads": 14
         },
         "2026-06-07": {
           "spend": 93.6,
-          "leads": 39
+          "leads": 17
         },
         "2026-06-08": {
           "spend": 145.34,
-          "leads": 64
+          "leads": 32
         },
         "2026-06-09": {
           "spend": 122.91,
-          "leads": 44
+          "leads": 20
         },
         "2026-06-10": {
           "spend": 130.01,
-          "leads": 42
+          "leads": 20
         },
         "2026-06-11": {
           "spend": 139.15,
-          "leads": 48
+          "leads": 23
         },
         "2026-06-12": {
           "spend": 82.82,
-          "leads": 29
+          "leads": 14
         },
         "2026-06-13": {
           "spend": 119.19,
-          "leads": 38
+          "leads": 19
         },
         "2026-06-14": {
           "spend": 119.02,
-          "leads": 50
+          "leads": 25
         },
         "2026-06-15": {
           "spend": 114.38,
-          "leads": 24
+          "leads": 12
         },
         "2026-06-16": {
           "spend": 86.23,
-          "leads": 61
+          "leads": 30
         },
         "2026-06-17": {
-          "spend": 93.89,
-          "leads": 21
+          "spend": 101.75,
+          "leads": 9
         }
       }
     },
@@ -137,10 +137,10 @@
       "actor_name": "Abdujabbor",
       "email": "abdu8229@icloud.com",
       "role": "known_user",
-      "spend": 972.41,
-      "leads": 525,
-      "impressions": 407447,
-      "clicks": 2388,
+      "spend": 980.04,
+      "leads": 252,
+      "impressions": 412219,
+      "clicks": 2416,
       "campaigns": {
         "120250127205560655": "Lead & N & 09.06.26",
         "120250133120280655": "Lead & N2 & Y20 & 09.06.26"
@@ -148,39 +148,39 @@
       "daily": {
         "2026-06-09": {
           "spend": 115.76,
-          "leads": 49
+          "leads": 24
         },
         "2026-06-10": {
           "spend": 129.28,
-          "leads": 69
+          "leads": 33
         },
         "2026-06-11": {
           "spend": 137.55,
-          "leads": 62
+          "leads": 28
         },
         "2026-06-12": {
           "spend": 107.18,
-          "leads": 45
+          "leads": 21
         },
         "2026-06-13": {
           "spend": 98.71,
-          "leads": 72
+          "leads": 34
         },
         "2026-06-14": {
           "spend": 126,
-          "leads": 77
+          "leads": 37
         },
         "2026-06-15": {
           "spend": 121.7,
-          "leads": 61
+          "leads": 27
         },
         "2026-06-16": {
           "spend": 62.42,
-          "leads": 27
+          "leads": 12
         },
         "2026-06-17": {
-          "spend": 73.81,
-          "leads": 63
+          "spend": 81.44,
+          "leads": 36
         }
       }
     },
@@ -189,17 +189,17 @@
       "actor_name": "Islomiddin Abdultojiyev",
       "email": "abdultojiyev@gmail.com",
       "role": "known_user",
-      "spend": 5.35,
-      "leads": 2,
-      "impressions": 1926,
+      "spend": 5.93,
+      "leads": 1,
+      "impressions": 2123,
       "clicks": 10,
       "campaigns": {
-        "120250798598270655": "Re-target"
+        "120250798598270655": "Re-target 17.06.26"
       },
       "daily": {
         "2026-06-17": {
-          "spend": 5.35,
-          "leads": 2
+          "spend": 5.93,
+          "leads": 1
         }
       }
     }

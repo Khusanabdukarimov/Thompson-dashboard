@@ -92,15 +92,14 @@ async function paginate(url, params) {
   return rows;
 }
 
-const LEAD_TYPES = new Set([
-  'lead',
-  'offsite_conversion.fb_pixel_lead',
-  'onsite_conversion.lead_grouped',
-  'onsite_conversion.messaging_conversation_started_7d',
-]);
+// Only count 'lead' — the canonical Lead Ads form submission action.
+// onsite_conversion.lead_grouped and offsite_conversion.fb_pixel_lead
+// are the same submission seen from a different attribution window — counting
+// them together causes double/triple counting.
 function leadCount(actions) {
   if (!actions) return 0;
-  return actions.reduce((s, a) => LEAD_TYPES.has(a.action_type) ? s + parseInt(a.value || 0, 10) : s, 0);
+  const a = actions.find(a => a.action_type === 'lead');
+  return a ? parseInt(a.value || 0, 10) : 0;
 }
 
 function pad(s, n, right = false) {
@@ -258,8 +257,21 @@ async function getAdInsightsWithForms() {
         } catch {}
       }));
 
+      // Build campaign → dominant form fallback (for video ads where creative has no form_id)
+      const campaignFormFallback = {}; // campaign_id → { form_id, form_name, count }
       for (const row of rows) {
-        const fm    = formMap[row.ad_id];
+        const fm = formMap[row.ad_id];
+        if (fm?.form_id && row.campaign_id) {
+          if (!campaignFormFallback[row.campaign_id]) {
+            campaignFormFallback[row.campaign_id] = { form_id: fm.form_id, form_name: fm.form_name, count: 0 };
+          }
+          campaignFormFallback[row.campaign_id].count++;
+        }
+      }
+
+      for (const row of rows) {
+        const fm    = formMap[row.ad_id]
+                   || campaignFormFallback[row.campaign_id];  // fallback: campaign's dominant form
         const key   = fm?.form_id || '__no_form__';
         const label = fm?.form_name || row.ad_name || 'No form';
         // Derive user from campaign name
