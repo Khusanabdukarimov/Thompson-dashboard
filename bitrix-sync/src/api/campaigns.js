@@ -435,14 +435,18 @@ router.get('/insights', async (req, res) => {
   const fromDate   = req.query.from;
   const toDate     = req.query.to;
   const force      = req.query.force === 'true' || req.query.force === '1';
-  const targetolog = (req.query.targetolog || 'all').toLowerCase();
-  const monthNum   = MONTH_NUMS[month];
+  const targetologParam = (req.query.targetolog || 'all').toLowerCase();
+  const targetologs     = targetologParam.split(',').map(s => s.trim()).filter(s => s && s !== 'all');
+  const monthNum        = MONTH_NUMS[month];
   if (!monthNum) return res.status(400).json({ error: `Unknown month: ${month}` });
 
-  const campaignFilter = TARGETOLOG_CAMPAIGN_SQL[targetolog] ? `AND ${TARGETOLOG_CAMPAIGN_SQL[targetolog]}` : '';
+  const campaignConditions = targetologs.map(t => TARGETOLOG_CAMPAIGN_SQL[t]).filter(Boolean);
+  const campaignFilter = campaignConditions.length > 0
+    ? `AND (${campaignConditions.join(' OR ')})`
+    : '';
 
   // ── If from/to provided OR targetolog specified → query meta_ad_daily ──
-  if (fromDate && toDate || (targetolog !== 'all' && !fromDate)) {
+  if (fromDate && toDate || (targetologs.length > 0 && !fromDate)) {
     const since = fromDate || `${year}-${String(monthNum).padStart(2,'0')}-01`;
     const until = toDate   || `${year}-${String(monthNum).padStart(2,'0')}-${String(daysInMonth(year, monthNum)).padStart(2,'0')}`;
     try {

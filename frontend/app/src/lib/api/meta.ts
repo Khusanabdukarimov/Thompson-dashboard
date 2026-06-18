@@ -74,14 +74,15 @@ export const MONTH_LABELS: Record<MonthKey, string> = {
   sentabr: 'Sentabr', oktabr: 'Oktabr', noyabr: 'Noyabr', dekabr: 'Dekabr',
 };
 
-export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string, force = false, from?: string, to?: string, targetolog = 'all') {
+export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string, force = false, from?: string, to?: string, targetologs: string[] = []) {
   void ad_account_id;
+  const tParam = targetologs.length > 0 ? targetologs.join(',') : undefined;
   return apiGet<MetaInsightsResponse>('/api/campaigns/insights', {
     month, year,
-    ...(force       ? { force: 'true' }           : {}),
-    ...(from        ? { from }                     : {}),
-    ...(to          ? { to }                       : {}),
-    ...(targetolog !== 'all' ? { targetolog }      : {}),
+    ...(force  ? { force: 'true' } : {}),
+    ...(from   ? { from }          : {}),
+    ...(to     ? { to }            : {}),
+    ...(tParam ? { targetolog: tParam } : {}),
   });
 }
 
@@ -89,7 +90,8 @@ export function getBitrixDaily(month: MonthKey, year: number) {
   return apiGet<BitrixDailyResponse>('/api/marketing/bitrix-daily', { month, year });
 }
 
-export function getKunlikHisobot(month: MonthKey, year: number, targetolog = 'all') {
+export function getKunlikHisobot(month: MonthKey, year: number, targetologs: string[] = []) {
+  const targetolog = targetologs.length > 0 ? targetologs.join(',') : 'all';
   return apiGet<KunlikResponse>('/api/marketing/kunlik', { month, year, targetolog });
 }
 

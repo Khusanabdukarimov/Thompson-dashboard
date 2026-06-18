@@ -745,8 +745,12 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
     }
 
     # Build extra WHERE clause for leads.title if a targetolog is selected
-    targ_key = targetolog.lower().strip()
-    title_patterns = _TARGETOLOG_TITLES.get(targ_key)  # None means "all"
+    # targetolog may be comma-separated for multi-selection, e.g. "islomiddin,abdujabbor"
+    targ_keys = [t.strip().lower() for t in targetolog.split(",") if t.strip() and t.strip() != "all"]
+    title_patterns: list[str] = []
+    for tk in targ_keys:
+        title_patterns.extend(_TARGETOLOG_TITLES.get(tk, []))
+    title_patterns = title_patterns if title_patterns else None  # type: ignore[assignment]
 
     def _title_filter_sql(alias: str) -> str:
         if not title_patterns:

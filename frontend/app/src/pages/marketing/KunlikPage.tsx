@@ -78,9 +78,10 @@ export default function KunlikPage() {
   const [month,        setMonth]        = useState<MonthKey>(DEFAULT_MONTH);
   const [year,         setYear]         = useState(DEFAULT_YEAR);
   const [active,       setActive]       = useState<string>("target");
-  const [targetolog,   setTargetolog]   = useState<string>("all");
+  const [targetologs,  setTargetologs]  = useState<string[]>([]);
   const [showModal,    setShowModal]    = useState(false);
   const [filterOpen,   setFilterOpen]   = useState(false);
+  const [tDropOpen,    setTDropOpen]    = useState(false);
   const [hiddenMetrics, setHiddenMetrics] = useState<Set<MetricKey>>(() => {
     try {
       const s = localStorage.getItem(LS_HIDDEN_KEY);
@@ -107,8 +108,8 @@ export default function KunlikPage() {
   const days      = daysInMonth(month, year);
   const isCurrent = isCurrentMonth(month, year);
 
-  const qMeta     = useQuery({ queryKey: ["meta/insights", month, year, targetolog], queryFn: () => getMetaInsights(month, year, undefined, false, undefined, undefined, targetolog) });
-  const qCrm      = useQuery({ queryKey: ["marketing/kunlik",    month, year, targetolog], queryFn: () => getKunlikHisobot(month, year, targetolog) });
+  const qMeta     = useQuery({ queryKey: ["meta/insights", month, year, targetologs], queryFn: () => getMetaInsights(month, year, undefined, false, undefined, undefined, targetologs) });
+  const qCrm      = useQuery({ queryKey: ["marketing/kunlik", month, year, targetologs], queryFn: () => getKunlikHisobot(month, year, targetologs) });
   const qPlan     = useQuery({ queryKey: ["marketing/kunlik-meta", month, year], queryFn: () => getKunlikMeta(month, year) });
   const qSections = useQuery({ queryKey: ["kunlik-sections"], queryFn: getKunlikSections, staleTime: Infinity });
 
@@ -227,11 +228,18 @@ export default function KunlikPage() {
   const isLoading = (qMeta.isLoading && !qMeta.data) || (qCrm.isLoading && !qCrm.data);
   const yearOptions = [DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2];
 
-  const targetologLabel: Record<string, string> = {
-    islomiddin: "Islomiddin", abdujabbor: "Abdujabbor", dilmurod: "Dilmurod",
-  };
-  const activeFilterCount = (targetolog !== "all" ? 1 : 0);
-  const filterSummary = `${MONTH_LABELS[month]} ${year}${targetolog !== "all" ? ` · ${targetologLabel[targetolog]}` : ""}`;
+  const TARGETOLOG_OPTIONS = [
+    { value: "islomiddin", label: "Islomiddin" },
+    { value: "abdujabbor", label: "Abdujabbor" },
+    { value: "dilmurod",   label: "Dilmurod"   },
+  ];
+  const toggleTargetolog = (v: string) =>
+    setTargetologs(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
+  const activeFilterCount = targetologs.length;
+  const targetologSummary = targetologs.length === 0
+    ? ""
+    : ` · ${targetologs.map(t => TARGETOLOG_OPTIONS.find(o => o.value === t)?.label ?? t).join(", ")}`;
+  const filterSummary = `${MONTH_LABELS[month]} ${year}${targetologSummary}`;
 
   return (
     <>
@@ -314,26 +322,68 @@ export default function KunlikPage() {
                 </select>
               </div>
 
-              {/* Targetolog */}
-              <div>
+              {/* Targetolog multi-select */}
+              <div className="relative" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setTDropOpen(false); }} tabIndex={-1}>
                 <label className="block text-[11px] font-semibold text-text3 mb-1.5">Targetolog</label>
-                <select
-                  className="w-full px-3 py-2 rounded-lg bg-bg border border-border text-[12.5px] text-text outline-none focus:border-blue transition-colors"
-                  value={targetolog}
-                  onChange={e => setTargetolog(e.target.value)}
+                <button
+                  type="button"
+                  onClick={() => setTDropOpen(o => !o)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2 rounded-lg bg-bg border text-[12.5px] text-left outline-none transition-colors",
+                    targetologs.length > 0 ? "border-blue text-blue" : "border-border text-text",
+                  )}
                 >
-                  <option value="all">Barchasi</option>
-                  <option value="islomiddin">Islomiddin</option>
-                  <option value="abdujabbor">Abdujabbor</option>
-                  <option value="dilmurod">Dilmurod</option>
-                </select>
+                  <span className="truncate">
+                    {targetologs.length === 0
+                      ? "Barchasi"
+                      : targetologs.length === 1
+                        ? TARGETOLOG_OPTIONS.find(o => o.value === targetologs[0])?.label
+                        : `${targetologs.length} ta tanlangan`}
+                  </span>
+                  <ChevronDown size={13} className={cn("shrink-0 ml-2 transition-transform", tDropOpen && "rotate-180")} />
+                </button>
+                {tDropOpen && (
+                  <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-bg2 border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+                    {targetologs.length > 0 && (
+                      <div className="px-3 py-1.5 border-b border-border">
+                        <button
+                          type="button"
+                          onClick={() => setTargetologs([])}
+                          className="text-[11px] text-text3 hover:text-text"
+                        >
+                          Hammasini olib tashlash
+                        </button>
+                      </div>
+                    )}
+                    {TARGETOLOG_OPTIONS.map(opt => {
+                      const checked = targetologs.includes(opt.value);
+                      return (
+                        <label
+                          key={opt.value}
+                          className={cn(
+                            "flex items-center gap-2.5 px-3 py-2 cursor-pointer text-[12.5px] hover:bg-bg3 transition-colors",
+                            checked ? "bg-blue-bg text-blue" : "text-text",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleTargetolog(opt.value)}
+                            className="accent-blue shrink-0"
+                          />
+                          {opt.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Tozalash */}
             <div className="flex justify-end mt-3">
               <button
-                onClick={() => { setMonth(DEFAULT_MONTH); setYear(DEFAULT_YEAR); setTargetolog("all"); }}
+                onClick={() => { setMonth(DEFAULT_MONTH); setYear(DEFAULT_YEAR); setTargetologs([]); setTDropOpen(false); }}
                 className="text-[12px] text-text3 hover:text-text px-3 py-1 rounded border border-border hover:bg-bg3 transition-colors"
               >
                 Tozalash
