@@ -107,7 +107,7 @@ export default function KunlikPage() {
   const days      = daysInMonth(month, year);
   const isCurrent = isCurrentMonth(month, year);
 
-  const qMeta     = useQuery({ queryKey: ["meta/insights",       month, year], queryFn: () => getMetaInsights(month, year) });
+  const qMeta     = useQuery({ queryKey: ["meta/insights", month, year, targetolog], queryFn: () => getMetaInsights(month, year, undefined, false, undefined, undefined, targetolog) });
   const qCrm      = useQuery({ queryKey: ["marketing/kunlik",    month, year, targetolog], queryFn: () => getKunlikHisobot(month, year, targetolog) });
   const qPlan     = useQuery({ queryKey: ["marketing/kunlik-meta", month, year], queryFn: () => getKunlikMeta(month, year) });
   const qSections = useQuery({ queryKey: ["kunlik-sections"], queryFn: getKunlikSections, staleTime: Infinity });

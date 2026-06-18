@@ -421,18 +421,30 @@ router.get('/rows', async (req, res) => {
   }
 });
 
-// GET /api/campaigns/insights?month=may&year=2026[&from=2026-06-01&to=2026-06-11]
+// Campaign name → targetolog SQL filter
+const TARGETOLOG_CAMPAIGN_SQL = {
+  dilmurod:    `(campaign_name ILIKE 'DU %' OR campaign_name ILIKE 'DU-%')`,
+  abdujabbor:  `(campaign_name ILIKE 'YO %' OR campaign_name ILIKE 'YO-%' OR campaign_name ILIKE 'YU %' OR campaign_name ILIKE 'YU-%' OR campaign_name ILIKE '%LEAD & N%')`,
+  islomiddin:  `(campaign_name ILIKE 'IL %' OR campaign_name ILIKE 'IL-%' OR campaign_name ILIKE '%RE-TARGET%' OR campaign_name ILIKE '%RETARGET%' OR campaign_name ILIKE '%NISHON%')`,
+};
+
+// GET /api/campaigns/insights?month=may&year=2026[&from=2026-06-01&to=2026-06-11][&targetolog=dilmurod]
 router.get('/insights', async (req, res) => {
-  const month    = (req.query.month || '').toLowerCase();
-  const year     = parseInt(req.query.year || new Date().getFullYear(), 10);
-  const fromDate = req.query.from;
-  const toDate   = req.query.to;
-  const force    = req.query.force === 'true' || req.query.force === '1';
-  const monthNum = MONTH_NUMS[month];
+  const month      = (req.query.month || '').toLowerCase();
+  const year       = parseInt(req.query.year || new Date().getFullYear(), 10);
+  const fromDate   = req.query.from;
+  const toDate     = req.query.to;
+  const force      = req.query.force === 'true' || req.query.force === '1';
+  const targetolog = (req.query.targetolog || 'all').toLowerCase();
+  const monthNum   = MONTH_NUMS[month];
   if (!monthNum) return res.status(400).json({ error: `Unknown month: ${month}` });
 
-  // ── If from/to provided, query meta_ad_daily ──────────────────
-  if (fromDate && toDate) {
+  const campaignFilter = TARGETOLOG_CAMPAIGN_SQL[targetolog] ? `AND ${TARGETOLOG_CAMPAIGN_SQL[targetolog]}` : '';
+
+  // ── If from/to provided OR targetolog specified → query meta_ad_daily ──
+  if (fromDate && toDate || (targetolog !== 'all' && !fromDate)) {
+    const since = fromDate || `${year}-${String(monthNum).padStart(2,'0')}-01`;
+    const until = toDate   || `${year}-${String(monthNum).padStart(2,'0')}-${String(daysInMonth(year, monthNum)).padStart(2,'0')}`;
     try {
       const { rows: dRows } = await pool.query(`
         SELECT
@@ -444,9 +456,35 @@ router.get('/insights', async (req, res) => {
           SUM(impressions)::int AS impressions
         FROM meta_ad_daily
         WHERE date >= $1::date AND date <= $2::date
+        ${campaignFilter}
         GROUP BY date, platform
         ORDER BY date
-      `, [fromDate, toDate]);
+      `, [since, until]);
+
+      // When no from/to (targetolog-only filter), return day-indexed arrays like the monthly cache
+      if (!fromDate && !toDate) {
+        const days  = daysInMonth(year, monthNum);
+        const empty = () => Array(days).fill(0);
+        const target    = { budget: empty(), leads: empty(), clicks: empty(), impressions: empty() };
+        const instagram = { budget: empty(), leads: empty(), clicks: empty(), impressions: empty() };
+        for (const row of dRows) {
+          const day = parseInt((row.date || '').split('-')[2] || '0', 10);
+          if (day < 1 || day > days) continue;
+          const idx = day - 1;
+          if (row.platform === 'facebook') {
+            target.budget[idx]      += parseFloat(row.spend || 0);
+            target.leads[idx]       += parseInt(row.leads || 0, 10);
+            target.clicks[idx]      += parseInt(row.clicks || 0, 10);
+            target.impressions[idx] += parseInt(row.impressions || 0, 10);
+          } else {
+            instagram.budget[idx]      += parseFloat(row.spend || 0);
+            instagram.leads[idx]       += parseInt(row.leads || 0, 10);
+            instagram.clicks[idx]      += parseInt(row.clicks || 0, 10);
+            instagram.impressions[idx] += parseInt(row.impressions || 0, 10);
+          }
+        }
+        return res.json({ month, year, data: { target, instagram } });
+      }
 
       const dateSet = new Set(dRows.map(r => r.date));
       const dates   = [...dateSet].sort();

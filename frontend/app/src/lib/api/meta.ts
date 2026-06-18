@@ -74,13 +74,14 @@ export const MONTH_LABELS: Record<MonthKey, string> = {
   sentabr: 'Sentabr', oktabr: 'Oktabr', noyabr: 'Noyabr', dekabr: 'Dekabr',
 };
 
-export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string, force = false, from?: string, to?: string) {
+export function getMetaInsights(month: MonthKey, year: number, ad_account_id?: string, force = false, from?: string, to?: string, targetolog = 'all') {
   void ad_account_id;
   return apiGet<MetaInsightsResponse>('/api/campaigns/insights', {
     month, year,
-    ...(force ? { force: 'true' } : {}),
-    ...(from ? { from } : {}),
-    ...(to   ? { to }   : {}),
+    ...(force       ? { force: 'true' }           : {}),
+    ...(from        ? { from }                     : {}),
+    ...(to          ? { to }                       : {}),
+    ...(targetolog !== 'all' ? { targetolog }      : {}),
   });
 }
 
