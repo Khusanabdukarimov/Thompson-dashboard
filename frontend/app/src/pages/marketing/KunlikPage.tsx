@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useCallback } from "react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/Button";
 import { ChartCardSkeleton } from "@/components/Skeleton";
@@ -79,7 +79,8 @@ export default function KunlikPage() {
   const [year,         setYear]         = useState(DEFAULT_YEAR);
   const [active,       setActive]       = useState<string>("target");
   const [targetolog,   setTargetolog]   = useState<string>("all");
-  const [showModal, setShowModal] = useState(false);
+  const [showModal,    setShowModal]    = useState(false);
+  const [filterOpen,   setFilterOpen]   = useState(false);
   const [hiddenMetrics, setHiddenMetrics] = useState<Set<MetricKey>>(() => {
     try {
       const s = localStorage.getItem(LS_HIDDEN_KEY);
@@ -226,34 +227,121 @@ export default function KunlikPage() {
   const isLoading = (qMeta.isLoading && !qMeta.data) || (qCrm.isLoading && !qCrm.data);
   const yearOptions = [DEFAULT_YEAR, DEFAULT_YEAR - 1, DEFAULT_YEAR - 2];
 
+  const targetologLabel: Record<string, string> = {
+    islomiddin: "Islomiddin", abdujabbor: "Abdujabbor", dilmurod: "Dilmurod",
+  };
+  const activeFilterCount = (targetolog !== "all" ? 1 : 0);
+  const filterSummary = `${MONTH_LABELS[month]} ${year}${targetolog !== "all" ? ` · ${targetologLabel[targetolog]}` : ""}`;
+
   return (
     <>
       <Topbar
         title="Kunlik hisobot"
         sub={`${MONTH_LABELS[month]} ${year} — kundalik ko'rsatkichlar jadvali`}
         actions={
-          <>
-            <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
-              value={targetolog} onChange={e => setTargetolog(e.target.value)}>
-              <option value="all">Barcha targetolog</option>
-              <option value="islomiddin">Islomiddin</option>
-              <option value="abdujabbor">Abdujabbor</option>
-              <option value="dilmurod">Dilmurod</option>
-            </select>
-            <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
-              value={month} onChange={e => setMonth(e.target.value as MonthKey)}>
-              {MONTH_KEYS.map(mm => <option key={mm} value={mm}>{MONTH_LABELS[mm]}</option>)}
-            </select>
-            <select className="px-2.5 py-1.5 rounded border border-border2 bg-bg2 text-[12px] text-text shadow-xs"
-              value={year} onChange={e => setYear(Number(e.target.value))}>
-              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <Button onClick={() => { qMeta.refetch(); qCrm.refetch(); qPlan.refetch(); }}>
-              Yangilash
-            </Button>
-          </>
+          <Button onClick={() => { qMeta.refetch(); qCrm.refetch(); qPlan.refetch(); }}>
+            Yangilash
+          </Button>
         }
       />
+
+      {/* ── Filter panel ───────────────────────────────────────── */}
+      <div className="border-b border-border bg-bg2">
+        {/* Trigger row */}
+        <button
+          onClick={() => setFilterOpen(o => !o)}
+          className="w-full flex items-center gap-2 px-3 sm:px-[22px] py-2.5 text-left hover:bg-bg3 transition-colors"
+        >
+          <span className="text-[13px] font-medium text-text2 flex-1">
+            Filtr: {filterSummary}
+          </span>
+          {activeFilterCount > 0 && (
+            <span className="bg-blue text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              {activeFilterCount} filtr
+            </span>
+          )}
+          {filterOpen ? <ChevronUp size={14} className="text-text3" /> : <ChevronDown size={14} className="text-text3" />}
+        </button>
+
+        {/* Expanded panel */}
+        {filterOpen && (
+          <div className="px-3 sm:px-[22px] pb-4 pt-1 border-t border-border">
+            {/* Quick month shortcuts */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {[
+                { label: "Bu oy",     m: DEFAULT_MONTH,                               y: DEFAULT_YEAR },
+                { label: "O'tgan oy", m: MONTH_KEYS[(now.getMonth() + 11) % 12],      y: now.getMonth() === 0 ? DEFAULT_YEAR - 1 : DEFAULT_YEAR },
+                { label: "2 oy oldin",m: MONTH_KEYS[(now.getMonth() + 10) % 12],      y: now.getMonth() <= 1  ? DEFAULT_YEAR - 1 : DEFAULT_YEAR },
+              ].map(({ label, m, y }) => (
+                <button
+                  key={label}
+                  onClick={() => { setMonth(m); setYear(y); }}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-[12px] border transition-all",
+                    month === m && year === y
+                      ? "bg-blue border-blue text-white font-semibold"
+                      : "border-border text-text2 hover:bg-bg3",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filter fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Oy */}
+              <div>
+                <label className="block text-[11px] font-semibold text-text3 mb-1.5">Oy</label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg bg-bg border border-border text-[12.5px] text-text outline-none focus:border-blue transition-colors"
+                  value={month}
+                  onChange={e => setMonth(e.target.value as MonthKey)}
+                >
+                  {MONTH_KEYS.map(mm => <option key={mm} value={mm}>{MONTH_LABELS[mm]}</option>)}
+                </select>
+              </div>
+
+              {/* Yil */}
+              <div>
+                <label className="block text-[11px] font-semibold text-text3 mb-1.5">Yil</label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg bg-bg border border-border text-[12.5px] text-text outline-none focus:border-blue transition-colors"
+                  value={year}
+                  onChange={e => setYear(Number(e.target.value))}
+                >
+                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              {/* Targetolog */}
+              <div>
+                <label className="block text-[11px] font-semibold text-text3 mb-1.5">Targetolog</label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg bg-bg border border-border text-[12.5px] text-text outline-none focus:border-blue transition-colors"
+                  value={targetolog}
+                  onChange={e => setTargetolog(e.target.value)}
+                >
+                  <option value="all">Barchasi</option>
+                  <option value="islomiddin">Islomiddin</option>
+                  <option value="abdujabbor">Abdujabbor</option>
+                  <option value="dilmurod">Dilmurod</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tozalash */}
+            <div className="flex justify-end mt-3">
+              <button
+                onClick={() => { setMonth(DEFAULT_MONTH); setYear(DEFAULT_YEAR); setTargetolog("all"); }}
+                className="text-[12px] text-text3 hover:text-text px-3 py-1 rounded border border-border hover:bg-bg3 transition-colors"
+              >
+                Tozalash
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px] bg-bg">
         {/* Toggle */}
