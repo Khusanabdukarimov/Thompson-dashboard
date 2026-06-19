@@ -20,11 +20,16 @@ function accountId() {
   return id.startsWith('act_') ? id : `act_${id}`;
 }
 
-// Returns all configured ad account IDs (primary + optional secondary)
+// Returns all configured ad account IDs (primary + optional extras)
 function allAccountIds() {
   const accounts = [accountId()];
-  const id2 = process.env.META_AD_ACCOUNT_ID_2 || '';
-  if (id2) accounts.push(id2.startsWith('act_') ? id2 : `act_${id2}`);
+  const extras = [
+    process.env.META_AD_ACCOUNT_ID_2 || '',
+    process.env.META_AD_ACCOUNT_ID_3 || '',
+  ];
+  for (const id of extras) {
+    if (id) accounts.push(id.startsWith('act_') ? id : `act_${id}`);
+  }
   return accounts;
 }
 
@@ -421,7 +426,7 @@ router.get('/rows', async (req, res) => {
 // Campaign name → targetolog SQL filter
 const TARGETOLOG_CAMPAIGN_SQL = {
   dilmurod:    `(campaign_name ILIKE 'DU %' OR campaign_name ILIKE 'DU-%')`,
-  abdujabbor:  `(campaign_name ILIKE 'YO %' OR campaign_name ILIKE 'YO-%' OR campaign_name ILIKE 'YU %' OR campaign_name ILIKE 'YU-%')`,
+  abdujabbor:  `(campaign_name ILIKE 'YO %' OR campaign_name ILIKE 'YO-%' OR campaign_name ILIKE 'YU %' OR campaign_name ILIKE 'YU-%' OR campaign_name ILIKE '%Potent%SBO%' OR campaign_name ILIKE '%Oziq ovqat%' OR campaign_name ILIKE '%Begubor%')`,
   islomiddin:  `(campaign_name ILIKE 'IL %' OR campaign_name ILIKE 'IL-%' OR campaign_name ILIKE '%RE-TARGET%' OR campaign_name ILIKE '%RETARGET%' OR campaign_name ILIKE '%NISHON%' OR campaign_name ILIKE '%LEAD & N%')`,
 };
 
