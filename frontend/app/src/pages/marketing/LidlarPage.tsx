@@ -705,7 +705,7 @@ export default function LidlarPage() {
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
                         title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
-                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Konversiya</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Konsultatsiya o'tkazildi / umumiy lid</div>
               </GradCard>
             </div>
 
