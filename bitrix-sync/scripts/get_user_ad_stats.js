@@ -36,8 +36,8 @@ const CAMPAIGN_PREFIX_MAP = {
 
 // Exact or substring campaign name → user  (for campaigns without clear initials prefix)
 const CAMPAIGN_KEYWORD_MAP = [
-  // "Lead & N" and "Lead & N2 & Y20" — Nishonchi campaigns
-  { keyword: 'LEAD & N',   name: 'Abdujabbor',              email: 'abdu8229@icloud.com',          key: 'YO' },
+  // "Lead & N" and "Lead & N2 & Y20" — Islomiddin's Nishonchi campaigns
+  { keyword: 'LEAD & N',   name: 'Islomiddin Abdultojiyev', email: 'abdultojiyev@gmail.com',       key: 'IL' },
   { keyword: 'RE-TARGET',  name: 'Islomiddin Abdultojiyev', email: 'abdultojiyev@gmail.com',       key: 'IL' },
   { keyword: 'RETARGET',   name: 'Islomiddin Abdultojiyev', email: 'abdultojiyev@gmail.com',       key: 'IL' },
 ];

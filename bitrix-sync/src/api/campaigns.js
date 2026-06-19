@@ -141,9 +141,6 @@ async function paginate(url, params) {
 
 const LEAD_TYPES = new Set([
   'lead',
-  'offsite_conversion.fb_pixel_lead',
-  'onsite_conversion.lead_grouped',
-  'onsite_conversion.messaging_conversation_started_7d',
 ]);
 const LPV_TYPES = new Set(['landing_page_view']);
 const V3_TYPES  = new Set(['video_view', 'video_3sec_watched_actions']);
@@ -424,8 +421,8 @@ router.get('/rows', async (req, res) => {
 // Campaign name → targetolog SQL filter
 const TARGETOLOG_CAMPAIGN_SQL = {
   dilmurod:    `(campaign_name ILIKE 'DU %' OR campaign_name ILIKE 'DU-%')`,
-  abdujabbor:  `(campaign_name ILIKE 'YO %' OR campaign_name ILIKE 'YO-%' OR campaign_name ILIKE 'YU %' OR campaign_name ILIKE 'YU-%' OR campaign_name ILIKE '%LEAD & N%')`,
-  islomiddin:  `(campaign_name ILIKE 'IL %' OR campaign_name ILIKE 'IL-%' OR campaign_name ILIKE '%RE-TARGET%' OR campaign_name ILIKE '%RETARGET%' OR campaign_name ILIKE '%NISHON%')`,
+  abdujabbor:  `(campaign_name ILIKE 'YO %' OR campaign_name ILIKE 'YO-%' OR campaign_name ILIKE 'YU %' OR campaign_name ILIKE 'YU-%')`,
+  islomiddin:  `(campaign_name ILIKE 'IL %' OR campaign_name ILIKE 'IL-%' OR campaign_name ILIKE '%RE-TARGET%' OR campaign_name ILIKE '%RETARGET%' OR campaign_name ILIKE '%NISHON%' OR campaign_name ILIKE '%LEAD & N%')`,
 };
 
 // GET /api/campaigns/insights?month=may&year=2026[&from=2026-06-01&to=2026-06-11][&targetolog=dilmurod]
