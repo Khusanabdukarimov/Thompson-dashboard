@@ -345,17 +345,31 @@ router.get('/plans/:id/distribution', async (req, res) => {
     // closedate = Bitrix24 CLOSEDATE (set when deal is won); fallback to date_modify, then date_create.
     const allIds = empRes.rows.map(r => r.responsible_id);
     const actualsRes = allIds.length ? await pool.query(`
-      SELECT
-        d.responsible_id,
-        COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS actual_sales,
-        COUNT(*)::int                             AS deal_count
-      FROM deals d
-      JOIN stages s ON s.id = d.stage_id
-      WHERE d.responsible_id = ANY($1)
-        AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-        AND NOT (s.is_final = true AND s.is_won = false)
-        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id
+      SELECT responsible_id,
+             COALESCE(SUM(amount), 0)::numeric AS actual_sales,
+             COUNT(DISTINCT deal_id)::int       AS deal_count
+      FROM (
+        SELECT d.responsible_id, p.deal_id, SUM(p.amount_usd) AS amount
+        FROM deals d
+        JOIN stages s ON s.id = d.stage_id
+        JOIN deal_payments p ON p.deal_id = d.id
+        WHERE d.responsible_id = ANY($1)
+          AND NOT (s.is_final = true AND s.is_won = false)
+          AND p.paid_at BETWEEN $2 AND $3
+        GROUP BY d.responsible_id, p.deal_id
+
+        UNION ALL
+
+        SELECT d.responsible_id, d.id AS deal_id, d.uf_paid_sum AS amount
+        FROM deals d
+        JOIN stages s ON s.id = d.stage_id
+        WHERE d.responsible_id = ANY($1)
+          AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+          AND NOT (s.is_final = true AND s.is_won = false)
+          AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date BETWEEN $2 AND $3
+          AND d.id NOT IN (SELECT DISTINCT deal_id FROM deal_payments)
+      ) sub
+      GROUP BY responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
     const actualsMap = {};
@@ -471,17 +485,30 @@ router.get('/plans/:id/progress', async (req, res) => {
     // closedate = Bitrix24 CLOSEDATE (the actual win date); fallback to date_modify, then date_create.
     // ::text cast ensures node-postgres returns a plain string (not a Date object)
     // so JS string comparison against sp.start/sp.end works correctly.
+    // deal_payments bo'lsa — har to'lov alohida sana bilan,
+    // bo'lmasa — uf_paid_sum ni bitta sana bilan hisoblash.
     const actualsRes = await pool.query(`
-      SELECT
-        d.responsible_id,
-        COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date::text AS close_date,
-        SUM(d.uf_paid_sum)::numeric AS amount
+      SELECT d.responsible_id, p.paid_at::text AS close_date, SUM(p.amount_usd)::numeric AS amount
+      FROM deals d
+      JOIN stages s ON s.id = d.stage_id
+      JOIN deal_payments p ON p.deal_id = d.id
+      WHERE d.responsible_id = ANY($1)
+        AND NOT (s.is_final = true AND s.is_won = false)
+        AND p.paid_at BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, p.paid_at
+
+      UNION ALL
+
+      SELECT d.responsible_id,
+             COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date::text AS close_date,
+             SUM(d.uf_paid_sum)::numeric AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
         AND NOT (s.is_final = true AND s.is_won = false)
         AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date BETWEEN $2 AND $3
+        AND d.id NOT IN (SELECT DISTINCT deal_id FROM deal_payments)
       GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
