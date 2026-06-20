@@ -672,7 +672,7 @@ export default function SdelkalarPage() {
           const pct = kutilmoqda > 0 ? Math.round((tolangan / kutilmoqda) * 100) : 0;
           return (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
-              <KpiCard label="Kutilmoqda" value={`$${fmtNum(Math.round(kutilmoqda))}`}
+              <KpiCard label="Shartnoma summasi" value={`$${fmtNum(Math.round(kutilmoqda))}`}
                 sub="Won sdelkalar jami summasi" gradient="linear-gradient(135deg,#0f3460,#1a6fa8)"
                 lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.14))"
                 icon={<DollarSign size={16} />} />
@@ -680,7 +680,7 @@ export default function SdelkalarPage() {
                 sub={`${pct}% to'landi`} gradient="linear-gradient(135deg,#064e3b,#059669)"
                 lightGradient="linear-gradient(135deg,rgba(5,150,105,0.07),rgba(5,150,105,0.14))"
                 icon={<CheckCircle size={16} />} />
-              <KpiCard label="Qoldiq" value={`$${fmtNum(Math.round(qoldiq))}`}
+              <KpiCard label="Kutilmoqda (qoldiq)" value={`$${fmtNum(Math.round(qoldiq))}`}
                 sub="Hali to'lanmagan" gradient="linear-gradient(135deg,#7c2d12,#dc2626)"
                 lightGradient="linear-gradient(135deg,rgba(220,38,38,0.07),rgba(220,38,38,0.14))"
                 icon={<DollarSign size={16} />} />
