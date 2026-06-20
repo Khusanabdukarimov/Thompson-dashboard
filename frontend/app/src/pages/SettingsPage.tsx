@@ -45,7 +45,6 @@ export default function SettingsPage() {
               <Item label="Bitrix24 portal" value={cfgQ.data?.bitrix_portal || '— sozlanmagan —'} mono />
               <Item label="Asosiy valyuta" value={cfgQ.data?.currency.primary || '—'} />
               <Item label="Ikkilamchi valyuta" value={cfgQ.data?.currency.secondary || '—'} />
-              <Item label="Frontend versiya" value="v2 (React + Vite)" />
             </div>
           )}
         </Section>
