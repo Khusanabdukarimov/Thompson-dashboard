@@ -179,13 +179,25 @@ function redistribute(totalTarget, subperiods, actualsMap, todayStr) {
     ? Math.round((remainingAfterCurrent - (futureCount - 1) * futureBase) * 100) / 100
     : 0;
 
-  const initialBase = Math.round((totalTarget / n) * 100) / 100;
+  // For past weeks: compute what the target was at the START of each past week
+  // (total - sum of actuals from prior completed weeks) / remaining weeks at that point
+  const pastList = subperiods.filter(sp => pastSet.has(sp.index));
+  const pastTargets = {};
+  let runningActual = 0;
+  for (let i = 0; i < pastList.length; i++) {
+    const sp = pastList[i];
+    const weeksLeft = n - i;
+    pastTargets[sp.index] = weeksLeft > 0
+      ? Math.round((Math.max(0, totalTarget - runningActual) / weeksLeft) * 100) / 100
+      : 0;
+    runningActual += actualsMap[sp.index] || 0;
+  }
 
   return subperiods.map(sp => {
     const actual = actualsMap[sp.index] || 0;
     let target;
     if (pastSet.has(sp.index)) {
-      target = initialBase;
+      target = pastTargets[sp.index];
     } else if (currentSp && sp.index === currentSp.index) {
       target = currentTarget;
     } else {
