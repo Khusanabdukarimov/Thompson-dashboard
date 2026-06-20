@@ -106,6 +106,14 @@ pool.query(`
   CREATE INDEX IF NOT EXISTS idx_mad_campaign ON meta_ad_daily(campaign_name);
 `).catch(err => console.error('[campaigns] meta_ad_daily init:', err.message));
 
+pool.query(`
+  CREATE TABLE IF NOT EXISTS campaign_targetolog_overrides (
+    campaign_name TEXT PRIMARY KEY,
+    targetolog    TEXT,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+  );
+`).catch(err => console.error('[campaigns] campaign_targetolog_overrides init:', err.message));
+
 async function getCache(endpoint, month, year) {
   const { rows } = await pool.query(
     `SELECT data FROM campaign_cache
@@ -423,6 +431,15 @@ router.get('/rows', async (req, res) => {
   }
 });
 
+// Detect targetolog from campaign name patterns (fallback when no DB override)
+function detectTargetolog(name) {
+  if (!name) return null;
+  if (/^DU[\s-]/i.test(name)) return 'dilmurod';
+  if (/^(YO|YU)[\s-]/i.test(name) || /potent.*sbo|oziq.?ovqat|begubor/i.test(name)) return 'abdujabbor';
+  if (/^IL[\s-]/i.test(name) || /re-?target|nishon|lead\s*&\s*n/i.test(name)) return 'islomiddin';
+  return null;
+}
+
 // Campaign name → targetolog SQL filter
 const TARGETOLOG_CAMPAIGN_SQL = {
   dilmurod:    `(campaign_name ILIKE 'DU %' OR campaign_name ILIKE 'DU-%')`,
@@ -442,10 +459,22 @@ router.get('/insights', async (req, res) => {
   const monthNum        = MONTH_NUMS[month];
   if (!monthNum) return res.status(400).json({ error: `Unknown month: ${month}` });
 
-  const campaignConditions = targetologs.map(t => TARGETOLOG_CAMPAIGN_SQL[t]).filter(Boolean);
-  const campaignFilter = campaignConditions.length > 0
-    ? `AND (${campaignConditions.join(' OR ')})`
-    : '';
+  // Build campaign filter: pattern-based + DB overrides
+  let campaignFilter = '';
+  if (targetologs.length > 0) {
+    const patternConditions = targetologs.map(t => TARGETOLOG_CAMPAIGN_SQL[t]).filter(Boolean);
+    const { rows: overrideRows } = await pool.query(
+      `SELECT campaign_name FROM campaign_targetolog_overrides WHERE targetolog = ANY($1)`,
+      [targetologs]
+    );
+    const overrideNames = overrideRows.map(r => r.campaign_name);
+    const parts = [...patternConditions];
+    if (overrideNames.length > 0) {
+      const inList = overrideNames.map(n => `'${n.replace(/'/g, "''")}'`).join(',');
+      parts.push(`campaign_name IN (${inList})`);
+    }
+    if (parts.length > 0) campaignFilter = `AND (${parts.join(' OR ')})`;
+  }
 
   // ── If from/to provided OR targetolog specified → query meta_ad_daily ──
   if (fromDate && toDate || (targetologs.length > 0 && !fromDate)) {
@@ -1592,6 +1621,75 @@ router.get('/uf-field-options', async (req, res) => {
   } catch (err) {
     console.error('[uf-field-options]', err.message);
     res.json({ options: [] });
+  }
+});
+
+// ── Campaign targetolog management ────────────────────────────────
+// GET /api/campaigns/campaign-assignments
+router.get('/campaign-assignments', async (_req, res) => {
+  try {
+    const { rows: campaigns } = await pool.query(`
+      SELECT campaign_name,
+        SUM(leads)::int                    AS total_leads,
+        ROUND(SUM(spend)::numeric, 2)      AS total_spend,
+        MAX(date)::text                    AS last_date
+      FROM meta_ad_daily
+      WHERE date >= NOW() - INTERVAL '90 days'
+      GROUP BY campaign_name
+      ORDER BY MAX(date) DESC, SUM(leads) DESC
+    `);
+    const { rows: overrides } = await pool.query(
+      `SELECT campaign_name, targetolog FROM campaign_targetolog_overrides`
+    );
+    const overrideMap = Object.fromEntries(overrides.map(o => [o.campaign_name, o.targetolog]));
+
+    const result = campaigns.map(c => ({
+      campaign_name: c.campaign_name,
+      total_leads:   parseInt(c.total_leads) || 0,
+      total_spend:   parseFloat(c.total_spend) || 0,
+      last_date:     c.last_date,
+      targetolog:    overrideMap[c.campaign_name] ?? detectTargetolog(c.campaign_name),
+      is_override:   c.campaign_name in overrideMap,
+    }));
+    res.json(result);
+  } catch (err) {
+    console.error('[campaign-assignments]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/campaigns/campaign-assign  { campaign_name, targetolog }
+router.post('/campaign-assign', async (req, res) => {
+  const { campaign_name, targetolog } = req.body || {};
+  if (!campaign_name) return res.status(400).json({ error: 'campaign_name required' });
+  const valid = ['dilmurod', 'islomiddin', 'abdujabbor'];
+  if (targetolog && !valid.includes(targetolog)) return res.status(400).json({ error: 'invalid targetolog' });
+  try {
+    await pool.query(`
+      INSERT INTO campaign_targetolog_overrides (campaign_name, targetolog)
+      VALUES ($1, $2)
+      ON CONFLICT (campaign_name) DO UPDATE SET targetolog = $2, created_at = NOW()
+    `, [campaign_name, targetolog]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[campaign-assign]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/campaigns/campaign-assign  { campaign_name }
+router.delete('/campaign-assign', async (req, res) => {
+  const { campaign_name } = req.body || {};
+  if (!campaign_name) return res.status(400).json({ error: 'campaign_name required' });
+  try {
+    await pool.query(
+      `DELETE FROM campaign_targetolog_overrides WHERE campaign_name = $1`,
+      [campaign_name]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[campaign-assign delete]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

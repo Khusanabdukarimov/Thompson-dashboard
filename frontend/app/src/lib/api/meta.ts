@@ -387,3 +387,40 @@ export function getCreativeLeads(adset_name: string, month: MonthKey, year: numb
     },
   );
 }
+
+
+// ── Campaign targetolog management ────────────────────────────────
+export type CampaignAssignment = {
+  campaign_name: string;
+  total_leads:   number;
+  total_spend:   number;
+  last_date:     string;
+  targetolog:    string | null;
+  is_override:   boolean;
+};
+
+export function getCampaignAssignments() {
+  return apiGet<CampaignAssignment[]>('/api/campaigns/campaign-assignments');
+}
+
+export async function assignCampaign(campaign_name: string, targetolog: string) {
+  const { authedFetch, API_URL_CRM } = await import('./client');
+  const res = await authedFetch('/api/campaigns/campaign-assign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campaign_name, targetolog }),
+  }, API_URL_CRM);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function unassignCampaign(campaign_name: string) {
+  const { authedFetch, API_URL_CRM } = await import('./client');
+  const res = await authedFetch('/api/campaigns/campaign-assign', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campaign_name }),
+  }, API_URL_CRM);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
