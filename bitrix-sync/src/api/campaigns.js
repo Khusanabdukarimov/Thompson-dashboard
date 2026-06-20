@@ -460,20 +460,32 @@ router.get('/insights', async (req, res) => {
   if (!monthNum) return res.status(400).json({ error: `Unknown month: ${month}` });
 
   // Build campaign filter: pattern-based + DB overrides
+  // Campaigns with null override are explicitly unassigned — always excluded
   let campaignFilter = '';
-  if (targetologs.length > 0) {
-    const patternConditions = targetologs.map(t => TARGETOLOG_CAMPAIGN_SQL[t]).filter(Boolean);
-    const { rows: overrideRows } = await pool.query(
-      `SELECT campaign_name FROM campaign_targetolog_overrides WHERE targetolog = ANY($1)`,
-      [targetologs]
+  {
+    // Always fetch all overrides: assigned ones to ADD, null ones to EXCLUDE
+    const { rows: allOverrides } = await pool.query(
+      `SELECT campaign_name, targetolog FROM campaign_targetolog_overrides`
     );
-    const overrideNames = overrideRows.map(r => r.campaign_name);
-    const parts = [...patternConditions];
-    if (overrideNames.length > 0) {
-      const inList = overrideNames.map(n => `'${n.replace(/'/g, "''")}'`).join(',');
-      parts.push(`campaign_name IN (${inList})`);
+    const nullExcluded = allOverrides.filter(r => r.targetolog === null).map(r => r.campaign_name);
+    const excludeClause = nullExcluded.length > 0
+      ? `AND campaign_name NOT IN (${nullExcluded.map(n => `'${n.replace(/'/g, "''")}'`).join(',')})`
+      : '';
+
+    if (targetologs.length > 0) {
+      const patternConditions = targetologs.map(t => TARGETOLOG_CAMPAIGN_SQL[t]).filter(Boolean);
+      const assignedOverrides = allOverrides
+        .filter(r => r.targetolog !== null && targetologs.includes(r.targetolog))
+        .map(r => r.campaign_name);
+      const parts = [...patternConditions];
+      if (assignedOverrides.length > 0) {
+        const inList = assignedOverrides.map(n => `'${n.replace(/'/g, "''")}'`).join(',');
+        parts.push(`campaign_name IN (${inList})`);
+      }
+      if (parts.length > 0) campaignFilter = `AND (${parts.join(' OR ')}) ${excludeClause}`;
+    } else if (excludeClause) {
+      campaignFilter = excludeClause;
     }
-    if (parts.length > 0) campaignFilter = `AND (${parts.join(' OR ')})`;
   }
 
   // ── If from/to provided OR targetolog specified → query meta_ad_daily ──
@@ -1663,13 +1675,16 @@ router.post('/campaign-assign', async (req, res) => {
   const { campaign_name, targetolog } = req.body || {};
   if (!campaign_name) return res.status(400).json({ error: 'campaign_name required' });
   const valid = ['dilmurod', 'islomiddin', 'abdujabbor'];
-  if (targetolog && !valid.includes(targetolog)) return res.status(400).json({ error: 'invalid targetolog' });
+  // null/undefined = explicitly unassigned (shown in "Biriktirilmagan")
+  if (targetolog !== null && targetolog !== undefined && targetolog !== '' && !valid.includes(targetolog))
+    return res.status(400).json({ error: 'invalid targetolog' });
+  const finalTargetolog = (targetolog && valid.includes(targetolog)) ? targetolog : null;
   try {
     await pool.query(`
       INSERT INTO campaign_targetolog_overrides (campaign_name, targetolog)
       VALUES ($1, $2)
       ON CONFLICT (campaign_name) DO UPDATE SET targetolog = $2, created_at = NOW()
-    `, [campaign_name, targetolog]);
+    `, [campaign_name, finalTargetolog]);
     res.json({ ok: true });
   } catch (err) {
     console.error('[campaign-assign]', err.message);

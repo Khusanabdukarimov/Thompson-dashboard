@@ -247,6 +247,19 @@ function CampaignRow({
                 {info.label}
               </button>
             ))}
+            <button
+              onClick={() => { onAssign(''); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '7px 12px', fontSize: 11,
+                background: 'transparent', border: 0, borderTop: '1px solid var(--border)',
+                color: '#9E9E9E', cursor: 'pointer',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(158,158,158,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              Biriktirilmagan (chiqar)
+            </button>
           </div>
         )}
       </div>
