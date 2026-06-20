@@ -51,6 +51,15 @@ async function upsertDeal(r, client) {
   const rawRemaining   = r.UF_CRM_1780643502 != null ? parseFloat(r.UF_CRM_1780643502) : null;
   const paidSumUSD     = await toUSD(rawPaidSum,   currency);
   const remainingSumUSD = await toUSD(rawRemaining, currency);
+  // UF_CRM_69D8F7169A174 — to'landi summa (money field: "7500|USD")
+  const tolandiRaw = r.UF_CRM_69D8F7169A174;
+  let tolandiSum = null;
+  if (tolandiRaw) {
+    const parts = String(tolandiRaw).split('|');
+    const amt = parseFloat(parts[0]);
+    const cur = parts[1] || currency;
+    if (!isNaN(amt) && amt > 0) tolandiSum = await toUSD(amt, cur);
+  }
 
   const { rows } = await db.query(
     `INSERT INTO deals (
@@ -58,8 +67,8 @@ async function upsertDeal(r, client) {
        source_id, utm_source, date_create, date_modify, closedate,
        uf_sale_date, uf_bp_sale_date, uf_payment_date,
        uf_paid_sum, uf_remaining_sum,
-       uf_cancel_reason, contact_id, begindate, uf_amo_date, uf_service, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+       uf_cancel_reason, contact_id, begindate, uf_amo_date, uf_service, uf_tolandi_sum, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -79,6 +88,7 @@ async function upsertDeal(r, client) {
        begindate        = EXCLUDED.begindate,
        uf_amo_date      = EXCLUDED.uf_amo_date,
        uf_service       = EXCLUDED.uf_service,
+       uf_tolandi_sum   = EXCLUDED.uf_tolandi_sum,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -102,6 +112,7 @@ async function upsertDeal(r, client) {
       parseDate(r.BEGINDATE),
       parseDate(r.UF_CRM_69FEFD2D71544),
       ufVal(r.UF_CRM_69D8F71700936),
+      tolandiSum,
     ]
   );
 

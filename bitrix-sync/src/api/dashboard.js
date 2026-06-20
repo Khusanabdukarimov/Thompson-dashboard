@@ -512,7 +512,7 @@ router.get('/deals-stats', async (req, res) => {
          COUNT(d.id) FILTER (WHERE s.is_won = true)::int AS sotuv_boldi,
          COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int  AS bekor,
          COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won = true AND d.currency_id = 'USD'), 0)::numeric AS jami_sotuv,
-         COALESCE(SUM(d.uf_paid_sum::numeric) FILTER (WHERE d.uf_paid_sum IS NOT NULL AND d.currency_id = 'USD' AND NOT (s.is_final = true AND s.is_won = false)), 0)::numeric AS tolangan,
+         COALESCE(SUM(d.uf_tolandi_sum) FILTER (WHERE d.uf_tolandi_sum IS NOT NULL AND d.uf_tolandi_sum > 0 AND NOT (s.is_final = true AND s.is_won = false)), 0)::numeric AS tolangan,
          COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.is_won = true AND d.currency_id = 'USD'), 0), 0)::numeric AS ortacha_chek,
          ROUND(COUNT(d.id) FILTER (WHERE s.is_won = true)::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d

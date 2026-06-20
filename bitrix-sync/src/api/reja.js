@@ -347,13 +347,12 @@ router.get('/plans/:id/distribution', async (req, res) => {
     const actualsRes = allIds.length ? await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS actual_sales,
-        COUNT(*)::int                             AS deal_count
+        COALESCE(SUM(d.uf_tolandi_sum), 0)::numeric AS actual_sales,
+        COUNT(*)::int                                AS deal_count
       FROM deals d
       JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
-        AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-        AND d.currency_id = 'USD'
+        AND d.uf_tolandi_sum IS NOT NULL AND d.uf_tolandi_sum > 0
         AND NOT (s.is_final = true AND s.is_won = false)
         AND COALESCE(d.uf_bp_sale_date, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
@@ -476,12 +475,11 @@ router.get('/plans/:id/progress', async (req, res) => {
       SELECT
         d.responsible_id,
         COALESCE(d.uf_bp_sale_date, d.date_create)::date::text AS close_date,
-        SUM(d.uf_paid_sum)::numeric                            AS amount
+        SUM(d.uf_tolandi_sum)::numeric                         AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
-        AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
-        AND d.currency_id = 'USD'
+        AND d.uf_tolandi_sum IS NOT NULL AND d.uf_tolandi_sum > 0
         AND NOT (s.is_final = true AND s.is_won = false)
         AND COALESCE(d.uf_bp_sale_date, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.date_create)::date
@@ -551,12 +549,12 @@ router.get('/plans/:id/progress', async (req, res) => {
     if (prevPlanRes.rows.length) {
       const pp = prevPlanRes.rows[0];
       const prevActualRes = await pool.query(`
-        SELECT COALESCE(SUM(d.uf_paid_sum), 0)::numeric AS total
+        SELECT COALESCE(SUM(d.uf_tolandi_sum), 0)::numeric AS total
         FROM deals d
         JOIN stages s ON s.id = d.stage_id
-        WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
+        WHERE d.uf_tolandi_sum IS NOT NULL AND d.uf_tolandi_sum > 0
           AND NOT (s.is_final AND NOT s.is_won)
-          AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date BETWEEN $1 AND $2
+          AND COALESCE(d.uf_bp_sale_date, d.date_create)::date BETWEEN $1 AND $2
       `, [pp.period_start, pp.period_end]);
       prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
     }

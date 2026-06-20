@@ -73,6 +73,7 @@ Promise.all([
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_remaining_sum NUMERIC(14,2);
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS begindate        TIMESTAMPTZ;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_service       TEXT;
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_tolandi_sum  NUMERIC(14,2);
     CREATE INDEX IF NOT EXISTS deals_date_modify_idx      ON deals(date_modify);
     CREATE INDEX IF NOT EXISTS deals_uf_sale_date_idx     ON deals(uf_sale_date);
     CREATE INDEX IF NOT EXISTS deals_uf_bp_sale_date_idx  ON deals(uf_bp_sale_date);
