@@ -141,58 +141,56 @@ function getSubperiods(plan) {
   return result;
 }
 
-// ── Redistribution (pure, no DB/date logic) ──────────────────────
+// ── Redistribution (flex mode) ────────────────────────────────────
 //
-// A week is "completed" when it has a positive actual recorded.
-// All remaining (non-completed) weeks share equally whatever target is left.
-// Last remaining week absorbs the 2-decimal rounding remainder so that
-//   sum(remaining planned) == remainingTarget exactly.
-// Over-performance: remainingTarget clamped to 0 → future weeks planned = 0.
+// Three zone model — each zone targets separately:
+//   PAST   (end < today):  show original M/N snapshot
+//   CURRENT (today in week): target = (total - past_actual) / remaining_week_count
+//   FUTURE (start > today): target = (total - past_actual - current_actual) / future_count
+//                           → flexes in real-time with every new payment in current week
 //
-// Acceptance tests:
-//   A) M=50 000, N=4, week1=10 000 → remaining 3 weeks each 13 333.33 / 13 333.34
-//   B) M=50 000, N=4, week1=55 000 → remaining weeks clamped to 0
-//   C) no actuals → all N weeks = M/N (equal)
-//
-// todayStr: "YYYY-MM-DD" — weeks whose end date has passed are locked (updated every Sunday)
+// Over-performance: clamped to 0.  Last future week absorbs rounding remainder.
 function redistribute(totalTarget, subperiods, actualsMap, todayStr) {
   const n = subperiods.length;
   if (n === 0) return [];
 
-  // Completed = week's end date is before today (date-based, not actual-based)
-  const completedSet = new Set(
-    subperiods
-      .filter(sp => sp.end < todayStr)
-      .map(sp => sp.index)
-  );
+  const pastSet    = new Set(subperiods.filter(sp => sp.end   <  todayStr).map(sp => sp.index));
+  const currentSp  = subperiods.find(sp => sp.start <= todayStr && todayStr <= sp.end);
+  const futureList = subperiods.filter(sp => sp.start > todayStr);
 
-  const cumulativeActual = [...completedSet]
-    .reduce((s, idx) => s + (actualsMap[idx] || 0), 0);
+  const pastActual    = [...pastSet].reduce((s, idx) => s + (actualsMap[idx] || 0), 0);
+  const currentActual = currentSp ? (actualsMap[currentSp.index] || 0) : 0;
 
-  const remainingTarget = Math.max(0, totalTarget - cumulativeActual);
-  const remainingWeeks  = subperiods.filter(sp => !completedSet.has(sp.index));
-  const remainingCount  = remainingWeeks.length;
-
-  // Round to 2dp; last remaining week absorbs remainder
-  const baseRounded = remainingCount > 0
-    ? Math.round((remainingTarget / remainingCount) * 100) / 100
-    : 0;
-  const lastRemIdx = remainingCount > 0
-    ? remainingWeeks[remainingWeeks.length - 1].index
-    : -1;
-  const lastPlanned = remainingCount > 0
-    ? Math.round((remainingTarget - (remainingCount - 1) * baseRounded) * 100) / 100
+  // Current week target: share remaining equally across current + future weeks
+  const remainingAfterPast  = Math.max(0, totalTarget - pastActual);
+  const currentAndFutureLen = (currentSp ? 1 : 0) + futureList.length;
+  const currentTarget = currentAndFutureLen > 0
+    ? Math.round((remainingAfterPast / currentAndFutureLen) * 100) / 100
     : 0;
 
-  // For completed weeks use initial snapshot = M/N
+  // Future weeks: flex based on current running total
+  const remainingAfterCurrent = Math.max(0, remainingAfterPast - currentActual);
+  const futureCount           = futureList.length;
+  const futureBase            = futureCount > 0
+    ? Math.round((remainingAfterCurrent / futureCount) * 100) / 100
+    : 0;
+  const lastFutureIdx = futureCount > 0 ? futureList[futureList.length - 1].index : -1;
+  const lastFuturePlanned = futureCount > 0
+    ? Math.round((remainingAfterCurrent - (futureCount - 1) * futureBase) * 100) / 100
+    : 0;
+
   const initialBase = Math.round((totalTarget / n) * 100) / 100;
 
   return subperiods.map(sp => {
-    const actual      = actualsMap[sp.index] || 0;
-    const isCompleted = completedSet.has(sp.index);
-    const target = isCompleted
-      ? initialBase
-      : (sp.index === lastRemIdx ? lastPlanned : baseRounded);
+    const actual = actualsMap[sp.index] || 0;
+    let target;
+    if (pastSet.has(sp.index)) {
+      target = initialBase;
+    } else if (currentSp && sp.index === currentSp.index) {
+      target = currentTarget;
+    } else {
+      target = sp.index === lastFutureIdx ? lastFuturePlanned : futureBase;
+    }
     return { spIndex: sp.index, target, actual: Math.round(actual * 100) / 100 };
   });
 }
