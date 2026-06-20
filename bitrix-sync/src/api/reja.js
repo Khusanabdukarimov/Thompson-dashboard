@@ -354,8 +354,8 @@ router.get('/plans/:id/distribution', async (req, res) => {
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
         AND d.currency_id = 'USD'
-        AND NOT (s.is_final AND NOT s.is_won)
-        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date BETWEEN $2 AND $3
+        AND s.is_won = true
+        AND d.uf_bp_sale_date::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -475,16 +475,16 @@ router.get('/plans/:id/progress', async (req, res) => {
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date::text AS close_date,
-        SUM(d.uf_paid_sum)::numeric                          AS amount
+        d.uf_bp_sale_date::date::text AS close_date,
+        SUM(d.uf_paid_sum)::numeric   AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
         AND d.currency_id = 'USD'
-        AND NOT (s.is_final AND NOT s.is_won)
-        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.closedate)::date
+        AND s.is_won = true
+        AND d.uf_bp_sale_date::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, d.uf_bp_sale_date::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
