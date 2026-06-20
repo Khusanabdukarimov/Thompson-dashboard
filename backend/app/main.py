@@ -1126,20 +1126,21 @@ def api_marketing_kunlik_segment(section_id: int, month: str, year: int):
 
 @app.api_route("/api/v1/tolov", methods=["GET", "POST"])
 def api_tolov(
-    id:    Optional[str] = None,
-    sana:  Optional[str] = None,
-    turi:  Optional[str] = None,
-    summa: Optional[str] = None,
+    id:       Optional[str] = None,
+    tolov_id: Optional[str] = None,
+    sana:     Optional[str] = None,
+    turi:     Optional[str] = None,
+    summa:    Optional[str] = None,
 ):
     """
-    Bitrix24 outgoing webhook chaqiradi.
-    Faqat bizning DB ni yangilaydi — Bitrix24 ga hech narsa yubormaydi.
+    Bitrix24 To'lov webhook — deal_payments ga INSERT + deals.uf_paid_sum yangilanadi.
 
     Params:
-      id    — deal ID
-      sana  — to'lov sanasi, format: "02.06.2026 18:17:00" → uf_bp_sale_date
-      turi  — to'lov turi (Karta, Hisob, ...) — saqlanadi, filtrlash uchun ishlatilmaydi
-      summa — "5000000|UZS" yoki "333|USD" formatida
+      id       — deal ID (parentId2)
+      tolov_id — To'lov entity ID (takrorlanmaslik uchun)
+      sana     — to'lov sanasi "02.06.2026 18:17:00"
+      turi     — Karta / Hisob / Naqd
+      summa    — "5000000|UZS" yoki "3913|USD"
     """
     if not id:
         raise HTTPException(status_code=400, detail="id majburiy")
@@ -1149,7 +1150,9 @@ def api_tolov(
     except ValueError:
         raise HTTPException(status_code=400, detail="id raqam bo'lishi kerak")
 
-    # Parse sana: "02.06.2026 18:17:00" (Bitrix24 + → space URL decode qiladi)
+    tolov_id_int = int(tolov_id) if tolov_id and tolov_id.isdigit() else None
+
+    # Parse sana
     paid_dt = None
     if sana:
         from dateutil import parser as _dparser
@@ -1158,7 +1161,7 @@ def api_tolov(
         except Exception:
             pass
 
-    # Parse summa: "5000000|UZS" yoki "333|USD"
+    # Parse summa
     paid_usd = None
     if summa:
         try:
@@ -1166,38 +1169,50 @@ def api_tolov(
             raw_amount = float(parts[0].replace(" ", "").replace(",", "."))
             currency = parts[1].strip().upper() if len(parts) > 1 else "UZS"
             UZS_RATE = 12100
-            if currency == "USD":
-                paid_usd = round(raw_amount, 2)
-            else:
-                paid_usd = round(raw_amount / UZS_RATE, 2)
+            paid_usd = round(raw_amount, 2) if currency == "USD" else round(raw_amount / UZS_RATE, 2)
         except Exception:
             pass
 
-    sets = []
-    params: dict = {"deal_id": deal_id}
-
-    if paid_dt:
-        sets.append("uf_bp_sale_date = :paid_dt")
-        params["paid_dt"] = paid_dt
-
-    if paid_usd is not None:
-        sets.append("uf_paid_sum = :paid_usd")
-        params["paid_usd"] = paid_usd
-
-    if not sets:
-        return {"ok": True, "updated": False, "reason": "yangilanadigan ma'lumot yo'q"}
+    if not paid_dt or paid_usd is None:
+        return {"ok": True, "updated": False, "reason": "sana yoki summa yo'q"}
 
     with bx_engine.connect() as conn:
-        result = conn.execute(
-            text(f"UPDATE deals SET {', '.join(sets)} WHERE id = :deal_id"),
-            params,
-        )
-        conn.commit()
-        if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail=f"Deal {deal_id} topilmadi")
+        # 1. deal_payments ga upsert
+        conn.execute(text("""
+            INSERT INTO deal_payments (deal_id, tolov_id, paid_at, amount_usd, turi)
+            VALUES (:deal_id, :tolov_id, :paid_at, :amount_usd, :turi)
+            ON CONFLICT (tolov_id) DO UPDATE SET
+              paid_at    = EXCLUDED.paid_at,
+              amount_usd = EXCLUDED.amount_usd,
+              turi       = EXCLUDED.turi
+        """), {
+            "deal_id":    deal_id,
+            "tolov_id":   tolov_id_int,
+            "paid_at":    paid_dt.date(),
+            "amount_usd": paid_usd,
+            "turi":       turi,
+        })
 
-    _log.info("[tolov] deal=%s sana=%s turi=%s summa_usd=%s", deal_id, paid_dt, turi, paid_usd)
-    return {"ok": True, "deal_id": deal_id, "paid_usd": paid_usd}
+        # 2. deals.uf_paid_sum = barcha to'lovlar yig'indisi
+        conn.execute(text("""
+            UPDATE deals SET uf_paid_sum = (
+              SELECT COALESCE(SUM(amount_usd), 0) FROM deal_payments WHERE deal_id = :deal_id
+            )
+            WHERE id = :deal_id
+        """), {"deal_id": deal_id})
+
+        # 3. deals.uf_bp_sale_date = eng birinchi to'lov sanasi
+        conn.execute(text("""
+            UPDATE deals SET uf_bp_sale_date = (
+              SELECT MIN(paid_at) FROM deal_payments WHERE deal_id = :deal_id
+            )
+            WHERE id = :deal_id
+        """), {"deal_id": deal_id})
+
+        conn.commit()
+
+    _log.info("[tolov] deal=%s tolov_id=%s sana=%s turi=%s summa_usd=%s", deal_id, tolov_id_int, paid_dt, turi, paid_usd)
+    return {"ok": True, "deal_id": deal_id, "paid_usd": paid_usd, "paid_at": str(paid_dt.date())}
 
 
 @app.api_route("/install", methods=["GET", "POST", "HEAD"], response_class=HTMLResponse)
