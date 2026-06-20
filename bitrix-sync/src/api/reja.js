@@ -354,7 +354,7 @@ router.get('/plans/:id/distribution', async (req, res) => {
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
         AND NOT (s.is_final = true AND s.is_won = false)
-        AND COALESCE(d.uf_bp_sale_date, d.date_create)::date BETWEEN $2 AND $3
+        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date BETWEEN $2 AND $3
       GROUP BY d.responsible_id
     `, [allIds, plan.period_start, plan.period_end]) : { rows: [] };
 
@@ -474,15 +474,15 @@ router.get('/plans/:id/progress', async (req, res) => {
     const actualsRes = await pool.query(`
       SELECT
         d.responsible_id,
-        COALESCE(d.uf_bp_sale_date, d.date_create)::date::text AS close_date,
+        COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date::text AS close_date,
         SUM(d.uf_paid_sum)::numeric AS amount
       FROM deals d
       JOIN stages s ON s.id = d.stage_id
       WHERE d.responsible_id = ANY($1)
         AND d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
         AND NOT (s.is_final = true AND s.is_won = false)
-        AND COALESCE(d.uf_bp_sale_date, d.date_create)::date BETWEEN $2 AND $3
-      GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.date_create)::date
+        AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date BETWEEN $2 AND $3
+      GROUP BY d.responsible_id, COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date
     `, [respIds, plan.period_start, plan.period_end]);
 
     // Build CRM actuals map: { responsible_id: { subperiod_index: amount } }
@@ -554,7 +554,7 @@ router.get('/plans/:id/progress', async (req, res) => {
         JOIN stages s ON s.id = d.stage_id
         WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0
           AND NOT (s.is_final AND NOT s.is_won)
-          AND COALESCE(d.uf_bp_sale_date, d.date_create)::date BETWEEN $1 AND $2
+          AND COALESCE(d.uf_bp_sale_date, d.uf_payment_date, d.date_create)::date BETWEEN $1 AND $2
       `, [pp.period_start, pp.period_end]);
       prevActual = Math.round(parseFloat(prevActualRes.rows[0].total) * 100) / 100;
     }
