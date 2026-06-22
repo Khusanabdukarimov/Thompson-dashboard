@@ -504,6 +504,36 @@ router.get('/deals-stats', async (req, res) => {
     params.push(source);
   }
 
+  // Build payment-date subquery extra conditions (same param indices, inner alias d2)
+  // Skip amocrm source condition (uses ph.phone lateral join not available inside subquery)
+  const extraPay = [];
+  let pi2 = 3;
+  if (responsible_id) { extraPay.push(`AND d2.responsible_id::text = ANY(string_to_array($${pi2++}, ','))`); }
+  if (stage_id)       { extraPay.push(`AND d2.stage_id::text = ANY(string_to_array($${pi2++}, ','))`); }
+  if (source && mode !== 'amocrm') { extraPay.push(`AND d2.source_id = ANY(string_to_array($${pi2++}, ','))`); }
+
+  const tolanganSubq = `(
+    SELECT COALESCE(SUM(sub.amount), 0)
+    FROM (
+      SELECT p.amount_usd AS amount
+      FROM deal_payments p
+      JOIN deals d2 ON d2.id = p.deal_id
+      JOIN stages s2 ON s2.id = d2.stage_id
+      WHERE NOT (s2.is_final = true AND s2.is_won = false)
+        AND p.paid_at BETWEEN $1::date AND $2::date
+        ${extraPay.join(' ')}
+      UNION ALL
+      SELECT d2.uf_paid_sum AS amount
+      FROM deals d2
+      JOIN stages s2 ON s2.id = d2.stage_id
+      WHERE d2.uf_paid_sum IS NOT NULL AND d2.uf_paid_sum > 0
+        AND NOT (s2.is_final = true AND s2.is_won = false)
+        AND COALESCE(d2.uf_bp_sale_date, d2.uf_payment_date, d2.date_create)::date BETWEEN $1::date AND $2::date
+        AND d2.id NOT IN (SELECT DISTINCT deal_id FROM deal_payments)
+        ${extraPay.join(' ')}
+    ) sub
+  )::numeric`;
+
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -512,7 +542,7 @@ router.get('/deals-stats', async (req, res) => {
          COUNT(d.id) FILTER (WHERE s.is_won = true)::int AS sotuv_boldi,
          COUNT(d.id) FILTER (WHERE s.is_final = true AND s.is_won = false)::int  AS bekor,
          COALESCE(SUM(d.opportunity) FILTER (WHERE s.is_won = true AND d.currency_id = 'USD'), 0)::numeric AS jami_sotuv,
-         COALESCE(SUM(d.uf_paid_sum::numeric) FILTER (WHERE d.uf_paid_sum IS NOT NULL AND d.uf_paid_sum > 0 AND NOT (s.is_final = true AND s.is_won = false)), 0)::numeric AS tolangan,
+         ${tolanganSubq} AS tolangan,
          COALESCE(ROUND(AVG(d.opportunity) FILTER (WHERE s.is_won = true AND d.currency_id = 'USD'), 0), 0)::numeric AS ortacha_chek,
          ROUND(COUNT(d.id) FILTER (WHERE s.is_won = true)::numeric / NULLIF(COUNT(d.id), 0) * 100, 1) AS konversiya
        FROM deals d
