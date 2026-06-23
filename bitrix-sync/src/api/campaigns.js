@@ -431,21 +431,6 @@ router.get('/rows', async (req, res) => {
   }
 });
 
-// Detect targetolog from campaign name patterns (fallback when no DB override)
-function detectTargetolog(name) {
-  if (!name) return null;
-  if (/^DU[\s-]/i.test(name)) return 'dilmurod';
-  if (/^(YO|YU)[\s-]/i.test(name) || /potent.*sbo|oziq.?ovqat|begubor/i.test(name)) return 'abdujabbor';
-  if (/^IL[\s-]/i.test(name) || /re-?target|nishon|lead\s*&\s*n/i.test(name)) return 'islomiddin';
-  return null;
-}
-
-// Campaign name → targetolog SQL filter
-const TARGETOLOG_CAMPAIGN_SQL = {
-  dilmurod:    `(campaign_name ILIKE 'DU %' OR campaign_name ILIKE 'DU-%')`,
-  abdujabbor:  `(campaign_name ILIKE 'YO %' OR campaign_name ILIKE 'YO-%' OR campaign_name ILIKE 'YU %' OR campaign_name ILIKE 'YU-%' OR campaign_name ILIKE '%Potent%SBO%' OR campaign_name ILIKE '%Oziq ovqat%' OR campaign_name ILIKE '%Begubor%')`,
-  islomiddin:  `(campaign_name ILIKE 'IL %' OR campaign_name ILIKE 'IL-%' OR campaign_name ILIKE '%RE-TARGET%' OR campaign_name ILIKE '%RETARGET%' OR campaign_name ILIKE '%NISHON%' OR campaign_name ILIKE '%LEAD & N%')`,
-};
 
 // GET /api/campaigns/insights?month=may&year=2026[&from=2026-06-01&to=2026-06-11][&targetolog=dilmurod]
 router.get('/insights', async (req, res) => {
@@ -459,32 +444,21 @@ router.get('/insights', async (req, res) => {
   const monthNum        = MONTH_NUMS[month];
   if (!monthNum) return res.status(400).json({ error: `Unknown month: ${month}` });
 
-  // Build campaign filter: pattern-based + DB overrides
-  // Campaigns with null override are explicitly unassigned — always excluded
+  // Build campaign filter — DB overrides only (no pattern matching)
   let campaignFilter = '';
   {
-    // Always fetch all overrides: assigned ones to ADD, null ones to EXCLUDE
     const { rows: allOverrides } = await pool.query(
       `SELECT campaign_name, targetolog FROM campaign_targetolog_overrides`
     );
-    const nullExcluded = allOverrides.filter(r => r.targetolog === null).map(r => r.campaign_name);
-    const excludeClause = nullExcluded.length > 0
-      ? `AND campaign_name NOT IN (${nullExcluded.map(n => `'${n.replace(/'/g, "''")}'`).join(',')})`
-      : '';
-
     if (targetologs.length > 0) {
-      const patternConditions = targetologs.map(t => TARGETOLOG_CAMPAIGN_SQL[t]).filter(Boolean);
-      const assignedOverrides = allOverrides
+      const assigned = allOverrides
         .filter(r => r.targetolog !== null && targetologs.includes(r.targetolog))
-        .map(r => r.campaign_name);
-      const parts = [...patternConditions];
-      if (assignedOverrides.length > 0) {
-        const inList = assignedOverrides.map(n => `'${n.replace(/'/g, "''")}'`).join(',');
-        parts.push(`campaign_name IN (${inList})`);
+        .map(r => `'${r.campaign_name.replace(/'/g, "''")}'`);
+      if (assigned.length > 0) {
+        campaignFilter = `AND campaign_name IN (${assigned.join(',')})`;
+      } else {
+        campaignFilter = `AND FALSE`;
       }
-      if (parts.length > 0) campaignFilter = `AND (${parts.join(' OR ')}) ${excludeClause}`;
-    } else if (excludeClause) {
-      campaignFilter = excludeClause;
     }
   }
 
@@ -1660,7 +1634,7 @@ router.get('/campaign-assignments', async (_req, res) => {
       total_leads:   parseInt(c.total_leads) || 0,
       total_spend:   parseFloat(c.total_spend) || 0,
       last_date:     c.last_date,
-      targetolog:    overrideMap[c.campaign_name] ?? detectTargetolog(c.campaign_name),
+      targetolog:    overrideMap[c.campaign_name] ?? null,
       is_override:   c.campaign_name in overrideMap,
     }));
     res.json(result);
@@ -1674,7 +1648,7 @@ router.get('/campaign-assignments', async (_req, res) => {
 router.post('/campaign-assign', async (req, res) => {
   const { campaign_name, targetolog } = req.body || {};
   if (!campaign_name) return res.status(400).json({ error: 'campaign_name required' });
-  const valid = ['dilmurod', 'islomiddin', 'abdujabbor'];
+  const valid = ['dilmurod', 'islomiddin'];
   // null/undefined = explicitly unassigned (shown in "Biriktirilmagan")
   if (targetolog !== null && targetolog !== undefined && targetolog !== '' && !valid.includes(targetolog))
     return res.status(400).json({ error: 'invalid targetolog' });

@@ -714,7 +714,7 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
       sales_sum    — opportunity sum at Sotuv/Ish boshlandi stages
       cancelled    — leads at "Bekor bo'ldi" stage
 
-    targetolog: "all" | "islomiddin" | "abdujabbor" | "dilmurod"
+    targetolog: "all" | "islomiddin" | "dilmurod"
     """
     from app.db_bx import bx_engine as _bxe
     from sqlalchemy import text as _text
@@ -734,37 +734,38 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
     # Target source_id in Bitrix24 = UC_89FPH6
     TARGET_SRC = "UC_89FPH6"
 
-    # Targetolog → form title patterns (matched against leads.title)
-    # NOTE: All Bitrix24 CRM form leads have titles like:
-    #   'Заполнение CRM-формы "Form Name"'
-    # Patterns must match the form name specifically, not generic substrings like "RM"
-    _TARGETOLOG_TITLES: dict[str, list[str]] = {
-        "islomiddin": ["Nishonchi"],
-        "abdujabbor":  ['"Filter"', '"Filtr"'],
-        "dilmurod":    ["DU - Mountain", "DU - Bepul Patent", "DU - Qurilish", "Test Otkir"],
-    }
-
-    # Build extra WHERE clause for leads.title if a targetolog is selected
-    # targetolog may be comma-separated for multi-selection, e.g. "islomiddin,abdujabbor"
     targ_keys = [t.strip().lower() for t in targetolog.split(",") if t.strip() and t.strip() != "all"]
-    title_patterns: list[str] = []
-    for tk in targ_keys:
-        title_patterns.extend(_TARGETOLOG_TITLES.get(tk, []))
-    title_patterns = title_patterns if title_patterns else None  # type: ignore[assignment]
 
-    def _title_filter_sql(alias: str) -> str:
-        if not title_patterns:
+    # Fetch campaign assignments from DB (no pattern logic — DB is sole source of truth)
+    _assigned_campaigns: list[str] = []
+    if targ_keys:
+        try:
+            with _bxe.connect() as _oc:
+                _override_rows = _oc.execute(
+                    _text("SELECT campaign_name, targetolog FROM campaign_targetolog_overrides WHERE targetolog IS NOT NULL")
+                ).fetchall()
+            _assigned_campaigns = [r[0] for r in _override_rows if r[1] in targ_keys]
+        except Exception:
+            pass
+
+    def _build_campaign_filter(alias: str, params: dict) -> str:
+        """Build utm_campaign WHERE clause using DB assignments only."""
+        if not targ_keys:
             return ""
-        conditions = " OR ".join(f"{alias}.title ILIKE :tp{i}" for i in range(len(title_patterns)))
-        return f"AND ({conditions})"
-
-    def _title_params() -> dict:
-        if not title_patterns:
-            return {}
-        return {f"tp{i}": f"%{p}%" for i, p in enumerate(title_patterns)}
+        if not _assigned_campaigns:
+            return "AND FALSE"
+        keys = []
+        for n in _assigned_campaigns:
+            key = f"ca{len(params)}"
+            params[key] = n
+            keys.append(f":{key}")
+        return f"AND {alias}.utm_campaign IN ({', '.join(keys)})"
 
     with _bxe.connect() as conn:
         # ── LEAD metrics ──────────────────────────────────────────────
+        lead_params: dict = {"since": since, "until": until, "src": TARGET_SRC}
+        lead_campaign_filter = _build_campaign_filter("l", lead_params)
+
         lead_sql = _text(f"""
             SELECT
                 EXTRACT(DAY FROM l.date_create AT TIME ZONE 'Asia/Tashkent')::int AS day,
@@ -776,11 +777,10 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
             LEFT JOIN stages s ON s.id = l.stage_id AND s.entity = 'lead'
             WHERE l.date_create::date BETWEEN :since AND :until
               AND l.source_id = :src
-              {_title_filter_sql('l')}
+              {lead_campaign_filter}
             GROUP BY 1, 2, 3, 4
         """)
-        params = {"since": since, "until": until, "src": TARGET_SRC, **_title_params()}
-        for day, stage_bid, is_final, is_won, cnt in conn.execute(lead_sql, params):
+        for day, stage_bid, is_final, is_won, cnt in conn.execute(lead_sql, lead_params):
             if day is None or day < 1 or day > days_in_month:
                 continue
             idx = int(day) - 1
@@ -791,14 +791,8 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
                 result["target"]["cancelled"][idx] += int(cnt)
 
         # ── DEAL metrics ──────────────────────────────────────────────
-        # Deals don't store form/campaign info — filter by source_id only.
-        # Lead-level targetolog filter above gives the per-person lead breakdown.
         deal_params: dict = {"since": since, "until": until, "src": TARGET_SRC}
-
-        if title_patterns:
-            # Filter deals by utm_source (Facebook/Instagram) as a rough proxy
-            deal_params["utm"] = "Facebook"
-        deal_title_filter = ""
+        deal_campaign_filter = _build_campaign_filter("d", deal_params)
 
         deal_sql = _text(f"""
             SELECT
@@ -811,7 +805,7 @@ def api_marketing_kunlik(month: str, year: int, targetolog: str = "all"):
             LEFT JOIN stages s ON s.id = d.stage_id AND s.entity = 'deal'
             WHERE d.date_create::date BETWEEN :since AND :until
               AND d.source_id = :src
-              {deal_title_filter}
+              {deal_campaign_filter}
         """)
         for day, stage_bid, is_won, is_final, opp in conn.execute(deal_sql, deal_params):
             if day is None or day < 1 or day > days_in_month:

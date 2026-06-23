@@ -230,7 +230,6 @@ export default function KunlikPage() {
 
   const TARGETOLOG_OPTIONS = [
     { value: "islomiddin", label: "Islomiddin" },
-    { value: "abdujabbor", label: "Abdujabbor" },
     { value: "dilmurod",   label: "Dilmurod"   },
   ];
   const toggleTargetolog = (v: string) =>
