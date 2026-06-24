@@ -28,7 +28,7 @@ BACKEND_DIR="$REPO_DIR/backend"
 FRONTEND_DIR="$REPO_DIR/frontend/app"
 SYNC_DIR="$REPO_DIR/bitrix-sync"
 VENV_PIP="$BACKEND_DIR/venv/bin/pip"
-SERVICE="mountain"
+SERVICE="thompsonschool"
 SYNC_SERVICE="bitrix-sync"
 BRANCH="main"
 
@@ -153,8 +153,8 @@ if $DEPLOY_FRONTEND; then
     remote "cd $FRONTEND_DIR && npm run build 2>&1 | tail -5"
     ok "  Build complete"
 
-    info "  Applying nginx config..."
-    remote "cp $REPO_DIR/nginx/mountain.conf /etc/nginx/sites-available/mountain && ln -sf /etc/nginx/sites-available/mountain /etc/nginx/sites-enabled/mountain && nginx -t && systemctl reload nginx"
+    info "  Reloading nginx..."
+    remote "nginx -t && systemctl reload nginx"
     ok "  nginx reloaded"
     echo
 fi
