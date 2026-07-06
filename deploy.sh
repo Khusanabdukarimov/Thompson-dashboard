@@ -1,6 +1,6 @@
 #!/bin/bash
 # ══════════════════════════════════════════════════════════════════════════════
-# Mountain Unified Deploy Script
+# Thompsonschool Unified Deploy Script
 # ══════════════════════════════════════════════════════════════════════════════
 # Usage:
 #   ./deploy.sh                        — git push + remote pull/build/restart (default)
@@ -9,19 +9,19 @@
 #   ./deploy.sh --frontend-only        — rebuild frontend only (no backend restart)
 #   ./deploy.sh --skip-push            — skip git push (server pulls existing main)
 #
-# Architecture (server 207.180.198.41):
+# Architecture (server 178.18.246.157):
 #   /var/www/mountain/        repo clone (main branch)
-#   /var/www/mountain/backend mountain.service (systemd) — uvicorn 127.0.0.1:8001
+#   /var/www/mountain/backend thompsonschool.service (systemd) — uvicorn 127.0.0.1:8000
 #   /var/www/mountain/frontend/app/dist  served by nginx on :80
 #
-# Connect via:  ssh mountain
+# Connect via:  ssh thompsonschool
 # ══════════════════════════════════════════════════════════════════════════════
 
 set -e
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-SERVER="mountain"
-PUBLIC_IP="207.180.198.41"
+SERVER="thompsonschool"
+PUBLIC_IP="178.18.246.157"
 
 REPO_DIR="/var/www/mountain"
 BACKEND_DIR="$REPO_DIR/backend"
@@ -110,7 +110,7 @@ ALL_OK=true
 
 # ─── Server pull ──────────────────────────────────────────────────────────────
 info "Server git pull..."
-remote "cd $REPO_DIR && git fetch origin $BRANCH && git reset --hard origin/$BRANCH" \
+remote "cd $REPO_DIR && git remote set-url origin git@github.com:Khusanabdukarimov/Thompson-dashboard.git && git fetch origin $BRANCH && git reset --hard origin/$BRANCH" \
     | tail -1
 ok "  Code updated"
 echo
