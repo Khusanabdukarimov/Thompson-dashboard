@@ -23,7 +23,7 @@ set -e
 SERVER="thompsonschool"
 PUBLIC_IP="178.18.246.157"
 
-REPO_DIR="/var/www/mountain"
+REPO_DIR="/var/www/thompson"
 BACKEND_DIR="$REPO_DIR/backend"
 FRONTEND_DIR="$REPO_DIR/frontend/app"
 SYNC_DIR="$REPO_DIR/bitrix-sync"
