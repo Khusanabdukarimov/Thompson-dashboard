@@ -330,7 +330,7 @@ export default function LidlarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search] = useState("");
-  const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
+  const [mode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
 
   const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
 
