@@ -103,15 +103,12 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onMobileClos
       >
         {/* Logo */}
         <div className="px-3 py-3.5 border-b border-border flex items-center gap-2.5 min-h-[57px]">
-          <div
-            className="w-8 h-8 rounded-[9px] flex items-center justify-center font-bold text-[13px] text-white tracking-tight shrink-0"
-            style={{ background: "linear-gradient(135deg, #3b82f6, #1d4ed8)" }}
-          >
-            M
+          <div className="w-8 h-8 rounded-[9px] overflow-hidden shrink-0">
+            <img src="/logo.png" alt="Thompson" className="w-full h-full object-cover" />
           </div>
           <div className={cn("flex-1 min-w-0", collapsed && "md:hidden")}>
             <div className="text-[14px] font-bold leading-none tracking-tight truncate">
-              Mountain
+              Thompson
             </div>
             <div className="text-[10px] text-text3 mono mt-0.5 truncate">CRM Analytics</div>
           </div>

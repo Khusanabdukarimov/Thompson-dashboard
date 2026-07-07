@@ -506,22 +506,7 @@ export default function LidlarPage() {
     <>
       <Topbar
         title="Lidlar analitika"
-        actions={
-          <div style={{ display: "flex", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 2 }}>
-            <button onClick={() => { setMode('default'); setApplied(getDefaultFilter()); }}
-              style={{ border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer", background: mode === 'default' ? "#3b82f6" : "transparent", color: mode === 'default' ? "#fff" : "var(--text2)", transition: "all 0.2s" }}>
-              Barcha lidlar
-            </button>
-            <button onClick={() => { setMode('bitrix24'); setApplied(getDefaultFilter()); }}
-              style={{ border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer", background: mode === 'bitrix24' ? "#22c55e" : "transparent", color: mode === 'bitrix24' ? "#fff" : "var(--text2)", transition: "all 0.2s" }}>
-              Bitrix24
-            </button>
-            <button onClick={() => { setMode('amocrm'); setApplied(getDefaultFilter()); }}
-              style={{ border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer", background: mode === 'amocrm' ? "#D97706" : "transparent", color: mode === 'amocrm' ? "#fff" : "var(--text2)", transition: "all 0.2s" }}>
-              AmoCRM
-            </button>
-          </div>
-        }
+        actions={null}
       />
 
       <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px]" style={{ background: "var(--bg)" }}>
