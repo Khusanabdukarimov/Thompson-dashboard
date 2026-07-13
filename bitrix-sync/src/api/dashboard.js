@@ -15,7 +15,7 @@ function leadModeClause(mode) {
 
 function leadDateCond(mode, p1, p2) {
   const col = mode === 'amocrm' ? 'COALESCE(l.uf_amo_date, l.date_create)' : 'l.date_create';
-  return `($${p1}::date IS NULL OR ${col}::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR ${col}::date <= $${p2}::date)`;
+  return `($${p1}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date <= $${p2}::date)`;
 }
 
 function leadSrcCond(mode, pi) {
@@ -31,7 +31,7 @@ function dealModeClause(mode) {
 
 function dealDateCond(mode, p1, p2) {
   const col = mode === 'amocrm' ? 'COALESCE(d.uf_amo_date, d.date_create)' : 'd.date_create';
-  return `($${p1}::date IS NULL OR ${col}::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR ${col}::date <= $${p2}::date)`;
+  return `($${p1}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date <= $${p2}::date)`;
 }
 
 function dealSrcCond(mode, pi) {
