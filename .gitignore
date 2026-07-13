@@ -28,6 +28,12 @@ backend/data/
 *.db
 *.db-journal
 
+# ── Database dumps (never commit — contain production data) ─
+*.dump
+*.sql.gz
+*.sql.bz2
+*.backup
+
 # ── Logs ───────────────────────────────────────────────────
 *.log
 

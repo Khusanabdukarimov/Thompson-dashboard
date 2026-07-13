@@ -1475,6 +1475,18 @@ router.post('/sync-crm-forms', async (_req, res) => {
 });
 
 // ── Call sync helpers (voximplant.statistic.get) ──────────────────
+
+// Bitrix returns CALL_DURATION as a Unix epoch (not a duration) for calls that
+// were still in progress when the sync ran. Such a row adds ~1.78e9 seconds to
+// every SUM/AVG, so a handful of them inflate total call time by ~9,600x.
+const MAX_PLAUSIBLE_CALL_SECONDS = 86400; // 24h
+
+function parseCallDuration(raw) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n > MAX_PLAUSIBLE_CALL_SECONDS ? 0 : n;
+}
+
 async function ensureCallsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS calls (
@@ -1594,13 +1606,6 @@ async function syncCallsFromBitrix(from, to) {
       useVoxi = false;
       console.log('[calls] voximplant scope missing, falling back to crm.activity.list');
     } else {
-      await pool.query(
-        `DELETE FROM calls
-         WHERE id LIKE 'act_%'
-           AND ($1::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-           AND ($2::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
-        [from || null, to || null],
-      );
       records = await fetchAll('voximplant.statistic.get', filter, [
         'CALL_ID', 'PORTAL_USER_ID', 'PORTAL_USER',
         'PHONE_NUMBER', 'CALL_TYPE', 'CALL_DURATION',
@@ -1609,13 +1614,35 @@ async function syncCallsFromBitrix(from, to) {
         'CALL_FAILED_CODE', 'CALL_FAILED_REASON', 'CALL_CATEGORY',
         'CRM_ENTITY_ID', 'CRM_ENTITY_TYPE',
       ]);
+      // Delete the other source's rows only AFTER the replacement data is in hand.
+      // Deleting first destroyed the whole table when Bitrix went unreachable
+      // between the delete and the fetch.
+      await pool.query(
+        `DELETE FROM calls
+         WHERE id LIKE 'act_%'
+           AND ($1::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($2::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
+        [from || null, to || null],
+      );
     }
   } catch (e) {
-    useVoxi = false;
-    console.warn('[calls] voximplant error:', e.message);
+    // Transient failure (timeout, 5xx, network) — abort this cycle and keep the
+    // existing rows. Falling back to crm.activity.list here would replace real
+    // telephony data with degraded activity records on every Bitrix hiccup.
+    console.warn('[calls] voximplant unavailable, keeping existing data:', e.message);
+    throw e;
   }
 
   if (!useVoxi) {
+    // Fallback: crm.activity.list (TYPE_ID=2 = calls) — reached only when the
+    // webhook genuinely lacks the telephony scope. Fetch BEFORE deleting.
+    const filter = { TYPE_ID: 2 };
+    if (from) filter['>=START_TIME'] = from;
+    if (to)   filter['<=START_TIME'] = to;
+    records = await fetchAll('crm.activity.list', filter, [
+      'ID', 'RESPONSIBLE_ID', 'START_TIME', 'END_TIME',
+      'DIRECTION', 'COMPLETED', 'SUBJECT', 'OWNER_ID', 'OWNER_TYPE_ID',
+    ]);
     // Remove old voximplant records for this date range to avoid 2x duplicates
     await pool.query(
       `DELETE FROM calls
@@ -1624,14 +1651,6 @@ async function syncCallsFromBitrix(from, to) {
          AND ($2::date IS NULL OR (call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)`,
       [from || null, to || null],
     );
-    // Fallback: crm.activity.list (TYPE_ID=2 = calls)
-    const filter = { TYPE_ID: 2 };
-    if (from) filter['>=START_TIME'] = from;
-    if (to)   filter['<=START_TIME'] = to;
-    records = await fetchAll('crm.activity.list', filter, [
-      'ID', 'RESPONSIBLE_ID', 'START_TIME', 'END_TIME',
-      'DIRECTION', 'COMPLETED', 'SUBJECT', 'OWNER_ID', 'OWNER_TYPE_ID',
-    ]);
   }
 
   let upserted = 0;
@@ -1645,7 +1664,7 @@ async function syncCallsFromBitrix(from, to) {
       responsibleId = r.PORTAL_USER_ID  ? parseInt(r.PORTAL_USER_ID)  : null;
       phoneNumber   = r.PHONE_NUMBER    || null;
       callType      = r.CALL_TYPE       ? parseInt(r.CALL_TYPE)        : null;
-      duration      = r.CALL_DURATION   ? parseInt(r.CALL_DURATION)    : 0;
+      duration      = parseCallDuration(r.CALL_DURATION);
       callStart     = r.CALL_START_DATE || r.CALL_START_TIME || null;
       statusCode    = /^\d+$/.test(String(r.CALL_STATUS_CODE || '')) ? parseInt(r.CALL_STATUS_CODE) : null;
       statusName    = r.CALL_STATUS_CODE_NAME || null;
@@ -1757,7 +1776,11 @@ module.exports.startCallsAutoSync = startCallsAutoSync;
  * Manual sync with optional date range.
  */
 router.post('/sync-calls', async (req, res) => {
-  const { from, to } = req.body || req.query;
+  // express.json() makes req.body `{}` (truthy) when there is no body, so
+  // `req.body || req.query` silently discarded query params and synced the
+  // portal's entire call history instead of the requested range.
+  const from = req.body?.from ?? req.query.from;
+  const to   = req.body?.to   ?? req.query.to;
   try {
     const upserted = await syncCallsFromBitrix(from, to);
     res.json({ ok: true, synced: upserted });
@@ -1772,6 +1795,7 @@ const CALL_INBOUND_TYPES = new Set([2, 3]);
 const CALL_CALLBACK = 4;
 const CALL_SUCCESS_CODES = new Set(['0', '200']);
 const CALL_MISSED_CODE = '304';
+const MIN_TALK_SECONDS = 15;
 const CALL_RECALL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function addDaysISO(iso, days) {
@@ -1840,6 +1864,16 @@ function isNdzCall(row) {
   return isOutboundCall(row) && !isSuccessfulCall(row);
 }
 
+// A call that was actually *talked on*, per the DataLens spec the business reports
+// against: CALL_STATUS_CODE = 200 AND CALL_DURATION > 15.
+//
+// Bitrix's CALL_DURATION counts ringing too, so a declined call that rang for 40s
+// reports 40s of "duration". Summing every call therefore inflates talk time (and
+// deflates the average). Duration metrics must aggregate only these rows.
+function isTalkCall(row) {
+  return isSuccessfulCall(row) && callDuration(row) > MIN_TALK_SECONDS;
+}
+
 function callFullName(row) {
   const dbName = `${row.resp_name || ''} ${row.resp_last_name || ''}`.trim();
   const userName = String(row.user_name || '').trim();
@@ -1882,7 +1916,11 @@ function buildOutboundMap(rows) {
     if (isInternalCall(row)) continue;
     const dt = callDate(row);
     const phoneKey = callPhoneKey(row.phone_number);
-    if (dt && phoneKey && isOutboundCall(row)) {
+    // Only ANSWERED outbound calls count as a callback. A failed redial attempt
+    // does not resolve a missed call — verified against Bitrix's own
+    // "Реакция на пропущенные звонки" report (11.07: Marjona/Xabiba exact match
+    // only under this rule; any-attempt overstates recalls).
+    if (dt && phoneKey && isOutboundCall(row) && isSuccessfulCall(row)) {
       const list = outboundMap.get(phoneKey) || [];
       list.push(dt);
       outboundMap.set(phoneKey, list);
@@ -1963,6 +2001,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeRespon
   let ndz = 0;
   let missed = 0;
   let totalDuration = 0;
+  let talkCalls = 0;
   let noPhoneMissed = 0;
 
   const getBucket = (row) => {
@@ -1982,6 +2021,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeRespon
         missed_inbound: 0,
         missed_recalled: 0,
         missed_unrecalled: 0,
+        talk_calls: 0,
         total_duration: 0,
         avg_duration: 0,
         inbound_duration: 0,
@@ -2015,27 +2055,34 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeRespon
     }
     if (!isInboundCall(row) && !isOutboundCall(row)) continue;
 
-    const dur = callDuration(row);
     const bucket = getBucket(row);
     const failedForDashboard = isNdzCall(row) || isMissedInbound(row);
 
+    // Counts include every call; duration only counts calls actually talked on.
+    const talk = isTalkCall(row);
+    const dur = talk ? callDuration(row) : 0;
+
     total += 1;
-    totalDuration += dur;
     bucket.total_calls += 1;
-    bucket.total_duration += dur;
+    if (talk) {
+      talkCalls += 1;
+      totalDuration += dur;
+      bucket.talk_calls += 1;
+      bucket.total_duration += dur;
+    }
 
     if (phoneKey) bucket.allPhones.add(phoneKey);
 
     if (isInboundCall(row)) {
       inbound += 1;
       bucket.inbound_calls += 1;
-      bucket.inbound_duration += dur;
+      if (talk) bucket.inbound_duration += dur;
       if (phoneKey) bucket.inPhones.add(phoneKey);
     }
     if (isOutboundCall(row)) {
       outbound += 1;
       bucket.outbound_calls += 1;
-      bucket.outbound_duration += dur;
+      if (talk) bucket.outbound_duration += dur;
       if (phoneKey) bucket.outPhones.add(phoneKey);
     }
     if (isNdzCall(row)) {
@@ -2083,7 +2130,9 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeRespon
         if (findCallback(ev.phoneKey, ev.dt)) bucket.missed_recalled += 1;
         else bucket.missed_unrecalled += 1;
       }
-      bucket.avg_duration = bucket.total_calls ? Math.round(bucket.total_duration / bucket.total_calls) : 0;
+      // Average over calls actually talked on — dividing by every call (incl. missed
+      // and declined) would drag the average toward zero.
+      bucket.avg_duration = bucket.talk_calls ? Math.round(bucket.total_duration / bucket.talk_calls) : 0;
       bucket.unique_inbound = bucket.inPhones.size;
       bucket.unique_outbound = bucket.outPhones.size;
       bucket.unique_total = bucket.allPhones.size;
@@ -2118,7 +2167,8 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filters = {}, activeRespon
     ndz_calls: ndz,
     missed_inbound: missed,
     total_duration: totalDuration,
-    avg_duration: total ? Math.round(totalDuration / total) : 0,
+    talk_calls: talkCalls,
+    avg_duration: talkCalls ? Math.round(totalDuration / talkCalls) : 0,
     success_pct: pct(success, total),
     failed_pct: pct(failed, total),
     ne_perezvonili: nePerezvonili,

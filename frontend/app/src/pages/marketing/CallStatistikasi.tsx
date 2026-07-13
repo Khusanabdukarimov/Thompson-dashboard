@@ -6,11 +6,19 @@ import {
   Download, PhoneOff, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
+import { getConfig } from "@/lib/api/config";
 import {
   getPyCallStats, getCallList, getCallFilterOptions,
   type CallDashboardFilter,
   type PyCallStatsResult, type PyResponsibleCallStats,
 } from "@/lib/api/leads";
+
+// The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or the
+// links point at whichever portal the code was copied from.
+function useBitrixPortal(): string {
+  const q = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: Infinity });
+  return (q.data?.bitrix_portal ?? "").replace(/\/+$/, "");
+}
 
 // ── Helpers ───────────────────────────────────────────────────────
 const localISO = (d: Date) =>
@@ -227,6 +235,7 @@ const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
 };
 
 function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter: CallDashboardFilter }) {
+  const portal = useBitrixPortal();
   const q = useQuery({ queryKey: ["call-list", responsibleId, filter], queryFn: () => getCallList(responsibleId, filter) });
   if (q.isLoading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda...</div>;
   const calls = q.data ?? [];
@@ -254,7 +263,7 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
                 <td style={{ padding: "8px 14px", fontFamily: "monospace" }}>{fmtDur(c.duration ?? 0)}</td>
                 <td style={{ padding: "8px 14px", color: "var(--text2)", whiteSpace: "nowrap" }}>{c.call_start ? new Date(c.call_start).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                 <td style={{ padding: "8px 14px" }}><span style={{ fontSize: 11, fontWeight: 600, color: ok ? "#4CAF50" : "#F44336", background: ok ? "#4CAF5015" : "#F4433615", border: `1px solid ${ok ? "#4CAF5030" : "#F4433630"}`, borderRadius: 5, padding: "2px 8px" }}>{ok ? "Muvaffaqiyatli" : "Muvaffaqiyatsiz"}</span></td>
-                <td style={{ padding: "8px 14px" }}>{c.lead_id ? <a href={`https://mountain.bitrix24.kz/crm/lead/details/${c.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2196F3", textDecoration: "none", fontSize: 12 }}>{c.lead_title || `#${c.lead_id}`}</a> : "—"}</td>
+                <td style={{ padding: "8px 14px" }}>{c.lead_id && portal ? <a href={`${portal}/crm/lead/details/${c.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2196F3", textDecoration: "none", fontSize: 12 }}>{c.lead_title || `#${c.lead_id}`}</a> : c.lead_id ? (c.lead_title || `#${c.lead_id}`) : "—"}</td>
                 <td style={{ padding: "8px 14px" }}>{stageLabel ? <span style={{ fontSize: 11, fontWeight: 600, color: "#9C27B0", background: "rgba(156,39,176,0.10)", border: "1px solid rgba(156,39,176,0.25)", borderRadius: 5, padding: "2px 8px", whiteSpace: "nowrap" }}>{stageLabel}</span> : "—"}</td>
               </tr>
             );
