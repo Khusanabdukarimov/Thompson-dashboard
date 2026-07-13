@@ -115,18 +115,25 @@ function MultiSelect({
 
 // ── Responsible table column definitions ─────────────────────────
 const RESPONSIBLE_COLS = [
-  { key: "qongiroqlar",             label: "Qo'ng'iroqlar",            color: "#9E9E9E" },
-  { key: "yangi_lid",               label: "Yangi lid",                color: "#2196F3" },
-  { key: "propushenniy",            label: "Propushenniy",             color: "#9E9E9E" },
-  { key: "javob_bermadi",           label: "Javob bermadi",            color: "#FF9800" },
-  { key: "qayta_aloqa",             label: "Qayta aloqa",              color: "#00BCD4" },
-  { key: "oylab_koradi",            label: "O'ylab ko'radi",           color: "#E91E63" },
-  { key: "konsultatsiya",           label: "Konsultatsiya belgilandi", color: "#9C27B0" },
-  { key: "otkazilmadi",             label: "O'tkazilmadi",             color: "#FF00FF" },
-  { key: "sandiq",                  label: "Sandiq",                   color: "#42A5F5" },
-  { key: "sifatsiz",                label: "Sifatsiz",                 color: "#F44336" },
-  { key: "konsultatsiya_otkazildi", label: "Konsultatsiya o'tkazildi", color: "#4CAF50" },
-  { key: "bekor_boldi",             label: "Bekor bo'ldi",             color: "#FFC107" },
+  { key: "qongiroqlar",  label: "Zvonki",             color: "#9E9E9E" },
+  { key: "target_uc",   label: "Taргет O'quv markaz", color: "#2196F3" },
+  { key: "target_kids", label: "Taргет KIDS",         color: "#E91E63" },
+  { key: "target_mkt",  label: "Taргет maktab",       color: "#9C27B0" },
+  { key: "target_bog",  label: "Taргет bog'cha",      color: "#00BCD4" },
+  { key: "jarayonda",   label: "Jarayonda",           color: "#FF9800" },
+  { key: "keyin_qong",  label: "Keyin qo'ng'iroq",   color: "#607D8B" },
+  { key: "yangi_lid",   label: "Yangi lid",           color: "#03A9F4" },
+  { key: "propushenniy",label: "Propushenniy",        color: "#78909C" },
+  { key: "dpu1",        label: "DPU 1",               color: "#FF5722" },
+  { key: "dpu2",        label: "DPU 2",               color: "#FF7043" },
+  { key: "dpu3",        label: "DPU 3",               color: "#FF8A65" },
+  { key: "qayta_aloqa", label: "Qayta aloqa",         color: "#26C6DA" },
+  { key: "kelmadi",     label: "Kelmadi",             color: "#FF00FF" },
+  { key: "muvaffaqiyatli", label: "Muvaffaqiyatli",  color: "#4CAF50" },
+  { key: "sandiq",      label: "Sandiq (JUNK)",       color: "#42A5F5" },
+  { key: "arxiv",       label: "Arxiv",               color: "#8D6E63" },
+  { key: "yopildi",     label: "Yopildi",             color: "#616161" },
+  { key: "student_hr",  label: "Student/HR",          color: "#FFC107" },
 ] as const;
 type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
 
