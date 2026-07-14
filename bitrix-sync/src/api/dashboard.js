@@ -23,6 +23,15 @@ function leadSrcCond(mode, pi) {
   return `($${pi}::text IS NULL OR ${col}::text = ANY(string_to_array($${pi}, ',')))`;
 }
 
+const PROEKT_FIELD = 'UF_CRM_1781879563298';
+
+function leadProektCond(pi) {
+  return `($${pi}::text IS NULL OR l.id IN (
+      SELECT lead_id FROM lead_uf_values
+      WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($${pi}, ','))
+    ))`;
+}
+
 function dealModeClause(mode) {
   if (mode === 'amocrm')   return `AND d.source_id = 'UC_1WUFJB'`;
   if (mode === 'bitrix24') return `AND (d.source_id IS NULL OR d.source_id != 'UC_1WUFJB')`;
@@ -770,20 +779,22 @@ router.get('/amocrm-sources', async (_req, res) => {
  * Params: from, to, responsible_id, stage, source, mode
  */
 router.get('/lead-stats', async (req, res) => {
-  const { from, to, responsible_id, stage, source, mode } = req.query;
+  const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
 
-  const statsParams  = [from || null, to || null, responsible_id || null, stage || null, source || null];
-  const funnelParams = [from || null, to || null, responsible_id || null, source || null];
+  const statsParams  = [from || null, to || null, responsible_id || null, stage || null, source || null, proekt || null];
+  const funnelParams = [from || null, to || null, responsible_id || null, source || null, proekt || null];
 
   const statsWhere = `${leadDateCond(mode, 1, 2)}
       AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
       AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
       AND ${leadSrcCond(mode, 5)}
+      AND ${leadProektCond(6)}
       ${leadModeClause(mode)}`;
 
   const funnelJoin = `${leadDateCond(mode, 1, 2)}
       AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
       AND ${leadSrcCond(mode, 4)}
+      AND ${leadProektCond(5)}
       ${leadModeClause(mode)}`;
 
   try {
@@ -839,8 +850,8 @@ router.get('/lead-stats', async (req, res) => {
  * Per-responsible lead breakdown with all stage columns.  Replaces Python /api/responsibles.
  */
 router.get('/lead-responsibles', async (req, res) => {
-  const { from, to, responsible_id, stage, source, mode } = req.query;
-  const params = [from || null, to || null, responsible_id || null, stage || null, source || null];
+  const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null, proekt || null];
 
   try {
     const { rows } = await pool.query(
@@ -852,6 +863,7 @@ router.get('/lead-responsibles', async (req, res) => {
            AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
            AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
+           AND ${leadProektCond(6)}
            ${leadModeClause(mode)}
        )
        SELECT
@@ -897,8 +909,8 @@ router.get('/lead-responsibles', async (req, res) => {
  * Per-responsible conversion funnel.  Replaces Python /api/conversion.
  */
 router.get('/lead-conversion', async (req, res) => {
-  const { from, to, responsible_id, stage, source, mode } = req.query;
-  const params = [from || null, to || null, responsible_id || null, stage || null, source || null];
+  const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null, proekt || null];
 
   try {
     const { rows } = await pool.query(
@@ -910,6 +922,7 @@ router.get('/lead-conversion', async (req, res) => {
            AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
            AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
+           AND ${leadProektCond(6)}
            ${leadModeClause(mode)}
        )
        SELECT
@@ -950,7 +963,7 @@ router.get('/lead-filter-options', async (req, res) => {
       ? `AND source_id = 'UC_1WUFJB'`
       : '';
   try {
-    const [respRes, stageRes, srcRes, formRes] = await Promise.all([
+    const [respRes, stageRes, srcRes, formRes, proektRes] = await Promise.all([
       pool.query(
         `SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
          FROM responsibles WHERE active = TRUE ORDER BY name`
@@ -971,12 +984,19 @@ router.get('/lead-filter-options', async (req, res) => {
          WHERE active = TRUE
          ORDER BY lead_count DESC NULLS LAST, name`
       ).catch(() => ({ rows: [] })),
+      pool.query(
+        `SELECT e.enum_id AS id, e.value AS name
+         FROM lead_uf_enums e
+         WHERE e.field_code = '${PROEKT_FIELD}'
+         ORDER BY e.value`
+      ).catch(() => ({ rows: [] })),
     ]);
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
       sources: srcRes.rows.map(r => ({ id: r.source_id, name: SOURCE_NAMES[r.source_id] || r.source_id })),
       forms: formRes.rows.map(r => ({ id: r.id, name: r.name, count: r.lead_count })),
+      proekts: proektRes.rows,
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);

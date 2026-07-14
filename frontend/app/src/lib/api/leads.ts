@@ -69,6 +69,7 @@ export type DashFilter = {
   stages?: string[];
   sources?: string[];
   form_ids?: string[];
+  proekts?: string[];
   mode?: 'default' | 'amocrm' | 'bitrix24';
 };
 
@@ -77,6 +78,7 @@ export type FilterOptions = {
   stages: { bitrix_id: string; name: string }[];
   sources: { id: string; name: string }[];
   forms: { id: string; name: string; count: number }[];
+  proekts: { id: string; name: string }[];
 };
 
 export function getDashboardStats(filter: DashFilter) {
@@ -86,6 +88,7 @@ export function getDashboardStats(filter: DashFilter) {
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),
+    proekt: filter.proekts?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -97,6 +100,7 @@ export function getResponsiblesStats(filter: DashFilter) {
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),
+    proekt: filter.proekts?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -121,6 +125,7 @@ export function getConversionStats(filter: DashFilter) {
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),
+    proekt: filter.proekts?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }

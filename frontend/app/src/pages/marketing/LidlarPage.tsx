@@ -370,6 +370,7 @@ export default function LidlarPage() {
     (applied.stages?.length ?? 0) > 0,
     (applied.sources?.length ?? 0) > 0,
     (applied.form_ids?.length ?? 0) > 0,
+    (applied.proekts?.length ?? 0) > 0,
     applied.start_date != null || applied.end_date != null,
   ].filter(Boolean).length;
 
@@ -624,7 +625,7 @@ export default function LidlarPage() {
                 </div>
 
                 {/* MultiSelect filters row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                   <MultiSelect
                     label="Mas'ul xodim" icon={<Users size={12} />}
                     options={(filterOpts?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
@@ -647,6 +648,13 @@ export default function LidlarPage() {
                     values={applied.sources ?? []}
                     onChange={(vals) => setApplied(p => ({ ...p, sources: vals.length ? vals : undefined }))}
                     loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Proekt" icon={<Filter size={12} />}
+                    options={(filterOpts?.proekts ?? []).map(p => ({ value: p.id, label: p.name }))}
+                    values={applied.proekts ?? []}
+                    onChange={(vals) => setApplied(p => ({ ...p, proekts: vals.length ? vals : undefined }))}
+                    loading={filterOptsQ.isLoading}
                   />
                 </div>
                 {activeCount > 0 && (

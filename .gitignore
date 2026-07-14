@@ -45,3 +45,8 @@ backend/data/
 bitrix-sync/.env
 backend/.env
 Lidlar.xls
+
+# local data exports
+leadlar.xls
+todaylead.csv
+*.xls
