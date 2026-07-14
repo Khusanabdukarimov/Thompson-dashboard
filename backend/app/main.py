@@ -1248,7 +1248,7 @@ async def bitrix_iframe_handler(request: Request):
     except Exception:
         pass  # Return app without pre-fill rather than erroring
 
-    dist_index = Path("/var/www/mountain/frontend/app/dist/index.html")
+    dist_index = Path(os.getenv("FRONTEND_DIST_INDEX", "/var/www/thompson/frontend/app/dist/index.html"))
     html = dist_index.read_text(encoding="utf-8")
     # Inject BX24 SDK + context + route before React mounts.
     # The SDK script must come first so BX24 is defined when the app bundle runs.
