@@ -697,7 +697,7 @@ export default function LidlarPage() {
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
                         title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
-                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Konsultatsiya o'tkazildi / umumiy lid</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Tashrif o'tkazildi / umumiy lid</div>
               </GradCard>
             </div>
 
@@ -713,8 +713,8 @@ export default function LidlarPage() {
                 <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1px 1fr 1px 1fr 1px 1fr", gap:0, alignItems:"center" }}>
                   {[
                     { icon:<Percent size={22} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
-                    { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Konsultatsiya", sub:"Umumiy → K.Belgilandi" },
-                    { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"K.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
+                    { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Tashrif", sub:"Umumiy → T.Belgilandi" },
+                    { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"T.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
                     { icon:<Target size={22} style={{ color:"#3F51B5" }} />, bg:"rgba(63,81,181,0.15)", val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0, color:"#3F51B5", title:"Sifatli → Uchrashuv", sub:"Sifatli / O'tkazildi" },
                   ].map((m, i) => (
                     <>
@@ -744,7 +744,7 @@ export default function LidlarPage() {
                       <Calendar size={20} style={{ color:"#9C27B0" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Konsultatsiyalar</div>
+                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Tashriflar</div>
                       <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginTop:2 }}>
                         <span style={{ fontSize:34, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
                         <span style={{ fontSize:20, fontWeight:700, color: isDark ? "#9E9E9E" : "var(--text3)" }}>/</span>
@@ -837,7 +837,7 @@ export default function LidlarPage() {
                     <th style={TH("#00BCD4")}>Sifatli Lid</th>
                     <th style={TH("#F44336")}>Sifatsiz Lid</th>
                     <th style={TH("#FFC107")}>Bekor Bo'ldi</th>
-                    <th style={TH("#4CAF50")}>Konsultatsiya O'tkazildi</th>
+                    <th style={TH("#4CAF50")}>Tashrif O'tkazildi</th>
                     <th style={{ ...TH("#4CAF50", 80), textAlign:"center" }}>Konversiya</th>
                   </tr>
                 </thead>
