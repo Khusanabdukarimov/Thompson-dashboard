@@ -24,12 +24,18 @@ function leadSrcCond(mode, pi) {
 }
 
 const PROEKT_FIELD = 'UF_CRM_1781879563298';
+// Hidden from the dashboard entirely: 3575 = Bog'cha, 3577 = IH
+const PROEKT_HIDDEN = "'3575','3577'";
 
 function leadProektCond(pi) {
   return `($${pi}::text IS NULL OR l.id IN (
       SELECT lead_id FROM lead_uf_values
       WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($${pi}, ','))
-    ))`;
+    ))
+    AND l.id NOT IN (
+      SELECT lead_id FROM lead_uf_values
+      WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_HIDDEN})
+    )`;
 }
 
 function dealModeClause(mode) {
@@ -988,6 +994,7 @@ router.get('/lead-filter-options', async (req, res) => {
         `SELECT e.enum_id AS id, e.value AS name
          FROM lead_uf_enums e
          WHERE e.field_code = '${PROEKT_FIELD}'
+           AND e.enum_id NOT IN (${PROEKT_HIDDEN})
          ORDER BY e.value`
       ).catch(() => ({ rows: [] })),
     ]);
