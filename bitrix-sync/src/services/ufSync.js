@@ -41,8 +41,9 @@ async function ensureSchema() {
 
 /** Fetch crm.lead.fields and upsert the field registry + enum option lists. */
 async function syncLeadUfMeta() {
-  const fields = await bitrixCall('crm.lead.fields', {});
-  if (!fields) throw new Error('crm.lead.fields returned nothing');
+  const res = await bitrixCall('crm.lead.fields', {});
+  const fields = res && res.result;
+  if (!fields) throw new Error(`crm.lead.fields failed: ${res && res.error_description || 'no result'}`);
 
   let fieldCount = 0, enumCount = 0;
   for (const [code, f] of Object.entries(fields)) {
