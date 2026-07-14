@@ -14,11 +14,7 @@ const LEAD_SELECT = [
   'ID', 'ASSIGNED_BY_ID', 'STATUS_ID', 'OPPORTUNITY', 'SOURCE_ID',
   'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'UTM_CONTENT', 'UTM_TERM',
   'DATE_CREATE', 'DATE_MODIFY', 'NAME', 'LAST_NAME', 'TITLE', 'COMMENTS', 'PHONE', 'WEB_FORM_ID',
-  'UF_CRM_1778261403182',
-  'UF_CRM_1775825731211', 'UF_CRM_1778260858916', 'UF_CRM_1777030859057', 'UF_CRM_1778261535982',
-  'UF_CRM_1775824803703', 'UF_CRM_1775825155935', 'UF_CRM_1770281264686',
-  'UF_CRM_1770693781846', 'UF_CRM_1778310745831',
-  'UF_CRM_1770976355232', 'UF_CRM_1770282341169',
+  'UF_*', // barcha custom maydonlar — lead_uf_values jadvaliga generik yoziladi
 ];
 
 const DEAL_SELECT = [
@@ -149,6 +145,9 @@ async function syncContacts() {
 
 async function main() {
   console.log('=== Bitrix24 Initial Sync ===');
+  const ufSync = require('../services/ufSync');
+  await ufSync.ensureSchema();
+  await ufSync.syncLeadUfMeta();
   console.log('Loading stages...');
   await loadStages();
 

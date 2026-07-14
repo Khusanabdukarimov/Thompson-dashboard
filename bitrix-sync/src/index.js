@@ -91,9 +91,16 @@ Promise.all([
       WHERE entity = 'deal' AND (bitrix_id = 'LOSE' OR bitrix_id LIKE '%:LOSE');
   `).catch(err => console.error('[startup] stages restore migration failed:', err.message)),
   rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
+  require('./services/ufSync').ensureSchema().catch(err => console.error('[startup] ufSync migration failed:', err.message)),
 ]).then(() => {
   app.listen(PORT, () => {
     startCallsAutoSync();
+
+    // Lead UF field registry + enum options: refresh on start and every 6h,
+    // so new custom fields created in Bitrix appear without code changes.
+    const { syncLeadUfMeta } = require('./services/ufSync');
+    syncLeadUfMeta().catch(e => console.warn('[ufSync] meta sync failed:', e.message));
+    setInterval(() => syncLeadUfMeta().catch(e => console.warn('[ufSync] meta sync failed:', e.message)), 6 * 3600 * 1000);
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
 
     // Check Meta access token expiry on startup

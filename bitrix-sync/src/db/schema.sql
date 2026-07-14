@@ -207,3 +207,33 @@ INSERT INTO stages (entity, bitrix_id, name, sort_order, is_final, is_won) VALUE
   ('deal', 'C1:WON',          'Yutildi',         50, TRUE,  TRUE),
   ('deal', 'C1:LOSE',         'Yutqizildi',      60, TRUE,  FALSE)
 ON CONFLICT (entity, bitrix_id) DO NOTHING;
+
+-- ============================================================
+-- Generic lead custom-field (UF_CRM*) storage
+--   lead_uf_fields — registry of every UF field
+--   lead_uf_enums  — options of enumeration ("list") fields
+--   lead_uf_values — per-lead values (enum values stored as option ID;
+--                    multi-value fields stored as a JSON array string)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS lead_uf_fields (
+  field_code  TEXT PRIMARY KEY,
+  label       TEXT,
+  field_type  TEXT,
+  is_multiple BOOLEAN DEFAULT FALSE,
+  synced_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lead_uf_enums (
+  field_code TEXT NOT NULL,
+  enum_id    TEXT NOT NULL,
+  value      TEXT,
+  PRIMARY KEY (field_code, enum_id)
+);
+
+CREATE TABLE IF NOT EXISTS lead_uf_values (
+  lead_id    INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  field_code TEXT NOT NULL,
+  value      TEXT,
+  PRIMARY KEY (lead_id, field_code)
+);
+CREATE INDEX IF NOT EXISTS lead_uf_values_field_idx ON lead_uf_values(field_code, value);

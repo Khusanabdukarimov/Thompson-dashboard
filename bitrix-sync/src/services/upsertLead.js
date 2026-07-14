@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const stageResolver = require('./stageResolver');
+const { upsertLeadUfValues } = require('./ufSync');
 
 const CANCEL_REASON_MAP = {
   '1062': "Qimmatlik qildi",
@@ -194,6 +195,10 @@ async function upsertLead(r, client) {
   );
 
   const leadId = rows[0].id;
+
+  // Store every UF_CRM* field generically (lead_uf_values / lead_uf_enums)
+  await upsertLeadUfValues(r, db).catch(e =>
+    console.warn(`[upsertLead] UF values sync xatosi (#${r.ID}):`, e.message));
 
   // Save phone numbers to lead_phones
   const phones = Array.isArray(r.PHONE) ? r.PHONE : [];
