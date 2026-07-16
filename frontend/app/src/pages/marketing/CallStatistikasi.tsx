@@ -429,9 +429,9 @@ export default function CallStatistikasi() {
           ) : rows.length === 0 ? (
             <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Ma'lumot topilmadi</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
+            <div style={{ overflowX: "auto", maxHeight: "min(64vh, 640px)", overflowY: "auto", overscrollBehavior: "contain" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+                <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
                   <tr>
                     <th style={TH({ textAlign: "left", minWidth: 200 })} rowSpan={2}>OPERATORLAR</th>
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
