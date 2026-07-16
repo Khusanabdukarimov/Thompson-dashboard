@@ -13,7 +13,9 @@ const taskCreated  = require('./webhooks/taskCreated');
 const taskUpdated  = require('./webhooks/taskUpdated');
 const taskDeleted  = require('./webhooks/taskDeleted');
 const dashboardRouter                    = require('./api/dashboard');
-const { startCallsAutoSync }             = require('./api/dashboard');
+const callsRouter                        = require('./api/calls');
+const onpbx                              = require('./services/onlinepbx');
+const { ensureSchema: callsEnsureSchema, syncUsers: syncPbxUsers, syncRecentCalls } = require('./sync/syncCalls');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
 const marketingRouter  = require('./api/marketing');
@@ -43,6 +45,7 @@ app.get('/webhook/facebook', fbVerify);
 app.post('/webhook/facebook', fbReceive);
 
 // ── Dashboard API ─────────────────────────────────────────────
+app.use('/api/dashboard', callsRouter);   // OnlinePBX call statistics
 app.use('/api/dashboard', dashboardRouter);
 
 // ── Campaigns API (Meta Ads, cached) ──────────────────────────
@@ -59,6 +62,36 @@ app.get('/health', async (req, res) => {
     res.status(503).json({ status: 'error', db: err.message });
   }
 });
+
+/**
+ * OnlinePBX call sync. No webhooks here — the PBX only offers a pull API, so a
+ * periodic sweep IS the primary path, not a safety net. Skipped entirely when
+ * ONPBX_DOMAIN / ONPBX_API_KEY are not configured.
+ */
+function startCallSync() {
+  if (!onpbx.DOMAIN) {
+    console.warn('[calls] ONPBX_DOMAIN not set — call sync disabled');
+    return;
+  }
+  const minutes = parseInt(process.env.CALL_SYNC_INTERVAL_MIN || '10', 10);
+  const lookbackH = parseInt(process.env.CALL_SYNC_LOOKBACK_HOURS || '3', 10);
+
+  const run = async () => {
+    try {
+      const { total, stubbed } = await syncRecentCalls(lookbackH);
+      if (total) console.log(`[calls] ${total} calls refreshed${stubbed ? ` (${stubbed} stubbed)` : ''}`);
+    } catch (err) {
+      console.error('[calls] sync failed:', err.message);
+    }
+  };
+
+  // PBX extensions must exist before calls reference them (FK on operator_ext).
+  syncPbxUsers()
+    .catch((err) => console.error(`[calls] OnlinePBX user sync failed (${err.message}) — serving existing DB data`))
+    .then(run);
+  setInterval(run, minutes * 60_000);
+  console.log(`[calls] every ${minutes}min, ${lookbackH}h lookback`);
+}
 
 // Run all migrations before accepting connections
 Promise.all([
@@ -92,9 +125,10 @@ Promise.all([
   `).catch(err => console.error('[startup] stages restore migration failed:', err.message)),
   rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
   require('./services/ufSync').ensureSchema().catch(err => console.error('[startup] ufSync migration failed:', err.message)),
+  callsEnsureSchema().catch(err => console.error('[startup] pbx migration failed:', err.message)),
 ]).then(() => {
   app.listen(PORT, () => {
-    startCallsAutoSync();
+    startCallSync();
 
     // Lead UF field registry + enum options: refresh on start and every 6h,
     // so new custom fields created in Bitrix appear without code changes.

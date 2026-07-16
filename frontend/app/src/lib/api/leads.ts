@@ -400,6 +400,7 @@ export type CallDashboardFilter = {
 export type CallFilterOptions = {
   responsibles: { id: number; full_name: string }[];
   sources: { id: string; name: string }[];
+  stages: { bitrix_id: string; name: string }[];
 };
 
 function callFilterParams(filter: CallDashboardFilter) {
@@ -610,6 +611,9 @@ export type PyResponsibleCallStats = {
   avg_duration:      number;
   inbound_duration:  number;
   outbound_duration: number;
+  call_dur_in:       number;
+  call_dur_out:      number;
+  call_dur_total:    number;
   unique_inbound:    number;
   unique_outbound:   number;
   unique_total:      number;

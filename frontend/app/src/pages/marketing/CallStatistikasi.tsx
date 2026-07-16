@@ -61,62 +61,6 @@ type CallFilterState = {
   stage: string;
 };
 
-const CALL_STAGE_LABELS: Record<string, string> = {
-  'NEW': 'Yangi lid', 'IN_PROCESS': 'Yangi lid',
-  'PROCESSED': 'Propushenniy',
-  'UC_1KPATX': 'Javob bermadi', 'NO_ANSWER': 'Javob bermadi',
-  'UC_Q2U9EL': 'Qayta aloqa', 'CALLBACK': 'Qayta aloqa',
-  'UC_KXC3ZW': "O'ylab ko'radi", 'THINKING': "O'ylab ko'radi",
-  'UC_L28G68': 'Tashrif belgilandi', 'CONSULTATION': 'Tashrif belgilandi',
-  'UC_5G8244': 'Kelmadi', 'NOT_TRANSFERRED': 'Kelmadi',
-  'JUNK': 'Sandiq', 'ARCHIVE': 'Sandiq',
-  'UC_F8K4GI': 'Sifatsiz',
-  'UC_NAZK5J': "Bekor bo'ldi", 'RECYCLED': "Bekor bo'ldi",
-  'CONVERTED_CONSULT': 'Tashrif buyurdi', 'CONVERTED': 'Tashrif buyurdi',
-  'C1:NEW': 'Konsultatsiya', 'C1:IN_PROCESS': 'Jarayonda',
-  'C1:PREPARATION': 'Taklif tayyorlash', 'C1:PRESENTATION': 'Taqdimot',
-  'C1:CLIENT_APPROVED': 'Mijoz manzur ko\'rdi', 'C1:CONTRACT_SENT': 'Shartnoma yuborildi',
-  'C1:AGREEMENT': 'Kelishuv', 'C1:FINAL_INVOICE': 'To\'lov',
-  'C1:PARTIAL_PAYMENT': 'Qisman to\'lov', 'C1:WORK_STARTED': 'Ish boshlandi',
-  'WON': 'Sotuv bo\'ldi', 'C1:WON': 'Sotuv bo\'ldi',
-  'LOSE': 'Muvaffaqiyatsiz', 'C1:LOSE': 'Muvaffaqiyatsiz',
-};
-
-const callStageOptionGroups = [
-  { group: null, options: [{ value: "all", label: "Barchasi" }] },
-  {
-    group: "📋 Lid bosqichlari",
-    options: [
-      { value: "NEW",              label: "Yangi lid" },
-      { value: "PROCESSED",        label: "Propushenniy" },
-      { value: "UC_1KPATX",        label: "Javob bermadi" },
-      { value: "UC_Q2U9EL",        label: "Qayta aloqa" },
-      { value: "UC_KXC3ZW",        label: "O'ylab ko'radi" },
-      { value: "UC_L28G68",        label: "Tashrif belgilandi" },
-      { value: "UC_5G8244",        label: "Kelmadi" },
-      { value: "UC_F8K4GI",        label: "Sifatsiz" },
-      { value: "UC_NAZK5J",        label: "Bekor bo'ldi" },
-      { value: "CONVERTED_CONSULT",label: "Tashrif buyurdi" },
-    ],
-  },
-  {
-    group: "🤝 Sdelka bosqichlari",
-    options: [
-      { value: "C1:NEW",           label: "Konsultatsiya" },
-      { value: "C1:IN_PROCESS",    label: "Jarayonda" },
-      { value: "C1:PREPARATION",   label: "Taklif tayyorlash" },
-      { value: "C1:PRESENTATION",  label: "Taqdimot" },
-      { value: "C1:CLIENT_APPROVED", label: "Mijoz manzur ko'rdi" },
-      { value: "C1:CONTRACT_SENT", label: "Shartnoma yuborildi" },
-      { value: "C1:AGREEMENT",     label: "Kelishuv" },
-      { value: "C1:FINAL_INVOICE", label: "To'lov" },
-      { value: "C1:WORK_STARTED",  label: "Ish boshlandi" },
-      { value: "WON",              label: "Sotuv bo'ldi" },
-      { value: "LOSE",             label: "Muvaffaqiyatsiz" },
-    ],
-  },
-];
-
 const callStatusOptions = [
   { value: "all", label: "Barchasi" },
   { value: "success", label: "Muvaffaqiyatli" },
@@ -254,7 +198,7 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
           {calls.map((c, i) => {
             const ct = c.call_type ? CALL_TYPE_LABEL[c.call_type] : null;
             const ok = c.status_code === 200 || (c.duration ?? 0) >= 10;
-            const stageLabel = c.stage_bitrix_id ? (CALL_STAGE_LABELS[c.stage_bitrix_id] ?? c.stage_name ?? c.stage_bitrix_id) : (c.stage_name ?? null);
+            const stageLabel = c.stage_name ?? c.stage_bitrix_id ?? null;
             return (
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <td style={{ padding: "8px 14px", color: "var(--text2)" }}>{i + 1}</td>
@@ -396,13 +340,10 @@ export default function CallStatistikasi() {
                 <div style={{ flex: "1 1 160px", minWidth: 140 }}>
                   <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Bosqich</div>
                   <select value={filters.stage} onChange={e => update({ stage: e.target.value })} style={selStyle}>
-                    {callStageOptionGroups.map(g =>
-                      g.group
-                        ? <optgroup key={g.group} label={g.group}>
-                            {g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </optgroup>
-                        : g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)
-                    )}
+                    <option value="all">Barchasi</option>
+                    {(filterOptionsQ.data?.stages ?? []).map(st => (
+                      <option key={st.bitrix_id} value={st.bitrix_id}>{st.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div style={{ flex: "1 1 200px", minWidth: 180 }}>
@@ -495,7 +436,7 @@ export default function CallStatistikasi() {
                     <th style={TH({ textAlign: "left", minWidth: 200 })} rowSpan={2}>OPERATORLAR</th>
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
                     <th style={TH({ color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.2)" })} colSpan={3}>UNIKAL QO'NG'IROQLAR</th>
-                    <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={3}>DAVOMIYLIK</th>
+                    <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={4}>DAVOMIYLIK</th>
                     <th style={TH({ color: "#FF9800", borderLeft: "2px solid rgba(255,152,0,0.24)" })} colSpan={3}>PROPUSHENNIY</th>
                   </tr>
                   <tr>
@@ -507,7 +448,8 @@ export default function CallStatistikasi() {
                     <th style={TH()}>Umumiy</th>
                     <th style={TH({ borderLeft: "2px solid rgba(156,39,176,0.2)" })}>Kiruvchi</th>
                     <th style={TH()}>Isxodyashie</th>
-                    <th style={TH()}>Jami</th>
+                    <th style={TH()}>Suhbat</th>
+                    <th style={TH()}>Davomiylik</th>
                     <th style={TH({ borderLeft: "2px solid rgba(255,152,0,0.24)" })}>Umumiy</th>
                     <th style={TH()}>Qayta chiqilgan</th>
                     <th style={TH()}>Chiqilmagan</th>
@@ -537,7 +479,8 @@ export default function CallStatistikasi() {
                           <td style={TD({ fontWeight: 700 })}>{u.unique_total}</td>
                           <td style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)", fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.inbound_duration)}</td>
                           <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.outbound_duration)}</td>
-                          <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
+                          <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
+                          <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.call_dur_total)}</td>
                           <td style={TD({ borderLeft: "2px solid rgba(255,152,0,0.12)", color: "#FF9800", fontWeight: 700 })}>{u.missed_inbound}</td>
                           <td style={TD({ color: "#4CAF50", fontWeight: 700 })}>{u.missed_recalled}</td>
                           <td style={TD({ color: "#F44336", fontWeight: 700 })}>{u.missed_unrecalled}</td>

@@ -237,3 +237,56 @@ CREATE TABLE IF NOT EXISTS lead_uf_values (
   PRIMARY KEY (lead_id, field_code)
 );
 CREATE INDEX IF NOT EXISTS lead_uf_values_field_idx ON lead_uf_values(field_code, value);
+
+-- ============================================================
+-- OnlinePBX telephony (applied at boot by sync/syncCalls.js ensureSchema)
+-- ============================================================
+
+-- PBX extensions (from user/get.json). Distinct from Bitrix `responsibles` —
+-- an operator is a Bitrix user AND a PBX extension, matched by name where needed.
+CREATE TABLE IF NOT EXISTS pbx_users (
+  ext        TEXT PRIMARY KEY,   -- extension number, e.g. "101"
+  name       TEXT,               -- "Operator 101"
+  enabled    BOOLEAN DEFAULT TRUE,
+  synced_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Which Bitrix user answers this extension (matched by display name at PBX
+-- user sync — see sync/syncCalls.js). NULL when no Bitrix user has that name.
+ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS responsible_id INTEGER;
+
+-- One row per call, keyed on the PBX uuid so re-syncing an overlapping window is
+-- idempotent. Derived columns (direction, operator_ext, customer_number,
+-- answered) are computed at ingest by src/config/calls.js; the untouched record
+-- is kept in `raw` for auditing.
+CREATE TABLE IF NOT EXISTS pbx_calls (
+  uuid              TEXT PRIMARY KEY,
+  direction         TEXT,          -- inbound | outbound | local (accountcode)
+  caller_number     TEXT,
+  caller_name       TEXT,
+  destination_number TEXT,
+  operator_ext      TEXT REFERENCES pbx_users(ext),
+  customer_number   TEXT,          -- the external party, whichever side it is
+  customer_norm     TEXT,          -- last 9 digits, for matching lead phones
+  start_stamp       TIMESTAMPTZ,
+  end_stamp         TIMESTAMPTZ,
+  duration          INTEGER DEFAULT 0,   -- total call seconds
+  talk_time         INTEGER DEFAULT 0,   -- user_talk_time — live conversation seconds
+  answered          BOOLEAN DEFAULT FALSE,
+  contacted         BOOLEAN,             -- inbound only; NULL for outbound/local
+  hangup_cause      TEXT,
+  gateway           TEXT,
+  quality_score     INTEGER,
+  events            JSONB,
+  raw               JSONB,
+  synced_at         TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS pbx_calls_start_idx     ON pbx_calls(start_stamp);
+CREATE INDEX IF NOT EXISTS pbx_calls_operator_idx  ON pbx_calls(operator_ext, start_stamp);
+CREATE INDEX IF NOT EXISTS pbx_calls_direction_idx ON pbx_calls(direction, start_stamp);
+CREATE INDEX IF NOT EXISTS pbx_calls_customer_idx  ON pbx_calls(customer_norm);
+
+-- Normalised phone lookup used by /call-list to attach a lead to each call.
+CREATE INDEX IF NOT EXISTS lead_phones_norm_idx
+  ON lead_phones (RIGHT(regexp_replace(phone, '\D', '', 'g'), 9));
