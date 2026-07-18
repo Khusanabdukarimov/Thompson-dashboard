@@ -579,7 +579,7 @@ export default function LidlarPage() {
                     { label: "Barchasi", start: "",             end: "" },
                   ];
                   return (
-                    <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
                       {presets.map((p) => {
                         const active = applied.start_date === (p.start || undefined) && applied.end_date === (p.end || undefined);
                         return (
@@ -598,6 +598,27 @@ export default function LidlarPage() {
                           </button>
                         );
                       })}
+                      {/* Proekt segmented buttons — single-select; click again to clear */}
+                      <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {(filterOpts?.proekts ?? []).map((pr) => {
+                          const active = (applied.proekts ?? []).includes(pr.id);
+                          return (
+                            <button key={pr.id}
+                              onClick={() => setApplied((prev) => ({ ...prev, proekts: active ? undefined : [pr.id] }))}
+                              style={{
+                                background: active ? "#7C4DFF" : "var(--bg3)",
+                                border: `1px solid ${active ? "#7C4DFF" : "var(--border)"}`,
+                                color: active ? "#fff" : "#9E9E9E",
+                                borderRadius: 20, padding: "5px 14px",
+                                fontSize: 12, fontWeight: active ? 600 : 400,
+                                cursor: "pointer", transition: "all 0.15s",
+                              }}
+                            >
+                              {pr.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}
@@ -625,7 +646,7 @@ export default function LidlarPage() {
                 </div>
 
                 {/* MultiSelect filters row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                   <MultiSelect
                     label="Mas'ul xodim" icon={<Users size={12} />}
                     options={(filterOpts?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
@@ -648,13 +669,6 @@ export default function LidlarPage() {
                     values={applied.sources ?? []}
                     onChange={(vals) => setApplied(p => ({ ...p, sources: vals.length ? vals : undefined }))}
                     loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
-                  />
-                  <MultiSelect
-                    label="Proekt" icon={<Filter size={12} />}
-                    options={(filterOpts?.proekts ?? []).map(p => ({ value: p.id, label: p.name }))}
-                    values={applied.proekts ?? []}
-                    onChange={(vals) => setApplied(p => ({ ...p, proekts: vals.length ? vals : undefined }))}
-                    loading={filterOptsQ.isLoading}
                   />
                 </div>
                 {activeCount > 0 && (
