@@ -329,12 +329,20 @@ router.get('/sources-list', async (_req, res) => {
  * Params: from, to
  */
 router.get('/tasks-summary', async (req, res) => {
-  const { from, to, mode } = req.query;
-  const params = [from || null, to || null];
+  const { from, to, proekt, mode } = req.query;
+  const params = [from || null, to || null, proekt || null];
 
-  const leadFilter = mode === 'amocrm'
+  const leadFilter = (mode === 'amocrm'
     ? `AND t.lead_id IS NOT NULL AND t.lead_id IN (SELECT id FROM leads WHERE source_id = 'UC_1WUFJB')`
-    : ``;
+    : ``) + `
+         AND ($3::text IS NULL OR t.lead_id IN (
+           SELECT lead_id FROM lead_uf_values
+           WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($3, ','))
+         ))
+         AND (t.lead_id IS NULL OR t.lead_id NOT IN (
+           SELECT lead_id FROM lead_uf_values
+           WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_HIDDEN})
+         ))`;
 
   try {
     const { rows } = await pool.query(
@@ -370,8 +378,8 @@ router.get('/tasks-summary', async (req, res) => {
  * Params: from, to, responsible_id
  */
 router.get('/cancel-reasons', async (req, res) => {
-  const { from, to, responsible_id, mode } = req.query;
-  const params = [from || null, to || null, responsible_id || null];
+  const { from, to, responsible_id, proekt, mode } = req.query;
+  const params = [from || null, to || null, responsible_id || null, proekt || null];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -381,6 +389,7 @@ router.get('/cancel-reasons', async (req, res) => {
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_L8G2B9'
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
        GROUP BY l.uf_cancel_reason
        ORDER BY total DESC`,
@@ -399,8 +408,8 @@ router.get('/cancel-reasons', async (req, res) => {
  * Params: from, to, responsible_id
  */
 router.get('/junk-reasons', async (req, res) => {
-  const { from, to, responsible_id, mode } = req.query;
-  const params = [from || null, to || null, responsible_id || null];
+  const { from, to, responsible_id, proekt, mode } = req.query;
+  const params = [from || null, to || null, responsible_id || null, proekt || null];
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -410,6 +419,7 @@ router.get('/junk-reasons', async (req, res) => {
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'JUNK'
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
        GROUP BY l.uf_junk_reason
        ORDER BY total DESC`,
@@ -1310,7 +1320,7 @@ router.get('/utm-responsible-stats', async (req, res) => {
 });
 
 router.get('/utm-stats', async (req, res) => {
-  const { from, to, mode, form_id } = req.query;
+  const { from, to, mode, form_id, proekt } = req.query;
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -1342,10 +1352,11 @@ router.get('/utm-stats', async (req, res) => {
                     WHERE lp.lead_id = l.id AND fl.form_id = cf2.fb_form_id
                   )
               ))
+         AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
        GROUP BY TRIM(l.utm_source)
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, form_id || null],
+      [from || null, to || null, form_id || null, proekt || null],
     );
     res.json(rows);
   } catch (err) {
@@ -1360,7 +1371,7 @@ router.get('/utm-stats', async (req, res) => {
  * Params: from, to, responsible_id, mode
  */
 router.get('/source-stats', async (req, res) => {
-  const { from, to, responsible_id, mode } = req.query;
+  const { from, to, responsible_id, proekt, mode } = req.query;
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -1381,10 +1392,11 @@ router.get('/source-stats', async (req, res) => {
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(l.source_id, 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
-      [from || null, to || null, responsible_id || null]
+      [from || null, to || null, responsible_id || null, proekt || null]
     );
     res.json(rows.map(r => ({
       ...r,
@@ -1502,10 +1514,10 @@ router.post('/sync-crm-forms', async (_req, res) => {
 });
 
 router.get('/responsible-leads', async (req, res) => {
-  const { responsible_id, from, to, mode } = req.query;
+  const { responsible_id, from, to, proekt, mode } = req.query;
   if (!responsible_id) return res.status(400).json({ error: 'responsible_id required' });
 
-  const params = [parseInt(responsible_id), from || null, to || null];
+  const params = [parseInt(responsible_id), from || null, to || null, proekt || null];
 
   try {
     const { rows } = await pool.query(
@@ -1537,6 +1549,7 @@ router.get('/responsible-leads', async (req, res) => {
        WHERE l.responsible_id = $1
          AND ($2::date IS NULL OR l.date_create::date >= $2::date)
          AND ($3::date IS NULL OR l.date_create::date <= $3::date)
+         AND ${leadProektCond(4)}
          ${mode === 'amocrm' ? `AND l.source_id = 'UC_1WUFJB'` : ``}
        ORDER BY l.date_create DESC
        LIMIT 1000`,
