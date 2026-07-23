@@ -480,9 +480,20 @@ export default function LidlarPage() {
   const overallConvPct   = total > 0 ? (konsultOtkazildi  / total) * 100 : 0;
 
   const byUserFiltered = useMemo(() => {
+    // When a filter (proekt / stage / source / responsible / form) is active,
+    // drop responsibles with no leads — same rule as the Lid va Konversiya table.
+    const hasFilter =
+      (applied.proekts?.length ?? 0) > 0 ||
+      (applied.stages?.length ?? 0) > 0 ||
+      (applied.sources?.length ?? 0) > 0 ||
+      (applied.responsible_ids?.length ?? 0) > 0 ||
+      (applied.form_ids?.length ?? 0) > 0;
     const s = search.trim().toLowerCase();
-    return s ? enrichedResponsibles.filter((u) => u.full_name.toLowerCase().includes(s)) : enrichedResponsibles;
-  }, [enrichedResponsibles, search]);
+    let rows = enrichedResponsibles;
+    if (hasFilter) rows = rows.filter((u) => (u.total ?? 0) > 0);
+    if (s) rows = rows.filter((u) => u.full_name.toLowerCase().includes(s));
+    return rows;
+  }, [enrichedResponsibles, search, applied]);
 
   const colMaxes = useMemo(() => {
     const m: Partial<Record<RespColKey, number>> = {};
