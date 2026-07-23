@@ -358,6 +358,25 @@ export default function LidlarPage() {
   });
   const filterOpts = filterOptsQ.data;
 
+  // Proekt segmented buttons: "Kids" is merged into "O'quv markaz" so that
+  // selecting O'quv markaz filters both proekts at once. Any other proekt
+  // (e.g. Maktab) stays its own single button, original order preserved.
+  const proektGroups = useMemo(() => {
+    const raw = filterOpts?.proekts ?? [];
+    const OQUV = new Set(["O'quv markaz", "Kids"]);
+    const groups: { name: string; ids: string[] }[] = [];
+    let oquv: { name: string; ids: string[] } | null = null;
+    for (const pr of raw) {
+      if (OQUV.has(pr.name)) {
+        if (!oquv) { oquv = { name: "O'quv markaz", ids: [] }; groups.push(oquv); }
+        oquv.ids.push(pr.id);
+      } else {
+        groups.push({ name: pr.name, ids: [pr.id] });
+      }
+    }
+    return groups;
+  }, [filterOpts]);
+
   const amocrmSrcQ = useQuery({
     queryKey: ["amocrm-sources"],
     queryFn: getAmocrmSources,
@@ -484,10 +503,18 @@ export default function LidlarPage() {
 
   // ── Lid va Konversiya rows (sorted by total desc) ───────────────
   const convRows = useMemo(() => {
-    const rows = (conversionQ.data?.conversion ?? []).filter((r) => !isExcluded(r.full_name));
-    rows.sort((a, b) => b.total - a.total);
-    return rows;
-  }, [conversionQ.data]);
+    // When a filter (proekt / stage / source / responsible / form) is active,
+    // drop responsibles with no leads in the filtered view.
+    const hasFilter =
+      (applied.proekts?.length ?? 0) > 0 ||
+      (applied.stages?.length ?? 0) > 0 ||
+      (applied.sources?.length ?? 0) > 0 ||
+      (applied.responsible_ids?.length ?? 0) > 0 ||
+      (applied.form_ids?.length ?? 0) > 0;
+    let rows = (conversionQ.data?.conversion ?? []).filter((r) => !isExcluded(r.full_name));
+    if (hasFilter) rows = rows.filter((r) => r.total > 0);
+    return [...rows].sort((a, b) => b.total - a.total);
+  }, [conversionQ.data, applied]);
 
   const convMax = useMemo(() => ({
     total:     Math.max(1, ...convRows.map((r) => r.total)),
@@ -600,11 +627,12 @@ export default function LidlarPage() {
                       })}
                       {/* Proekt segmented buttons — single-select; click again to clear */}
                       <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {(filterOpts?.proekts ?? []).map((pr) => {
-                          const active = (applied.proekts ?? []).includes(pr.id);
+                        {proektGroups.map((pr) => {
+                          const sel = applied.proekts ?? [];
+                          const active = pr.ids.length > 0 && pr.ids.every((id) => sel.includes(id));
                           return (
-                            <button key={pr.id}
-                              onClick={() => setApplied((prev) => ({ ...prev, proekts: active ? undefined : [pr.id] }))}
+                            <button key={pr.name}
+                              onClick={() => setApplied((prev) => ({ ...prev, proekts: active ? undefined : pr.ids }))}
                               style={{
                                 background: active ? "#7C4DFF" : "var(--bg3)",
                                 border: `1px solid ${active ? "#7C4DFF" : "var(--border)"}`,

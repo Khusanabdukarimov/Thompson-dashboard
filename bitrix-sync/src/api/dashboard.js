@@ -27,6 +27,12 @@ const PROEKT_FIELD = 'UF_CRM_1781879563298';
 // Hidden from the dashboard entirely: 3575 = Bog'cha, 3577 = IH
 const PROEKT_HIDDEN = "'3575','3577'";
 
+// Proekt2 (UF_CRM_1782148374198): internal HR / Студент / Жалоба tagging.
+// Any lead with a non-empty Proekt2 value is hidden from every lead view.
+const PROEKT2_FIELD = 'UF_CRM_1782148374198';
+const proekt2ExcludeCond = (col) =>
+  `${col} NOT IN (SELECT lead_id FROM lead_uf_values WHERE field_code = '${PROEKT2_FIELD}')`;
+
 function leadProektCond(pi) {
   return `($${pi}::text IS NULL OR l.id IN (
       SELECT lead_id FROM lead_uf_values
@@ -35,7 +41,8 @@ function leadProektCond(pi) {
     AND l.id NOT IN (
       SELECT lead_id FROM lead_uf_values
       WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_HIDDEN})
-    )`;
+    )
+    AND ${proekt2ExcludeCond('l.id')}`;
 }
 
 function dealModeClause(mode) {
@@ -342,7 +349,8 @@ router.get('/tasks-summary', async (req, res) => {
          AND (t.lead_id IS NULL OR t.lead_id NOT IN (
            SELECT lead_id FROM lead_uf_values
            WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_HIDDEN})
-         ))`;
+         ))
+         AND (t.lead_id IS NULL OR ${proekt2ExcludeCond('t.lead_id')})`;
 
   try {
     const { rows } = await pool.query(
@@ -1134,6 +1142,7 @@ router.get('/utm-campaign-stats', async (req, res) => {
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
          AND ($4::text IS NULL OR COALESCE(NULLIF(TRIM(l.utm_medium),''),'Nomalum') = $4)
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1169,6 +1178,7 @@ router.get('/utm-medium-stats', async (req, res) => {
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND TRIM(l.utm_source) = $3
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(TRIM(l.utm_medium), ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1210,6 +1220,7 @@ router.get('/utm-content-stats', async (req, res) => {
            OR ($5 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
            OR ($5 != 'Nomalum' AND l.utm_campaign = $5)
          )
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(TRIM(l.utm_content), ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1256,6 +1267,7 @@ router.get('/utm-term-stats', async (req, res) => {
            OR ($6 = 'Nomalum' AND (l.utm_content IS NULL OR l.utm_content = ''))
            OR ($6 != 'Nomalum' AND l.utm_content = $6)
          )
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(TRIM(l.utm_term), ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1307,6 +1319,7 @@ router.get('/utm-responsible-stats', async (req, res) => {
            OR ($7 = 'Nomalum' AND (l.utm_term IS NULL OR l.utm_term = ''))
            OR ($7 != 'Nomalum' AND l.utm_term = $7)
          )
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY l.responsible_id, r.name, r.last_name
        ORDER BY umumiy_lidlar DESC`,
@@ -1437,6 +1450,7 @@ router.get('/form-stats', async (req, res) => {
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY l.web_form_id, cf.form_name
        ORDER BY umumiy_lidlar DESC`,
