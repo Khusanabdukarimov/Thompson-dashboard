@@ -101,7 +101,51 @@ const UF_FILTERS = [
   ['source1', 'UF_CRM_1635794595'],    // Источник 1
   ['filial',  'UF_CRM_1618299635672'], // Филиал
   ['reason',  'UF_CRM_1618300665524'], // Причина
+  ['hudud',   'UF_CRM_1701529319467'], // Вилоят
 ];
+
+const SOURCE1_FIELD = 'UF_CRM_1635794595';
+const HUDUD_FIELD   = 'UF_CRM_1701529319467';
+
+/**
+ * Lead breakdown by a Bitrix enum UF field (same funnel columns as
+ * /source-stats), grouped by that field's own enum value. Backs both
+ * /source1-stats ("Manba 1 bo'yicha") and /hudud-stats ("Hudud bo'yicha") —
+ * they differ only in which field they group by.
+ */
+function ufBreakdownHandler(fieldCode) {
+  return async (req, res) => {
+    const { from, to, responsible_id, proekt, mode } = req.query;
+    try {
+      const { rows } = await pool.query(
+        `SELECT
+           COALESCE(e.value, 'Noma''lum')                                       AS name,
+           COUNT(*)::int                                                        AS umumiy_lidlar,
+           COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int                          AS jarayonda,
+           COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int       AS sifatli_lid,
+           COUNT(*) FILTER (WHERE ${TASHRIF_BELGILANDI})::int                   AS konsultatsiya_belgilandi,
+           COUNT(*) FILTER (WHERE ${TASHRIF_OTKAZILDI})::int                    AS konsultatsiya_otkazildi,
+           COUNT(*) FILTER (WHERE s.bitrix_id = 'JUNK')::int                    AS sifatsiz,
+           COUNT(*) FILTER (WHERE s.bitrix_id = 'UC_L8G2B9')::int               AS bekor_boldi
+         FROM leads l
+         LEFT JOIN stages s ON s.id = l.stage_id
+         LEFT JOIN lead_uf_values v ON v.lead_id = l.id AND v.field_code = '${fieldCode}' AND v.value <> ''
+         LEFT JOIN lead_uf_enums  e ON e.field_code = v.field_code AND e.enum_id = v.value
+         WHERE ${leadDateCond(mode, 1, 2)}
+           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ${leadProektCond(4, req.query)}
+           ${leadModeClause(mode)}
+         GROUP BY COALESCE(e.value, 'Noma''lum')
+         ORDER BY umumiy_lidlar DESC`,
+        [from || null, to || null, responsible_id || null, proekt || null]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(`[dashboard/uf-breakdown ${fieldCode}]`, err.message);
+      res.status(500).json({ error: err.message });
+    }
+  };
+}
 
 /** SQL for whichever of the four enum filters the request actually set. */
 function ufFilterCond(q, col = 'l.id') {
@@ -1275,9 +1319,10 @@ router.get('/lead-filter-options', async (req, res) => {
       forms: formRes.rows.map(r => ({ id: r.id, name: r.name, count: r.lead_count })),
       proekts: proektRes.rows,
       courses:  byField('UF_CRM_1618299519454'),
-      source1s: byField('UF_CRM_1635794595'),
+      source1s: byField(SOURCE1_FIELD),
       filials:  byField('UF_CRM_1618299635672'),
       reasons:  byField('UF_CRM_1618300665524'),
+      hududs:   byField(HUDUD_FIELD),
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);
@@ -1694,6 +1739,14 @@ router.get('/source-stats', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * GET /api/dashboard/source1-stats — leads grouped by "Источник 1" (Manba 1).
+ * GET /api/dashboard/hudud-stats    — leads grouped by "Вилоят" (Hudud).
+ * Same funnel columns as /source-stats. Params: from, to, responsible_id, proekt, mode.
+ */
+router.get('/source1-stats', ufBreakdownHandler(SOURCE1_FIELD));
+router.get('/hudud-stats',   ufBreakdownHandler(HUDUD_FIELD));
 
 /**
  * GET /api/dashboard/form-stats

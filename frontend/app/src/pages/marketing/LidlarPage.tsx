@@ -14,9 +14,9 @@ import {
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
   getResponsibleTasks, getSourceLeads, getLeadDaily,
-  getSourceStats, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
+  getSourceStats, getSource1Stats, getHududStats, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
-  type SourceStatsRow, type ResponsibleLeadRow,
+  type SourceStatsRow, type UfBreakdownRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -96,12 +96,18 @@ function MultiSelect({
           background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8,
           boxShadow: "0 4px 24px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4,
         }}>
-          {values.length > 0 && (
-            <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
-              <button type="button" onClick={() => onChange([])}
-                style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                Hammasini olib tashlash
+          {options.length > 0 && (
+            <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)", display: "flex", gap: 12 }}>
+              <button type="button" onClick={() => onChange(options.map(o => o.value))}
+                style={{ fontSize: 11, color: "#2196F3", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                Barchasini tanlash
               </button>
+              {values.length > 0 && (
+                <button type="button" onClick={() => onChange([])}
+                  style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  Hammasini olib tashlash
+                </button>
+              )}
             </div>
           )}
           {options.map(o => {
@@ -486,6 +492,7 @@ export default function LidlarPage() {
     (applied.source1s?.length ?? 0) > 0,
     (applied.filials?.length ?? 0) > 0,
     (applied.reasons?.length ?? 0) > 0,
+    (applied.hududs?.length ?? 0) > 0,
     applied.start_date != null || applied.end_date != null,
   ].filter(Boolean).length;
 
@@ -499,6 +506,8 @@ export default function LidlarPage() {
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
+  const source1Q    = useQuery({ queryKey: ["stats/source1-stats", appliedWithMode], queryFn: () => getSource1Stats(appliedWithMode) });
+  const hududQ      = useQuery({ queryKey: ["stats/hudud-stats", appliedWithMode], queryFn: () => getHududStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const dailyQ = useQuery({
     queryKey: ["stats/lead-daily", appliedWithMode],
@@ -822,10 +831,10 @@ export default function LidlarPage() {
                   />
                 </div>
 
-                {/* Kurslar / Manba 1 / Filial / Sabab — the Bitrix enum fields
-                    the team filters reports by. Options come from lead_uf_enums,
-                    so new values appear without a code change. */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                {/* Kurslar / Manba 1 / Filial / Sabab / Hudud — the Bitrix enum
+                    fields the team filters reports by. Options come from
+                    lead_uf_enums, so new values appear without a code change. */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                   <MultiSelect
                     label="Kurslar" icon={<Filter size={12} />}
                     options={(filterOpts?.courses ?? []).map(o => ({ value: o.id, label: o.name }))}
@@ -852,6 +861,13 @@ export default function LidlarPage() {
                     options={(filterOpts?.reasons ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.reasons ?? []}
                     onChange={(v) => setApplied(p => ({ ...p, reasons: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Hudud" icon={<Filter size={12} />}
+                    options={(filterOpts?.hududs ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.hududs ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, hududs: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
                 </div>
@@ -1835,6 +1851,98 @@ export default function LidlarPage() {
             </div>
           );
         })()}
+
+        {/* ══════════════════════════════════════════════════════════
+            Manba 1 / Hudud bo'yicha — same funnel columns as Manba
+            bo'yicha, grouped by a UF enum field instead of source_id.
+        ══════════════════════════════════════════════════════════ */}
+        {[
+          { title: "Manba 1 bo'yicha", unit: "manba", q: source1Q },
+          { title: "Hudud bo'yicha",   unit: "hudud", q: hududQ },
+        ].map(({ title, unit, q }) => {
+          const rows: UfBreakdownRow[] = q.data ?? [];
+          const maxes = {
+            umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
+            sifatli:  Math.max(1, ...rows.map(r => r.sifatli_lid)),
+            konsB:    Math.max(1, ...rows.map(r => r.konsultatsiya_belgilandi)),
+            konsO:    Math.max(1, ...rows.map(r => r.konsultatsiya_otkazildi)),
+            sifatsiz: Math.max(1, ...rows.map(r => r.sifatsiz)),
+            bekor:    Math.max(1, ...rows.map(r => r.bekor_boldi)),
+          };
+          return (
+            <div key={title} style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>{rows.length} ta {unit}</span>
+              </div>
+              {q.isLoading ? (
+                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+              ) : rows.length === 0 ? (
+                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                    <thead>
+                      <tr>
+                        <th style={TH("#9E9E9E", 180)}>{title.split(" bo'yicha")[0].toUpperCase()}</th>
+                        <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
+                        <th style={TH("#00BCD4")}>SIFATLI LID</th>
+                        <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
+                        <th style={TH("#4CAF50")}>USPESHNIY LID</th>
+                        <th style={TH("#F44336")}>SIFATSIZ</th>
+                        <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
+                        <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                        <th style={{ ...TH("#00BCD4", 80), textAlign: "center" }}>SIFATLI KON.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, i) => {
+                        const konv        = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+                        const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
+                        return (
+                          <tr key={r.name} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
+                            <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>{r.name}</td>
+                            <td style={TD}>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
+                              <MiniBar value={r.umumiy_lidlar} max={maxes.umumiy} color="#2196F3" />
+                            </td>
+                            <td style={TD}>
+                              {r.sifatli_lid > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={maxes.sifatli} color="#00BCD4" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.konsultatsiya_belgilandi > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={maxes.konsB} color="#9C27B0" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.konsultatsiya_otkazildi > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={maxes.konsO} color="#4CAF50" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.sifatsiz > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={maxes.sifatsiz} color="#F44336" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                            </td>
+                            <td style={TD}>
+                              {r.bekor_boldi > 0 ? (
+                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={maxes.bekor} color="#FFC107" /></>
+                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                            </td>
+                            <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
+                            <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={sifatliKonv} size={38} /></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {statsQ.error && (
           <div className="p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
