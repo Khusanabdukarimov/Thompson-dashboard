@@ -16,6 +16,14 @@ import {
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { getConfig } from "@/lib/api/config";
+
+// The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or
+// links point at whichever portal the code was copied from.
+function useBitrixPortal(): string {
+  const q = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: Infinity });
+  return (q.data?.bitrix_portal ?? "").replace(/\/+$/, "");
+}
 
 // ── Date helpers ──────────────────────────────────────────────────
 const localISO = (d: Date) =>
@@ -338,6 +346,7 @@ export default function LidlarPage() {
   const filterRef = useRef<HTMLDivElement>(null);
   const [search] = useState("");
   const [mode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
+  const bitrixPortal = useBitrixPortal();
 
   const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
 
@@ -1002,7 +1011,7 @@ export default function LidlarPage() {
                                             {String(li + 1).padStart(2, "0")}
                                           </td>
                                           <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                            <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
+                                            <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`}
                                                target="_blank" rel="noopener noreferrer"
                                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
                                               {lead.title || `Lid #${lead.id}`}
@@ -1194,7 +1203,7 @@ export default function LidlarPage() {
                                             {String(li + 1).padStart(2, "0")}
                                           </td>
                                           <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                            <a href={`https://mountain.bitrix24.kz/crm/lead/details/${lead.id}/`}
+                                            <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`}
                                                target="_blank" rel="noopener noreferrer"
                                                style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
                                               {lead.title || `Lid #${lead.id}`}
@@ -1458,7 +1467,7 @@ export default function LidlarPage() {
                 <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
-                  <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
+                  <a href={`${bitrixPortal}/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
                      target="_blank" rel="noopener noreferrer"
                      style={{ fontSize: 11, color: "#2196F3", background: "rgba(33,150,243,0.1)", border: "1px solid rgba(33,150,243,0.3)", borderRadius: 6, padding: "3px 8px", textDecoration: "none", whiteSpace: "nowrap" }}>
                     Bitrix24 ↗
@@ -1481,7 +1490,7 @@ export default function LidlarPage() {
                           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
                             {fmtNum(r.total)}
                           </span>
-                          <a href={`https://mountain.bitrix24.kz/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
+                          <a href={`${bitrixPortal}/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
                              target="_blank" rel="noopener noreferrer"
                              style={{ fontSize: 10, color: "#2196F3", background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.25)", borderRadius: 4, padding: "2px 6px", textDecoration: "none" }}>
                             ↗
