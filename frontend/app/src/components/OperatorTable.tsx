@@ -48,6 +48,28 @@ function Avatar({ name, color }: { name: string; color: string }) {
     </div>
   );
 }
+const SUB_TH: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "8px 12px" };
+const SUB_TD: React.CSSProperties = { padding: "7px 12px", verticalAlign: "middle" };
+
+// Stage badge for the expanded lead list, keyed by Bitrix STATUS_ID.
+const STAGE_BADGE: Record<string, { label: string; color: string }> = {
+  NEW: { label: "Zvonki", color: "#9E9E9E" },
+  UC_IX1SKS: { label: "Yangi lid", color: "#03A9F4" },
+  UC_O7Y5NT: { label: "Propushenniy", color: "#78909C" },
+  "7": { label: "DPU 1", color: "#FF5722" },
+  UC_S5YC0D: { label: "DPU 2", color: "#FF7043" },
+  UC_X316SW: { label: "DPU 3", color: "#FF8A65" },
+  UC_63QL7L: { label: "Qayta aloqa", color: "#26C6DA" },
+  "1": { label: "O'ylab ko'radi", color: "#607D8B" },
+  UC_N0PI5R: { label: "Tashrif belgilandi", color: "#FF9800" },
+  UC_SWPARQ: { label: "Kelmadi", color: "#FF00FF" },
+  CONVERTED: { label: "Muvaffaqiyatli", color: "#4CAF50" },
+  JUNK: { label: "Sifatsiz (NO)", color: "#42A5F5" },
+  UC_GSPVUS: { label: "Arxiv 30+", color: "#8D6E63" },
+  UC_L8G2B9: { label: "Bekor bo'ldi", color: "#616161" },
+  UC_W02434: { label: "Student/Shikoyat/HR", color: "#FFC107" },
+};
+
 const AVATAR_COLORS = ["#7C4DFF", "#2196F3", "#00BCD4", "#4CAF50", "#FF9800", "#E91E63", "#9C27B0", "#607D8B"];
 const avatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
 
@@ -166,6 +188,8 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
                     style={{
                       cursor: "pointer",
                       background: isOpen ? "rgba(33,150,243,0.08)" : isHot ? "var(--bg3)" : "transparent",
+                      borderLeft: isOpen ? "1px solid #2196F3" : "1px solid transparent",
+                      borderRight: isOpen ? "1px solid #2196F3" : "1px solid transparent",
                       boxShadow: isHot ? "0 4px 18px rgba(0,0,0,0.28)" : "none",
                       transition: "background .18s ease, box-shadow .18s ease",
                     }}>
@@ -209,34 +233,63 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
                 </tr>,
                 isOpen ? (
                   <tr key={`${r.responsible_id}-leads`}>
-                    <td colSpan={10} style={{ padding: 0, background: "var(--bg)" }}>
-                      <div style={{ padding: "10px 20px 14px", borderBottom: "1px solid var(--border)" }}>
+                    <td colSpan={10} style={{ padding: "0 12px 12px", background: "transparent" }}>
+                      {/* Framed and tinted so it reads as belonging to the row
+                          above rather than as a loose list spanning the page. */}
+                      <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                         {leadsLoading ? (
-                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 0" }}>Yuklanmoqda…</div>
+                          <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
                         ) : !leads?.length ? (
-                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 0" }}>Lid topilmadi</div>
+                          <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                         ) : (
                           <>
-                            <div style={{ maxHeight: 280, overflowY: "auto" }}>
-                              {leads.slice(0, shownLeads).map(l => (
-                                <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "5px 0" }}>
-                                  <a href={`${portal}/crm/lead/details/${l.id}/`} target="_blank" rel="noreferrer"
-                                     onClick={e => e.stopPropagation()}
-                                     style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                                    {l.title || `Lid #${l.id}`}
-                                  </a>
-                                  <span style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>
-                                    {l.date_create ? String(l.date_create).slice(0, 10) : ""}
-                                  </span>
-                                </div>
-                              ))}
+                            <div style={{ maxHeight: 340, overflowY: "auto" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                  <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                    <th style={{ ...SUB_TH, width: 44, paddingLeft: 20 }}>#</th>
+                                    <th style={SUB_TH}>LID</th>
+                                    <th style={{ ...SUB_TH, width: 110 }}>SANA</th>
+                                    <th style={{ ...SUB_TH, width: 190 }}>BOSQICH</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {leads.slice(0, shownLeads).map((l, li) => {
+                                    const st = STAGE_BADGE[l.stage_bid] ?? { label: l.stage_bid, color: "#9E9E9E" };
+                                    return (
+                                      <tr key={l.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
+                                        <td style={{ ...SUB_TD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
+                                        <td style={{ ...SUB_TD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                          <a href={`${portal}/crm/lead/details/${l.id}/`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                                             style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
+                                            {l.title || `Lid #${l.id}`}
+                                          </a>
+                                        </td>
+                                        <td style={{ ...SUB_TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
+                                          {l.date_create ? String(l.date_create).slice(0, 10) : "—"}
+                                        </td>
+                                        <td style={SUB_TD}>
+                                          <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: `${st.color}22`, border: `1px solid ${st.color}55`, color: st.color, whiteSpace: "nowrap" }}>
+                                            {st.label}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
-                            {shownLeads < leads.length && (
-                              <button onClick={e => { e.stopPropagation(); setShownLeads(n => n + 10); }}
-                                style={{ marginTop: 8, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                Yana 10 ta ({leads.length - shownLeads} qoldi)
-                              </button>
-                            )}
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
+                              {shownLeads < leads.length && (
+                                <button onClick={e => { e.stopPropagation(); setShownLeads(n => n + 10); }}
+                                  style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                  Yana 10 ta
+                                </button>
+                              )}
+                              <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                                {Math.min(shownLeads, leads.length)} / {leads.length} ta lid
+                              </span>
+                            </div>
                           </>
                         )}
                       </div>
