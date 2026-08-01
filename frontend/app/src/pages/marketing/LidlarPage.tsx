@@ -6,6 +6,7 @@ import {
   Percent, ArrowLeftRight, Target, XCircle, ChevronDown, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
@@ -188,6 +189,7 @@ const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   CONVERTED_CONSULT: { label: "Tashrif buyurdi",     color: "#4CAF50" },
 };
 type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
+
 
 // ── Shared mini-components ────────────────────────────────────────
 const AVATAR_COLORS = [
@@ -611,7 +613,7 @@ export default function LidlarPage() {
       <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px]" style={{ background: "var(--bg)" }}>
 
         {/* ── Filter panel ── */}
-        <div ref={filterRef} style={{ position: "sticky", top: 0, zIndex: 10, marginBottom: 20 }}>
+        <div ref={filterRef} style={{ position: "relative", width: "100%", marginBottom: 20 }}>
           {/* Trigger button */}
           <button
             onClick={() => setFilterOpen((o) => !o)}
@@ -627,7 +629,7 @@ export default function LidlarPage() {
             <Search size={16} style={{ color: "var(--text3)", flexShrink: 0 }} />
             <span style={{ color: "var(--text3)", flex: 1 }}>
               {applied.start_date || applied.end_date
-                ? `Filtr: ${applied.start_date ?? '…'} → ${applied.end_date ?? '…'}`
+                ? `Yaratilgan sana: ${applied.start_date ?? '…'} → ${applied.end_date ?? '…'}`
                 : 'Qidirish va filtrlash…'}
             </span>
             {mode === 'amocrm' && (
@@ -654,86 +656,66 @@ export default function LidlarPage() {
           {/* Dropdown */}
           {filterOpen && (
             <div style={{
-              position: "absolute", left: 0, right: 0, zIndex: 100,
               background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none",
-              borderRadius: "0 0 12px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-              overflow: "visible",
+              borderRadius: "0 0 10px 10px",
             }}>
               <div style={{ padding: "16px 20px" }}>
-                {/* Quick date presets */}
-                {(() => {
-                  const presets = [
-                    { label: "Bugun",    start: todayISO(),    end: todayISO() },
-                    { label: "7 kun",    start: daysAgoISO(7), end: todayISO() },
-                    { label: "30 kun",   start: daysAgoISO(30),end: todayISO() },
-                    { label: "90 kun",   start: daysAgoISO(90),end: todayISO() },
-                    { label: "Barchasi", start: "",             end: "" },
-                  ];
-                  return (
-                    <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-                      {presets.map((p) => {
-                        const active = applied.start_date === (p.start || undefined) && applied.end_date === (p.end || undefined);
+                {/* Yaratilgan sana — range picker and the quick presets share one row,
+                    so the applied range is always visible next to the shortcut that set it. */}
+                <div style={{ marginBottom: 14 }}>
+                  <label title="Дата создания" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    <Calendar size={12} />{mode === 'amocrm' ? "Yaratilgan sana (amoCRM)" : "Yaratilgan sana"}
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <DateRangePicker start={applied.start_date} end={applied.end_date}
+                      onChange={(s, e) => setApplied((p) => ({ ...p, start_date: s || undefined, end_date: e || undefined }))}
+                      onClear={() => setApplied((p) => ({ ...p, start_date: undefined, end_date: undefined }))} />
+                    {[
+                      { label: "Bugun",      start: todayISO(),     end: todayISO() },
+                      { label: "7 kun",      start: daysAgoISO(7),  end: todayISO() },
+                      { label: "30 kun",     start: daysAgoISO(30), end: todayISO() },
+                      { label: "90 kun",     start: daysAgoISO(90), end: todayISO() },
+                      { label: "Butun davr", start: "",             end: "" },
+                    ].map((p) => {
+                      const active = applied.start_date === (p.start || undefined) && applied.end_date === (p.end || undefined);
+                      return (
+                        <button key={p.label}
+                          onClick={() => setApplied((prev) => ({ ...prev, start_date: p.start || undefined, end_date: p.end || undefined }))}
+                          style={{
+                            background: active ? "#2196F3" : "var(--bg3)",
+                            border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
+                            color: active ? "#fff" : "#9E9E9E",
+                            borderRadius: 20, padding: "5px 14px",
+                            fontSize: 12, fontWeight: active ? 600 : 400,
+                            cursor: "pointer", transition: "all 0.15s",
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                    {/* Proekt segmented buttons — single-select; click again to clear */}
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {proektGroups.map((pr) => {
+                        const sel = applied.proekts ?? [];
+                        const active = pr.ids.length > 0 && pr.ids.every((id) => sel.includes(id));
                         return (
-                          <button key={p.label}
-                            onClick={() => setApplied((prev) => ({ ...prev, start_date: p.start || undefined, end_date: p.end || undefined }))}
+                          <button key={pr.name}
+                            onClick={() => setApplied((prev) => ({ ...prev, proekts: active ? undefined : pr.ids }))}
                             style={{
-                              background: active ? "#2196F3" : "var(--bg3)",
-                              border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
+                              background: active ? "#7C4DFF" : "var(--bg3)",
+                              border: `1px solid ${active ? "#7C4DFF" : "var(--border)"}`,
                               color: active ? "#fff" : "#9E9E9E",
                               borderRadius: 20, padding: "5px 14px",
                               fontSize: 12, fontWeight: active ? 600 : 400,
                               cursor: "pointer", transition: "all 0.15s",
                             }}
                           >
-                            {p.label}
+                            {pr.name}
                           </button>
                         );
                       })}
-                      {/* Proekt segmented buttons — single-select; click again to clear */}
-                      <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {proektGroups.map((pr) => {
-                          const sel = applied.proekts ?? [];
-                          const active = pr.ids.length > 0 && pr.ids.every((id) => sel.includes(id));
-                          return (
-                            <button key={pr.name}
-                              onClick={() => setApplied((prev) => ({ ...prev, proekts: active ? undefined : pr.ids }))}
-                              style={{
-                                background: active ? "#7C4DFF" : "var(--bg3)",
-                                border: `1px solid ${active ? "#7C4DFF" : "var(--border)"}`,
-                                color: active ? "#fff" : "#9E9E9E",
-                                borderRadius: 20, padding: "5px 14px",
-                                fontSize: 12, fontWeight: active ? 600 : 400,
-                                cursor: "pointer", transition: "all 0.15s",
-                              }}
-                            >
-                              {pr.name}
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
-                  );
-                })()}
-
-                {/* Date row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                  <div>
-                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                      <Calendar size={12} />{mode === 'amocrm' ? "Dan (amoCRM)" : "Dan (boshlanish)"}
-                    </label>
-                    <input type="date" value={applied.start_date ?? ""}
-                      onChange={(e) => setApplied((p) => ({ ...p, start_date: e.target.value || undefined }))}
-                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
-                      <Calendar size={12} />{mode === 'amocrm' ? "Gacha (amoCRM)" : "Gacha (tugash)"}
-                    </label>
-                    <input type="date" value={applied.end_date ?? ""}
-                      onChange={(e) => setApplied((p) => ({ ...p, end_date: e.target.value || undefined }))}
-                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
-                    />
                   </div>
                 </div>
 
@@ -827,9 +809,9 @@ export default function LidlarPage() {
                 <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1px 1fr 1px 1fr 1px 1fr", gap:0, alignItems:"center" }}>
                   {[
                     { icon:<Percent size={22} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
-                    { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Tashrif", sub:"Umumiy → T.Belgilandi" },
-                    { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"T.O'tkazildi / Belgilandi", sub:"Belgilandi → O'tkazildi" },
-                    { icon:<Target size={22} style={{ color:"#3F51B5" }} />, bg:"rgba(63,81,181,0.15)", val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0, color:"#3F51B5", title:"Sifatli → Uchrashuv", sub:"Sifatli / O'tkazildi" },
+                    { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Tashrif", sub:"T.Belgilandi / Umumiy" },
+                    { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"T.O'tkazildi / Belgilandi", sub:"O'tkazildi / Belgilandi" },
+                    { icon:<Target size={22} style={{ color:"#3F51B5" }} />, bg:"rgba(63,81,181,0.15)", val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0, color:"#3F51B5", title:"Sifatli → Uchrashuv", sub:"O'tkazildi / Sifatli" },
                   ].map((m, i) => (
                     <>
                       <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"8px 24px", gap:12 }}>
@@ -960,7 +942,6 @@ export default function LidlarPage() {
                     const konv = (r.sifatli_lid ?? 0) > 0 ? (r.tashrif_buyurdi / (r.sifatli_lid ?? 0)) * 100 : 0;
                     const isSelected = selectedRespConv?.id === r.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSelected ? (respLeadsConvQ.data ?? []) : [];
-                    const STAGE_MAP_INLINE = STAGE_BADGE_MAP;
                     return (
                       <>
                         <tr key={r.responsible_id}
@@ -1027,7 +1008,7 @@ export default function LidlarPage() {
                                   </thead>
                                   <tbody>
                                     {subLeads.map((lead, li) => {
-                                      const stage = STAGE_MAP_INLINE[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                      const stage = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
                                       return (
                                         <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
                                           <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>
@@ -1141,7 +1122,6 @@ export default function LidlarPage() {
                   {byUserFiltered.map((u, i) => {
                     const isSel = selectedRespMasul?.id === u.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
-                    const STAGE_MAP_M = STAGE_BADGE_MAP;
                     const colCount = 2 + RESPONSIBLE_COLS.length;
                     return (
                       <>
@@ -1198,7 +1178,7 @@ export default function LidlarPage() {
                                   </thead>
                                   <tbody>
                                     {subLeads.map((lead, li) => {
-                                      const stage = STAGE_MAP_M[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                      const stage = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
                                       return (
                                         <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
                                           <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>

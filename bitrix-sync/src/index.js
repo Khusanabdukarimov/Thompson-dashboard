@@ -98,6 +98,14 @@ Promise.all([
   pool.query(`
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_amo_date TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
+    -- 'Tashrif buyurdiga tushgan sana' (UF_CRM_1770695429433) — stamped when a
+    -- lead reaches the won stage. Distinct from uf_tashrif_sanasi, which holds
+    -- 'Tashrif belgilandiga tushgan sana' (UF_CRM_1770693781846). The two names
+    -- look alike but mean different things: scheduled vs actually attended.
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS uf_tashrif_buyurdi TEXT;
+    CREATE INDEX IF NOT EXISTS leads_uf_tashrif_buyurdi_idx ON leads(uf_tashrif_buyurdi);
+    -- Bitrix SEMANTICS for a lead status: 'P' in progress / 'S' won / 'F' failed.
+    ALTER TABLE stages ADD COLUMN IF NOT EXISTS semantics TEXT;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS date_modify      TIMESTAMPTZ;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_sale_date     TIMESTAMPTZ;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_bp_sale_date  TIMESTAMPTZ;
@@ -135,6 +143,12 @@ Promise.all([
     const { syncLeadUfMeta } = require('./services/ufSync');
     syncLeadUfMeta().catch(e => console.warn('[ufSync] meta sync failed:', e.message));
     setInterval(() => syncLeadUfMeta().catch(e => console.warn('[ufSync] meta sync failed:', e.message)), 6 * 3600 * 1000);
+
+    // Lead status dictionary (names + SEMANTICS). Dashboard metrics read
+    // stages.semantics, so a stale dictionary mis-counts "Jarayonda".
+    const { syncLeadStatuses } = require('./services/leadStatusSync');
+    syncLeadStatuses().catch(e => console.warn('[leadStatusSync] failed:', e.message));
+    setInterval(() => syncLeadStatuses().catch(e => console.warn('[leadStatusSync] failed:', e.message)), 6 * 3600 * 1000);
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
 
     // Check Meta access token expiry on startup

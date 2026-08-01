@@ -46,18 +46,23 @@ export type ResponsiblesStatsResponse = {
     full_name: string;
     work_position?: string | null;
     total: number;
-    qongiroqlar: number;
-    yangi_lid: number;
-    propushenniy: number;
-    javob_bermadi: number;
-    qayta_aloqa: number;
-    oylab_koradi: number;
-    konsultatsiya: number;
-    otkazilmadi: number;
-    konsultatsiya_otkazildi: number;
-    sandiq: number;
-    sifatsiz: number;
-    bekor_boldi: number;
+    // One field per live Bitrix lead status. Key names are historical; the
+    // stage each one counts is documented on RESPONSIBLE_COLS in LidlarPage.
+    qongiroqlar: number;      // NEW
+    jarayonda: number;        // UC_N0PI5R — Визит назначен
+    keyin_qong: number;       // '1' — Думает (1-30)
+    yangi_lid: number;        // UC_IX1SKS
+    propushenniy: number;     // UC_O7Y5NT
+    dpu1: number;             // '7'
+    dpu2: number;             // UC_S5YC0D
+    dpu3: number;             // UC_X316SW
+    qayta_aloqa: number;      // UC_63QL7L
+    kelmadi: number;          // UC_SWPARQ
+    muvaffaqiyatli: number;   // CONVERTED
+    sandiq: number;           // JUNK
+    arxiv: number;            // UC_GSPVUS
+    yopildi: number;          // UC_L8G2B9
+    student_hr: number;       // UC_W02434
     total_opportunity: number;
   }[];
 };
@@ -114,6 +119,9 @@ export type ConversionStatsResponse = {
     sifatli_lid: number;
     sifatsiz_lid: number;
     bekor_boldi: number;
+    /** "Tashrif belgilandiga tushgan sana" stamped (visit scheduled). */
+    tashrif_belgilandi: number;
+    /** "Tashrif buyurdiga tushgan sana" stamped (visit actually attended). */
     tashrif_buyurdi: number;
   }[];
 };

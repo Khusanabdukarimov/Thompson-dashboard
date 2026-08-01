@@ -23,6 +23,33 @@ function leadSrcCond(mode, pi) {
   return `($${pi}::text IS NULL OR ${col}::text = ANY(string_to_array($${pi}, ',')))`;
 }
 
+// ── Lead metric definitions ────────────────────────────────────────
+// Everything below keys off Bitrix STATUS_ID, never the display name: names are
+// edited in Bitrix from time to time, ids are not. Names are quoted only so a
+// reader can tell which status an id refers to. Source of truth is
+// crm.status.list (ENTITY_ID=STATUS), mirrored into `stages` by leadStatusSync.
+//
+//   1          Думает (1-30)        UC_N0PI5R  Визит назначен
+//   UC_SWPARQ  Не пришёл            UC_L8G2B9  Закрыт
+//   CONVERTED  Успешный лид         JUNK       Горячие звонки (NO)
+const STAGE_SIFATLI  = "'1','UC_N0PI5R','UC_SWPARQ','UC_L8G2B9','CONVERTED'";
+const STAGE_SIFATSIZ = "'JUNK'";      // Горячие звонки (NO) — stage only, never the "sifatsiz sababi" field
+const STAGE_BEKOR    = "'UC_L8G2B9'"; // Закрыт — stage only, never the "bekor sababi" field
+
+// "Jarayonda" = Bitrix status semantics 'P' (in progress), i.e. neither won nor
+// failed. Mirrors DataLens count_if(статус-тип id = "P").
+const IN_PROGRESS = `s.semantics = 'P'`;
+
+// Bitrix writes '' or the string 'false' for an unset field, so IS NOT NULL alone
+// is not enough to decide "this date was stamped".
+const ufSet = (col) => `(${col} IS NOT NULL AND ${col} <> '' AND ${col} <> 'false')`;
+
+// Tashrif belgilandi  → UF_CRM_1770693781846 "Tashrif belgilandiga tushgan sana"
+// Tashrif o'tkazildi  → UF_CRM_1770695429433 "Tashrif buyurdiga tushgan sana"
+// Similar names, different meanings: scheduled vs actually attended.
+const TASHRIF_BELGILANDI = ufSet('l.uf_tashrif_sanasi');
+const TASHRIF_OTKAZILDI  = ufSet('l.uf_tashrif_buyurdi');
+
 const PROEKT_FIELD = 'UF_CRM_1781879563298';
 // Hidden from the dashboard entirely: 3575 = Bog'cha, 3577 = IH
 const PROEKT_HIDDEN = "'3575','3577'";
@@ -139,6 +166,7 @@ router.get('/responsibles', async (req, res) => {
            AND ($3::int  IS NULL OR l.responsible_id = $3::int)
            AND ($4::text IS NULL OR s.bitrix_id = $4::text)
            AND ${leadSrcCond(mode, 5)}
+           AND ${proekt2ExcludeCond('l.id')}
            ${leadModeClause(mode)}
        )
        SELECT
@@ -198,6 +226,7 @@ router.get('/funnel', async (req, res) => {
          AND ${leadDateCond(mode, 1, 2)}
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
          AND ${leadSrcCond(mode, 4)}
+         AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
        WHERE s.entity = 'lead'
        GROUP BY s.id, s.name, s.bitrix_id, s.sort_order, s.is_final, s.is_won
@@ -826,22 +855,22 @@ router.get('/lead-stats', async (req, res) => {
       pool.query(
         `SELECT
            COUNT(*)::int                                                                       AS total_leads,
-           COUNT(*) FILTER (WHERE NOT s.is_final)::int                                        AS in_process,
-           COUNT(*) FILTER (WHERE s.is_final AND NOT s.is_won)::int                           AS failed,
-           COUNT(*) FILTER (WHERE s.is_final AND s.is_won)::int                               AS converted,
-           ROUND(COUNT(*) FILTER (WHERE s.is_final AND s.is_won)::numeric
+           COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int                                        AS in_process,
+           COUNT(*) FILTER (WHERE s.semantics = 'F')::int                                     AS failed,
+           COUNT(*) FILTER (WHERE ${TASHRIF_OTKAZILDI})::int                                  AS converted,
+           ROUND(COUNT(*) FILTER (WHERE ${TASHRIF_OTKAZILDI})::numeric
                  / NULLIF(COUNT(*), 0) * 100, 2)                                              AS conversion_pct,
            COALESCE(SUM(l.opportunity), 0)::numeric                                           AS total_opportunity,
            COALESCE(ROUND(AVG(l.opportunity), 0), 0)::numeric                                 AS avg_opportunity,
-           COUNT(*) FILTER (WHERE NOT s.is_final AND l.date_modify < NOW() - INTERVAL '7 days')::int AS frozen_leads,
+           COUNT(*) FILTER (WHERE ${IN_PROGRESS} AND l.date_modify < NOW() - INTERVAL '7 days')::int AS frozen_leads,
            ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - l.date_create)) / 86400.0)
-             FILTER (WHERE NOT s.is_final), 1)                                                AS avg_age_days,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id = 'JUNK')::int                               AS sifatsiz_bekor_count,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id = 'UC_L8G2B9')::int                         AS bekor_boldi_count,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('UC_63QL7L','1','UC_N0PI5R','UC_SWPARQ','UC_L8G2B9','CONVERTED'))::int AS sifatli_lid_count,
-           COUNT(l.id) FILTER (WHERE l.uf_tashrif_sanasi IS NOT NULL AND l.uf_tashrif_sanasi != '' AND l.uf_tashrif_sanasi != 'false')::int AS konsultatsiya_belgilandi_count,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id IN ('CONVERTED_CONSULT','CONVERTED'))::int  AS konsultatsiya_otkazildi_count,
-           COUNT(l.id) FILTER (WHERE s.bitrix_id = 'JUNK')::int                               AS muvaffaqiyatsiz_count
+             FILTER (WHERE ${IN_PROGRESS}), 1)                                                AS avg_age_days,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATSIZ}))::int                 AS sifatsiz_bekor_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN (${STAGE_BEKOR}))::int                    AS bekor_boldi_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int                  AS sifatli_lid_count,
+           COUNT(l.id) FILTER (WHERE ${TASHRIF_BELGILANDI})::int                              AS konsultatsiya_belgilandi_count,
+           COUNT(l.id) FILTER (WHERE ${TASHRIF_OTKAZILDI})::int                               AS konsultatsiya_otkazildi_count,
+           COUNT(l.id) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATSIZ}))::int                 AS muvaffaqiyatsiz_count
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
          WHERE ${statsWhere}`,
@@ -894,6 +923,9 @@ router.get('/lead-responsibles', async (req, res) => {
          r.id                                                                                  AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))                         AS full_name,
          COUNT(fl.id)::int                                                                     AS total,
+         -- One column per live Bitrix lead status. IN_PROCESS / UC_6INRIS /
+         -- UC_YGM8H2 / UC_TO2TYK were dropped: retired statuses absent from
+         -- crm.status.list, so they only ever rendered empty columns.
          COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'NEW')::int                                AS qongiroqlar,
          COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_N0PI5R')::int                          AS jarayonda,
          COUNT(fl.id) FILTER (WHERE fl.stage_bid = '1')::int                                  AS keyin_qong,
@@ -935,7 +967,9 @@ router.get('/lead-conversion', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `WITH fl AS (
-         SELECT l.id, l.responsible_id, s.bitrix_id AS stage_bid
+         SELECT l.id, l.responsible_id, s.bitrix_id AS stage_bid, s.semantics,
+                ${TASHRIF_BELGILANDI} AS t_belgilandi,
+                ${TASHRIF_OTKAZILDI}  AS t_otkazildi
          FROM leads l
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
@@ -949,14 +983,12 @@ router.get('/lead-conversion', async (req, res) => {
          r.id                                                                                  AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))                         AS full_name,
          COUNT(fl.id)::int                                                                     AS total,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (
-           'NEW','IN_PROCESS','PROCESSED',
-           'UC_1KPATX','UC_Q2U9EL','UC_KXC3ZW','UC_L28G68','UC_5G8244'
-         ))::int                                                                               AS jarayonda,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN ('UC_63QL7L','1','UC_N0PI5R','UC_SWPARQ','UC_L8G2B9','CONVERTED'))::int            AS sifatli_lid,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'JUNK')::int                               AS sifatsiz_lid,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_L8G2B9')::int                           AS bekor_boldi,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')::int                         AS tashrif_buyurdi
+         COUNT(fl.id) FILTER (WHERE fl.semantics = 'P')::int                                   AS jarayonda,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (${STAGE_SIFATLI}))::int                   AS sifatli_lid,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (${STAGE_SIFATSIZ}))::int                  AS sifatsiz_lid,
+         COUNT(fl.id) FILTER (WHERE fl.stage_bid IN (${STAGE_BEKOR}))::int                     AS bekor_boldi,
+         COUNT(fl.id) FILTER (WHERE fl.t_belgilandi)::int                                      AS tashrif_belgilandi,
+         COUNT(fl.id) FILTER (WHERE fl.t_otkazildi)::int                                       AS tashrif_buyurdi
        FROM responsibles r
        LEFT JOIN fl ON fl.responsible_id = r.id
        WHERE r.active = TRUE
