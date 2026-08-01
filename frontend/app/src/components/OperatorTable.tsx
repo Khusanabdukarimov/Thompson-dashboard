@@ -6,7 +6,7 @@
 // values; the only thing computed here is the comparison against the previous
 // period of equal length.
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ExternalLink, Phone, User } from "lucide-react";
+import { ExternalLink, Phone, User } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
 import type { ConversionStatsResponse } from "@/lib/api/leads";
@@ -37,23 +37,6 @@ function Bullet({ value, max, color }: { value: number; max: number; color: stri
   );
 }
 
-/** Period-over-period change. Renders nothing when there is no prior figure to
- *  compare with, rather than implying a 0% change we cannot support. */
-function Trend({ curr, prev, label }: { curr: number; prev?: number; label: string }) {
-  if (prev === undefined) return <span style={{ fontSize: 10.5, color: "var(--text3)" }}>—</span>;
-  const diff = prev === 0 ? (curr > 0 ? 100 : 0) : ((curr - prev) / prev) * 100;
-  const flat = Math.abs(diff) < 0.5;
-  const up = diff > 0;
-  const color = flat ? "var(--text3)" : up ? "#4CAF50" : "#F44336";
-  const Icon = flat ? ArrowRight : up ? ArrowUp : ArrowDown;
-  return (
-    <span title={`${label}: ${fmtNum(prev)} → ${fmtNum(curr)}`}
-      style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 700, color, animation: "fadeIn .3s ease" }}>
-      <Icon size={10} />{flat ? "0%" : `${up ? "+" : ""}${diff.toFixed(0)}%`}
-    </span>
-  );
-}
-
 const RANK_MEDAL = ["🥇", "🥈", "🥉"];
 
 function Avatar({ name, color }: { name: string; color: string }) {
@@ -67,20 +50,12 @@ function Avatar({ name, color }: { name: string; color: string }) {
 const AVATAR_COLORS = ["#7C4DFF", "#2196F3", "#00BCD4", "#4CAF50", "#FF9800", "#E91E63", "#9C27B0", "#607D8B"];
 const avatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
 
-export function OperatorTable({ rows, prevRows, loading }: {
+export function OperatorTable({ rows, loading }: {
   rows: Row[];
-  /** Same query over the previous period of equal length; drives the trends. */
-  prevRows?: Row[];
   loading: boolean;
 }) {
   const portal = useBitrixPortal();
   const [hovered, setHovered] = useState<number | null>(null);
-
-  const prev = useMemo(() => {
-    const m = new Map<number, Row>();
-    for (const r of prevRows ?? []) m.set(r.responsible_id, r);
-    return m;
-  }, [prevRows]);
 
   // Ranked by conversion — the metric the business actually optimises for.
   const ranked = useMemo(
@@ -114,11 +89,10 @@ export function OperatorTable({ rows, prevRows, loading }: {
   const TH: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 12px 10px", whiteSpace: "nowrap" };
   const TD: React.CSSProperties = { padding: "11px 12px", verticalAlign: "middle" };
 
-  const cell = (value: number, max: number, color: string, prevVal?: number, label?: string) => (
+  const cell = (value: number, max: number, color: string) => (
     <td style={TD}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{fmtNum(value)}</span>
-        {label && <Trend curr={value} prev={prevVal} label={label} />}
       </div>
       <Bullet value={value} max={max} color={color} />
     </td>
@@ -126,8 +100,6 @@ export function OperatorTable({ rows, prevRows, loading }: {
 
   return (
     <div>
-      <style>{`@keyframes fadeIn{from{opacity:0}to{opacity:1}}`}</style>
-
       {/* Podium — who leads, before any numbers are read */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${leaders.length}, 1fr)`, gap: 12, padding: "0 20px 16px" }}>
         {leaders.map(l => (
@@ -161,9 +133,7 @@ export function OperatorTable({ rows, prevRows, loading }: {
           </thead>
           <tbody>
             {ranked.map((r, i) => {
-              const p = prev.get(r.responsible_id);
               const conv = conversionOf(r);
-              const prevConv = p ? conversionOf(p) : undefined;
               const isHot = hovered === r.responsible_id;
               return (
                 <tr key={r.responsible_id}
@@ -196,18 +166,17 @@ export function OperatorTable({ rows, prevRows, loading }: {
                       </span>
                     </div>
                   </td>
-                  {cell(r.total, maxes.total, METRIC_COLORS.total, p?.total, "Umumiy lidlar")}
-                  {cell(r.sifatli_lid ?? 0, maxes.sifatli, METRIC_COLORS.sifatli, p?.sifatli_lid, "Sifatli lid")}
-                  {cell(r.jarayonda, maxes.jarayonda, METRIC_COLORS.jarayonda, p?.jarayonda, "Jarayonda")}
-                  {cell(r.sifatsiz_lid, maxes.sifatsiz, METRIC_COLORS.sifatsiz, p?.sifatsiz_lid, "Sifatsiz")}
-                  {cell(r.bekor_boldi ?? 0, maxes.bekor, METRIC_COLORS.bekor, p?.bekor_boldi, "Bekor bo'ldi")}
-                  {cell(r.tashrif_buyurdi, maxes.tashrif, METRIC_COLORS.tashrif, p?.tashrif_buyurdi, "Tashrif o'tkazildi")}
+                  {cell(r.total, maxes.total, METRIC_COLORS.total)}
+                  {cell(r.sifatli_lid ?? 0, maxes.sifatli, METRIC_COLORS.sifatli)}
+                  {cell(r.jarayonda, maxes.jarayonda, METRIC_COLORS.jarayonda)}
+                  {cell(r.sifatsiz_lid, maxes.sifatsiz, METRIC_COLORS.sifatsiz)}
+                  {cell(r.bekor_boldi ?? 0, maxes.bekor, METRIC_COLORS.bekor)}
+                  {cell(r.tashrif_buyurdi, maxes.tashrif, METRIC_COLORS.tashrif)}
                   <td style={{ ...TD, textAlign: "right" }}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", gap: 6 }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: METRIC_COLORS.konversiya, fontVariantNumeric: "tabular-nums" }}>
                         {conv.toFixed(1)}%
                       </span>
-                      <Trend curr={conv} prev={prevConv} label="Konversiya" />
                     </div>
                     <Bullet value={conv} max={Math.max(1, ...rows.map(conversionOf))} color={METRIC_COLORS.konversiya} />
                   </td>

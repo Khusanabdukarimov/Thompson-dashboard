@@ -438,24 +438,6 @@ export default function LidlarPage() {
 
   const statsQ      = useQuery({ queryKey: ["stats/dashboard",    appliedWithMode], queryFn: () => getDashboardStats(appliedWithMode) });
   const respQ       = useQuery({ queryKey: ["stats/responsibles", appliedWithMode], queryFn: () => getResponsiblesStats(appliedWithMode) });
-  // Trends compare the selected period with the one immediately before it, of
-  // equal length. Same endpoint, shifted dates — no derived or stored metric.
-  const prevRange = useMemo(() => {
-    const { start_date: a, end_date: b } = applied;
-    if (!a || !b) return null;
-    const s0 = new Date(a), e0 = new Date(b);
-    const days = Math.max(1, Math.round((e0.getTime() - s0.getTime()) / 86400000) + 1);
-    const pe = new Date(s0); pe.setDate(pe.getDate() - 1);
-    const ps = new Date(pe); ps.setDate(ps.getDate() - (days - 1));
-    return { start_date: localISO(ps), end_date: localISO(pe) };
-  }, [applied]);
-
-  const prevConvQ = useQuery({
-    queryKey: ["stats/conversion-prev", prevRange, appliedWithMode],
-    queryFn: () => getConversionStats({ ...appliedWithMode, ...prevRange! }),
-    enabled: prevRange !== null,
-    staleTime: 5 * 60_000,
-  });
 
   const conversionQ = useQuery({ queryKey: ["stats/conversion",   appliedWithMode], queryFn: () => getConversionStats(appliedWithMode) });
   const tasksQ      = useQuery({ queryKey: ["stats/tasks",        appliedWithMode], queryFn: () => getTasksSummary(appliedWithMode) });
@@ -959,7 +941,6 @@ export default function LidlarPage() {
           <div style={{ paddingTop:16 }}>
             <OperatorTable
               rows={convRows}
-              prevRows={prevConvQ.data?.conversion}
               loading={conversionQ.isLoading}
             />
           </div>
