@@ -85,7 +85,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
   const portal = useBitrixPortal();
   const [hovered, setHovered] = useState<number | null>(null);
   const [shownLeads, setShownLeads] = useState(10);
-  const [openPodium, setOpenPodium] = useState<string | null>(null);
+  const [openPodium, setOpenPodium] = useState<Set<string>>(new Set());
   const leadScrollRef = useRef<HTMLDivElement>(null);
 
   // Ranked by conversion — the metric the business actually optimises for.
@@ -150,12 +150,16 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
           click away instead of a scan down the table. */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${leaders.length}, 1fr)`, gap: 12, padding: "0 20px 16px", alignItems: "start" }}>
         {leaders.map(l => {
-          const open = openPodium === l.key;
+          const open = openPodium.has(l.key);
           const top5 = [...rows].sort((a, b) => l.pick(b) - l.pick(a)).slice(0, 5);
           const top = Math.max(1, ...top5.map(l.pick));
           return (
             <div key={l.key}
-              onClick={() => setOpenPodium(open ? null : l.key)}
+              onClick={() => setOpenPodium(prev => {
+                const next = new Set(prev);
+                if (next.has(l.key)) next.delete(l.key); else next.add(l.key);
+                return next;
+              })}
               style={{
                 background: "var(--bg3)", border: `1px solid ${open ? l.color : "var(--border)"}`,
                 borderRadius: 12, cursor: "pointer", overflow: "hidden",
