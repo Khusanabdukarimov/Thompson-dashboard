@@ -144,3 +144,20 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
 }
+
+/* Scrollbars follow the theme. The browser default is a light grey slab that
+   sits badly on the dark surfaces and does not flip with the light/dark toggle. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg4) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--bg4);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--text3); background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }

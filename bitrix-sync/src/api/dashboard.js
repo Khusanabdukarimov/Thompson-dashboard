@@ -630,7 +630,7 @@ router.get('/deal-filter-options', async (req, res) => {
     } else {
       sources = srcRes.rows.map(r => ({
         id: r.source_id,
-        name: SOURCE_NAMES[r.source_id] || r.source_id,
+        name: r.source_name || SOURCE_NAMES[r.source_id] || r.source_id,
       }));
     }
 
@@ -1122,9 +1122,10 @@ router.get('/lead-filter-options', async (req, res) => {
          ORDER BY sort_order`
       ),
       pool.query(
-        `SELECT DISTINCT source_id FROM leads
-         WHERE source_id IS NOT NULL AND source_id != '' ${srcExclude}
-         ORDER BY source_id LIMIT 60`
+        `SELECT DISTINCT l.source_id, ls.name
+         FROM leads l LEFT JOIN lead_sources ls ON ls.source_id = l.source_id
+         WHERE l.source_id IS NOT NULL AND l.source_id != '' ${srcExclude}
+         ORDER BY l.source_id LIMIT 60`
       ),
       pool.query(
         `SELECT form_id AS id, form_name AS name, lead_count
@@ -1152,7 +1153,7 @@ router.get('/lead-filter-options', async (req, res) => {
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
-      sources: srcRes.rows.map(r => ({ id: r.source_id, name: SOURCE_NAMES[r.source_id] || r.source_id })),
+      sources: srcRes.rows.map(r => ({ id: r.source_id, name: r.name || SOURCE_NAMES[r.source_id] || r.source_id })),
       forms: formRes.rows.map(r => ({ id: r.id, name: r.name, count: r.lead_count })),
       proekts: proektRes.rows,
       courses:  byField('UF_CRM_1618299519454'),
@@ -1533,7 +1534,7 @@ router.get('/source-stats', async (req, res) => {
     );
     res.json(rows.map(r => ({
       ...r,
-      source_name: SOURCE_NAMES[r.source_id] || r.source_id,
+      source_name: r.source_name || SOURCE_NAMES[r.source_id] || r.source_id,
     })));
   } catch (err) {
     console.error('[dashboard/source-stats]', err.message);
@@ -1717,7 +1718,7 @@ router.get('/deals-source-stats', async (req, res) => {
     );
     const result = rows.map(r => ({
       ...r,
-      source_name: SOURCE_NAMES[r.source_id] || r.source_id || 'Manbasiz',
+      source_name: r.source_name || SOURCE_NAMES[r.source_id] || r.source_id || 'Manbasiz',
     }));
     res.json(result);
   } catch (err) {

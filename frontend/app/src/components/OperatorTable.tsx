@@ -85,6 +85,19 @@ export function OperatorTable({ rows, loading }: {
     ].filter(l => l.row);
   }, [rows]);
 
+
+  // Column totals. The old table carried a JAMI row and the rebuild lost it;
+  // without it there is nothing to check the KPI cards above against.
+  const totals = useMemo(() => rows.reduce((a, r) => ({
+    total:      a.total      + r.total,
+    sifatli:    a.sifatli    + (r.sifatli_lid ?? 0),
+    jarayonda:  a.jarayonda  + r.jarayonda,
+    sifatsiz:   a.sifatsiz   + r.sifatsiz_lid,
+    bekor:      a.bekor      + (r.bekor_boldi ?? 0),
+    belgilandi: a.belgilandi + (r.tashrif_belgilandi ?? 0),
+    tashrif:    a.tashrif    + r.tashrif_buyurdi,
+  }), { total: 0, sifatli: 0, jarayonda: 0, sifatsiz: 0, bekor: 0, belgilandi: 0, tashrif: 0 }), [rows]);
+
   if (loading) return <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>;
   if (!rows.length) return <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>;
 
@@ -188,6 +201,31 @@ export function OperatorTable({ rows, loading }: {
               );
             })}
           </tbody>
+          <tfoot>
+            <tr style={{ background: "var(--bg3)", borderTop: "2px solid var(--border)" }}>
+              <td style={{ ...TD, textAlign: "center", fontSize: 11, fontWeight: 800, color: "var(--text3)" }}>—</td>
+              <td style={{ ...TD, fontSize: 12, fontWeight: 800, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+                JAMI · {rows.length} operator
+              </td>
+              {([
+                [totals.total, METRIC_COLORS.total], [totals.sifatli, METRIC_COLORS.sifatli],
+                [totals.jarayonda, METRIC_COLORS.jarayonda], [totals.sifatsiz, METRIC_COLORS.sifatsiz],
+                [totals.bekor, METRIC_COLORS.bekor], [totals.belgilandi, METRIC_COLORS.belgilandi],
+                [totals.tashrif, METRIC_COLORS.tashrif],
+              ] as [number, string][]).map(([v, c], i) => (
+                <td key={i} style={TD}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{fmtNum(v)}</span>
+                  <div style={{ height: 3, borderRadius: 2, background: c, marginTop: 4 }} />
+                </td>
+              ))}
+              <td style={{ ...TD, textAlign: "right" }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: METRIC_COLORS.konversiya, fontVariantNumeric: "tabular-nums" }}>
+                  {(totals.total > 0 ? (totals.tashrif / totals.total) * 100 : 0).toFixed(1)}%
+                </span>
+                <div style={{ height: 3, borderRadius: 2, background: METRIC_COLORS.konversiya, marginTop: 4 }} />
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
