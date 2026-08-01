@@ -149,14 +149,14 @@ export function OperatorTable({ rows, prevRows, loading }: {
           <thead>
             <tr>
               <th style={{ ...TH, width: 52, textAlign: "center" }}>#</th>
-              <th style={{ ...TH, minWidth: 170 }}>Operator</th>
-              <th style={TH}>Umumiy lidlar</th>
-              <th style={TH}>Sifatli lid</th>
-              <th style={TH}>Jarayonda</th>
-              <th style={TH}>Sifatsiz</th>
-              <th style={TH}>Bekor bo'ldi</th>
-              <th style={TH}>Tashrif o'tkazildi</th>
-              <th style={{ ...TH, textAlign: "right" }}>Konversiya</th>
+              <th style={{ ...TH, width: 230 }}>Operator</th>
+              <th style={{ ...TH, width: "12%" }}>Umumiy lidlar</th>
+              <th style={{ ...TH, width: "12%" }}>Sifatli lid</th>
+              <th style={{ ...TH, width: "12%" }}>Jarayonda</th>
+              <th style={{ ...TH, width: "12%" }}>Sifatsiz</th>
+              <th style={{ ...TH, width: "12%" }}>Bekor bo'ldi</th>
+              <th style={{ ...TH, width: "13%" }}>Tashrif o'tkazildi</th>
+              <th style={{ ...TH, width: "12%", textAlign: "right" }}>Konversiya</th>
             </tr>
           </thead>
           <tbody>
@@ -180,13 +180,13 @@ export function OperatorTable({ rows, prevRows, loading }: {
                     </span>
                   </td>
                   <td style={TD}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                       <Avatar name={r.full_name || `U${r.responsible_id}`} color={avatarColor(r.responsible_id)} />
                       <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {r.full_name || `User ${r.responsible_id}`}
                       </span>
                       {/* Quick actions appear on hover so the row stays calm at rest */}
-                      <span style={{ display: "flex", gap: 4, marginLeft: "auto", opacity: isHot ? 1 : 0, transition: "opacity .18s ease" }}>
+                      <span style={{ display: "flex", gap: 4, flexShrink: 0, opacity: isHot ? 1 : 0, transition: "opacity .18s ease" }}>
                         <a href={`${portal}/company/personal/user/${r.responsible_id}/`} target="_blank" rel="noreferrer"
                            title="Profil" onClick={e => e.stopPropagation()} style={iconBtn}><User size={12} /></a>
                         <a href={`${portal}/crm/lead/list/?apply_filter=Y&ASSIGNED_BY_ID=${r.responsible_id}`} target="_blank" rel="noreferrer"
