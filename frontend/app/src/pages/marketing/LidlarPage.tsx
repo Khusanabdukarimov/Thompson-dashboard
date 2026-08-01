@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import {
   Calendar, Users, Star, TrendingUp, Filter,
-  Percent, ArrowLeftRight, Target, XCircle, ChevronDown, Search,
+  Percent, ArrowLeftRight, Target, XCircle, ChevronDown, ChevronRight, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -910,32 +910,55 @@ export default function LidlarPage() {
 
             {/* Row 2 — Voronka (3 cols) + Sifatsiz/Bekor (1 col) */}
             <div style={{ display:"grid", gridTemplateColumns:"3fr 1fr", gap:12, marginBottom:20 }}>
-              {/* Voronka */}
-              <div style={{ background: isDark ? "linear-gradient(135deg,#0a1628,#0d2240)" : "linear-gradient(135deg,rgba(33,150,243,0.06),rgba(0,188,212,0.04))", border:"1px solid var(--border)", borderRadius:16, padding:"20px 24px", display:"flex", flexDirection:"column" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20 }}>
-                  <Filter size={14} style={{ color:"var(--text3)" }} />
-                  <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>Voronka samaradorligi</span>
-                  <span style={{ fontSize:11, color:"var(--text3)", marginLeft:2 }}>Konversiya ko'rsatkichlari</span>
+              {/* Voronka — each step shows the rate, a track with the value
+                  marked on it, and the raw pair the rate came from. Without the
+                  pair a percentage is unverifiable; with it the reader can see
+                  1 989 of 3 125 and check it against the cards above. */}
+              <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:16, padding:"18px 22px", display:"flex", flexDirection:"column" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18 }}>
+                  <div style={{ width:40, height:40, borderRadius:12, background: isDark ? "rgba(33,150,243,0.15)" : "rgba(33,150,243,0.10)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <Filter size={18} style={{ color:"#2196F3" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:800, color:"var(--text)", lineHeight:1.2 }}>Voronka samaradorligi</div>
+                    <div style={{ fontSize:11.5, color:"var(--text3)", marginTop:1 }}>Konversiya ko'rsatkichlari</div>
+                  </div>
                 </div>
-                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1px 1fr 1px 1fr 1px 1fr", gap:0, alignItems:"center" }}>
+
+                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr auto 1fr auto 1fr auto 1fr", alignItems:"stretch" }}>
                   {[
-                    { icon:<Percent size={22} style={{ color:"#00BCD4" }} />, bg:"rgba(0,188,212,0.15)", val:sifatliKonvPct,   color:"#00BCD4", title:"Sifatli Konversiya",   sub:"Sifatli / Umumiy" },
-                    { icon:<ArrowLeftRight size={22} style={{ color:"#4CAF50" }} />, bg:"rgba(76,175,80,0.15)", val:leadToConsultPct, color:"#4CAF50", title:"Lid → Tashrif", sub:"T.Belgilandi / Umumiy" },
-                    { icon:<Target size={22} style={{ color:"#9C27B0" }} />, bg:"rgba(156,39,176,0.15)", val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9C27B0", title:"T.O'tkazildi / Belgilandi", sub:"O'tkazildi / Belgilandi" },
-                    { icon:<Target size={22} style={{ color:"#3F51B5" }} />, bg:"rgba(63,81,181,0.15)", val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0, color:"#3F51B5", title:"Sifatli → Uchrashuv", sub:"O'tkazildi / Sifatli" },
-                  ].map((m, i) => (
-                    <>
-                      <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"8px 24px", gap:12 }}>
-                        <div style={{ width:52, height:52, borderRadius:"50%", background:m.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>{m.icon}</div>
-                        <div style={{ textAlign:"center" }}>
-                          <div style={{ fontSize:12, fontWeight:600, color:"var(--text2)", marginBottom:6 }}>{m.title}</div>
-                          <div style={{ fontSize:40, fontWeight:800, color:m.color, lineHeight:1 }}>{m.val.toFixed(1)}%</div>
-                          <div style={{ fontSize:11, color:"var(--text3)", marginTop:6 }}>{m.sub}</div>
+                    { icon:<Percent size={24} />,        val:sifatliKonvPct,  color:"#2196F3", title:"Sifatli Konversiya",     sub:"Sifatli / Umumiy",      num:sifatliLid,       den:total },
+                    { icon:<ArrowLeftRight size={24} />, val:leadToConsultPct, color:"#22C55E", title:"Lid \u2192 Tashrif",       sub:"T.Belgilandi / Umumiy", num:konsultBelgilandi, den:total },
+                    { icon:<Target size={24} />,         val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9333EA", title:"T.O'tkazildi / Belgilandi", sub:"O'tkazildi / Belgilandi", num:konsultOtkazildi, den:konsultBelgilandi },
+                    { icon:<Target size={24} />,         val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0,               color:"#4F46E5", title:"Sifatli \u2192 Uchrashuv",   sub:"O'tkazildi / Sifatli",    num:konsultOtkazildi, den:sifatliLid },
+                  ].flatMap((m, i) => [
+                    <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"6px 16px", gap:12 }}>
+                      <div style={{ width:56, height:56, borderRadius:"50%", background:`${m.color}1A`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <span style={{ color:m.color, display:"flex" }}>{m.icon}</span>
+                      </div>
+                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", textAlign:"center", lineHeight:1.25 }}>{m.title}</div>
+                      <div style={{ fontSize:34, fontWeight:800, color:m.color, lineHeight:1 }}>{m.val.toFixed(1)}%</div>
+                      {/* Track with the value marked on it — reads as a position
+                          along the funnel rather than a bare number. */}
+                      <div style={{ position:"relative", width:"100%", height:8 }}>
+                        <div style={{ position:"absolute", inset:0, borderRadius:5, background:"var(--bg4)" }} />
+                        <div style={{ position:"absolute", left:0, top:0, height:8, width:`${Math.min(100, m.val)}%`, borderRadius:5, background:m.color, transition:"width .5s cubic-bezier(.4,0,.2,1)" }} />
+                        <div style={{ position:"absolute", left:`calc(${Math.min(100, m.val)}% - 6px)`, top:-2, width:12, height:12, borderRadius:"50%", background:"#fff", border:`2px solid ${m.color}`, boxShadow:"0 1px 4px rgba(0,0,0,0.25)" }} />
+                      </div>
+                      <div style={{ fontSize:11.5, color:"var(--text3)", textAlign:"center" }}>{m.sub}</div>
+                      <div style={{ background:`${m.color}1A`, color:m.color, borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap" }}>
+                        {fmtNum(m.num)} / {fmtNum(m.den)}
+                      </div>
+                    </div>,
+                    i < 3 ? (
+                      <div key={`sep-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
+                        <div style={{ position:"absolute", top:0, bottom:0, width:1, background:"var(--border)" }} />
+                        <div style={{ position:"relative", width:26, height:26, borderRadius:"50%", background:"var(--bg2)", border:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          <ChevronRight size={13} style={{ color:"var(--text3)" }} />
                         </div>
                       </div>
-                      {i < 3 && <div key={`sep-${i}`} style={{ background:"var(--border)", width:1, height:"60%", alignSelf:"center" }} />}
-                    </>
-                  ))}
+                    ) : null,
+                  ])}
                 </div>
               </div>
 
