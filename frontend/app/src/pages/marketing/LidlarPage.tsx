@@ -1719,8 +1719,8 @@ export default function LidlarPage() {
                         <th style={TH("#9E9E9E", 180)}>MANBA</th>
                         <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
                         <th style={TH("#00BCD4")}>SIFATLI LID</th>
-                        <th style={TH("#9C27B0")}>KONS. BELGILANDI</th>
-                        <th style={TH("#4CAF50")}>KONS. O'TKAZILDI</th>
+                        <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
+                        <th style={TH("#4CAF50")}>USPESHNIY LID</th>
                         <th style={TH("#F44336")}>SIFATSIZ</th>
                         <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
                         <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>

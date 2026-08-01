@@ -47,7 +47,36 @@ async function syncLeadStatuses() {
   try { require('./stageResolver').invalidate(); } catch { /* optional */ }
 
   console.log(`[leadStatusSync] ${updated} lead statuses synced from Bitrix`);
+  await syncLeadSources();
   return updated;
 }
 
-module.exports = { syncLeadStatuses };
+/**
+ * Mirror the lead SOURCE dictionary (crm.status.list ENTITY_ID=SOURCE).
+ *
+ * The source table previously rendered whatever id Bitrix sent — STORE, EMAIL,
+ * RC_GENERATOR, UC_O1BBBD, even a bare "1" — because names came from a
+ * hardcoded map that only covered the sources someone had happened to add.
+ */
+async function syncLeadSources() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lead_sources (
+      source_id TEXT PRIMARY KEY,
+      name      TEXT NOT NULL,
+      synced_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+  const res = await bitrixCall('crm.status.list', { filter: { ENTITY_ID: 'SOURCE' } });
+  const list = res?.result ?? [];
+  for (const s of list) {
+    await pool.query(
+      `INSERT INTO lead_sources (source_id, name, synced_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (source_id) DO UPDATE SET name = EXCLUDED.name, synced_at = NOW()`,
+      [s.STATUS_ID, s.NAME || s.STATUS_ID]
+    );
+  }
+  console.log(`[leadStatusSync] ${list.length} lead sources synced from Bitrix`);
+  return list.length;
+}
+
+module.exports = { syncLeadStatuses, syncLeadSources };

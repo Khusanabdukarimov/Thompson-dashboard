@@ -1430,6 +1430,7 @@ router.get('/source-stats', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT
          COALESCE(l.source_id, 'Nomalum') AS source_id,
+         COALESCE(MAX(ls.name), l.source_id, 'Nomalum') AS source_name,
          COUNT(*)::int AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int AS jarayonda,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int AS sifatli_lid,
@@ -1439,8 +1440,12 @@ router.get('/source-stats', async (req, res) => {
          COUNT(*) FILTER (WHERE s.bitrix_id = 'UC_L8G2B9')::int               AS bekor_boldi
        FROM leads l
        LEFT JOIN stages s ON s.id = l.stage_id
-       WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
-         AND ($2::date IS NULL OR l.date_create::date <= $2::date)
+       LEFT JOIN lead_sources ls ON ls.source_id = l.source_id
+       -- Was l.date_create::date, i.e. UTC day boundaries, while every other
+       -- endpoint converts to Asia/Tashkent first. The two disagreed on which
+       -- leads fall in the period, which is why Sifatli lid in this table never
+       -- matched the KPI card above it.
+       WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
