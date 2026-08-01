@@ -1,6 +1,58 @@
 const pool = require('../db/pool');
 const stageResolver = require('./stageResolver');
 const { upsertLeadUfValues } = require('./ufSync');
+const { bitrixCall } = require('./bitrix');
+
+// Bitrix user ids we have already resolved this process, so a busy webhook
+// stream does not re-query for the same owner on every lead.
+const _seenResponsibles = new Set();
+
+/**
+ * Make sure the lead's owner exists in `responsibles`, and return its id.
+ *
+ * Without this a lead assigned to a Bitrix user we have never synced fails the
+ * leads_responsible_id_fkey constraint and the WHOLE lead is rejected — not
+ * just its owner field. That was silently dropping ~8% of lead webhooks and
+ * 347 leads in a single reconcile run: new leads never landed, and updates were
+ * refused so existing rows stayed frozen at whatever stage they had when the
+ * owner was still known. It is also why the dashboard could show MORE leads in
+ * an early stage than Bitrix — those rows had simply stopped moving.
+ *
+ * Users are synced periodically, but a lead must never be lost just because it
+ * arrived first, so fall back to inserting a stub row from user.get.
+ */
+async function ensureResponsible(assignedById) {
+  const id = assignedById ? parseInt(assignedById, 10) : null;
+  if (!id) return null;
+  if (_seenResponsibles.has(id)) return id;
+
+  const { rows } = await pool.query('SELECT 1 FROM responsibles WHERE id = $1', [id]);
+  if (rows.length) { _seenResponsibles.add(id); return id; }
+
+  let name = null, lastName = null, email = null, position = null, active = true;
+  try {
+    const res = await bitrixCall('user.get', { ID: id });
+    const u = res?.result?.[0];
+    if (u) {
+      name = u.NAME || null;
+      lastName = u.LAST_NAME || null;
+      email = u.EMAIL || null;
+      position = u.WORK_POSITION || null;
+      active = u.ACTIVE !== false && u.ACTIVE !== 'N';
+    }
+  } catch (e) {
+    console.warn(`[upsertLead] user.get ${id} failed (${e.message}) — inserting placeholder`);
+  }
+
+  await pool.query(
+    `INSERT INTO responsibles (id, name, last_name, email, work_position, active, synced_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    [id, name || `User ${id}`, lastName, email, position, active]
+  );
+  _seenResponsibles.add(id);
+  return id;
+}
 
 const CANCEL_REASON_MAP = {
   '1062': "Qimmatlik qildi",
@@ -74,7 +126,7 @@ async function upsertLead(r, client) {
   const db = client || pool;
 
   const stageId = await stageResolver.resolve('lead', r.STATUS_ID);
-  const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
+  const responsibleId = await ensureResponsible(r.ASSIGNED_BY_ID);
 
   // For Website leads: use COMMENTS field as date_create if it's a valid ISO datetime
   let dateCreate = parseDate(r.DATE_CREATE);
@@ -237,4 +289,4 @@ async function upsertLead(r, client) {
   return leadId;
 }
 
-module.exports = { upsertLead };
+module.exports = { upsertLead, ensureResponsible };

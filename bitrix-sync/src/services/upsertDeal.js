@@ -1,4 +1,5 @@
 const pool = require('../db/pool');
+const { ensureResponsible } = require('./upsertLead');
 const stageResolver = require('./stageResolver');
 const { toUSD } = require('./currencyRates');
 
@@ -43,7 +44,8 @@ async function upsertDeal(r, client) {
   const db = client || pool;
 
   const stageId = await stageResolver.resolve('deal', r.STAGE_ID, r.STAGE_SEMANTIC_ID);
-  const responsibleId = r.ASSIGNED_BY_ID ? parseInt(r.ASSIGNED_BY_ID) : null;
+  // Same FK trap as leads: an unknown owner rejected the whole deal.
+  const responsibleId = await ensureResponsible(r.ASSIGNED_BY_ID);
   const contactId = r.CONTACT_ID ? parseInt(r.CONTACT_ID) : null;
   const currency = r.CURRENCY_ID || 'USD';
 

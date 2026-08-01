@@ -149,6 +149,14 @@ Promise.all([
     const { syncLeadStatuses } = require('./services/leadStatusSync');
     syncLeadStatuses().catch(e => console.warn('[leadStatusSync] failed:', e.message));
     setInterval(() => syncLeadStatuses().catch(e => console.warn('[leadStatusSync] failed:', e.message)), 6 * 3600 * 1000);
+
+    // Responsibles. A lead whose owner is missing from this table fails the
+    // FK and the entire lead is rejected, so a stale user list quietly drops
+    // leads and freezes existing ones at an old stage. upsertLead self-heals
+    // per lead; this keeps the table current so it rarely has to.
+    const { syncResponsibles } = require('./services/responsibleSync');
+    syncResponsibles().catch(e => console.warn('[responsibleSync] failed:', e.message));
+    setInterval(() => syncResponsibles().catch(e => console.warn('[responsibleSync] failed:', e.message)), 60 * 60 * 1000);
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
 
     // Check Meta access token expiry on startup
