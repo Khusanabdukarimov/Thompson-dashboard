@@ -13,6 +13,7 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
+  getResponsibleTasks,
   getSourceStats, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
   type SourceStatsRow, type ResponsibleLeadRow,
@@ -151,6 +152,20 @@ const stageColor = (bid: string) => STAGE_COLORS[bid] ?? "#9E9E9E";
 // Konversiya, Lid mas'ullar kesimida) always show the same label for a stage.
 // Legacy codes (UC_1KPATX, THINKING, ...) are kept as a fallback in case any
 // old lead still carries a since-removed stage_bid.
+const SUBTH: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "8px 12px" };
+const SUBTD: React.CSSProperties = { padding: "7px 12px", verticalAlign: "middle" };
+const pill = (c: string): React.CSSProperties => ({ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: `${c}22`, border: `1px solid ${c}55`, color: c, whiteSpace: "nowrap" });
+
+// Task status, already normalised by upsertTask from the Bitrix STATUS code.
+const TASK_STATUS: Record<string, { label: string; color: string }> = {
+  pending:     { label: "Kutilmoqda",     color: "#9E9E9E" },
+  in_progress: { label: "Jarayonda",      color: "#FF9800" },
+  review:      { label: "Nazoratda",      color: "#26C6DA" },
+  completed:   { label: "Tugatilgan",     color: "#4CAF50" },
+  deferred:    { label: "Kechiktirilgan", color: "#8D6E63" },
+  rejected:    { label: "Rad etilgan",    color: "#F44336" },
+};
+
 const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   NEW:               { label: "Zvonki",             color: "#9E9E9E" },
   UC_N0PI5R:         { label: "Tashrif belgilandi",  color: "#FF9800" },
@@ -445,6 +460,12 @@ export default function LidlarPage() {
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const [selectedTaskResp, setSelectedTaskResp] = useState<number | null>(null);
+  const respTasksQ = useQuery({
+    queryKey: ["stats/responsible-tasks", selectedTaskResp, appliedWithMode],
+    queryFn: () => getResponsibleTasks(selectedTaskResp!, appliedWithMode),
+    enabled: selectedTaskResp !== null,
+  });
   const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
   const respLeadsConvQ = useQuery({
     queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
@@ -1172,13 +1193,16 @@ export default function LidlarPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {taskRows.map((r, i) => {
+                      {taskRows.flatMap((r, i) => {
                         const pct = r.total > 0 ? (r.completed / r.total) * 100 : 0;
-                        return (
+                        const isTaskOpen = selectedTaskResp === r.responsible_id;
+                        const tasks = isTaskOpen ? (respTasksQ.data?.items ?? []) : [];
+                        return [
                           <tr key={r.responsible_id}
-                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              onClick={() => setSelectedTaskResp(isTaskOpen ? null : r.responsible_id)}
+                              style={{ background: isTaskOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                              onMouseEnter={(e) => { if (!isTaskOpen) e.currentTarget.style.background = "var(--bg3)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = isTaskOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
                             <td style={{ ...TD, color: "#555", fontSize: 13, fontWeight: 600, width: 44 }}>
                               {String(i + 1).padStart(2, "0")}
                             </td>
@@ -1229,8 +1253,61 @@ export default function LidlarPage() {
                             <td style={{ ...TD, textAlign: "center" }}>
                               <ConversionDonut pct={pct} size={38} />
                             </td>
-                          </tr>
-                        );
+                          </tr>,
+                          isTaskOpen ? (
+                            <tr key={`${r.responsible_id}-tasks`}>
+                              <td colSpan={8} style={{ padding: "0 12px 12px" }}>
+                                <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
+                                  {respTasksQ.isLoading ? (
+                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                                  ) : !tasks.length ? (
+                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma’lumot yo’q</div>
+                                  ) : (
+                                    <div style={{ maxHeight: 340, overflowY: "auto" }}>
+                                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                        <thead>
+                                          <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                            <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
+                                            <th style={SUBTH}>VAZIFA</th>
+                                            <th style={{ ...SUBTH, width: 150 }}>HOLATI</th>
+                                            <th style={{ ...SUBTH, width: 210 }}>LID BOSQICHI</th>
+                                            <th style={{ ...SUBTH, width: 110 }}>SANA</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {tasks.map((t, ti) => {
+                                            const st = TASK_STATUS[t.status] ?? { label: t.status, color: "#9E9E9E" };
+                                            const ls = t.lead_stage_bid ? (STAGE_BADGE_MAP[t.lead_stage_bid] ?? { label: t.lead_stage_bid, color: "#9E9E9E" }) : null;
+                                            return (
+                                              <tr key={t.id} style={{ background: ti % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
+                                                <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(ti + 1).padStart(2, "0")}</td>
+                                                <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--text2)" }}>
+                                                  {t.title || `Vazifa #${t.id}`}
+                                                </td>
+                                                <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
+                                                <td style={SUBTD}>
+                                                  {t.lead_id && ls ? (
+                                                    <a href={`${bitrixPortal}/crm/lead/details/${t.lead_id}/`} target="_blank" rel="noreferrer"
+                                                       onClick={e => e.stopPropagation()} style={{ textDecoration: "none" }}>
+                                                      <span style={pill(ls.color)}>{ls.label}</span>
+                                                    </a>
+                                                  ) : <span style={{ fontSize: 12, color: "var(--text3)" }}>—</span>}
+                                                </td>
+                                                <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
+                                                  {t.date_created ? String(t.date_created).slice(0, 10) : "—"}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null,
+                        ];
                       })}
 
                       {/* JAMI row */}

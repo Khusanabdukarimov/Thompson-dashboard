@@ -416,6 +416,48 @@ router.get('/sources-list', async (_req, res) => {
  * Tasks grouped by executor (responsible).
  * Params: from, to
  */
+/**
+ * GET /api/dashboard/responsible-tasks
+ * The tasks behind one row of Vazifalar kesimida, so an operator's count can be
+ * opened down to the actual records. Params: responsible_id, from, to, proekt,
+ * mode, limit.
+ */
+router.get('/responsible-tasks', async (req, res) => {
+  const { responsible_id, from, to, proekt, mode } = req.query;
+  if (!responsible_id) return res.status(400).json({ error: 'responsible_id required' });
+  const limit = Math.min(500, parseInt(req.query.limit, 10) || 200);
+
+  const leadFilter = (mode === 'amocrm'
+    ? `AND t.lead_id IS NOT NULL AND t.lead_id IN (SELECT id FROM leads WHERE source_id = 'UC_1WUFJB')`
+    : ``) + `
+         AND ($4::text IS NULL OR t.lead_id IN (
+           SELECT lead_id FROM lead_uf_values
+           WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($4, ','))
+         ))
+         AND (t.lead_id IS NULL OR ${leadScopeCond('t.lead_id')})`;
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.id, t.title, t.status, t.deadline, t.date_created, t.date_closed,
+              t.lead_id, l.title AS lead_title, s.bitrix_id AS lead_stage_bid
+       FROM tasks t
+       LEFT JOIN leads l  ON l.id = t.lead_id
+       LEFT JOIN stages s ON s.id = l.stage_id
+       WHERE t.executor_id = $3::int
+         AND ($1::date IS NULL OR t.date_created >= $1::date)
+         AND ($2::date IS NULL OR t.date_created < $2::date + INTERVAL '1 day')
+         ${leadFilter}
+       ORDER BY t.date_created DESC
+       LIMIT ${limit}`,
+      [from || null, to || null, parseInt(responsible_id, 10), proekt || null]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/responsible-tasks]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/tasks-summary', async (req, res) => {
   const { from, to, proekt, mode } = req.query;
   const params = [from || null, to || null, proekt || null];

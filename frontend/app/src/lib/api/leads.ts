@@ -717,3 +717,30 @@ export function getReasonLeads(
     offset: args.offset,
   }, API_URL_CRM);
 }
+
+export type ResponsibleTaskRow = {
+  id: number;
+  title: string | null;
+  status: string;
+  deadline: string | null;
+  date_created: string | null;
+  date_closed: string | null;
+  lead_id: number | null;
+  lead_title: string | null;
+  /** Bitrix STATUS_ID of the linked lead — where that lead sits right now. */
+  lead_stage_bid: string | null;
+};
+
+/** Tasks behind one row of Vazifalar kesimida. */
+export function getResponsibleTasks(
+  responsibleId: number,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "proekts" | "mode">,
+) {
+  return apiGet<{ items: ResponsibleTaskRow[] }>("/api/dashboard/responsible-tasks", {
+    responsible_id: responsibleId,
+    from: filter.start_date,
+    to: filter.end_date,
+    proekt: filter.proekts?.join(','),
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
