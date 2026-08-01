@@ -445,6 +445,12 @@ export default function LidlarPage() {
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
+  const respLeadsConvQ = useQuery({
+    queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
+    queryFn: () => getResponsibleLeads(selectedRespConv!.id, appliedWithMode),
+    enabled: selectedRespConv !== null,
+  });
   const [selectedRespMasul, setSelectedRespMasul] = useState<{ id: number; name: string } | null>(null);
   const respLeadsMasulQ = useQuery({
     queryKey: ["stats/responsible-leads-masul", selectedRespMasul?.id, appliedWithMode],
@@ -942,6 +948,10 @@ export default function LidlarPage() {
             <OperatorTable
               rows={convRows}
               loading={conversionQ.isLoading}
+              selected={selectedRespConv}
+              onSelect={setSelectedRespConv}
+              leads={respLeadsConvQ.data}
+              leadsLoading={respLeadsConvQ.isLoading}
             />
           </div>
         </div>

@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { ExternalLink, Phone, User } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
-import type { ConversionStatsResponse } from "@/lib/api/leads";
+import type { ConversionStatsResponse, ResponsibleLeadRow } from "@/lib/api/leads";
 
 type Row = ConversionStatsResponse["conversion"][number];
 
@@ -51,12 +51,18 @@ function Avatar({ name, color }: { name: string; color: string }) {
 const AVATAR_COLORS = ["#7C4DFF", "#2196F3", "#00BCD4", "#4CAF50", "#FF9800", "#E91E63", "#9C27B0", "#607D8B"];
 const avatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
 
-export function OperatorTable({ rows, loading }: {
+export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsLoading }: {
   rows: Row[];
   loading: boolean;
+  /** Currently expanded operator, or null. */
+  selected: { id: number; name: string } | null;
+  onSelect: (v: { id: number; name: string } | null) => void;
+  leads?: ResponsibleLeadRow[];
+  leadsLoading?: boolean;
 }) {
   const portal = useBitrixPortal();
   const [hovered, setHovered] = useState<number | null>(null);
+  const [shownLeads, setShownLeads] = useState(10);
 
   // Ranked by conversion — the metric the business actually optimises for.
   const ranked = useMemo(
@@ -107,7 +113,7 @@ export function OperatorTable({ rows, loading }: {
   const cell = (value: number, max: number, color: string) => (
     <td style={TD}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{fmtNum(value)}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: value > 0 ? "var(--text)" : "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{fmtNum(value)}</span>
       </div>
       <Bullet value={value} max={max} color={color} />
     </td>
@@ -148,15 +154,18 @@ export function OperatorTable({ rows, loading }: {
             </tr>
           </thead>
           <tbody>
-            {ranked.map((r, i) => {
+            {ranked.flatMap((r, i) => {
               const conv = conversionOf(r);
               const isHot = hovered === r.responsible_id;
-              return (
+              const isOpen = selected?.id === r.responsible_id;
+              return [
                 <tr key={r.responsible_id}
                     onMouseEnter={() => setHovered(r.responsible_id)}
                     onMouseLeave={() => setHovered(null)}
+                    onClick={() => { setShownLeads(10); onSelect(isOpen ? null : { id: r.responsible_id, name: r.full_name || `User ${r.responsible_id}` }); }}
                     style={{
-                      background: isHot ? "var(--bg3)" : "transparent",
+                      cursor: "pointer",
+                      background: isOpen ? "rgba(33,150,243,0.08)" : isHot ? "var(--bg3)" : "transparent",
                       boxShadow: isHot ? "0 4px 18px rgba(0,0,0,0.28)" : "none",
                       transition: "background .18s ease, box-shadow .18s ease",
                     }}>
@@ -197,8 +206,44 @@ export function OperatorTable({ rows, loading }: {
                     </div>
                     <Bullet value={conv} max={Math.max(1, ...rows.map(conversionOf))} color={METRIC_COLORS.konversiya} />
                   </td>
-                </tr>
-              );
+                </tr>,
+                isOpen ? (
+                  <tr key={`${r.responsible_id}-leads`}>
+                    <td colSpan={10} style={{ padding: 0, background: "var(--bg)" }}>
+                      <div style={{ padding: "10px 20px 14px", borderBottom: "1px solid var(--border)" }}>
+                        {leadsLoading ? (
+                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 0" }}>Yuklanmoqda…</div>
+                        ) : !leads?.length ? (
+                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 0" }}>Lid topilmadi</div>
+                        ) : (
+                          <>
+                            <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                              {leads.slice(0, shownLeads).map(l => (
+                                <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "5px 0" }}>
+                                  <a href={`${portal}/crm/lead/details/${l.id}/`} target="_blank" rel="noreferrer"
+                                     onClick={e => e.stopPropagation()}
+                                     style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                                    {l.title || `Lid #${l.id}`}
+                                  </a>
+                                  <span style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>
+                                    {l.date_create ? String(l.date_create).slice(0, 10) : ""}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            {shownLeads < leads.length && (
+                              <button onClick={e => { e.stopPropagation(); setShownLeads(n => n + 10); }}
+                                style={{ marginTop: 8, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                Yana 10 ta ({leads.length - shownLeads} qoldi)
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ) : null,
+              ];
             })}
           </tbody>
           <tfoot>
