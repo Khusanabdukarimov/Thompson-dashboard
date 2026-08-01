@@ -404,24 +404,13 @@ export default function LidlarPage() {
   });
   const filterOpts = filterOptsQ.data;
 
-  // Proekt segmented buttons: "Kids" is merged into "O'quv markaz" so that
-  // selecting O'quv markaz filters both proekts at once. Any other proekt
-  // (e.g. Maktab) stays its own single button, original order preserved.
-  const proektGroups = useMemo(() => {
-    const raw = filterOpts?.proekts ?? [];
-    const OQUV = new Set(["O'quv markaz", "Kids"]);
-    const groups: { name: string; ids: string[] }[] = [];
-    let oquv: { name: string; ids: string[] } | null = null;
-    for (const pr of raw) {
-      if (OQUV.has(pr.name)) {
-        if (!oquv) { oquv = { name: "O'quv markaz", ids: [] }; groups.push(oquv); }
-        oquv.ids.push(pr.id);
-      } else {
-        groups.push({ name: pr.name, ids: [pr.id] });
-      }
-    }
-    return groups;
-  }, [filterOpts]);
+  // One button per project, straight from the filter options. Kids used to be
+  // folded into O'quv markaz; it is its own button now so any combination can
+  // be selected.
+  const proektGroups = useMemo(
+    () => (filterOpts?.proekts ?? []).map((pr) => ({ name: pr.name, ids: [pr.id] })),
+    [filterOpts]
+  );
 
   const amocrmSrcQ = useQuery({
     queryKey: ["amocrm-sources"],
@@ -710,14 +699,20 @@ export default function LidlarPage() {
                         </button>
                       );
                     })}
-                    {/* Proekt segmented buttons — single-select; click again to clear */}
+                    {/* Proekt buttons — multi-select; click to toggle, none selected = all */}
                     <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {proektGroups.map((pr) => {
                         const sel = applied.proekts ?? [];
                         const active = pr.ids.length > 0 && pr.ids.every((id) => sel.includes(id));
                         return (
                           <button key={pr.name}
-                            onClick={() => setApplied((prev) => ({ ...prev, proekts: active ? undefined : pr.ids }))}
+                            onClick={() => setApplied((prev) => {
+                              const sel0 = prev.proekts ?? [];
+                              const next = active
+                                ? sel0.filter((id) => !pr.ids.includes(id))
+                                : [...sel0, ...pr.ids.filter((id) => !sel0.includes(id))];
+                              return { ...prev, proekts: next.length ? next : undefined };
+                            })}
                             style={{
                               background: active ? "#7C4DFF" : "var(--bg3)",
                               border: `1px solid ${active ? "#7C4DFF" : "var(--border)"}`,

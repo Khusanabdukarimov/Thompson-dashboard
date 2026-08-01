@@ -106,6 +106,17 @@ Promise.all([
     CREATE INDEX IF NOT EXISTS leads_uf_tashrif_buyurdi_idx ON leads(uf_tashrif_buyurdi);
     -- Bitrix SEMANTICS for a lead status: 'P' in progress / 'S' won / 'F' failed.
     ALTER TABLE stages ADD COLUMN IF NOT EXISTS semantics TEXT;
+    -- crm_forms was only created inside the /sync-forms endpoint, which nothing
+    -- calls on boot. Until it was hit by hand every query joining it failed, so
+    -- "UTM bo'yicha" rendered "Ma'lumot yo'q" — the panel was erroring, not empty.
+    CREATE TABLE IF NOT EXISTS crm_forms (
+      form_id     TEXT PRIMARY KEY,
+      form_name   TEXT,
+      active      BOOLEAN DEFAULT TRUE,
+      lead_count  INT,
+      fb_form_id  TEXT,
+      synced_at   TIMESTAMPTZ DEFAULT NOW()
+    );
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS date_modify      TIMESTAMPTZ;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_sale_date     TIMESTAMPTZ;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_bp_sale_date  TIMESTAMPTZ;

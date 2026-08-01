@@ -62,8 +62,8 @@ const TASHRIF_OTKAZILDI  = ufSet('l.uf_tashrif_buyurdi');
 // `NOT IN (Bog'cha, IH)`, which silently let through every lead with no Proekt
 // value at all — the single biggest reason the cards disagreed with Bitrix.
 const PROEKT_FIELD = 'UF_CRM_1781879563298';
-const PROEKT_ALLOWED = "'3571','3573'"; // 3571 O'quv markaz, 3573 Maktab
-                                        // excluded: 3575 Bog'cha, 3577 IH, 5113 Kids
+const PROEKT_ALLOWED = "'3571','3573','5113'"; // O'quv markaz, Maktab, Kids
+                                               // excluded: 3575 Bog'cha, 3577 IH
 
 // Proekt2 (UF_CRM_1782148374198): internal HR / Студент / Жалоба tagging.
 // Only HR (5159) is dropped — Студент (5161) and Жалоба (5163) are real leads.
