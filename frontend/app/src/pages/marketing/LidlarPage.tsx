@@ -387,13 +387,9 @@ const TD: React.CSSProperties = {
   borderBottom: "1px solid var(--border)",
 };
 
-// Responsibles excluded from "Lid va konversiya" and "Lid va mas'ullar kesimida" tables
-const EXCLUDED_RESPONSIBLES = [
-  "Data365", "Data365 Support", "Shaxzod Turanov", "Murodjon",
-  "Abror", "Sardor Jumayev", "Sardor Jjumayev", "Main (asosiy)", "Main",
-];
-const isExcluded = (name: string) =>
-  EXCLUDED_RESPONSIBLES.some((ex) => name.trim().toLowerCase().includes(ex.toLowerCase()));
+// No responsible is hidden from the tables. Blacklisting names here (Data365,
+// Main, ...) dropped their rows but not their leads, so the JAMI row could never
+// add up to the KPI cards above it — the cards count every lead in scope.
 
 // ─────────────────────────────────────────────────────────────────
 // Page
@@ -536,7 +532,7 @@ export default function LidlarPage() {
   });
 
   const header       = statsQ.data?.header;
-  const responsibles = (respQ.data?.responsibles ?? []).filter((u) => !isExcluded(u.full_name));
+  const responsibles = (respQ.data?.responsibles ?? []);
 
   const enrichedResponsibles = responsibles;
 
@@ -620,7 +616,7 @@ export default function LidlarPage() {
       (applied.sources?.length ?? 0) > 0 ||
       (applied.responsible_ids?.length ?? 0) > 0 ||
       (applied.form_ids?.length ?? 0) > 0;
-    let rows = (conversionQ.data?.conversion ?? []).filter((r) => !isExcluded(r.full_name));
+    let rows = (conversionQ.data?.conversion ?? []);
     if (hasFilter) rows = rows.filter((r) => r.total > 0);
     return [...rows].sort((a, b) => b.total - a.total);
   }, [conversionQ.data, applied]);

@@ -50,29 +50,40 @@ const ufSet = (col) => `(${col} IS NOT NULL AND ${col} <> '' AND ${col} <> 'fals
 const TASHRIF_BELGILANDI = ufSet('l.uf_tashrif_sanasi');
 const TASHRIF_OTKAZILDI  = ufSet('l.uf_tashrif_buyurdi');
 
+// ── The dashboard's lead scope ─────────────────────────────────────
+// Every lead figure on the Lidlar page is scoped to these two conditions, and
+// nothing else. They are always on — "Tozalash" clears the visible filters but
+// never widens the scope — so the page is always answering the same question as
+// this Bitrix filter:
+//
+//     Proekt: O'quv markaz, Maktab      Proekt2: anything except HR
+//
+// Proekt is an allow-list, not a deny-list. It used to be
+// `NOT IN (Bog'cha, IH)`, which silently let through every lead with no Proekt
+// value at all — the single biggest reason the cards disagreed with Bitrix.
 const PROEKT_FIELD = 'UF_CRM_1781879563298';
-// Hidden from the dashboard entirely: 3575 = Bog'cha, 3577 = IH
-const PROEKT_HIDDEN = "'3575','3577'";
+const PROEKT_ALLOWED = "'3571','3573'"; // 3571 O'quv markaz, 3573 Maktab
+                                        // excluded: 3575 Bog'cha, 3577 IH, 5113 Kids
 
 // Proekt2 (UF_CRM_1782148374198): internal HR / Студент / Жалоба tagging.
-// Only HR (enum 5159) is hidden from the lead views — Студент (5161) and
-// Жалоба (5163) are real leads and stay counted.
+// Only HR (5159) is dropped — Студент (5161) and Жалоба (5163) are real leads.
 const PROEKT2_FIELD = 'UF_CRM_1782148374198';
 const PROEKT2_HIDDEN = "'5159'"; // HR
-const proekt2ExcludeCond = (col) =>
-  `${col} NOT IN (SELECT lead_id FROM lead_uf_values
-                   WHERE field_code = '${PROEKT2_FIELD}' AND value IN (${PROEKT2_HIDDEN}))`;
 
+/** The always-on scope, for any query that has a lead id to constrain. */
+const leadScopeCond = (col) =>
+  `${col} IN (SELECT lead_id FROM lead_uf_values
+               WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_ALLOWED}))
+   AND ${col} NOT IN (SELECT lead_id FROM lead_uf_values
+                       WHERE field_code = '${PROEKT2_FIELD}' AND value IN (${PROEKT2_HIDDEN}))`;
+
+/** Scope plus the user's optional Proekt picker (a subset of the allow-list). */
 function leadProektCond(pi) {
   return `($${pi}::text IS NULL OR l.id IN (
       SELECT lead_id FROM lead_uf_values
       WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($${pi}, ','))
     ))
-    AND l.id NOT IN (
-      SELECT lead_id FROM lead_uf_values
-      WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_HIDDEN})
-    )
-    AND ${proekt2ExcludeCond('l.id')}`;
+    AND ${leadScopeCond('l.id')}`;
 }
 
 function dealModeClause(mode) {
@@ -169,7 +180,7 @@ router.get('/responsibles', async (req, res) => {
            AND ($3::int  IS NULL OR l.responsible_id = $3::int)
            AND ($4::text IS NULL OR s.bitrix_id = $4::text)
            AND ${leadSrcCond(mode, 5)}
-           AND ${proekt2ExcludeCond('l.id')}
+           AND ${leadScopeCond('l.id')}
            ${leadModeClause(mode)}
        )
        SELECT
@@ -229,7 +240,7 @@ router.get('/funnel', async (req, res) => {
          AND ${leadDateCond(mode, 1, 2)}
          AND ($3::int  IS NULL OR l.responsible_id = $3::int)
          AND ${leadSrcCond(mode, 4)}
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        WHERE s.entity = 'lead' AND s.semantics IS NOT NULL
        GROUP BY s.id, s.name, s.bitrix_id, s.sort_order, s.is_final, s.is_won
@@ -378,11 +389,7 @@ router.get('/tasks-summary', async (req, res) => {
            SELECT lead_id FROM lead_uf_values
            WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($3, ','))
          ))
-         AND (t.lead_id IS NULL OR t.lead_id NOT IN (
-           SELECT lead_id FROM lead_uf_values
-           WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_HIDDEN})
-         ))
-         AND (t.lead_id IS NULL OR ${proekt2ExcludeCond('t.lead_id')})`;
+         AND (t.lead_id IS NULL OR ${leadScopeCond('t.lead_id')})`;
 
   try {
     const { rows } = await pool.query(
@@ -946,7 +953,8 @@ router.get('/lead-responsibles', async (req, res) => {
          t.total_opportunity
        FROM responsibles r
        JOIN totals t ON t.responsible_id = r.id   -- inner join drops 0-lead staff
-       WHERE r.active = TRUE
+       -- no r.active filter: a lead still counts when its owner was
+       -- deactivated, and the KPI cards count it, so JAMI must too.
        ORDER BY t.total DESC`,
       params
     );
@@ -992,7 +1000,8 @@ router.get('/lead-conversion', async (req, res) => {
          COUNT(fl.id) FILTER (WHERE fl.t_otkazildi)::int                                       AS tashrif_buyurdi
        FROM responsibles r
        JOIN fl ON fl.responsible_id = r.id   -- inner join drops 0-lead staff
-       WHERE r.active = TRUE
+       -- no r.active filter: a lead still counts when its owner was
+       -- deactivated, and the KPI cards count it, so JAMI must too.
        GROUP BY r.id, r.name, r.last_name
        ORDER BY total DESC`,
       params
@@ -1045,7 +1054,7 @@ router.get('/lead-filter-options', async (req, res) => {
         `SELECT e.enum_id AS id, e.value AS name
          FROM lead_uf_enums e
          WHERE e.field_code = '${PROEKT_FIELD}'
-           AND e.enum_id NOT IN (${PROEKT_HIDDEN})
+           AND e.enum_id IN (${PROEKT_ALLOWED})
          ORDER BY e.value`
       ).catch(() => ({ rows: [] })),
     ]);
@@ -1175,7 +1184,7 @@ router.get('/utm-campaign-stats', async (req, res) => {
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR TRIM(l.utm_source) = $3)
          AND ($4::text IS NULL OR COALESCE(NULLIF(TRIM(l.utm_medium),''),'Nomalum') = $4)
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(l.utm_campaign, ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1211,7 +1220,7 @@ router.get('/utm-medium-stats', async (req, res) => {
        WHERE ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND TRIM(l.utm_source) = $3
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(TRIM(l.utm_medium), ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1253,7 +1262,7 @@ router.get('/utm-content-stats', async (req, res) => {
            OR ($5 = 'Nomalum' AND (l.utm_campaign IS NULL OR l.utm_campaign = ''))
            OR ($5 != 'Nomalum' AND l.utm_campaign = $5)
          )
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(TRIM(l.utm_content), ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1300,7 +1309,7 @@ router.get('/utm-term-stats', async (req, res) => {
            OR ($6 = 'Nomalum' AND (l.utm_content IS NULL OR l.utm_content = ''))
            OR ($6 != 'Nomalum' AND l.utm_content = $6)
          )
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(NULLIF(TRIM(l.utm_term), ''), 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1352,7 +1361,7 @@ router.get('/utm-responsible-stats', async (req, res) => {
            OR ($7 = 'Nomalum' AND (l.utm_term IS NULL OR l.utm_term = ''))
            OR ($7 != 'Nomalum' AND l.utm_term = $7)
          )
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY l.responsible_id, r.name, r.last_name
        ORDER BY umumiy_lidlar DESC`,
@@ -1483,7 +1492,7 @@ router.get('/form-stats', async (req, res) => {
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-         AND ${proekt2ExcludeCond('l.id')}
+         AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY l.web_form_id, cf.form_name
        ORDER BY umumiy_lidlar DESC`,
