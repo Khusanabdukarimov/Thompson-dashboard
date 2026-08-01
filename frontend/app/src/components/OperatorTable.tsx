@@ -18,6 +18,7 @@ export const METRIC_COLORS = {
   total:     "#2196F3", // blue   — total leads
   sifatli:   "#00BCD4", // cyan   — qualified
   jarayonda: "#FF9800", // orange — in progress
+  belgilandi:"#26C6DA", // teal   — visits scheduled
   tashrif:   "#4CAF50", // green  — visits conducted
   konversiya:"#9C27B0", // purple — conversion
   sifatsiz:  "#F44336", // red    — unqualified / lost
@@ -69,6 +70,7 @@ export function OperatorTable({ rows, loading }: {
     jarayonda: Math.max(1, ...rows.map(r => r.jarayonda)),
     sifatsiz:  Math.max(1, ...rows.map(r => r.sifatsiz_lid)),
     bekor:     Math.max(1, ...rows.map(r => r.bekor_boldi ?? 0)),
+    belgilandi: Math.max(1, ...rows.map(r => r.tashrif_belgilandi ?? 0)),
     tashrif:   Math.max(1, ...rows.map(r => r.tashrif_buyurdi)),
   }), [rows]);
 
@@ -77,9 +79,9 @@ export function OperatorTable({ rows, loading }: {
   const leaders = useMemo(() => {
     const best = (pick: (r: Row) => number) => rows.reduce<Row | null>((b, r) => (!b || pick(r) > pick(b) ? r : b), null);
     return [
-      { medal: "🥇", label: "Eng ko'p sifatli lid", row: best(r => r.sifatli_lid ?? 0), val: (r: Row) => fmtNum(r.sifatli_lid ?? 0), color: METRIC_COLORS.sifatli },
-      { medal: "🥈", label: "Eng ko'p tashrif",     row: best(r => r.tashrif_buyurdi), val: (r: Row) => fmtNum(r.tashrif_buyurdi), color: METRIC_COLORS.tashrif },
-      { medal: "🥉", label: "Eng yuqori konversiya", row: best(conversionOf),           val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
+      { medal: "🥇", label: "Eng ko'p tashrif o'tkazildi", row: best(r => r.tashrif_buyurdi),    val: (r: Row) => fmtNum(r.tashrif_buyurdi),    color: METRIC_COLORS.tashrif },
+      { medal: "🥈", label: "Eng ko'p tashrif belgilandi", row: best(r => r.tashrif_belgilandi ?? 0), val: (r: Row) => fmtNum(r.tashrif_belgilandi ?? 0), color: METRIC_COLORS.belgilandi },
+      { medal: "🥉", label: "Eng yuqori konversiya",       row: best(conversionOf),               val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
     ].filter(l => l.row);
   }, [rows]);
 
@@ -127,6 +129,7 @@ export function OperatorTable({ rows, loading }: {
               <th style={{ ...TH, width: "12%" }}>Jarayonda</th>
               <th style={{ ...TH, width: "12%" }}>Sifatsiz</th>
               <th style={{ ...TH, width: "12%" }}>Bekor bo'ldi</th>
+              <th style={{ ...TH, width: "13%" }}>Tashrif belgilandi</th>
               <th style={{ ...TH, width: "13%" }}>Tashrif o'tkazildi</th>
               <th style={{ ...TH, width: "12%", textAlign: "right" }}>Konversiya</th>
             </tr>
@@ -171,6 +174,7 @@ export function OperatorTable({ rows, loading }: {
                   {cell(r.jarayonda, maxes.jarayonda, METRIC_COLORS.jarayonda)}
                   {cell(r.sifatsiz_lid, maxes.sifatsiz, METRIC_COLORS.sifatsiz)}
                   {cell(r.bekor_boldi ?? 0, maxes.bekor, METRIC_COLORS.bekor)}
+                  {cell(r.tashrif_belgilandi ?? 0, maxes.belgilandi, METRIC_COLORS.belgilandi)}
                   {cell(r.tashrif_buyurdi, maxes.tashrif, METRIC_COLORS.tashrif)}
                   <td style={{ ...TD, textAlign: "right" }}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", gap: 6 }}>
