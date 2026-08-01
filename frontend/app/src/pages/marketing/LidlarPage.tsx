@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import {
   Calendar, Users, Star, TrendingUp, Filter,
-  Percent, ArrowLeftRight, Target, XCircle, ChevronDown, ChevronRight, Search,
+  Percent, ArrowLeftRight, Target, XCircle, ChevronDown, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -937,7 +937,7 @@ export default function LidlarPage() {
                         <span style={{ color:m.color, display:"flex" }}>{m.icon}</span>
                       </div>
                       <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", textAlign:"center", lineHeight:1.25 }}>{m.title}</div>
-                      <div style={{ fontSize:34, fontWeight:800, color:m.color, lineHeight:1 }}>{m.val.toFixed(1)}%</div>
+                      <div style={{ fontSize:34, fontWeight:800, color:m.color, lineHeight:1, marginTop:6 }}>{m.val.toFixed(1)}%</div>
                       {/* Track with the value marked on it — reads as a position
                           along the funnel rather than a bare number. */}
                       <div style={{ position:"relative", width:"100%", height:8 }}>
@@ -951,12 +951,7 @@ export default function LidlarPage() {
                       </div>
                     </div>,
                     i < 3 ? (
-                      <div key={`sep-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
-                        <div style={{ position:"absolute", top:0, bottom:0, width:1, background:"var(--border)" }} />
-                        <div style={{ position:"relative", width:26, height:26, borderRadius:"50%", background:"var(--bg2)", border:"1px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                          <ChevronRight size={13} style={{ color:"var(--text3)" }} />
-                        </div>
-                      </div>
+                      <div key={`sep-${i}`} style={{ width:1, background:"var(--border)", alignSelf:"stretch", margin:"6px 0" }} />
                     ) : null,
                   ])}
                 </div>
