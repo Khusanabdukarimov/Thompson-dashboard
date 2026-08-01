@@ -744,3 +744,21 @@ export function getResponsibleTasks(
     mode: filter.mode,
   }, API_URL_CRM);
 }
+
+/** Leads behind one row of Manba bo'yicha. */
+export function getSourceLeads(
+  sourceId: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  opts: { limit?: number; offset?: number } = {},
+) {
+  return apiGet<{ items: ResponsibleLeadRow[] }>("/api/dashboard/source-leads", {
+    source_id: sourceId,
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_ids?.join(','),
+    proekt: filter.proekts?.join(','),
+    mode: filter.mode,
+    limit: opts.limit,
+    offset: opts.offset,
+  }, API_URL_CRM);
+}

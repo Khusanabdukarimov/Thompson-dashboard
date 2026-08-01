@@ -1545,6 +1545,41 @@ router.get('/utm-stats', async (req, res) => {
  * Leads grouped by source with funnel breakdown.
  * Params: from, to, responsible_id, mode
  */
+/**
+ * GET /api/dashboard/source-leads
+ * The leads behind one row of Manba bo'yicha. `source_id` is the raw Bitrix
+ * SOURCE_ID; 'Nomalum' means the field was never set.
+ * Params: source_id, from, to, responsible_id, proekt, mode, limit, offset.
+ */
+router.get('/source-leads', async (req, res) => {
+  const { source_id, from, to, responsible_id, proekt, mode } = req.query;
+  const limit  = Math.min(5000, parseInt(req.query.limit, 10) || 10);
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  const unknown = !source_id || source_id === 'Nomalum';
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.id, l.title, l.name, l.last_name, l.date_create,
+              s.bitrix_id AS stage_bid,
+              NULLIF(NULLIF(l.uf_tashrif_sanasi, ''), 'false') AS tashrif_sanasi
+       FROM leads l
+       JOIN stages s ON s.id = l.stage_id
+       WHERE ${leadDateCond(mode, 1, 2)}
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${leadProektCond(4, req.query)}
+         AND (${unknown ? 'l.source_id IS NULL' : 'l.source_id = $5::text'})
+         ${leadModeClause(mode)}
+       ORDER BY l.date_create DESC
+       LIMIT ${limit} OFFSET ${offset}`,
+      [from || null, to || null, responsible_id || null, proekt || null, ...(unknown ? [] : [source_id])]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/source-leads]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/source-stats', async (req, res) => {
   const { from, to, responsible_id, proekt, mode } = req.query;
   try {

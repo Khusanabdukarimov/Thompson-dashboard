@@ -13,7 +13,7 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
-  getResponsibleTasks,
+  getResponsibleTasks, getSourceLeads,
   getSourceStats, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
   type SourceStatsRow, type ResponsibleLeadRow,
@@ -460,6 +460,14 @@ export default function LidlarPage() {
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [shownSrcLeads, setShownSrcLeads] = useState(10);
+  const srcListRef = useRef<HTMLDivElement>(null);
+  const srcLeadsQ = useQuery({
+    queryKey: ["stats/source-leads", selectedSource, appliedWithMode],
+    queryFn: () => getSourceLeads(selectedSource!, appliedWithMode, { limit: 1000 }),
+    enabled: selectedSource !== null,
+  });
   const [shownMasulLeads, setShownMasulLeads] = useState(10);
   const masulListRef = useRef<HTMLDivElement>(null);
   const [selectedTaskResp, setSelectedTaskResp] = useState<number | null>(null);
@@ -1615,14 +1623,17 @@ export default function LidlarPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {srcRows.map((r, i) => {
+                      {srcRows.flatMap((r, i) => {
                         const konv      = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
                         const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
-                        return (
+                        const isSrcOpen = selectedSource === r.source_id;
+                        const srcLeads = isSrcOpen ? (srcLeadsQ.data?.items ?? []) : [];
+                        return [
                           <tr key={r.source_id}
-                              style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                              onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                              onClick={() => { setShownSrcLeads(10); setSelectedSource(isSrcOpen ? null : r.source_id); }}
+                              style={{ background: isSrcOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                              onMouseEnter={e => { if (!isSrcOpen) e.currentTarget.style.background = "var(--bg3)"; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = isSrcOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
                             <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>
                               {r.source_name}
                             </td>
@@ -1661,8 +1672,81 @@ export default function LidlarPage() {
                             <td style={{ ...TD, textAlign: "center" }}>
                               <ConversionDonut pct={sifatliKonv} size={38} />
                             </td>
-                          </tr>
-                        );
+                          </tr>,
+                          isSrcOpen ? (
+                            <tr key={`${r.source_id}-leads`}>
+                              <td colSpan={9} style={{ padding: "0 12px 12px" }}>
+                                <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
+                                  {srcLeadsQ.isLoading ? (
+                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                                  ) : !srcLeads.length ? (
+                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
+                                  ) : (
+                                    <>
+                                      <div ref={srcListRef} style={{ maxHeight: 340, overflowY: "auto" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                          <thead>
+                                            <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                              <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
+                                              <th style={SUBTH}>LID</th>
+                                              <th style={{ ...SUBTH, width: 110 }}>SANA</th>
+                                              <th style={{ ...SUBTH, width: 210 }}>BOSQICH</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {srcLeads.slice(0, shownSrcLeads).map((lead, li) => {
+                                              const st = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                              return (
+                                                <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
+                                                  <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
+                                                  <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`} target="_blank" rel="noreferrer"
+                                                       onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
+                                                      {lead.title || `Lid #${lead.id}`}
+                                                    </a>
+                                                  </td>
+                                                  <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
+                                                    {lead.date_create ? String(lead.date_create).slice(0, 10) : "—"}
+                                                  </td>
+                                                  <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
+                                        {shownSrcLeads < srcLeads.length && (
+                                          <>
+                                            <button onClick={e => {
+                                                      e.stopPropagation();
+                                                      setShownSrcLeads(n => n + 10);
+                                                      requestAnimationFrame(() => srcListRef.current?.scrollTo({ top: srcListRef.current.scrollHeight, behavior: "smooth" }));
+                                                    }}
+                                              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                              Yana 10 ta <ChevronDown size={12} />
+                                            </button>
+                                            <button onClick={e => {
+                                                      e.stopPropagation();
+                                                      setShownSrcLeads(srcLeads.length);
+                                                      requestAnimationFrame(() => srcListRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+                                                    }}
+                                              style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                              Barchasi ({srcLeads.length})
+                                            </button>
+                                          </>
+                                        )}
+                                        <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                                          {Math.min(shownSrcLeads, srcLeads.length)} / {srcLeads.length} ta lid
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null,
+                        ];
                       })}
                       {/* JAMI row */}
                       <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
