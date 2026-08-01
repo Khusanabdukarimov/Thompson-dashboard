@@ -1430,7 +1430,7 @@ router.get('/source-stats', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT
          COALESCE(l.source_id, 'Nomalum') AS source_id,
-         COALESCE(MAX(ls.name), l.source_id, 'Nomalum') AS source_name,
+         COALESCE(MAX(ls.name), COALESCE(l.source_id, 'Nomalum')) AS source_name,
          COUNT(*)::int AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int AS jarayonda,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int AS sifatli_lid,
