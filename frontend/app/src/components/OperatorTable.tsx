@@ -5,8 +5,8 @@
 // nobody trusts. Ranking, trend and the leaderboard are all read off those same
 // values; the only thing computed here is the comparison against the previous
 // period of equal length.
-import { useMemo, useState } from "react";
-import { ExternalLink, Phone, User } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ChevronDown, ExternalLink, Phone, User } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
 import type { ConversionStatsResponse, ResponsibleLeadRow } from "@/lib/api/leads";
@@ -85,6 +85,8 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
   const portal = useBitrixPortal();
   const [hovered, setHovered] = useState<number | null>(null);
   const [shownLeads, setShownLeads] = useState(10);
+  const [openPodium, setOpenPodium] = useState<string | null>(null);
+  const leadScrollRef = useRef<HTMLDivElement>(null);
 
   // Ranked by conversion — the metric the business actually optimises for.
   const ranked = useMemo(
@@ -107,9 +109,9 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
   const leaders = useMemo(() => {
     const best = (pick: (r: Row) => number) => rows.reduce<Row | null>((b, r) => (!b || pick(r) > pick(b) ? r : b), null);
     return [
-      { medal: "🥇", label: "Eng ko'p tashrif o'tkazildi", row: best(r => r.tashrif_buyurdi),    val: (r: Row) => fmtNum(r.tashrif_buyurdi),    color: METRIC_COLORS.tashrif },
-      { medal: "🥈", label: "Eng ko'p tashrif belgilandi", row: best(r => r.tashrif_belgilandi ?? 0), val: (r: Row) => fmtNum(r.tashrif_belgilandi ?? 0), color: METRIC_COLORS.belgilandi },
-      { medal: "🥉", label: "Eng yuqori konversiya",       row: best(conversionOf),               val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
+      { key: "otkazildi", medal: "🥇", label: "Eng ko'p tashrif o'tkazildi", row: best(r => r.tashrif_buyurdi), pick: (r: Row) => r.tashrif_buyurdi, val: (r: Row) => fmtNum(r.tashrif_buyurdi), color: METRIC_COLORS.tashrif },
+      { key: "belgilandi", medal: "🥈", label: "Eng ko'p tashrif belgilandi", row: best(r => r.tashrif_belgilandi ?? 0), pick: (r: Row) => r.tashrif_belgilandi ?? 0, val: (r: Row) => fmtNum(r.tashrif_belgilandi ?? 0), color: METRIC_COLORS.belgilandi },
+      { key: "konversiya", medal: "🥉", label: "Eng yuqori konversiya", row: best(conversionOf), pick: conversionOf, val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
     ].filter(l => l.row);
   }, [rows]);
 
@@ -143,20 +145,54 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
 
   return (
     <div>
-      {/* Podium — who leads, before any numbers are read */}
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${leaders.length}, 1fr)`, gap: 12, padding: "0 20px 16px" }}>
-        {leaders.map(l => (
-          <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 16px" }}>
-            <span style={{ fontSize: 22, lineHeight: 1 }}>{l.medal}</span>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {l.row!.full_name || `User ${l.row!.responsible_id}`}
+      {/* Podium — who leads, before any numbers are read. Each card opens
+          into the top five for that metric, so "who else is close" is one
+          click away instead of a scan down the table. */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${leaders.length}, 1fr)`, gap: 12, padding: "0 20px 16px", alignItems: "start" }}>
+        {leaders.map(l => {
+          const open = openPodium === l.key;
+          const top5 = [...rows].sort((a, b) => l.pick(b) - l.pick(a)).slice(0, 5);
+          const top = Math.max(1, ...top5.map(l.pick));
+          return (
+            <div key={l.key}
+              onClick={() => setOpenPodium(open ? null : l.key)}
+              style={{
+                background: "var(--bg3)", border: `1px solid ${open ? l.color : "var(--border)"}`,
+                borderRadius: 12, cursor: "pointer", overflow: "hidden",
+                transition: "border-color .18s ease",
+              }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px" }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>{l.medal}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {l.row!.full_name || `User ${l.row!.responsible_id}`}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 1 }}>{l.label}</div>
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: l.color, fontVariantNumeric: "tabular-nums" }}>{l.val(l.row!)}</div>
+                <ChevronDown size={14} style={{ color: "var(--text3)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .18s ease" }} />
               </div>
-              <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 1 }}>{l.label}</div>
+              {open && (
+                <div style={{ borderTop: "1px solid var(--border)", padding: "10px 16px 12px", background: "var(--bg2)" }}>
+                  {top5.map((r, i) => (
+                    <div key={r.responsible_id} style={{ padding: "5px 0" }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text3)", width: 16 }}>{i + 1}</span>
+                        <span style={{ fontSize: 12, color: "var(--text2)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {r.full_name || `User ${r.responsible_id}`}
+                        </span>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{l.val(r)}</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 3, background: "var(--bg4)", marginLeft: 24, overflow: "hidden" }}>
+                        <div style={{ width: `${(l.pick(r) / top) * 100}%`, height: "100%", borderRadius: 3, background: l.color, transition: "width .45s cubic-bezier(.4,0,.2,1)" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: l.color, fontVariantNumeric: "tabular-nums" }}>{l.val(l.row!)}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -243,7 +279,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
                           <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                         ) : (
                           <>
-                            <div style={{ maxHeight: 340, overflowY: "auto" }}>
+                            <div ref={leadScrollRef} style={{ maxHeight: 340, overflowY: "auto" }}>
                               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                 <thead>
                                   <tr style={{ background: "rgba(33,150,243,0.06)" }}>
@@ -279,12 +315,29 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
                                 </tbody>
                               </table>
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
                               {shownLeads < leads.length && (
-                                <button onClick={e => { e.stopPropagation(); setShownLeads(n => n + 10); }}
-                                  style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                  Yana 10 ta
-                                </button>
+                                <>
+                                  {/* Reveal the next page and carry the eye to it —
+                                      without the scroll the new rows land below
+                                      the fold and the button looks inert. */}
+                                  <button onClick={e => {
+                                            e.stopPropagation();
+                                            setShownLeads(n => n + 10);
+                                            requestAnimationFrame(() => leadScrollRef.current?.scrollTo({ top: leadScrollRef.current.scrollHeight, behavior: "smooth" }));
+                                          }}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                    Yana 10 ta <ChevronDown size={12} />
+                                  </button>
+                                  <button onClick={e => {
+                                            e.stopPropagation();
+                                            setShownLeads(leads.length);
+                                            requestAnimationFrame(() => leadScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+                                          }}
+                                    style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                    Barchasi ({leads.length})
+                                  </button>
+                                </>
                               )}
                               <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
                                 {Math.min(shownLeads, leads.length)} / {leads.length} ta lid
