@@ -816,6 +816,40 @@ export function getSourceLeads(
   }, API_URL_CRM);
 }
 
+function getUfBreakdownLeads(
+  path: "source1-leads" | "hudud-leads",
+  enumId: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  opts: { limit?: number; offset?: number } = {},
+) {
+  return apiGet<{ items: ResponsibleLeadRow[] }>(`/api/dashboard/${path}`, {
+    enum_id: enumId,
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_ids?.join(','),
+    proekt: filter.proekts?.join(','),
+    mode: filter.mode,
+    limit: opts.limit,
+    offset: opts.offset,
+  }, API_URL_CRM);
+}
+
+export function getSource1Leads(
+  enumId: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  opts: { limit?: number; offset?: number } = {},
+) {
+  return getUfBreakdownLeads("source1-leads", enumId, filter, opts);
+}
+
+export function getHududLeads(
+  enumId: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  opts: { limit?: number; offset?: number } = {},
+) {
+  return getUfBreakdownLeads("hudud-leads", enumId, filter, opts);
+}
+
 export type LeadDailyResponse = {
   /** 'day' | 'week' | 'month' — chosen from the range length. */
   bucket: string;

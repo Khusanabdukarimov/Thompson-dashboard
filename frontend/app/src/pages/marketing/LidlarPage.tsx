@@ -14,7 +14,7 @@ import {
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
   getResponsibleTasks, getSourceLeads, getLeadDaily,
-  getSourceStats, getSource1Stats, getHududStats, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
+  getSourceStats, getSource1Stats, getHududStats, getSource1Leads, getHududLeads, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
   type SourceStatsRow, type UfBreakdownRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
@@ -522,6 +522,22 @@ export default function LidlarPage() {
     queryKey: ["stats/source-leads", selectedSource, appliedWithMode],
     queryFn: () => getSourceLeads(selectedSource!, appliedWithMode, { limit: 1000 }),
     enabled: selectedSource !== null,
+  });
+  const [selectedSource1, setSelectedSource1] = useState<string | null>(null);
+  const [shownSource1Leads, setShownSource1Leads] = useState(10);
+  const source1ListRef = useRef<HTMLDivElement>(null);
+  const source1LeadsQ = useQuery({
+    queryKey: ["stats/source1-leads", selectedSource1, appliedWithMode],
+    queryFn: () => getSource1Leads(selectedSource1!, appliedWithMode, { limit: 1000 }),
+    enabled: selectedSource1 !== null,
+  });
+  const [selectedHudud, setSelectedHudud] = useState<string | null>(null);
+  const [shownHududLeads, setShownHududLeads] = useState(10);
+  const hududListRef = useRef<HTMLDivElement>(null);
+  const hududLeadsQ = useQuery({
+    queryKey: ["stats/hudud-leads", selectedHudud, appliedWithMode],
+    queryFn: () => getHududLeads(selectedHudud!, appliedWithMode, { limit: 1000 }),
+    enabled: selectedHudud !== null,
   });
   const [shownMasulLeads, setShownMasulLeads] = useState(10);
   const masulListRef = useRef<HTMLDivElement>(null);
@@ -1857,10 +1873,21 @@ export default function LidlarPage() {
             bo'yicha, grouped by a UF enum field instead of source_id.
         ══════════════════════════════════════════════════════════ */}
         {[
-          { title: "Manba 1 bo'yicha", unit: "manba", q: source1Q, fieldCode: "UF_CRM_1635794595" },
-          { title: "Hudud bo'yicha",   unit: "hudud", q: hududQ,   fieldCode: "UF_CRM_1701529319467" },
-        ].map(({ title, unit, q, fieldCode }) => {
+          {
+            title: "Manba 1 bo'yicha", unit: "manba", q: source1Q,
+            selected: selectedSource1, setSelected: setSelectedSource1,
+            shown: shownSource1Leads, setShown: setShownSource1Leads,
+            listRef: source1ListRef, leadsQ: source1LeadsQ,
+          },
+          {
+            title: "Hudud bo'yicha", unit: "hudud", q: hududQ,
+            selected: selectedHudud, setSelected: setSelectedHudud,
+            shown: shownHududLeads, setShown: setShownHududLeads,
+            listRef: hududListRef, leadsQ: hududLeadsQ,
+          },
+        ].map(({ title, unit, q, selected, setSelected, shown, setShown, listRef, leadsQ }) => {
           const rows: UfBreakdownRow[] = q.data ?? [];
+          const rowKey = (r: UfBreakdownRow) => r.enum_id ?? 'Nomalum';
           const maxes = {
             umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
             sifatli:  Math.max(1, ...rows.map(r => r.sifatli_lid)),
@@ -1896,22 +1923,19 @@ export default function LidlarPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((r, i) => {
+                      {rows.flatMap((r, i) => {
                         const konv        = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
                         const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
-                        return (
-                          <tr key={r.name} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                            <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
-                              {r.enum_id && bitrixPortal ? (
-                                <a href={`${bitrixPortal}/crm/lead/list/?apply_filter=Y&${fieldCode}=${r.enum_id}`}
-                                   target="_blank" rel="noreferrer"
-                                   style={{ color: "#2196F3", textDecoration: "underline" }}>
-                                  {r.name}
-                                </a>
-                              ) : (
-                                <span style={{ color: "var(--text)" }}>{r.name}</span>
-                              )}
-                            </td>
+                        const key = rowKey(r);
+                        const isOpen = selected === key;
+                        const leads: ResponsibleLeadRow[] = isOpen ? (leadsQ.data?.items ?? []) : [];
+                        return [
+                          <tr key={key}
+                              onClick={() => { setShown(10); setSelected(isOpen ? null : key); }}
+                              style={{ background: isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                              onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = "var(--bg3)"; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
+                            <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>{r.name}</td>
                             <td style={TD}>
                               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
                               <MiniBar value={r.umumiy_lidlar} max={maxes.umumiy} color="#2196F3" />
@@ -1943,8 +1967,81 @@ export default function LidlarPage() {
                             </td>
                             <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
                             <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={sifatliKonv} size={38} /></td>
-                          </tr>
-                        );
+                          </tr>,
+                          isOpen ? (
+                            <tr key={`${key}-leads`}>
+                              <td colSpan={9} style={{ padding: "0 12px 12px" }}>
+                                <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
+                                  {leadsQ.isLoading ? (
+                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                                  ) : !leads.length ? (
+                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
+                                  ) : (
+                                    <>
+                                      <div ref={listRef} style={{ maxHeight: 340, overflowY: "auto" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                          <thead>
+                                            <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                              <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
+                                              <th style={SUBTH}>LID</th>
+                                              <th style={{ ...SUBTH, width: 110 }}>SANA</th>
+                                              <th style={{ ...SUBTH, width: 210 }}>BOSQICH</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {leads.slice(0, shown).map((lead, li) => {
+                                              const st = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                              return (
+                                                <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
+                                                  <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
+                                                  <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`} target="_blank" rel="noreferrer"
+                                                       onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
+                                                      {lead.title || `Lid #${lead.id}`}
+                                                    </a>
+                                                  </td>
+                                                  <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
+                                                    {lead.date_create ? String(lead.date_create).slice(0, 10) : "—"}
+                                                  </td>
+                                                  <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
+                                        {shown < leads.length && (
+                                          <>
+                                            <button onClick={e => {
+                                                      e.stopPropagation();
+                                                      setShown((n: number) => n + 10);
+                                                      requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }));
+                                                    }}
+                                              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                              Yana 10 ta <ChevronDown size={12} />
+                                            </button>
+                                            <button onClick={e => {
+                                                      e.stopPropagation();
+                                                      setShown(leads.length);
+                                                      requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+                                                    }}
+                                              style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                              Barchasi ({leads.length})
+                                            </button>
+                                          </>
+                                        )}
+                                        <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                                          {Math.min(shown, leads.length)} / {leads.length} ta lid
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null,
+                        ];
                       })}
                     </tbody>
                   </table>

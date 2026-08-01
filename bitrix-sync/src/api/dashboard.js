@@ -1750,6 +1750,45 @@ router.get('/source1-stats', ufBreakdownHandler(SOURCE1_FIELD));
 router.get('/hudud-stats',   ufBreakdownHandler(HUDUD_FIELD, { excludeUnknown: true }));
 
 /**
+ * Drill-down leads for one row of /source1-stats or /hudud-stats — same shape
+ * as /source-leads. `enum_id` identifies the row; "Nomalum" means no value set.
+ */
+function ufBreakdownLeadsHandler(fieldCode) {
+  return async (req, res) => {
+    const { enum_id, from, to, responsible_id, proekt, mode } = req.query;
+    const limit  = Math.min(5000, parseInt(req.query.limit, 10) || 10);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const unknown = !enum_id || enum_id === 'Nomalum';
+
+    try {
+      const { rows } = await pool.query(
+        `SELECT l.id, l.title, l.name, l.last_name, l.date_create,
+                s.bitrix_id AS stage_bid,
+                NULLIF(NULLIF(l.uf_tashrif_sanasi, ''), 'false') AS tashrif_sanasi
+         FROM leads l
+         JOIN stages s ON s.id = l.stage_id
+         WHERE ${leadDateCond(mode, 1, 2)}
+           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ${leadProektCond(4, req.query)}
+           AND (${unknown
+             ? `l.id NOT IN (SELECT lead_id FROM lead_uf_values WHERE field_code = '${fieldCode}' AND value <> '')`
+             : `l.id IN (SELECT lead_id FROM lead_uf_values WHERE field_code = '${fieldCode}' AND value = $5::text)`})
+           ${leadModeClause(mode)}
+         ORDER BY l.date_create DESC
+         LIMIT ${limit} OFFSET ${offset}`,
+        [from || null, to || null, responsible_id || null, proekt || null, ...(unknown ? [] : [enum_id])]
+      );
+      res.json({ items: rows });
+    } catch (err) {
+      console.error(`[dashboard/uf-breakdown-leads ${fieldCode}]`, err.message);
+      res.status(500).json({ error: err.message });
+    }
+  };
+}
+router.get('/source1-leads', ufBreakdownLeadsHandler(SOURCE1_FIELD));
+router.get('/hudud-leads',   ufBreakdownLeadsHandler(HUDUD_FIELD));
+
+/**
  * GET /api/dashboard/form-stats
  * Leads grouped by web_form_id (direct DB field), joined with crm_forms for name.
  * Params: from, to, responsible_id, mode
