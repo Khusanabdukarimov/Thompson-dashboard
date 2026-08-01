@@ -977,14 +977,21 @@ router.get('/amocrm-sources', async (_req, res) => {
  */
 router.get('/lead-daily', async (req, res) => {
   const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
-  const params = [from || null, to || null, responsible_id || null, stage || null, source || null, proekt || null];
-
+  // Bucket follows the range so the wave always holds roughly 8-24 points.
+  // One day reads hour by hour; a year reads by month.
   let bucket = 'month';
+  let effFrom = from || null;
   if (from && to) {
     const span = (new Date(to) - new Date(from)) / 86400000;
-    bucket = span <= 10 ? 'day' : span <= 90 ? 'week' : 'month';
+    bucket = span < 1 ? 'hour' : span <= 10 ? 'day' : span <= 90 ? 'week' : 'month';
+  } else {
+    // "Butun davr" spans years in which the early ones are nearly empty, so the
+    // wave flattened to a line with a single spike at the right. Start at the
+    // current year instead — the shape is the point of the card.
+    effFrom = `${new Date().getFullYear()}-01-01`;
   }
 
+  const params = [effFrom, to || null, responsible_id || null, stage || null, source || null, proekt || null];
   const dateCol = mode === 'amocrm' ? 'COALESCE(l.uf_amo_date, l.date_create)' : 'l.date_create';
 
   try {
@@ -1011,9 +1018,9 @@ router.get('/lead-daily', async (req, res) => {
 
     const fmt = (d) => {
       const dt = new Date(d);
-      return bucket === 'month'
-        ? dt.toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })
-        : dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+      if (bucket === 'hour')  return `${String(dt.getHours()).padStart(2, '0')}:00`;
+      if (bucket === 'month') return dt.toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' });
+      return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
     };
 
     res.json({
