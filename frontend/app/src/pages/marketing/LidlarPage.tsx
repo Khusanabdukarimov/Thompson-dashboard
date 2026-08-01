@@ -144,24 +144,6 @@ const STAGE_COLORS: Record<string, string> = {
 };
 const stageColor = (bid: string) => STAGE_COLORS[bid] ?? "#9E9E9E";
 
-/** Footer for the operator tables — reveals another page of rows, or all of
- *  them. Renders nothing once everything is on screen. */
-function ShowMore({ shown, total, page, onShow }: {
-  shown: number; total: number; page: number; onShow: (n: number) => void;
-}) {
-  if (shown >= total) return null;
-  const btn: React.CSSProperties = {
-    background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
-    color: "var(--text2)", fontSize: 12, fontWeight: 600, padding: "7px 14px", cursor: "pointer",
-  };
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
-      <button style={btn} onClick={() => onShow(shown + page)}>Yana {Math.min(page, total - shown)} ta</button>
-      <button style={{ ...btn, background: "transparent" }} onClick={() => onShow(total)}>Barchasini ko'rsatish ({total})</button>
-      <span style={{ fontSize: 11.5, color: "var(--text3)", marginLeft: "auto" }}>{shown} / {total}</span>
-    </div>
-  );
-}
 
 // Drill-down "BOSQICH" badge — kept in one place so both sub-tables (Lid va
 // Konversiya, Lid mas'ullar kesimida) always show the same label for a stage.
@@ -398,11 +380,6 @@ export default function LidlarPage() {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
   const [filterOpen, setFilterOpen] = useState(false);
-  // Both operator tables start collapsed to one page of rows. Rendering all 26
-  // at once buried the ranking and made the drill-downs hard to find.
-  const MGR_PAGE = 10;
-  const [shownConv, setShownConv] = useState(MGR_PAGE);
-  const [shownMasul, setShownMasul] = useState(MGR_PAGE);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search] = useState("");
   const [mode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
@@ -977,7 +954,7 @@ export default function LidlarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {convRows.slice(0, shownConv).map((r, i) => {
+                  {convRows.map((r, i) => {
                     const konv = (r.sifatli_lid ?? 0) > 0 ? (r.tashrif_buyurdi / (r.sifatli_lid ?? 0)) * 100 : 0;
                     const isSelected = selectedRespConv?.id === r.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSelected ? (respLeadsConvQ.data ?? []) : [];
@@ -1132,7 +1109,6 @@ export default function LidlarPage() {
               </table>
             </div>
           )}
-          <ShowMore shown={shownConv} total={convRows.length} page={MGR_PAGE} onShow={setShownConv} />
         </div>
 
         {/* ══════════════════════════════════════════════════════════
@@ -1159,7 +1135,7 @@ export default function LidlarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {byUserFiltered.slice(0, shownMasul).map((u, i) => {
+                  {byUserFiltered.map((u, i) => {
                     const isSel = selectedRespMasul?.id === u.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
                     const colCount = 2 + stageCols.length;
@@ -1283,7 +1259,6 @@ export default function LidlarPage() {
             </div>
           )}
 
-          <ShowMore shown={shownMasul} total={byUserFiltered.length} page={MGR_PAGE} onShow={setShownMasul} />
         </div>
 
         {/* ══════════════════════════════════════════════════════════
