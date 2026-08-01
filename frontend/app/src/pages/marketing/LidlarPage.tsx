@@ -122,27 +122,71 @@ function MultiSelect({
 }
 
 // ── Responsible table column definitions ─────────────────────────
+// Column → live Bitrix stage_bid (as of the current lead pipeline):
+//   qongiroqlar=NEW, tashrif_belgilandi=UC_N0PI5R, oylab_koradi='1',
+//   yangi_lid=UC_IX1SKS, propushenniy=UC_O7Y5NT, dpu1='7', dpu2=UC_S5YC0D,
+//   dpu3=UC_X316SW, qayta_aloqa=UC_63QL7L, kelmadi=UC_SWPARQ,
+//   muvaffaqiyatli=CONVERTED, sandiq=JUNK, arxiv=UC_GSPVUS, yopildi=UC_L8G2B9,
+//   student_hr=UC_W02434. The old "Target O'quv markaz/Kids/Maktab/Bog'cha"
+// columns (IN_PROCESS/UC_6INRIS/UC_YGM8H2/UC_TO2TYK) were removed — those
+// stages no longer exist in the portal, so they always read zero.
 const RESPONSIBLE_COLS = [
-  { key: "qongiroqlar",  label: "Zvonki",             color: "#9E9E9E" },
-  { key: "target_uc",   label: "Taргет O'quv markaz", color: "#2196F3" },
-  { key: "target_kids", label: "Taргет KIDS",         color: "#E91E63" },
-  { key: "target_mkt",  label: "Taргет maktab",       color: "#9C27B0" },
-  { key: "target_bog",  label: "Taргет bog'cha",      color: "#00BCD4" },
-  { key: "jarayonda",   label: "Jarayonda",           color: "#FF9800" },
-  { key: "keyin_qong",  label: "Keyin qo'ng'iroq",   color: "#607D8B" },
-  { key: "yangi_lid",   label: "Yangi lid",           color: "#03A9F4" },
-  { key: "propushenniy",label: "Propushenniy",        color: "#78909C" },
-  { key: "dpu1",        label: "DPU 1",               color: "#FF5722" },
-  { key: "dpu2",        label: "DPU 2",               color: "#FF7043" },
-  { key: "dpu3",        label: "DPU 3",               color: "#FF8A65" },
-  { key: "qayta_aloqa", label: "Qayta aloqa",         color: "#26C6DA" },
-  { key: "kelmadi",     label: "Kelmadi",             color: "#FF00FF" },
-  { key: "muvaffaqiyatli", label: "Muvaffaqiyatli",  color: "#4CAF50" },
-  { key: "sandiq",      label: "Sandiq (JUNK)",       color: "#42A5F5" },
-  { key: "arxiv",       label: "Arxiv",               color: "#8D6E63" },
-  { key: "yopildi",     label: "Yopildi",             color: "#616161" },
-  { key: "student_hr",  label: "Student/HR",          color: "#FFC107" },
+  { key: "qongiroqlar",  label: "Zvonki",              color: "#9E9E9E" },
+  { key: "jarayonda",    label: "Tashrif belgilandi",  color: "#FF9800" },
+  { key: "keyin_qong",   label: "O'ylab ko'radi",      color: "#607D8B" },
+  { key: "yangi_lid",    label: "Yangi lid",           color: "#03A9F4" },
+  { key: "propushenniy", label: "Propushenniy",        color: "#78909C" },
+  { key: "dpu1",         label: "DPU 1",               color: "#FF5722" },
+  { key: "dpu2",         label: "DPU 2",               color: "#FF7043" },
+  { key: "dpu3",         label: "DPU 3",               color: "#FF8A65" },
+  { key: "qayta_aloqa",  label: "Qayta aloqa",         color: "#26C6DA" },
+  { key: "kelmadi",      label: "Kelmadi",             color: "#FF00FF" },
+  { key: "muvaffaqiyatli", label: "Muvaffaqiyatli",   color: "#4CAF50" },
+  { key: "sandiq",       label: "Sandiq (JUNK)",       color: "#42A5F5" },
+  { key: "arxiv",        label: "Arxiv",               color: "#8D6E63" },
+  { key: "yopildi",      label: "Yopildi",             color: "#616161" },
+  { key: "student_hr",   label: "Student/HR",          color: "#FFC107" },
 ] as const;
+
+// Drill-down "BOSQICH" badge — kept in one place so both sub-tables (Lid va
+// Konversiya, Lid mas'ullar kesimida) always show the same label for a stage.
+// Legacy codes (UC_1KPATX, THINKING, ...) are kept as a fallback in case any
+// old lead still carries a since-removed stage_bid.
+const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
+  NEW:               { label: "Zvonki",             color: "#9E9E9E" },
+  UC_N0PI5R:         { label: "Tashrif belgilandi",  color: "#FF9800" },
+  "1":               { label: "O'ylab ko'radi",      color: "#607D8B" },
+  UC_IX1SKS:         { label: "Yangi lid",           color: "#03A9F4" },
+  UC_O7Y5NT:         { label: "Propushenniy",        color: "#78909C" },
+  "7":               { label: "DPU 1",               color: "#FF5722" },
+  UC_S5YC0D:         { label: "DPU 2",               color: "#FF7043" },
+  UC_X316SW:         { label: "DPU 3",               color: "#FF8A65" },
+  UC_63QL7L:         { label: "Qayta aloqa",         color: "#26C6DA" },
+  UC_SWPARQ:         { label: "Kelmadi",             color: "#FF00FF" },
+  CONVERTED:         { label: "Muvaffaqiyatli",      color: "#4CAF50" },
+  JUNK:              { label: "Sandiq (JUNK)",       color: "#42A5F5" },
+  UC_GSPVUS:         { label: "Arxiv",               color: "#8D6E63" },
+  UC_L8G2B9:         { label: "Yopildi",             color: "#616161" },
+  UC_W02434:         { label: "Student/HR",          color: "#FFC107" },
+  // Legacy stage codes, superseded by the ones above but kept for old leads.
+  IN_PROCESS:        { label: "Yangi lid",           color: "#2196F3" },
+  PROCESSED:         { label: "Propushenniy",        color: "#9E9E9E" },
+  UC_1KPATX:         { label: "Javob bermadi",       color: "#FF9800" },
+  NO_ANSWER:         { label: "Javob bermadi",       color: "#FF9800" },
+  UC_Q2U9EL:         { label: "Qayta aloqa",         color: "#00BCD4" },
+  CALLBACK:          { label: "Qayta aloqa",         color: "#00BCD4" },
+  UC_KXC3ZW:         { label: "O'ylab ko'radi",      color: "#E91E63" },
+  THINKING:          { label: "O'ylab ko'radi",      color: "#E91E63" },
+  UC_L28G68:         { label: "Tashrif belgilandi",  color: "#9C27B0" },
+  CONSULTATION:      { label: "Tashrif belgilandi",  color: "#9C27B0" },
+  UC_5G8244:         { label: "Kelmadi",             color: "#FF00FF" },
+  NOT_TRANSFERRED:   { label: "Kelmadi",             color: "#FF00FF" },
+  ARCHIVE:           { label: "Sandiq",              color: "#42A5F5" },
+  UC_F8K4GI:         { label: "Sifatsiz",            color: "#F44336" },
+  UC_NAZK5J:         { label: "Bekor bo'ldi",        color: "#FFC107" },
+  RECYCLED:          { label: "Bekor bo'ldi",        color: "#FFC107" },
+  CONVERTED_CONSULT: { label: "Tashrif buyurdi",     color: "#4CAF50" },
+};
 type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
 
 // ── Shared mini-components ────────────────────────────────────────
@@ -916,28 +960,7 @@ export default function LidlarPage() {
                     const konv = (r.sifatli_lid ?? 0) > 0 ? (r.tashrif_buyurdi / (r.sifatli_lid ?? 0)) * 100 : 0;
                     const isSelected = selectedRespConv?.id === r.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSelected ? (respLeadsConvQ.data ?? []) : [];
-                    const STAGE_MAP_INLINE: Record<string, { label: string; color: string }> = {
-                      NEW:               { label: "Yangi lid",          color: "#2196F3" },
-                      IN_PROCESS:        { label: "Yangi lid",          color: "#2196F3" },
-                      PROCESSED:         { label: "Propushenniy",       color: "#9E9E9E" },
-                      UC_1KPATX:         { label: "Javob bermadi",      color: "#FF9800" },
-                      NO_ANSWER:         { label: "Javob bermadi",      color: "#FF9800" },
-                      UC_Q2U9EL:         { label: "Qayta aloqa",        color: "#00BCD4" },
-                      CALLBACK:          { label: "Qayta aloqa",        color: "#00BCD4" },
-                      UC_KXC3ZW:         { label: "O'ylab ko'radi",     color: "#E91E63" },
-                      THINKING:          { label: "O'ylab ko'radi",     color: "#E91E63" },
-                      UC_L28G68:         { label: "Tashrif belgilandi", color: "#9C27B0" },
-                      CONSULTATION:      { label: "Tashrif belgilandi", color: "#9C27B0" },
-                      UC_5G8244:         { label: "Kelmadi",            color: "#FF00FF" },
-                      NOT_TRANSFERRED:   { label: "Kelmadi",            color: "#FF00FF" },
-                      JUNK:              { label: "Sandiq",             color: "#42A5F5" },
-                      ARCHIVE:           { label: "Sandiq",             color: "#42A5F5" },
-                      UC_F8K4GI:         { label: "Sifatsiz",           color: "#F44336" },
-                      UC_NAZK5J:         { label: "Bekor bo'ldi",       color: "#FFC107" },
-                      RECYCLED:          { label: "Bekor bo'ldi",       color: "#FFC107" },
-                      CONVERTED_CONSULT: { label: "Tashrif buyurdi",    color: "#4CAF50" },
-                      CONVERTED:         { label: "Tashrif buyurdi",    color: "#4CAF50" },
-                    };
+                    const STAGE_MAP_INLINE = STAGE_BADGE_MAP;
                     return (
                       <>
                         <tr key={r.responsible_id}
@@ -1118,28 +1141,7 @@ export default function LidlarPage() {
                   {byUserFiltered.map((u, i) => {
                     const isSel = selectedRespMasul?.id === u.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
-                    const STAGE_MAP_M: Record<string, { label: string; color: string }> = {
-                      NEW: { label: "Yangi lid", color: "#2196F3" },
-                      IN_PROCESS: { label: "Yangi lid", color: "#2196F3" },
-                      PROCESSED: { label: "Propushenniy", color: "#9E9E9E" },
-                      UC_1KPATX: { label: "Javob bermadi", color: "#FF9800" },
-                      NO_ANSWER: { label: "Javob bermadi", color: "#FF9800" },
-                      UC_Q2U9EL: { label: "Qayta aloqa", color: "#00BCD4" },
-                      CALLBACK: { label: "Qayta aloqa", color: "#00BCD4" },
-                      UC_KXC3ZW: { label: "O'ylab ko'radi", color: "#E91E63" },
-                      THINKING: { label: "O'ylab ko'radi", color: "#E91E63" },
-                      UC_L28G68: { label: "Tashrif belgilandi", color: "#9C27B0" },
-                      CONSULTATION: { label: "Tashrif belgilandi", color: "#9C27B0" },
-                      UC_5G8244: { label: "Kelmadi", color: "#FF00FF" },
-                      NOT_TRANSFERRED: { label: "Kelmadi", color: "#FF00FF" },
-                      JUNK: { label: "Sandiq", color: "#42A5F5" },
-                      ARCHIVE: { label: "Sandiq", color: "#42A5F5" },
-                      UC_F8K4GI: { label: "Sifatsiz", color: "#F44336" },
-                      UC_NAZK5J: { label: "Bekor bo'ldi", color: "#FFC107" },
-                      RECYCLED: { label: "Bekor bo'ldi", color: "#FFC107" },
-                      CONVERTED_CONSULT: { label: "Tashrif buyurdi", color: "#4CAF50" },
-                      CONVERTED: { label: "Tashrif buyurdi", color: "#4CAF50" },
-                    };
+                    const STAGE_MAP_M = STAGE_BADGE_MAP;
                     const colCount = 2 + RESPONSIBLE_COLS.length;
                     return (
                       <>
