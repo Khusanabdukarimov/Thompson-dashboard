@@ -88,9 +88,11 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
   const [openPodium, setOpenPodium] = useState<Set<string>>(new Set());
   const leadScrollRef = useRef<HTMLDivElement>(null);
 
-  // Ranked by conversion — the metric the business actually optimises for.
+  // Ranked by lead volume, ties broken by conversion. Ranking on conversion put
+  // an operator with 4 leads and 100% above one with 126 and 85% — a rate on a
+  // tiny base is noise, and the people carrying the work sank to the bottom.
   const ranked = useMemo(
-    () => [...rows].sort((a, b) => conversionOf(b) - conversionOf(a) || b.total - a.total),
+    () => [...rows].sort((a, b) => b.total - a.total || conversionOf(b) - conversionOf(a)),
     [rows]
   );
 

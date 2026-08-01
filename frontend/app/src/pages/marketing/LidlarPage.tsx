@@ -1018,7 +1018,7 @@ export default function LidlarPage() {
           <div style={{ padding:"16px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"baseline", gap:10 }}>
             <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid va Konversiya</span>
             <span style={{ fontSize:11.5, color:"var(--text3)" }}>
-              Konversiya bo'yicha reyting • trend oldingi davr bilan solishtiriladi
+              Umumiy lidlar bo'yicha reyting
             </span>
           </div>
           <div style={{ paddingTop:16 }}>
