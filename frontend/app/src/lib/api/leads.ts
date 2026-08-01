@@ -387,6 +387,7 @@ export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date
 
 export type UfBreakdownRow = {
   name: string;
+  enum_id: string | null;
   umumiy_lidlar: number;
   jarayonda: number;
   sifatli_lid: number;

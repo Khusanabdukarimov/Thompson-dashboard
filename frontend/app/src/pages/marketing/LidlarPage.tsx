@@ -1857,9 +1857,9 @@ export default function LidlarPage() {
             bo'yicha, grouped by a UF enum field instead of source_id.
         ══════════════════════════════════════════════════════════ */}
         {[
-          { title: "Manba 1 bo'yicha", unit: "manba", q: source1Q },
-          { title: "Hudud bo'yicha",   unit: "hudud", q: hududQ },
-        ].map(({ title, unit, q }) => {
+          { title: "Manba 1 bo'yicha", unit: "manba", q: source1Q, fieldCode: "UF_CRM_1635794595" },
+          { title: "Hudud bo'yicha",   unit: "hudud", q: hududQ,   fieldCode: "UF_CRM_1701529319467" },
+        ].map(({ title, unit, q, fieldCode }) => {
           const rows: UfBreakdownRow[] = q.data ?? [];
           const maxes = {
             umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
@@ -1901,7 +1901,17 @@ export default function LidlarPage() {
                         const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
                         return (
                           <tr key={r.name} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                            <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>{r.name}</td>
+                            <td style={{ ...TD, fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>
+                              {r.enum_id && bitrixPortal ? (
+                                <a href={`${bitrixPortal}/crm/lead/list/?apply_filter=Y&${fieldCode}=${r.enum_id}`}
+                                   target="_blank" rel="noreferrer"
+                                   style={{ color: "#2196F3", textDecoration: "underline" }}>
+                                  {r.name}
+                                </a>
+                              ) : (
+                                <span style={{ color: "var(--text)" }}>{r.name}</span>
+                              )}
+                            </td>
                             <td style={TD}>
                               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
                               <MiniBar value={r.umumiy_lidlar} max={maxes.umumiy} color="#2196F3" />

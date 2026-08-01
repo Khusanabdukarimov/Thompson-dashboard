@@ -113,13 +113,14 @@ const HUDUD_FIELD   = 'UF_CRM_1701529319467';
  * /source1-stats ("Manba 1 bo'yicha") and /hudud-stats ("Hudud bo'yicha") —
  * they differ only in which field they group by.
  */
-function ufBreakdownHandler(fieldCode) {
+function ufBreakdownHandler(fieldCode, { excludeUnknown = false } = {}) {
   return async (req, res) => {
     const { from, to, responsible_id, proekt, mode } = req.query;
     try {
       const { rows } = await pool.query(
         `SELECT
            COALESCE(e.value, 'Noma''lum')                                       AS name,
+           MAX(e.enum_id)                                                       AS enum_id,
            COUNT(*)::int                                                        AS umumiy_lidlar,
            COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int                          AS jarayonda,
            COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int       AS sifatli_lid,
@@ -129,8 +130,8 @@ function ufBreakdownHandler(fieldCode) {
            COUNT(*) FILTER (WHERE s.bitrix_id = 'UC_L8G2B9')::int               AS bekor_boldi
          FROM leads l
          LEFT JOIN stages s ON s.id = l.stage_id
-         LEFT JOIN lead_uf_values v ON v.lead_id = l.id AND v.field_code = '${fieldCode}' AND v.value <> ''
-         LEFT JOIN lead_uf_enums  e ON e.field_code = v.field_code AND e.enum_id = v.value
+         ${excludeUnknown ? 'JOIN' : 'LEFT JOIN'} lead_uf_values v ON v.lead_id = l.id AND v.field_code = '${fieldCode}' AND v.value <> ''
+         ${excludeUnknown ? 'JOIN' : 'LEFT JOIN'} lead_uf_enums  e ON e.field_code = v.field_code AND e.enum_id = v.value
          WHERE ${leadDateCond(mode, 1, 2)}
            AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
            AND ${leadProektCond(4, req.query)}
@@ -1746,7 +1747,7 @@ router.get('/source-stats', async (req, res) => {
  * Same funnel columns as /source-stats. Params: from, to, responsible_id, proekt, mode.
  */
 router.get('/source1-stats', ufBreakdownHandler(SOURCE1_FIELD));
-router.get('/hudud-stats',   ufBreakdownHandler(HUDUD_FIELD));
+router.get('/hudud-stats',   ufBreakdownHandler(HUDUD_FIELD, { excludeUnknown: true }));
 
 /**
  * GET /api/dashboard/form-stats
