@@ -148,8 +148,8 @@ export function OperatorTable({ rows, prevRows, loading }: {
         <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
           <thead>
             <tr>
-              <th style={{ ...TH, width: 52, textAlign: "center" }}>#</th>
-              <th style={{ ...TH, width: 230 }}>Operator</th>
+              <th style={{ ...TH, width: "1%", textAlign: "center" }}>#</th>
+              <th style={{ ...TH, width: "1%" }}>Operator</th>
               <th style={{ ...TH, width: "12%" }}>Umumiy lidlar</th>
               <th style={{ ...TH, width: "12%" }}>Sifatli lid</th>
               <th style={{ ...TH, width: "12%" }}>Jarayonda</th>
@@ -179,7 +179,7 @@ export function OperatorTable({ rows, prevRows, loading }: {
                       {i < 3 ? RANK_MEDAL[i] : `#${i + 1}`}
                     </span>
                   </td>
-                  <td style={TD}>
+                  <td style={{ ...TD, whiteSpace: "nowrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                       <Avatar name={r.full_name || `U${r.responsible_id}`} color={avatarColor(r.responsible_id)} />
                       <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
