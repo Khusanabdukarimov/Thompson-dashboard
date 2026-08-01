@@ -77,6 +77,21 @@ const leadScopeCond = (col) =>
    AND ${col} NOT IN (SELECT lead_id FROM lead_uf_values
                        WHERE field_code = '${PROEKT2_FIELD}' AND value IN (${PROEKT2_HIDDEN}))`;
 
+// Reason fields, resolved against lead_uf_enums (kept current by ufSync) rather
+// than a hardcoded id→label map. The maps inherited from the Mountain codebase
+// carried that portal's enum ids, so nothing matched here and leads.uf_*_reason
+// ended up 0% filled — every reason rendered as "Noma'lum" despite 11,002
+// values sitting in lead_uf_values.
+const REASON_BEKOR    = 'UF_CRM_1770976355232'; // Bekor bo'ldi sababini belgilang (LC)
+const REASON_SIFATSIZ = 'UF_CRM_1770282341169'; // Sifatsizlik sababini belgilang (LC)
+
+/** Reason label for a lead, joined off the enum dictionary. */
+const reasonJoin = (field) => `
+  LEFT JOIN lead_uf_values rv ON rv.lead_id = l.id
+        AND rv.field_code = '${field}' AND rv.value <> ''
+  LEFT JOIN lead_uf_enums  re ON re.field_code = rv.field_code
+        AND re.enum_id = rv.value`;
+
 /** Scope plus the user's optional Proekt picker (a subset of the allow-list). */
 function leadProektCond(pi) {
   return `($${pi}::text IS NULL OR l.id IN (
@@ -430,15 +445,16 @@ router.get('/cancel-reasons', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(l.uf_cancel_reason, 'Noma''lum') AS reason,
+         COALESCE(re.value, 'Noma''lum') AS reason,
          COUNT(*)::int AS total
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_L8G2B9'
+       ${reasonJoin(REASON_BEKOR)}
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
-       GROUP BY l.uf_cancel_reason
+       GROUP BY re.value
        ORDER BY total DESC`,
       params
     );
@@ -460,15 +476,16 @@ router.get('/junk-reasons', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(l.uf_junk_reason, 'Noma''lum') AS reason,
+         COALESCE(re.value, 'Noma''lum') AS reason,
          COUNT(*)::int AS total
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'JUNK'
+       ${reasonJoin(REASON_SIFATSIZ)}
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          AND ${leadProektCond(4)}
          ${leadModeClause(mode)}
-       GROUP BY l.uf_junk_reason
+       GROUP BY re.value
        ORDER BY total DESC`,
       params
     );
