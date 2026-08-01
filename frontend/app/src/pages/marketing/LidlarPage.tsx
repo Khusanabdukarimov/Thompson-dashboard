@@ -460,6 +460,8 @@ export default function LidlarPage() {
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const [shownMasulLeads, setShownMasulLeads] = useState(10);
+  const masulListRef = useRef<HTMLDivElement>(null);
   const [selectedTaskResp, setSelectedTaskResp] = useState<number | null>(null);
   const respTasksQ = useQuery({
     queryKey: ["stats/responsible-tasks", selectedTaskResp, appliedWithMode],
@@ -1009,7 +1011,7 @@ export default function LidlarPage() {
                       <>
                         <tr key={u.responsible_id}
                             style={{ background: isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                            onClick={() => setSelectedRespMasul(isSel ? null : { id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` })}
+                            onClick={() => { setShownMasulLeads(10); setSelectedRespMasul(isSel ? null : { id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` }); }}
                             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
                             onMouseLeave={(e) => (e.currentTarget.style.background = isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                           <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
@@ -1042,12 +1044,14 @@ export default function LidlarPage() {
                         </tr>
                         {isSel && (
                           <tr key={`sub-masul-${u.responsible_id}`}>
-                            <td colSpan={colCount} style={{ padding: 0, background: "rgba(33,150,243,0.04)", borderBottom: "1px solid var(--border)" }}>
+                            <td colSpan={colCount} style={{ padding: "0 12px 12px" }}>
+                              <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                               {respLeadsMasulQ.isLoading ? (
-                                <div style={{ padding: "14px 20px", color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                                <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
                               ) : subLeads.length === 0 ? (
-                                <div style={{ padding: "14px 20px", color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+                                <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                               ) : (
+                                <div ref={masulListRef} style={{ maxHeight: 340, overflowY: "auto" }}>
                                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                   <thead>
                                     <tr style={{ background: "rgba(33,150,243,0.06)" }}>
@@ -1059,7 +1063,7 @@ export default function LidlarPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {subLeads.map((lead, li) => {
+                                    {subLeads.slice(0, shownMasulLeads).map((lead, li) => {
                                       const stage = stageBadge(lead.stage_bid);
                                       return (
                                         <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
@@ -1099,7 +1103,36 @@ export default function LidlarPage() {
                                     </tr>
                                   </tbody>
                                 </table>
+                                </div>
                               )}
+                              {subLeads.length > 0 && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
+                                  {shownMasulLeads < subLeads.length && (
+                                    <>
+                                      <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShownMasulLeads((n) => n + 10);
+                                                requestAnimationFrame(() => masulListRef.current?.scrollTo({ top: masulListRef.current.scrollHeight, behavior: "smooth" }));
+                                              }}
+                                        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                        Yana 10 ta <ChevronDown size={12} />
+                                      </button>
+                                      <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShownMasulLeads(subLeads.length);
+                                                requestAnimationFrame(() => masulListRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+                                              }}
+                                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                        Barchasi ({subLeads.length})
+                                      </button>
+                                    </>
+                                  )}
+                                  <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                                    {Math.min(shownMasulLeads, subLeads.length)} / {subLeads.length} ta lid
+                                  </span>
+                                </div>
+                              )}
+                              </div>
                             </td>
                           </tr>
                         )}

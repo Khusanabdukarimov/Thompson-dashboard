@@ -1,7 +1,7 @@
 // Bekor bo'lish / Sifatsiz reason panel — ported from the Jahonschool dashboard
 // so both products read the same way. Each reason expands to the leads behind
 // it, paged 8 at a time, with a link straight into the CRM.
-import { useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { ChevronDown } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
@@ -36,6 +36,7 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const fetchPage = async (reason: string, offset: number) => {
     setLeadsLoading(true); setLeadsError(null);
@@ -124,7 +125,7 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
                     {/* Capped height with its own scrollbar: "Barchasi" on a
                         reason with hundreds of leads would otherwise push the
                         rest of the page far below the fold. */}
-                    <div style={{ maxHeight: leads.length > PAGE ? 260 : undefined, overflowY: leads.length > PAGE ? "auto" : undefined }}>
+                    <div ref={listRef} style={{ maxHeight: leads.length > PAGE ? 260 : undefined, overflowY: leads.length > PAGE ? "auto" : undefined }}>
                     {leads.map(l => (
                       <div key={l.id} style={{ display: "grid", gridTemplateColumns: GRID, gap: GAP, padding: "5px 20px" }}>
                         <span />
@@ -147,10 +148,20 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
                         {leadsLoading && <div style={{ fontSize: 11.5, color: "var(--text3)", padding: "6px 0" }}>Yuklanmoqda…</div>}
                         {!leadsLoading && !leadsError && hasMore && (
                           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                            <button onClick={() => void fetchPage(r.reason, leads.length)} style={btn}>
-                              Yana {PAGE} ta ko'rsatish
+                            <button
+                              onClick={() => {
+                                void fetchPage(r.reason, leads.length).then(() =>
+                                  requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })));
+                              }}
+                              style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              Yana {PAGE} ta ko'rsatish <ChevronDown size={12} />
                             </button>
-                            <button onClick={() => void fetchAll(r.reason, r.total)} style={btn}>
+                            <button
+                              onClick={() => {
+                                void fetchAll(r.reason, r.total).then(() =>
+                                  requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" })));
+                              }}
+                              style={btn}>
                               Barchasi ({fmtNum(r.total)})
                             </button>
                           </div>
