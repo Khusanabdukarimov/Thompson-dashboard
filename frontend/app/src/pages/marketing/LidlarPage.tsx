@@ -132,7 +132,7 @@ function MultiSelect({
 // columns (IN_PROCESS/UC_6INRIS/UC_YGM8H2/UC_TO2TYK) were removed — those
 // stages no longer exist in the portal, so they always read zero.
 const RESPONSIBLE_COLS = [
-  { key: "qongiroqlar",  label: "Arizalar",            color: "#9E9E9E" },
+  { key: "qongiroqlar",  label: "Zvonki",              color: "#9E9E9E" },
   { key: "jarayonda",    label: "Tashrif belgilandi",  color: "#FF9800" },
   { key: "keyin_qong",   label: "O'ylab ko'radi",      color: "#607D8B" },
   { key: "yangi_lid",    label: "Yangi lid",           color: "#03A9F4" },
@@ -143,10 +143,10 @@ const RESPONSIBLE_COLS = [
   { key: "qayta_aloqa",  label: "Qayta aloqa",         color: "#26C6DA" },
   { key: "kelmadi",      label: "Kelmadi",             color: "#FF00FF" },
   { key: "muvaffaqiyatli", label: "Muvaffaqiyatli",   color: "#4CAF50" },
-  { key: "sandiq",       label: "Issiq tashrif (N1)",  color: "#42A5F5" },
-  { key: "arxiv",        label: "Arxiv 204+",          color: "#8D6E63" },
+  { key: "sandiq",       label: "Sandiq (JUNK)",       color: "#42A5F5" },
+  { key: "arxiv",        label: "Arxiv 30+",           color: "#8D6E63" },
   { key: "yopildi",      label: "Yopildi",             color: "#616161" },
-  { key: "student_hr",   label: "Student / Shikoyat",  color: "#FFC107" },
+  { key: "student_hr",   label: "Student/HR",          color: "#FFC107" },
 ] as const;
 
 // Drill-down "BOSQICH" badge — kept in one place so both sub-tables (Lid va
@@ -154,7 +154,7 @@ const RESPONSIBLE_COLS = [
 // Legacy codes (UC_1KPATX, THINKING, ...) are kept as a fallback in case any
 // old lead still carries a since-removed stage_bid.
 const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
-  NEW:               { label: "Arizalar",           color: "#9E9E9E" },
+  NEW:               { label: "Zvonki",             color: "#9E9E9E" },
   UC_N0PI5R:         { label: "Tashrif belgilandi",  color: "#FF9800" },
   "1":               { label: "O'ylab ko'radi",      color: "#607D8B" },
   UC_IX1SKS:         { label: "Yangi lid",           color: "#03A9F4" },
@@ -165,10 +165,10 @@ const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   UC_63QL7L:         { label: "Qayta aloqa",         color: "#26C6DA" },
   UC_SWPARQ:         { label: "Kelmadi",             color: "#FF00FF" },
   CONVERTED:         { label: "Muvaffaqiyatli",      color: "#4CAF50" },
-  JUNK:              { label: "Issiq tashrif (N1)",  color: "#42A5F5" },
-  UC_GSPVUS:         { label: "Arxiv 204+",          color: "#8D6E63" },
+  JUNK:              { label: "Sandiq (JUNK)",       color: "#42A5F5" },
+  UC_GSPVUS:         { label: "Arxiv 30+",           color: "#8D6E63" },
   UC_L8G2B9:         { label: "Yopildi",             color: "#616161" },
-  UC_W02434:         { label: "Student / Shikoyat",  color: "#FFC107" },
+  UC_W02434:         { label: "Student/HR",          color: "#FFC107" },
   // Legacy stage codes, superseded by the ones above but kept for old leads.
   IN_PROCESS:        { label: "Yangi lid",           color: "#2196F3" },
   PROCESSED:         { label: "Propushenniy",        color: "#9E9E9E" },
