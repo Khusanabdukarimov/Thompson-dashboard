@@ -231,7 +231,7 @@ router.get('/funnel', async (req, res) => {
          AND ${leadSrcCond(mode, 4)}
          AND ${proekt2ExcludeCond('l.id')}
          ${leadModeClause(mode)}
-       WHERE s.entity = 'lead'
+       WHERE s.entity = 'lead' AND s.semantics IS NOT NULL
        GROUP BY s.id, s.name, s.bitrix_id, s.sort_order, s.is_final, s.is_won
        ORDER BY s.sort_order`,
       params
@@ -333,7 +333,7 @@ router.get('/stages-list', async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT bitrix_id, name FROM stages
-       WHERE entity = 'lead' AND sort_order > 0
+       WHERE entity = 'lead' AND sort_order > 0 AND semantics IS NOT NULL
        ORDER BY sort_order`
     );
     res.json(rows);
@@ -888,7 +888,7 @@ router.get('/lead-stats', async (req, res) => {
            COALESCE(SUM(l.opportunity), 0)::numeric  AS total_opportunity
          FROM stages s
          LEFT JOIN leads l ON l.stage_id = s.id AND ${funnelJoin}
-         WHERE s.entity = 'lead' AND s.sort_order > 0
+         WHERE s.entity = 'lead' AND s.sort_order > 0 AND s.semantics IS NOT NULL
          GROUP BY s.id, s.bitrix_id, s.name, s.sort_order
          ORDER BY s.sort_order`,
         funnelParams
@@ -1022,8 +1022,12 @@ router.get('/lead-filter-options', async (req, res) => {
          FROM responsibles WHERE active = TRUE ORDER BY name`
       ),
       pool.query(
+        // semantics IS NOT NULL excludes retired statuses that predate
+        // leadStatusSync (e.g. IN_PROCESS/PROCESSED) — they're still in this
+        // table because nothing ever deletes a stage row, but no live lead
+        // can be in one, so they'd only ever render an empty column.
         `SELECT bitrix_id, name FROM stages
-         WHERE entity = 'lead' AND sort_order > 0
+         WHERE entity = 'lead' AND sort_order > 0 AND semantics IS NOT NULL
          ORDER BY sort_order`
       ),
       pool.query(
