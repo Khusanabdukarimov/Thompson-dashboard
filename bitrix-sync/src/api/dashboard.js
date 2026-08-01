@@ -92,13 +92,36 @@ const reasonJoin = (field) => `
   LEFT JOIN lead_uf_enums  re ON re.field_code = rv.field_code
         AND re.enum_id = rv.value`;
 
+// Optional enum filters, each an AND over lead_uf_values. Enum ids are numeric,
+// so they are validated as digits and inlined — parameterising four
+// variable-length lists across every endpoint would renumber all the existing
+// positional placeholders.
+const UF_FILTERS = [
+  ['course',  'UF_CRM_1618299519454'], // Курсы
+  ['source1', 'UF_CRM_1635794595'],    // Источник 1
+  ['filial',  'UF_CRM_1618299635672'], // Филиал
+  ['reason',  'UF_CRM_1618300665524'], // Причина
+];
+
+/** SQL for whichever of the four enum filters the request actually set. */
+function ufFilterCond(q, col = 'l.id') {
+  let sql = '';
+  for (const [key, field] of UF_FILTERS) {
+    const ids = String(q?.[key] ?? '').split(',').map(v => v.trim()).filter(v => /^\d+$/.test(v));
+    if (!ids.length) continue;
+    sql += `\n    AND ${col} IN (SELECT lead_id FROM lead_uf_values
+             WHERE field_code = '${field}' AND value IN (${ids.map(i => `'${i}'`).join(',')}))`;
+  }
+  return sql;
+}
+
 /** Scope plus the user's optional Proekt picker (a subset of the allow-list). */
-function leadProektCond(pi) {
+function leadProektCond(pi, q) {
   return `($${pi}::text IS NULL OR l.id IN (
       SELECT lead_id FROM lead_uf_values
       WHERE field_code = '${PROEKT_FIELD}' AND value = ANY(string_to_array($${pi}, ','))
     ))
-    AND ${leadScopeCond('l.id')}`;
+    AND ${leadScopeCond('l.id')}${ufFilterCond(q)}`;
 }
 
 function dealModeClause(mode) {
@@ -452,7 +475,7 @@ router.get('/cancel-reasons', async (req, res) => {
        ${reasonJoin(REASON_BEKOR)}
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-         AND ${leadProektCond(4)}
+         AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY re.value
        ORDER BY total DESC`,
@@ -484,7 +507,9 @@ router.get('/reason-leads', async (req, res) => {
   const isJunk = kind === 'junk';
   const stage  = isJunk ? 'JUNK' : 'UC_L8G2B9';
   const field  = isJunk ? REASON_SIFATSIZ : REASON_BEKOR;
-  const limit  = Math.min(100, parseInt(req.query.limit, 10) || 8);
+  // Barchasi asks for a whole reason at once; 5000 is well above the
+  // largest bucket and still bounds a malformed request.
+  const limit  = Math.min(5000, parseInt(req.query.limit, 10) || 8);
   const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
   const unknown = !reason || reason === "Noma'lum";
 
@@ -496,7 +521,7 @@ router.get('/reason-leads', async (req, res) => {
        ${reasonJoin(field)}
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-         AND ${leadProektCond(4)}
+         AND ${leadProektCond(4, req.query)}
          AND (${unknown ? 're.value IS NULL' : 're.value = $5::text'})
          ${leadModeClause(mode)}
        ORDER BY l.date_create DESC
@@ -523,7 +548,7 @@ router.get('/junk-reasons', async (req, res) => {
        ${reasonJoin(REASON_SIFATSIZ)}
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-         AND ${leadProektCond(4)}
+         AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY re.value
        ORDER BY total DESC`,
@@ -908,13 +933,13 @@ router.get('/lead-stats', async (req, res) => {
       AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
       AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
       AND ${leadSrcCond(mode, 5)}
-      AND ${leadProektCond(6)}
+      AND ${leadProektCond(6, req.query)}
       ${leadModeClause(mode)}`;
 
   const funnelJoin = `${leadDateCond(mode, 1, 2)}
       AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
       AND ${leadSrcCond(mode, 4)}
-      AND ${leadProektCond(5)}
+      AND ${leadProektCond(5, req.query)}
       ${leadModeClause(mode)}`;
 
   try {
@@ -983,7 +1008,7 @@ router.get('/lead-responsibles', async (req, res) => {
            AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
            AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
-           AND ${leadProektCond(6)}
+           AND ${leadProektCond(6, req.query)}
            ${leadModeClause(mode)}
        ),
        per_stage AS (
@@ -1042,7 +1067,7 @@ router.get('/lead-conversion', async (req, res) => {
            AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
            AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
            AND ${leadSrcCond(mode, 5)}
-           AND ${leadProektCond(6)}
+           AND ${leadProektCond(6, req.query)}
            ${leadModeClause(mode)}
        )
        SELECT
@@ -1082,7 +1107,7 @@ router.get('/lead-filter-options', async (req, res) => {
       ? `AND source_id = 'UC_1WUFJB'`
       : '';
   try {
-    const [respRes, stageRes, srcRes, formRes, proektRes] = await Promise.all([
+    const [respRes, stageRes, srcRes, formRes, proektRes, ufRes] = await Promise.all([
       pool.query(
         `SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
          FROM responsibles WHERE active = TRUE ORDER BY name`
@@ -1114,13 +1139,26 @@ router.get('/lead-filter-options', async (req, res) => {
            AND e.enum_id IN (${PROEKT_ALLOWED})
          ORDER BY e.value`
       ).catch(() => ({ rows: [] })),
+      // The four extra enum pickers (Kurslar / Manba 1 / Filial / Sabab).
+      pool.query(
+        `SELECT field_code, enum_id AS id, value AS name
+         FROM lead_uf_enums
+         WHERE field_code = ANY($1::text[])
+         ORDER BY field_code, value`,
+        [UF_FILTERS.map(([, f]) => f)]
+      ).catch(() => ({ rows: [] })),
     ]);
+    const byField = (code) => ufRes.rows.filter(r => r.field_code === code).map(r => ({ id: r.id, name: r.name }));
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
       sources: srcRes.rows.map(r => ({ id: r.source_id, name: SOURCE_NAMES[r.source_id] || r.source_id })),
       forms: formRes.rows.map(r => ({ id: r.id, name: r.name, count: r.lead_count })),
       proekts: proektRes.rows,
+      courses:  byField('UF_CRM_1618299519454'),
+      source1s: byField('UF_CRM_1635794595'),
+      filials:  byField('UF_CRM_1618299635672'),
+      reasons:  byField('UF_CRM_1618300665524'),
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);
@@ -1446,7 +1484,7 @@ router.get('/utm-stats', async (req, res) => {
                     WHERE lp.lead_id = l.id AND fl.form_id = cf2.fb_form_id
                   )
               ))
-         AND ${leadProektCond(4)}
+         AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY TRIM(l.utm_source)
        ORDER BY umumiy_lidlar DESC`,
@@ -1487,7 +1525,7 @@ router.get('/source-stats', async (req, res) => {
        -- matched the KPI card above it.
        WHERE ${leadDateCond(mode, 1, 2)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-         AND ${leadProektCond(4)}
+         AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(l.source_id, 'Nomalum')
        ORDER BY umumiy_lidlar DESC`,
@@ -1642,7 +1680,7 @@ router.get('/responsible-leads', async (req, res) => {
        WHERE l.responsible_id = $1
          AND ($2::date IS NULL OR l.date_create::date >= $2::date)
          AND ($3::date IS NULL OR l.date_create::date <= $3::date)
-         AND ${leadProektCond(4)}
+         AND ${leadProektCond(4, req.query)}
          ${mode === 'amocrm' ? `AND l.source_id = 'UC_1WUFJB'` : ``}
        ORDER BY l.date_create DESC
        LIMIT 1000`,

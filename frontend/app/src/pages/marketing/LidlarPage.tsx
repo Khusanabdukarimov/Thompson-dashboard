@@ -426,6 +426,10 @@ export default function LidlarPage() {
     (applied.sources?.length ?? 0) > 0,
     (applied.form_ids?.length ?? 0) > 0,
     (applied.proekts?.length ?? 0) > 0,
+    (applied.courses?.length ?? 0) > 0,
+    (applied.source1s?.length ?? 0) > 0,
+    (applied.filials?.length ?? 0) > 0,
+    (applied.reasons?.length ?? 0) > 0,
     applied.start_date != null || applied.end_date != null,
   ].filter(Boolean).length;
 
@@ -757,6 +761,41 @@ export default function LidlarPage() {
                     loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
                   />
                 </div>
+
+                {/* Kurslar / Manba 1 / Filial / Sabab — the Bitrix enum fields
+                    the team filters reports by. Options come from lead_uf_enums,
+                    so new values appear without a code change. */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <MultiSelect
+                    label="Kurslar" icon={<Filter size={12} />}
+                    options={(filterOpts?.courses ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.courses ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, courses: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Manba 1" icon={<TrendingUp size={12} />}
+                    options={(filterOpts?.source1s ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.source1s ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, source1s: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Filial" icon={<Users size={12} />}
+                    options={(filterOpts?.filials ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.filials ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, filials: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Sabab" icon={<XCircle size={12} />}
+                    options={(filterOpts?.reasons ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.reasons ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, reasons: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                </div>
+
                 {activeCount > 0 && (
                   <div style={{ paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
                     <button onClick={() => setApplied(getDefaultFilter())}

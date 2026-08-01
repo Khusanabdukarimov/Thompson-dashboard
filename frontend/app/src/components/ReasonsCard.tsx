@@ -1,7 +1,7 @@
 // Bekor bo'lish / Sifatsiz reason panel — ported from the Jahonschool dashboard
 // so both products read the same way. Each reason expands to the leads behind
 // it, paged 8 at a time, with a link straight into the CRM.
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { ChevronDown } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
@@ -54,6 +54,29 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
     } finally { setLeadsLoading(false); }
   };
 
+  /** "Barchasi" — load every lead for this reason in one go. The list stays in
+   *  place and scrolls internally rather than growing the card. */
+  const fetchAll = async (reason: string, total: number) => {
+    setLeadsLoading(true); setLeadsError(null);
+    try {
+      const resp = await getReasonLeads({
+        kind, reason,
+        start_date: filter.start_date, end_date: filter.end_date,
+        responsible_ids: filter.responsible_ids, proekts: filter.proekts, mode: filter.mode,
+        limit: Math.max(total, 1), offset: 0,
+      });
+      setLeads(Array.isArray(resp?.items) ? resp.items : []);
+      setHasMore(false);
+    } catch {
+      setLeadsError("Ro'yxatni yuklab bo'lmadi");
+    } finally { setLeadsLoading(false); }
+  };
+
+  const btn: CSSProperties = {
+    background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7,
+    color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer",
+  };
+
   const toggle = (reason: string) => {
     if (openReason === reason) { setOpenReason(null); setLeads([]); setHasMore(false); return; }
     setOpenReason(reason); setLeads([]); setHasMore(false); void fetchPage(reason, 0);
@@ -98,6 +121,10 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
 
                 {isOpen && (
                   <div style={{ padding: "4px 0 10px", borderBottom: "1px solid var(--border)" }}>
+                    {/* Capped height with its own scrollbar: "Barchasi" on a
+                        reason with hundreds of leads would otherwise push the
+                        rest of the page far below the fold. */}
+                    <div style={{ maxHeight: leads.length > PAGE ? 260 : undefined, overflowY: leads.length > PAGE ? "auto" : undefined }}>
                     {leads.map(l => (
                       <div key={l.id} style={{ display: "grid", gridTemplateColumns: GRID, gap: GAP, padding: "5px 20px" }}>
                         <span />
@@ -112,16 +139,21 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
                         </div>
                       </div>
                     ))}
+                    </div>
                     <div style={{ display: "grid", gridTemplateColumns: GRID, gap: GAP, padding: "0 20px" }}>
                       <span />
                       <div style={{ gridColumn: "2 / span 3" }}>
                         {leadsError && <div style={{ fontSize: 11.5, color: "var(--text3)", padding: "6px 0" }}>{leadsError}</div>}
                         {leadsLoading && <div style={{ fontSize: 11.5, color: "var(--text3)", padding: "6px 0" }}>Yuklanmoqda…</div>}
                         {!leadsLoading && !leadsError && hasMore && (
-                          <button onClick={() => void fetchPage(r.reason, leads.length)}
-                                  style={{ marginTop: 6, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                            Yana {PAGE} ta ko'rsatish
-                          </button>
+                          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                            <button onClick={() => void fetchPage(r.reason, leads.length)} style={btn}>
+                              Yana {PAGE} ta ko'rsatish
+                            </button>
+                            <button onClick={() => void fetchAll(r.reason, r.total)} style={btn}>
+                              Barchasi ({fmtNum(r.total)})
+                            </button>
+                          </div>
                         )}
                         {!leadsLoading && !leadsError && !hasMore && leads.length > 0 && (
                           <div style={{ fontSize: 11, color: "var(--text3)", paddingTop: 6 }}>Hammasi ko'rsatildi ({leads.length} ta)</div>
