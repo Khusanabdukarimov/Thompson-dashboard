@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { ReasonsCard } from "@/components/ReasonsCard";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
@@ -1428,91 +1429,18 @@ export default function LidlarPage() {
         {/* ══════════════════════════════════════════════════════════
             Bekor bo'lish va Sifatsiz sabablari (side-by-side)
         ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          const cancelItems = (cancelQ.data?.items ?? []).map((r) => ({
-            ...r,
-            total: parseInt(String(r.total), 10) || 0,
-          }));
-          const junkItems = (junkQ.data?.items ?? []).map((r) => ({
-            ...r,
-            total: parseInt(String(r.total), 10) || 0,
-          }));
-          const cancelMax   = Math.max(1, ...cancelItems.map((r) => r.total));
-          const junkMax     = Math.max(1, ...junkItems.map((r) => r.total));
-          const cancelTotal = cancelItems.reduce((s, r) => s + r.total, 0);
-          const junkTotal   = junkItems.reduce((s, r) => s + r.total, 0);
-
-          const renderTable = (
-            title: string,
-            items: { reason: string; total: number }[],
-            max: number,
-            grandTotal: number,
-            barColor: string,
-            loading: boolean,
-            stageId: string,
-          ) => (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden" }}>
-              <div style={{
-                padding: "14px 20px 12px",
-                borderBottom: "1px solid var(--border)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{title}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: barColor }}>{fmtNum(grandTotal)}</span>
-                  <a href={`${bitrixPortal}/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
-                     target="_blank" rel="noopener noreferrer"
-                     style={{ fontSize: 11, color: "#2196F3", background: "rgba(33,150,243,0.1)", border: "1px solid rgba(33,150,243,0.3)", borderRadius: 6, padding: "3px 8px", textDecoration: "none", whiteSpace: "nowrap" }}>
-                    Bitrix24 ↗
-                  </a>
-                </div>
-              </div>
-              {loading ? (
-                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : items.length === 0 ? (
-                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
-              ) : (
-                <div style={{ padding: "6px 0 10px" }}>
-                  {items.map((r, i) => (
-                    <div key={i} style={{ padding: "7px 20px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                          {r.reason}
-                        </span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 8 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-                            {fmtNum(r.total)}
-                          </span>
-                          <a href={`${bitrixPortal}/crm/lead/list/?set_filter=Y&STATUS_ID%5B0%5D=${stageId}`}
-                             target="_blank" rel="noopener noreferrer"
-                             style={{ fontSize: 10, color: "#2196F3", background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.25)", borderRadius: 4, padding: "2px 6px", textDecoration: "none" }}>
-                            ↗
-                          </a>
-                        </div>
-                      </div>
-                      <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%",
-                          width: `${(r.total / max) * 100}%`,
-                          background: barColor,
-                          borderRadius: 2,
-                          transition: "width 0.3s",
-                        }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-
-          return (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-              {renderTable("Bekor bo'lish sabablari", cancelItems, cancelMax, cancelTotal, "#FFC107", cancelQ.isLoading, "UC_NAZK5J")}
-              {renderTable("Sifatsiz sabablari",       junkItems,   junkMax,   junkTotal,   "#F44336", junkQ.isLoading,   "UC_F8K4GI")}
-            </div>
-          );
-        })()}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+          <ReasonsCard
+            title="Bekor bo'lish sabablari" barColor="#FFC107" kind="cancel" filter={applied}
+            loading={cancelQ.isLoading}
+            items={(cancelQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
+          />
+          <ReasonsCard
+            title="Sifatsiz sabablari" barColor="#F44336" kind="junk" filter={applied}
+            loading={junkQ.isLoading}
+            items={(junkQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
+          />
+        </div>
 
         {/* ══════════════════════════════════════════════════════════
             UTM bo'yicha — single table, 6-level breadcrumb navigation

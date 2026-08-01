@@ -470,6 +470,46 @@ router.get('/cancel-reasons', async (req, res) => {
  * Disqualification reason breakdown for UC_F8K4GI (Sifatsiz) stage.
  * Params: from, to, responsible_id
  */
+/**
+ * GET /api/dashboard/reason-leads
+ * The leads behind one bar of the Bekor / Sifatsiz panels, so a reason can be
+ * expanded down to the actual records. Params: kind=cancel|junk, reason,
+ * from, to, responsible_id, proekt, mode, limit, offset.
+ *
+ * `reason` is the human label, matched against the enum dictionary — the same
+ * value the panel renders. "Noma'lum" means the field was never filled.
+ */
+router.get('/reason-leads', async (req, res) => {
+  const { kind, reason, from, to, responsible_id, proekt, mode } = req.query;
+  const isJunk = kind === 'junk';
+  const stage  = isJunk ? 'JUNK' : 'UC_L8G2B9';
+  const field  = isJunk ? REASON_SIFATSIZ : REASON_BEKOR;
+  const limit  = Math.min(100, parseInt(req.query.limit, 10) || 8);
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  const unknown = !reason || reason === "Noma'lum";
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.id, l.title, l.name, l.last_name, l.date_create
+       FROM leads l
+       JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = '${stage}'
+       ${reasonJoin(field)}
+       WHERE ${leadDateCond(mode, 1, 2)}
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${leadProektCond(4)}
+         AND (${unknown ? 're.value IS NULL' : 're.value = $5::text'})
+         ${leadModeClause(mode)}
+       ORDER BY l.date_create DESC
+       LIMIT ${limit} OFFSET ${offset}`,
+      [from || null, to || null, responsible_id || null, proekt || null, ...(unknown ? [] : [reason])]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/reason-leads]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/junk-reasons', async (req, res) => {
   const { from, to, responsible_id, proekt, mode } = req.query;
   const params = [from || null, to || null, responsible_id || null, proekt || null];

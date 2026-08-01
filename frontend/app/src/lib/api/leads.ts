@@ -645,3 +645,30 @@ export function getPyCallStats(filter: CallDashboardFilter) {
     ...callFilterParams(filter),
   }, API_URL_CRM);
 }
+
+export type ReasonLeadRow = {
+  id: number;
+  title: string | null;
+  name: string | null;
+  last_name: string | null;
+  date_create: string | null;
+};
+
+/** Leads behind one bar of the Bekor / Sifatsiz panels. */
+export function getReasonLeads(
+  args: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode"> & {
+    kind: "cancel" | "junk"; reason: string; limit?: number; offset?: number;
+  },
+) {
+  return apiGet<{ items: ReasonLeadRow[] }>("/api/dashboard/reason-leads", {
+    kind: args.kind,
+    reason: args.reason,
+    from: args.start_date,
+    to: args.end_date,
+    responsible_id: args.responsible_ids?.join(','),
+    proekt: args.proekts?.join(','),
+    mode: args.mode,
+    limit: args.limit,
+    offset: args.offset,
+  }, API_URL_CRM);
+}
