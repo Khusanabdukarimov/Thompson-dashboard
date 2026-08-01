@@ -8,6 +8,7 @@ import {
 import { Topbar } from "@/components/Topbar";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { ReasonsCard } from "@/components/ReasonsCard";
+import { OperatorTable } from "@/components/OperatorTable";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
@@ -437,18 +438,31 @@ export default function LidlarPage() {
 
   const statsQ      = useQuery({ queryKey: ["stats/dashboard",    appliedWithMode], queryFn: () => getDashboardStats(appliedWithMode) });
   const respQ       = useQuery({ queryKey: ["stats/responsibles", appliedWithMode], queryFn: () => getResponsiblesStats(appliedWithMode) });
+  // Trends compare the selected period with the one immediately before it, of
+  // equal length. Same endpoint, shifted dates — no derived or stored metric.
+  const prevRange = useMemo(() => {
+    const { start_date: a, end_date: b } = applied;
+    if (!a || !b) return null;
+    const s0 = new Date(a), e0 = new Date(b);
+    const days = Math.max(1, Math.round((e0.getTime() - s0.getTime()) / 86400000) + 1);
+    const pe = new Date(s0); pe.setDate(pe.getDate() - 1);
+    const ps = new Date(pe); ps.setDate(ps.getDate() - (days - 1));
+    return { start_date: localISO(ps), end_date: localISO(pe) };
+  }, [applied]);
+
+  const prevConvQ = useQuery({
+    queryKey: ["stats/conversion-prev", prevRange, appliedWithMode],
+    queryFn: () => getConversionStats({ ...appliedWithMode, ...prevRange! }),
+    enabled: prevRange !== null,
+    staleTime: 5 * 60_000,
+  });
+
   const conversionQ = useQuery({ queryKey: ["stats/conversion",   appliedWithMode], queryFn: () => getConversionStats(appliedWithMode) });
   const tasksQ      = useQuery({ queryKey: ["stats/tasks",        appliedWithMode], queryFn: () => getTasksSummary(appliedWithMode) });
   const cancelQ     = useQuery({ queryKey: ["stats/cancel-reasons", appliedWithMode], queryFn: () => getCancelReasons(appliedWithMode) });
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
-  const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
-  const respLeadsConvQ = useQuery({
-    queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
-    queryFn: () => getResponsibleLeads(selectedRespConv!.id, appliedWithMode),
-    enabled: selectedRespConv !== null,
-  });
   const [selectedRespMasul, setSelectedRespMasul] = useState<{ id: number; name: string } | null>(null);
   const respLeadsMasulQ = useQuery({
     queryKey: ["stats/responsible-leads-masul", selectedRespMasul?.id, appliedWithMode],
@@ -592,26 +606,7 @@ export default function LidlarPage() {
     return [...rows].sort((a, b) => b.total - a.total);
   }, [conversionQ.data, applied]);
 
-  const convMax = useMemo(() => ({
-    total:     Math.max(1, ...convRows.map((r) => r.total)),
-    jarayonda: Math.max(1, ...convRows.map((r) => r.jarayonda)),
-    sifatli:   Math.max(1, ...convRows.map((r) => r.sifatli_lid ?? 0)),
-    sifatsiz:  Math.max(1, ...convRows.map((r) => r.sifatsiz_lid)),
-    bekor:     Math.max(1, ...convRows.map((r) => r.bekor_boldi ?? 0)),
-    otkazildi: Math.max(1, ...convRows.map((r) => r.tashrif_buyurdi)),
-  }), [convRows]);
 
-  const convTotals = useMemo(() => convRows.reduce(
-    (acc, r) => ({
-      total:     acc.total     + r.total,
-      jarayonda: acc.jarayonda + r.jarayonda,
-      sifatli:   acc.sifatli   + (r.sifatli_lid ?? 0),
-      sifatsiz:  acc.sifatsiz  + r.sifatsiz_lid,
-      bekor:     acc.bekor     + (r.bekor_boldi ?? 0),
-      otkazildi: acc.otkazildi + r.tashrif_buyurdi,
-    }),
-    { total: 0, jarayonda: 0, sifatli: 0, sifatsiz: 0, bekor: 0, otkazildi: 0 }
-  ), [convRows]);
 
   return (
     <>
@@ -955,195 +950,19 @@ export default function LidlarPage() {
             Lid va Konversiya table
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
-          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)" }}>
+          <div style={{ padding:"16px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"baseline", gap:10 }}>
             <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid va Konversiya</span>
+            <span style={{ fontSize:11.5, color:"var(--text3)" }}>
+              Konversiya bo'yicha reyting • trend oldingi davr bilan solishtiriladi
+            </span>
           </div>
-
-          {conversionQ.isLoading ? (
-            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
-          ) : (
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
-                <colgroup>
-                  <col style={{ width:44 }} />
-                  <col style={{ width:200 }} />
-                  <col />
-                  <col />
-                  <col />
-                  <col />
-                  <col />
-                  <col />
-                  <col style={{ width:80 }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th style={TH("#555", 44)}>#</th>
-                    <th style={TH("#9E9E9E", 200)}>Menejer</th>
-                    <th style={TH("#2196F3")}>Jami Lid</th>
-                    <th style={TH("#FF9800")}>Jarayonda</th>
-                    <th style={TH("#00BCD4")}>Sifatli Lid</th>
-                    <th style={TH("#F44336")}>Sifatsiz Lid</th>
-                    <th style={TH("#FFC107")}>Bekor Bo'ldi</th>
-                    <th style={TH("#4CAF50")}>Tashrif O'tkazildi</th>
-                    <th style={{ ...TH("#4CAF50", 80), textAlign:"center" }}>Konversiya</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {convRows.map((r, i) => {
-                    const konv = (r.sifatli_lid ?? 0) > 0 ? (r.tashrif_buyurdi / (r.sifatli_lid ?? 0)) * 100 : 0;
-                    const isSelected = selectedRespConv?.id === r.responsible_id;
-                    const subLeads: ResponsibleLeadRow[] = isSelected ? (respLeadsConvQ.data ?? []) : [];
-                    return (
-                      <>
-                        <tr key={r.responsible_id}
-                            style={{ background: isSelected ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor:"pointer" }}
-                            onClick={() => setSelectedRespConv(isSelected ? null : { id: r.responsible_id, name: r.full_name || `User ${r.responsible_id}` })}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                          <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44 }}>
-                            {String(i + 1).padStart(2, "0")}
-                          </td>
-                          <td style={{ ...TD, width:200 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                              <AvatarCircle name={r.full_name || "?"} size={34} />
-                              <span style={{ fontSize:13, color: isSelected ? "#2196F3" : "var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                                {r.full_name}
-                              </span>
-                            </div>
-                          </td>
-                          <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.total)}</span>
-                            <MiniBar value={r.total} max={convMax.total} color="#2196F3" />
-                          </td>
-                          <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.jarayonda)}</span>
-                            <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
-                          </td>
-                          <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.sifatli_lid ?? 0)}</span>
-                            <MiniBar value={r.sifatli_lid ?? 0} max={convMax.sifatli} color="#00BCD4" />
-                          </td>
-                          <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.sifatsiz_lid)}</span>
-                            <MiniBar value={r.sifatsiz_lid} max={convMax.sifatsiz} color="#F44336" />
-                          </td>
-                          <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.bekor_boldi ?? 0)}</span>
-                            <MiniBar value={r.bekor_boldi ?? 0} max={convMax.bekor} color="#FFC107" />
-                          </td>
-                          <td style={TD}>
-                            <span style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>{fmtNum(r.tashrif_buyurdi)}</span>
-                            <MiniBar value={r.tashrif_buyurdi} max={convMax.otkazildi} color="#4CAF50" />
-                          </td>
-                          <td style={{ ...TD, textAlign:"center" }}>
-                            <ConversionDonut pct={konv} size={38} />
-                          </td>
-                        </tr>
-                        {isSelected && (
-                          <tr key={`sub-${r.responsible_id}`}>
-                            <td colSpan={8} style={{ padding: 0, background: "rgba(33,150,243,0.04)", borderBottom: "1px solid var(--border)" }}>
-                              {respLeadsConvQ.isLoading ? (
-                                <div style={{ padding: "14px 20px", color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-                              ) : subLeads.length === 0 ? (
-                                <div style={{ padding: "14px 20px", color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-                              ) : (
-                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                  <thead>
-                                    <tr style={{ background: "rgba(33,150,243,0.06)" }}>
-                                      <th style={{ ...TH("#555", 40), paddingLeft: 32 }}>#</th>
-                                      <th style={TH("#9E9E9E", 260)}>LID</th>
-                                      <th style={TH("#2196F3", 90)}>SANA</th>
-                                      <th style={TH("#9C27B0", 130)}>TASHRIF SANASI</th>
-                                      <th style={TH("#FF9800", 190)}>BOSQICH</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {subLeads.map((lead, li) => {
-                                      const stage = stageBadge(lead.stage_bid);
-                                      return (
-                                        <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
-                                          <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>
-                                            {String(li + 1).padStart(2, "0")}
-                                          </td>
-                                          <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                            <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`}
-                                               target="_blank" rel="noopener noreferrer"
-                                               style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title || `Lid #${lead.id}`}
-                                            </a>
-                                          </td>
-                                          <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
-                                            {lead.date_create ? new Date(lead.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
-                                          </td>
-                                          <td style={{ ...TD, fontSize: 12, color: lead.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
-                                            {lead.tashrif_sanasi ? new Date(lead.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
-                                          </td>
-                                          <td style={TD}>
-                                            <span style={{
-                                              display: "inline-block", padding: "3px 10px", borderRadius: 20,
-                                              fontSize: 11, fontWeight: 600,
-                                              background: `${stage.color}22`, border: `1px solid ${stage.color}55`, color: stage.color,
-                                              whiteSpace: "nowrap",
-                                            }}>
-                                              {stage.label}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                    <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
-                                      <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
-                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
-                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{subLeads.length} ta lid</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    );
-                  })}
-
-                  {/* JAMI row */}
-                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
-                    <td style={{ ...TD, color:"var(--text3)" }} />
-                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                      JAMI
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.total)}</span>
-                      <MiniBar value={1} max={1} color="#2196F3" />
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.jarayonda)}</span>
-                      <MiniBar value={1} max={1} color="#FF9800" />
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.sifatli)}</span>
-                      <MiniBar value={1} max={1} color="#00BCD4" />
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.sifatsiz)}</span>
-                      <MiniBar value={1} max={1} color="#F44336" />
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.bekor)}</span>
-                      <MiniBar value={1} max={1} color="#FFC107" />
-                    </td>
-                    <td style={TD}>
-                      <span style={{ fontSize:16, fontWeight:700, color:"var(--text)" }}>{fmtNum(convTotals.otkazildi)}</span>
-                      <MiniBar value={1} max={1} color="#4CAF50" />
-                    </td>
-                    <td style={{ ...TD, textAlign:"center" }}>
-                      <ConversionDonut pct={convTotals.sifatli > 0 ? (convTotals.otkazildi / convTotals.sifatli) * 100 : 0} size={38} />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div style={{ paddingTop:16 }}>
+            <OperatorTable
+              rows={convRows}
+              prevRows={prevConvQ.data?.conversion}
+              loading={conversionQ.isLoading}
+            />
+          </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════
