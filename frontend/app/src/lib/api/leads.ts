@@ -46,23 +46,10 @@ export type ResponsiblesStatsResponse = {
     full_name: string;
     work_position?: string | null;
     total: number;
-    // One field per live Bitrix lead status. Key names are historical; the
-    // stage each one counts is documented on RESPONSIBLE_COLS in LidlarPage.
-    qongiroqlar: number;      // NEW
-    jarayonda: number;        // UC_N0PI5R — Визит назначен
-    keyin_qong: number;       // '1' — Думает (1-30)
-    yangi_lid: number;        // UC_IX1SKS
-    propushenniy: number;     // UC_O7Y5NT
-    dpu1: number;             // '7'
-    dpu2: number;             // UC_S5YC0D
-    dpu3: number;             // UC_X316SW
-    qayta_aloqa: number;      // UC_63QL7L
-    kelmadi: number;          // UC_SWPARQ
-    muvaffaqiyatli: number;   // CONVERTED
-    sandiq: number;           // JUNK
-    arxiv: number;            // UC_GSPVUS
-    yopildi: number;          // UC_L8G2B9
-    student_hr: number;       // UC_W02434
+    /** Lead count per Bitrix STATUS_ID, e.g. { CONVERTED: 1275, JUNK: 1166 }.
+     *  Absent keys mean zero. Columns are rendered from the live stage list
+     *  (getFilterOptions().stages) so they always match the portal. */
+    by_stage: Record<string, number>;
     total_opportunity: number;
   }[];
 };

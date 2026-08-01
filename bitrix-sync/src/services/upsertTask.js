@@ -1,11 +1,19 @@
 const pool = require('../db/pool');
 
+// Bitrix task status codes (tasks.task.list STATUS). The previous map was
+// shifted by one — it read 4 as "completed" and 5 as "rejected", so every
+// genuinely finished task (status 5, 1630 of them in July 2026 alone) was
+// filed as rejected and "Tugatilgan" could only ever render zero.
+//   1 New   2 Pending   3 In progress   4 Waiting control
+//   5 Completed   6 Deferred   7 Declined
 const STATUS_MAP = {
   '1': 'pending',
-  '2': 'in_progress',
-  '3': 'review',
-  '4': 'completed',
-  '5': 'rejected',
+  '2': 'pending',
+  '3': 'in_progress',
+  '4': 'review',
+  '5': 'completed',
+  '6': 'deferred',
+  '7': 'rejected',
 };
 
 function parseDate(s) {

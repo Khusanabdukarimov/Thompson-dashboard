@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/meta";
 import type { MonthKey, PageForm } from "@/lib/api/meta";
 import { fmtNum } from "@/lib/utils";
+import { useBitrixPortal } from "@/lib/api/config";
 
 
 
@@ -69,7 +70,6 @@ function MultiSelect({ label, options, values, onChange }: {
 }
 
 // ── Creative leads sub-table ──────────────────────────────────────────────────
-const BX_URL = "https://mountain.bitrix24.kz/crm/lead/details";
 
 const STAGE_COLOR: Record<string, string> = {
   UC_F8K4GI: "#ef4444",
@@ -88,6 +88,7 @@ function notInBitrixReason(phone: string, isDuplicate: boolean): string {
 }
 
 function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: string; month: MonthKey; year: number; from: string; to: string }) {
+  const portal = useBitrixPortal();
   const q = useQuery({
     queryKey: ["creative-leads", adsetName, month, year, from, to],
     queryFn: () => getCreativeLeads(adsetName, month, year, from, to),
@@ -125,9 +126,9 @@ function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: s
                   </td>
                   <td className="px-4 py-2.5">
                     {hasDeal
-                      ? <a href={`https://mountain.bitrix24.kz/crm/deal/details/${l.deal_id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold underline underline-offset-2 text-[#22c55e] hover:opacity-80">Sdelka #{l.deal_id} →</a>
+                      ? <a href={`${portal}/crm/deal/details/${l.deal_id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold underline underline-offset-2 text-[#22c55e] hover:opacity-80">Sdelka #{l.deal_id} →</a>
                       : l.bitrix_id
-                        ? <a href={`${BX_URL}/${l.bitrix_id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold underline underline-offset-2 text-blue hover:opacity-80">#{l.bitrix_id} →</a>
+                        ? <a href={`${portal}/crm/lead/details/${l.bitrix_id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold underline underline-offset-2 text-blue hover:opacity-80">#{l.bitrix_id} →</a>
                         : <span className="text-[11px] text-text3/60">—</span>
                     }
                   </td>
@@ -142,6 +143,7 @@ function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: s
 }
 
 function SotuvDealsPanel({ adsetName, month, year, from, to, sotuvFrom, sotuvTo }: { adsetName: string; month: MonthKey; year: number; from: string; to: string; sotuvFrom?: string; sotuvTo?: string }) {
+  const portal = useBitrixPortal();
   const q = useQuery({
     queryKey: ["creative-deals", adsetName, month, year, from, to, sotuvFrom, sotuvTo],
     queryFn: () => getCreativeDeals(adsetName, month, year, from, to, sotuvFrom, sotuvTo),
@@ -159,7 +161,7 @@ function SotuvDealsPanel({ adsetName, month, year, from, to, sotuvFrom, sotuvTo 
           <tbody>
             {q.data.deals.map(d => (
               <tr key={d.id} className="border-b border-border/20 hover:bg-[#22c55e]/10">
-                <td className="px-4 py-2.5"><a href={`https://mountain.bitrix24.kz/crm/deal/details/${d.id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-[#22c55e] underline underline-offset-2 hover:opacity-80">#{d.id} →</a></td>
+                <td className="px-4 py-2.5"><a href={`${portal}/crm/deal/details/${d.id}/`} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-[#22c55e] underline underline-offset-2 hover:opacity-80">#{d.id} →</a></td>
                 <td className="px-4 py-2.5 font-mono text-text2">{d.phone}</td>
                 <td className="px-4 py-2.5 text-text2">{d.responsible}</td>
                 <td className="px-4 py-2.5 font-semibold text-text">{d.opportunity > 0 ? `$${d.opportunity.toLocaleString()}` : '—'}</td>
@@ -176,6 +178,7 @@ function SotuvDealsPanel({ adsetName, month, year, from, to, sotuvFrom, sotuvTo 
 
 // ── Lead sub-table ─────────────────────────────────────────────────────────────
 function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campaignId: string; from: string; to: string }) {
+  const portal = useBitrixPortal();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const q = useQuery({
     queryKey: ["form-leads", formId, campaignId, from, to],
@@ -223,7 +226,7 @@ function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campa
                   <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
                     {l.bitrix_id ? (
                       <a
-                        href={`${BX_URL}/${l.bitrix_id}/`}
+                        href={`${portal}/crm/lead/details/${l.bitrix_id}/`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[11px] font-semibold text-blue underline underline-offset-2 hover:opacity-80"

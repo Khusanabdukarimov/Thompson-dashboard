@@ -55,10 +55,13 @@ const PROEKT_FIELD = 'UF_CRM_1781879563298';
 const PROEKT_HIDDEN = "'3575','3577'";
 
 // Proekt2 (UF_CRM_1782148374198): internal HR / Студент / Жалоба tagging.
-// Any lead with a non-empty Proekt2 value is hidden from every lead view.
+// Only HR (enum 5159) is hidden from the lead views — Студент (5161) and
+// Жалоба (5163) are real leads and stay counted.
 const PROEKT2_FIELD = 'UF_CRM_1782148374198';
+const PROEKT2_HIDDEN = "'5159'"; // HR
 const proekt2ExcludeCond = (col) =>
-  `${col} NOT IN (SELECT lead_id FROM lead_uf_values WHERE field_code = '${PROEKT2_FIELD}')`;
+  `${col} NOT IN (SELECT lead_id FROM lead_uf_values
+                   WHERE field_code = '${PROEKT2_FIELD}' AND value IN (${PROEKT2_HIDDEN}))`;
 
 function leadProektCond(pi) {
   return `($${pi}::text IS NULL OR l.id IN (
@@ -387,7 +390,7 @@ router.get('/tasks-summary', async (req, res) => {
          r.id AS responsible_id,
          TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
          COUNT(t.id)                                                                              AS total,
-         COUNT(t.id) FILTER (WHERE t.status IN ('pending','in_progress','review'))               AS in_progress,
+         COUNT(t.id) FILTER (WHERE t.status IN ('pending','in_progress','review','deferred'))    AS in_progress,
          COUNT(t.id) FILTER (WHERE t.status = 'completed')                                       AS completed,
          COUNT(t.id) FILTER (WHERE t.deadline < NOW() AND t.status != 'completed')               AS overdue,
          COUNT(t.id) FILTER (WHERE t.status = 'completed' AND t.deadline IS NOT NULL AND t.date_closed > t.deadline) AS completed_late
@@ -918,35 +921,33 @@ router.get('/lead-responsibles', async (req, res) => {
            AND ${leadSrcCond(mode, 5)}
            AND ${leadProektCond(6)}
            ${leadModeClause(mode)}
+       ),
+       per_stage AS (
+         SELECT responsible_id, stage_bid, COUNT(*)::int AS n
+         FROM fl GROUP BY responsible_id, stage_bid
+       ),
+       totals AS (
+         SELECT responsible_id, COUNT(*)::int AS total,
+                COALESCE(SUM(opportunity), 0)::numeric AS total_opportunity
+         FROM fl GROUP BY responsible_id
        )
        SELECT
-         r.id                                                                                  AS responsible_id,
-         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))                         AS full_name,
-         COUNT(fl.id)::int                                                                     AS total,
-         -- One column per live Bitrix lead status. IN_PROCESS / UC_6INRIS /
-         -- UC_YGM8H2 / UC_TO2TYK were dropped: retired statuses absent from
-         -- crm.status.list, so they only ever rendered empty columns.
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'NEW')::int                                AS qongiroqlar,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_N0PI5R')::int                          AS jarayonda,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = '1')::int                                  AS keyin_qong,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_IX1SKS')::int                          AS yangi_lid,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_O7Y5NT')::int                          AS propushenniy,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = '7')::int                                  AS dpu1,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_S5YC0D')::int                          AS dpu2,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_X316SW')::int                          AS dpu3,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_63QL7L')::int                          AS qayta_aloqa,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_SWPARQ')::int                          AS kelmadi,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'CONVERTED')::int                          AS muvaffaqiyatli,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'JUNK')::int                               AS sandiq,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_GSPVUS')::int                          AS arxiv,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_L8G2B9')::int                          AS yopildi,
-         COUNT(fl.id) FILTER (WHERE fl.stage_bid = 'UC_W02434')::int                          AS student_hr,
-         COALESCE(SUM(fl.opportunity), 0)::numeric                                            AS total_opportunity
+         r.id                                                          AS responsible_id,
+         TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))  AS full_name,
+         t.total,
+         -- Counts keyed by Bitrix STATUS_ID rather than a fixed column list, so
+         -- the table always shows exactly the statuses the portal currently has.
+         -- The old hardcoded list had drifted: four retired statuses that could
+         -- only render empty columns, and no room for any status added later.
+         COALESCE((
+           SELECT jsonb_object_agg(p.stage_bid, p.n)
+           FROM per_stage p WHERE p.responsible_id = r.id
+         ), '{}'::jsonb)                                               AS by_stage,
+         t.total_opportunity
        FROM responsibles r
-       LEFT JOIN fl ON fl.responsible_id = r.id
+       JOIN totals t ON t.responsible_id = r.id   -- inner join drops 0-lead staff
        WHERE r.active = TRUE
-       GROUP BY r.id, r.name, r.last_name, r.work_position
-       ORDER BY total DESC`,
+       ORDER BY t.total DESC`,
       params
     );
     res.json({ responsibles: rows });
@@ -990,7 +991,7 @@ router.get('/lead-conversion', async (req, res) => {
          COUNT(fl.id) FILTER (WHERE fl.t_belgilandi)::int                                      AS tashrif_belgilandi,
          COUNT(fl.id) FILTER (WHERE fl.t_otkazildi)::int                                       AS tashrif_buyurdi
        FROM responsibles r
-       LEFT JOIN fl ON fl.responsible_id = r.id
+       JOIN fl ON fl.responsible_id = r.id   -- inner join drops 0-lead staff
        WHERE r.active = TRUE
        GROUP BY r.id, r.name, r.last_name
        ORDER BY total DESC`,

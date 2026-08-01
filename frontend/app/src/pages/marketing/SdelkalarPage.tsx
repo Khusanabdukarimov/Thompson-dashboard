@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/deals";
 import { getDealCancelReasons } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
+import { useBitrixPortal } from "@/lib/api/config";
 
 // ── Helpers ──────────────────────────────────────────────────────
 const localISO = (d: Date) =>
@@ -198,11 +199,11 @@ function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
 }
 
 // ── Operator deals dropdown ───────────────────────────────────────
-const BX_BASE = "https://mountain.bitrix24.kz/crm/deal/details";
 
 function OperatorDealsDropdown({
   responsibleId, from, to, mode,
 }: { responsibleId: string; from?: string; to?: string; mode: string }) {
+  const portal = useBitrixPortal();
   const q = useQuery({
     queryKey: ["op-deals", responsibleId, from, to, mode],
     queryFn: () => getDealsList({ from, to, responsible_id: responsibleId, limit: 200, mode }),
@@ -237,7 +238,7 @@ function OperatorDealsDropdown({
             {items.map((d, i) => (
               <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", borderBottom: "1px solid var(--border2)" }}>
                 <td style={{ padding: "5px 12px", color: "var(--text3)", minWidth: 40 }}>
-                  <a href={`${BX_BASE}/${d.id}/`} target="_blank" rel="noreferrer"
+                  <a href={`${portal}/crm/deal/details/${d.id}/`} target="_blank" rel="noreferrer"
                     style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}
                     onClick={e => e.stopPropagation()}>
                     #{d.id}
@@ -265,6 +266,7 @@ function OperatorDealsDropdown({
 function DealsInlinePanel({
   filter, colSpan = 6,
 }: { filter: Parameters<typeof getDealsList>[0]; colSpan?: number }) {
+  const portal = useBitrixPortal();
   const q = useQuery({
     queryKey: ["inline-deals", JSON.stringify(filter)],
     queryFn:  () => getDealsList({ ...filter, limit: 200 }),
@@ -295,7 +297,7 @@ function DealsInlinePanel({
             {items.map((d, i) => (
               <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", borderBottom: "1px solid var(--border2)" }}>
                 <td style={{ padding: "5px 10px", minWidth: 50 }}>
-                  <a href={`${BX_BASE}/${d.id}/`} target="_blank" rel="noreferrer"
+                  <a href={`${portal}/crm/deal/details/${d.id}/`} target="_blank" rel="noreferrer"
                     style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}
                     onClick={e => e.stopPropagation()}>
                     #{d.id}
@@ -336,6 +338,7 @@ const DEAL_STAGE_COLS = [
 
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
+  const portal = useBitrixPortal();
   const [filterOpen, setFilterOpen] = useState(false);
   const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
   const [expandedOp,     setExpandedOp]     = useState<string | null>(null);
@@ -957,7 +960,7 @@ export default function SdelkalarPage() {
                             {r.reason}
                           </span>
                           <a
-                            href={`https://mountain.bitrix24.kz/crm/deal/list/?preset_filter=Y&find[STAGE_ID]=LOSE`}
+                            href={`${portal}/crm/deal/list/?preset_filter=Y&find[STAGE_ID]=LOSE`}
                             target="_blank" rel="noreferrer"
                             onClick={e => e.stopPropagation()}
                             style={{ fontSize: 13, fontWeight: 700, color: "#FFC107", flexShrink: 0, marginLeft: 8, textDecoration: "none" }}

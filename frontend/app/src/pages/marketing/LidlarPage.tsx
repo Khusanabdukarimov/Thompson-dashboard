@@ -131,23 +131,37 @@ function MultiSelect({
 //   student_hr=UC_W02434. The old "Target O'quv markaz/Kids/Maktab/Bog'cha"
 // columns (IN_PROCESS/UC_6INRIS/UC_YGM8H2/UC_TO2TYK) were removed — those
 // stages no longer exist in the portal, so they always read zero.
-const RESPONSIBLE_COLS = [
-  { key: "qongiroqlar",  label: "Zvonki",              color: "#9E9E9E" },
-  { key: "jarayonda",    label: "Tashrif belgilandi",  color: "#FF9800" },
-  { key: "keyin_qong",   label: "O'ylab ko'radi",      color: "#607D8B" },
-  { key: "yangi_lid",    label: "Yangi lid",           color: "#03A9F4" },
-  { key: "propushenniy", label: "Propushenniy",        color: "#78909C" },
-  { key: "dpu1",         label: "DPU 1",               color: "#FF5722" },
-  { key: "dpu2",         label: "DPU 2",               color: "#FF7043" },
-  { key: "dpu3",         label: "DPU 3",               color: "#FF8A65" },
-  { key: "qayta_aloqa",  label: "Qayta aloqa",         color: "#26C6DA" },
-  { key: "kelmadi",      label: "Kelmadi",             color: "#FF00FF" },
-  { key: "muvaffaqiyatli", label: "Muvaffaqiyatli",   color: "#4CAF50" },
-  { key: "sandiq",       label: "Sandiq (JUNK)",       color: "#42A5F5" },
-  { key: "arxiv",        label: "Arxiv 30+",           color: "#8D6E63" },
-  { key: "yopildi",      label: "Yopildi",             color: "#616161" },
-  { key: "student_hr",   label: "Student/HR",          color: "#FFC107" },
-] as const;
+// Per-stage colours, keyed by Bitrix STATUS_ID. Only the colour lives here —
+// the column set and every label come from the live stage list, so the table
+// mirrors the Bitrix pipeline exactly and a rename or a new stage needs no
+// code change. Unknown ids fall back to grey.
+const STAGE_COLORS: Record<string, string> = {
+  NEW: "#9E9E9E", UC_IX1SKS: "#03A9F4", UC_O7Y5NT: "#78909C",
+  "7": "#FF5722", UC_S5YC0D: "#FF7043", UC_X316SW: "#FF8A65",
+  UC_63QL7L: "#26C6DA", "1": "#607D8B", UC_N0PI5R: "#FF9800",
+  UC_SWPARQ: "#FF00FF", CONVERTED: "#4CAF50", JUNK: "#42A5F5",
+  UC_GSPVUS: "#8D6E63", UC_L8G2B9: "#616161", UC_W02434: "#FFC107",
+};
+const stageColor = (bid: string) => STAGE_COLORS[bid] ?? "#9E9E9E";
+
+/** Footer for the operator tables — reveals another page of rows, or all of
+ *  them. Renders nothing once everything is on screen. */
+function ShowMore({ shown, total, page, onShow }: {
+  shown: number; total: number; page: number; onShow: (n: number) => void;
+}) {
+  if (shown >= total) return null;
+  const btn: React.CSSProperties = {
+    background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8,
+    color: "var(--text2)", fontSize: 12, fontWeight: 600, padding: "7px 14px", cursor: "pointer",
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
+      <button style={btn} onClick={() => onShow(shown + page)}>Yana {Math.min(page, total - shown)} ta</button>
+      <button style={{ ...btn, background: "transparent" }} onClick={() => onShow(total)}>Barchasini ko'rsatish ({total})</button>
+      <span style={{ fontSize: 11.5, color: "var(--text3)", marginLeft: "auto" }}>{shown} / {total}</span>
+    </div>
+  );
+}
 
 // Drill-down "BOSQICH" badge — kept in one place so both sub-tables (Lid va
 // Konversiya, Lid mas'ullar kesimida) always show the same label for a stage.
@@ -188,7 +202,6 @@ const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   RECYCLED:          { label: "Bekor bo'ldi",        color: "#FFC107" },
   CONVERTED_CONSULT: { label: "Tashrif buyurdi",     color: "#4CAF50" },
 };
-type RespColKey = typeof RESPONSIBLE_COLS[number]["key"];
 
 
 // ── Shared mini-components ────────────────────────────────────────
@@ -389,6 +402,11 @@ export default function LidlarPage() {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
   const [filterOpen, setFilterOpen] = useState(false);
+  // Both operator tables start collapsed to one page of rows. Rendering all 26
+  // at once buried the ranking and made the drill-downs hard to find.
+  const MGR_PAGE = 10;
+  const [shownConv, setShownConv] = useState(MGR_PAGE);
+  const [shownMasul, setShownMasul] = useState(MGR_PAGE);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search] = useState("");
   const [mode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
@@ -550,20 +568,45 @@ export default function LidlarPage() {
     return rows;
   }, [enrichedResponsibles, search, applied]);
 
-  const colMaxes = useMemo(() => {
-    const m: Partial<Record<RespColKey, number>> = {};
-    for (const col of RESPONSIBLE_COLS)
-      m[col.key] = Math.max(1, ...enrichedResponsibles.map((u) => (u as unknown as Record<string, number>)[col.key] ?? 0));
+  // Columns = the portal's current lead stages, in Bitrix sort order, with the
+  // Bitrix name as the header. Nothing here is hardcoded, so the table can not
+  // drift away from the pipeline the way the old fixed column list did.
+  const stageCols = useMemo(
+    () => (filterOpts?.stages ?? []).map((s) => ({
+      key: s.bitrix_id,
+      label: s.name,
+      color: stageColor(s.bitrix_id),
+    })),
+    [filterOpts]
+  );
+
+  // bitrix_id → human name, for the drill-down "BOSQICH" badge. Falls back to
+  // the static map, then to the raw id only if the stage is unknown to both.
+  const stageName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of filterOpts?.stages ?? []) m.set(s.bitrix_id, s.name);
     return m;
-  }, [enrichedResponsibles]);
+  }, [filterOpts]);
+
+  const stageBadge = (bid: string) => ({
+    label: stageName.get(bid) ?? STAGE_BADGE_MAP[bid]?.label ?? bid,
+    color: STAGE_COLORS[bid] ?? STAGE_BADGE_MAP[bid]?.color ?? "#9E9E9E",
+  });
+
+  const colMaxes = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const col of stageCols)
+      m[col.key] = Math.max(1, ...enrichedResponsibles.map((u) => u.by_stage?.[col.key] ?? 0));
+    return m;
+  }, [enrichedResponsibles, stageCols]);
 
   const totalsRow = useMemo(() => {
-    const bs: Partial<Record<RespColKey, number>> = {};
+    const bs: Record<string, number> = {};
     for (const u of enrichedResponsibles)
-      for (const col of RESPONSIBLE_COLS)
-        bs[col.key] = (bs[col.key] ?? 0) + ((u as unknown as Record<string, number>)[col.key] ?? 0);
+      for (const col of stageCols)
+        bs[col.key] = (bs[col.key] ?? 0) + (u.by_stage?.[col.key] ?? 0);
     return bs;
-  }, [enrichedResponsibles]);
+  }, [enrichedResponsibles, stageCols]);
 
   const isLoading = statsQ.isLoading;
 
@@ -938,7 +981,7 @@ export default function LidlarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {convRows.map((r, i) => {
+                  {convRows.slice(0, shownConv).map((r, i) => {
                     const konv = (r.sifatli_lid ?? 0) > 0 ? (r.tashrif_buyurdi / (r.sifatli_lid ?? 0)) * 100 : 0;
                     const isSelected = selectedRespConv?.id === r.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSelected ? (respLeadsConvQ.data ?? []) : [];
@@ -1008,7 +1051,7 @@ export default function LidlarPage() {
                                   </thead>
                                   <tbody>
                                     {subLeads.map((lead, li) => {
-                                      const stage = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                      const stage = stageBadge(lead.stage_bid);
                                       return (
                                         <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
                                           <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>
@@ -1093,6 +1136,7 @@ export default function LidlarPage() {
               </table>
             </div>
           )}
+          <ShowMore shown={shownConv} total={convRows.length} page={MGR_PAGE} onShow={setShownConv} />
         </div>
 
         {/* ══════════════════════════════════════════════════════════
@@ -1113,16 +1157,16 @@ export default function LidlarPage() {
                   <tr>
                     <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
                     <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
-                    {RESPONSIBLE_COLS.map((col) => (
+                    {stageCols.map((col) => (
                       <th key={col.key} style={TH(col.color)}>{col.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {byUserFiltered.map((u, i) => {
+                  {byUserFiltered.slice(0, shownMasul).map((u, i) => {
                     const isSel = selectedRespMasul?.id === u.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
-                    const colCount = 2 + RESPONSIBLE_COLS.length;
+                    const colCount = 2 + stageCols.length;
                     return (
                       <>
                         <tr key={u.responsible_id}
@@ -1141,8 +1185,8 @@ export default function LidlarPage() {
                               </span>
                             </div>
                           </td>
-                          {RESPONSIBLE_COLS.map((col) => {
-                            const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
+                          {stageCols.map((col) => {
+                            const cnt = u.by_stage?.[col.key] ?? 0;
                             const max = colMaxes[col.key] ?? 1;
                             return (
                               <td key={col.key} style={{ ...TD, minWidth:90 }}>
@@ -1178,7 +1222,7 @@ export default function LidlarPage() {
                                   </thead>
                                   <tbody>
                                     {subLeads.map((lead, li) => {
-                                      const stage = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                      const stage = stageBadge(lead.stage_bid);
                                       return (
                                         <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
                                           <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>
@@ -1231,7 +1275,7 @@ export default function LidlarPage() {
                     <td style={{ ...TD, fontSize:13, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
                       JAMI
                     </td>
-                    {RESPONSIBLE_COLS.map((col) => (
+                    {stageCols.map((col) => (
                       <td key={col.key} style={TD}>
                         <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
                         <MiniBar value={1} max={1} color={col.color} height={3} />
@@ -1243,6 +1287,7 @@ export default function LidlarPage() {
             </div>
           )}
 
+          <ShowMore shown={shownMasul} total={byUserFiltered.length} page={MGR_PAGE} onShow={setShownMasul} />
         </div>
 
         {/* ══════════════════════════════════════════════════════════
