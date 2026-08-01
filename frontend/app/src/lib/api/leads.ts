@@ -427,6 +427,31 @@ export function getHududStats(filter: Pick<DashFilter, "start_date" | "end_date"
   }, API_URL_CRM);
 }
 
+/** "Sabab bo'yicha" — the Причина enum field, distinct from the cancel/junk
+ *  "reason" panels above (getReasonLeads), which use a different Bitrix field. */
+export function getPrichinaStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs">) {
+  return apiGet<UfBreakdownRow[]>("/api/dashboard/prichina-stats", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_ids?.join(','),
+    proekt: filter.proekts?.join(','),
+    course: filter.courses?.join(','),
+    source1: filter.source1s?.join(','),
+    filial: filter.filials?.join(','),
+    reason: filter.reasons?.join(','),
+    hudud: filter.hududs?.join(','),
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
+export function getPrichinaLeads(
+  enumId: string,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  opts: { limit?: number; offset?: number } = {},
+) {
+  return getUfBreakdownLeads("prichina-leads", enumId, filter, opts);
+}
+
 export type CallStatsRow = {
   responsible_id: number;
   full_name: string;
@@ -817,7 +842,7 @@ export function getSourceLeads(
 }
 
 function getUfBreakdownLeads(
-  path: "source1-leads" | "hudud-leads",
+  path: "source1-leads" | "hudud-leads" | "prichina-leads",
   enumId: string,
   filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
   opts: { limit?: number; offset?: number } = {},

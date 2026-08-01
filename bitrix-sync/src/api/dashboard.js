@@ -106,6 +106,7 @@ const UF_FILTERS = [
 
 const SOURCE1_FIELD = 'UF_CRM_1635794595';
 const HUDUD_FIELD   = 'UF_CRM_1701529319467';
+const PRICHINA_FIELD = 'UF_CRM_1618300665524'; // Причина — the "Sabab" filter's own field
 
 /**
  * Lead breakdown by a Bitrix enum UF field (same funnel columns as
@@ -1787,6 +1788,14 @@ function ufBreakdownLeadsHandler(fieldCode) {
 }
 router.get('/source1-leads', ufBreakdownLeadsHandler(SOURCE1_FIELD));
 router.get('/hudud-leads',   ufBreakdownLeadsHandler(HUDUD_FIELD));
+
+/**
+ * GET /api/dashboard/reason-stats / /reason-leads — leads grouped by
+ * "Причина" (Sabab), placed under Bekor bo'lish/Sifatsiz sabablari on the
+ * page. Same shape as source1/hudud.
+ */
+router.get('/prichina-stats', ufBreakdownHandler(PRICHINA_FIELD));
+router.get('/prichina-leads', ufBreakdownLeadsHandler(PRICHINA_FIELD));
 
 /**
  * GET /api/dashboard/form-stats

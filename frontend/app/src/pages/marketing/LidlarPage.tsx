@@ -14,7 +14,7 @@ import {
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
   getResponsibleTasks, getSourceLeads, getLeadDaily,
-  getSourceStats, getSource1Stats, getHududStats, getSource1Leads, getHududLeads, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
+  getSourceStats, getSource1Stats, getHududStats, getPrichinaStats, getSource1Leads, getHududLeads, getPrichinaLeads, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
   type SourceStatsRow, type UfBreakdownRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
@@ -432,6 +432,185 @@ const TD: React.CSSProperties = {
   borderBottom: "1px solid var(--border)",
 };
 
+// Shared by Manba 1 / Hudud / Sabab bo'yicha — same funnel columns as Manba
+// bo'yicha, grouped by a UF enum value instead of source_id, each row
+// expandable into a LID/SANA/BOSQICH drill-down (same shape as Manba bo'yicha's).
+function UfBreakdownTable({
+  title, unit, q, selected, setSelected, shown, setShown, listRef, leadsQ, bitrixPortal,
+}: {
+  title: string; unit: string;
+  q: { data?: UfBreakdownRow[]; isLoading: boolean };
+  selected: string | null; setSelected: (v: string | null) => void;
+  shown: number; setShown: React.Dispatch<React.SetStateAction<number>>;
+  listRef: React.RefObject<HTMLDivElement | null>;
+  leadsQ: { data?: { items: ResponsibleLeadRow[] }; isLoading: boolean };
+  bitrixPortal: string;
+}) {
+  const rows: UfBreakdownRow[] = q.data ?? [];
+  const rowKey = (r: UfBreakdownRow) => r.enum_id ?? 'Nomalum';
+  const maxes = {
+    umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
+    sifatli:  Math.max(1, ...rows.map(r => r.sifatli_lid)),
+    konsB:    Math.max(1, ...rows.map(r => r.konsultatsiya_belgilandi)),
+    konsO:    Math.max(1, ...rows.map(r => r.konsultatsiya_otkazildi)),
+    sifatsiz: Math.max(1, ...rows.map(r => r.sifatsiz)),
+    bekor:    Math.max(1, ...rows.map(r => r.bekor_boldi)),
+  };
+  return (
+    <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+        <span style={{ fontSize: 12, color: "var(--text3)" }}>{rows.length} ta {unit}</span>
+      </div>
+      {q.isLoading ? (
+        <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+            <thead>
+              <tr>
+                <th style={TH("#9E9E9E", 180)}>{title.split(" bo'yicha")[0].toUpperCase()}</th>
+                <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
+                <th style={TH("#00BCD4")}>SIFATLI LID</th>
+                <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
+                <th style={TH("#4CAF50")}>USPESHNIY LID</th>
+                <th style={TH("#F44336")}>SIFATSIZ</th>
+                <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
+                <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
+                <th style={{ ...TH("#00BCD4", 80), textAlign: "center" }}>SIFATLI KON.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.flatMap((r, i) => {
+                const konv        = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
+                const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
+                const key = rowKey(r);
+                const isOpen = selected === key;
+                const leads: ResponsibleLeadRow[] = isOpen ? (leadsQ.data?.items ?? []) : [];
+                return [
+                  <tr key={key}
+                      onClick={() => { setShown(10); setSelected(isOpen ? null : key); }}
+                      style={{ background: isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
+                      onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = "var(--bg3)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
+                    <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>{r.name}</td>
+                    <td style={TD}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
+                      <MiniBar value={r.umumiy_lidlar} max={maxes.umumiy} color="#2196F3" />
+                    </td>
+                    <td style={TD}>
+                      {r.sifatli_lid > 0 ? (
+                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={maxes.sifatli} color="#00BCD4" /></>
+                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                    </td>
+                    <td style={TD}>
+                      {r.konsultatsiya_belgilandi > 0 ? (
+                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={maxes.konsB} color="#9C27B0" /></>
+                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                    </td>
+                    <td style={TD}>
+                      {r.konsultatsiya_otkazildi > 0 ? (
+                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={maxes.konsO} color="#4CAF50" /></>
+                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                    </td>
+                    <td style={TD}>
+                      {r.sifatsiz > 0 ? (
+                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={maxes.sifatsiz} color="#F44336" /></>
+                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                    </td>
+                    <td style={TD}>
+                      {r.bekor_boldi > 0 ? (
+                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={maxes.bekor} color="#FFC107" /></>
+                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
+                    </td>
+                    <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
+                    <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={sifatliKonv} size={38} /></td>
+                  </tr>,
+                  isOpen ? (
+                    <tr key={`${key}-leads`}>
+                      <td colSpan={9} style={{ padding: "0 12px 12px" }}>
+                        <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
+                          {leadsQ.isLoading ? (
+                            <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                          ) : !leads.length ? (
+                            <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
+                          ) : (
+                            <>
+                              <div ref={listRef} style={{ maxHeight: 340, overflowY: "auto" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                  <thead>
+                                    <tr style={{ background: "rgba(33,150,243,0.06)" }}>
+                                      <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
+                                      <th style={SUBTH}>LID</th>
+                                      <th style={{ ...SUBTH, width: 110 }}>SANA</th>
+                                      <th style={{ ...SUBTH, width: 210 }}>BOSQICH</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {leads.slice(0, shown).map((lead, li) => {
+                                      const st = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
+                                      return (
+                                        <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
+                                          <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
+                                          <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`} target="_blank" rel="noreferrer"
+                                               onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
+                                              {lead.title || `Lid #${lead.id}`}
+                                            </a>
+                                          </td>
+                                          <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
+                                            {lead.date_create ? String(lead.date_create).slice(0, 10) : "—"}
+                                          </td>
+                                          <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
+                                {shown < leads.length && (
+                                  <>
+                                    <button onClick={e => {
+                                              e.stopPropagation();
+                                              setShown((n: number) => n + 10);
+                                              requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current!.scrollHeight, behavior: "smooth" }));
+                                            }}
+                                      style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                      Yana 10 ta <ChevronDown size={12} />
+                                    </button>
+                                    <button onClick={e => {
+                                              e.stopPropagation();
+                                              setShown(leads.length);
+                                              requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
+                                            }}
+                                      style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                                      Barchasi ({leads.length})
+                                    </button>
+                                  </>
+                                )}
+                                <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                                  {Math.min(shown, leads.length)} / {leads.length} ta lid
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null,
+                ];
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // No responsible is hidden from the tables. Blacklisting names here (Data365,
 // Main, ...) dropped their rows but not their leads, so the JAMI row could never
 // add up to the KPI cards above it — the cards count every lead in scope.
@@ -508,6 +687,7 @@ export default function LidlarPage() {
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const source1Q    = useQuery({ queryKey: ["stats/source1-stats", appliedWithMode], queryFn: () => getSource1Stats(appliedWithMode) });
   const hududQ      = useQuery({ queryKey: ["stats/hudud-stats", appliedWithMode], queryFn: () => getHududStats(appliedWithMode) });
+  const reasonStatsQ = useQuery({ queryKey: ["stats/reason-stats", appliedWithMode], queryFn: () => getPrichinaStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const dailyQ = useQuery({
     queryKey: ["stats/lead-daily", appliedWithMode],
@@ -538,6 +718,14 @@ export default function LidlarPage() {
     queryKey: ["stats/hudud-leads", selectedHudud, appliedWithMode],
     queryFn: () => getHududLeads(selectedHudud!, appliedWithMode, { limit: 1000 }),
     enabled: selectedHudud !== null,
+  });
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [shownReasonLeads, setShownReasonLeads] = useState(10);
+  const reasonListRef = useRef<HTMLDivElement>(null);
+  const reasonLeadsQ = useQuery({
+    queryKey: ["stats/reason-leads", selectedReason, appliedWithMode],
+    queryFn: () => getPrichinaLeads(selectedReason!, appliedWithMode, { limit: 1000 }),
+    enabled: selectedReason !== null,
   });
   const [shownMasulLeads, setShownMasulLeads] = useState(10);
   const masulListRef = useRef<HTMLDivElement>(null);
@@ -1506,6 +1694,17 @@ export default function LidlarPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════
+            Sabab (Причина) bo'yicha — same funnel columns as Manba
+            bo'yicha, under Bekor bo'ldi / Sifatsiz sabablari.
+        ══════════════════════════════════════════════════════════ */}
+        <UfBreakdownTable
+          title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ} bitrixPortal={bitrixPortal}
+          selected={selectedReason} setSelected={setSelectedReason}
+          shown={shownReasonLeads} setShown={setShownReasonLeads}
+          listRef={reasonListRef} leadsQ={reasonLeadsQ}
+        />
+
+        {/* ══════════════════════════════════════════════════════════
             UTM bo'yicha — single table, 6-level breadcrumb navigation
         ══════════════════════════════════════════════════════════ */}
         {(() => {
@@ -1872,184 +2071,18 @@ export default function LidlarPage() {
             Manba 1 / Hudud bo'yicha — same funnel columns as Manba
             bo'yicha, grouped by a UF enum field instead of source_id.
         ══════════════════════════════════════════════════════════ */}
-        {[
-          {
-            title: "Manba 1 bo'yicha", unit: "manba", q: source1Q,
-            selected: selectedSource1, setSelected: setSelectedSource1,
-            shown: shownSource1Leads, setShown: setShownSource1Leads,
-            listRef: source1ListRef, leadsQ: source1LeadsQ,
-          },
-          {
-            title: "Hudud bo'yicha", unit: "hudud", q: hududQ,
-            selected: selectedHudud, setSelected: setSelectedHudud,
-            shown: shownHududLeads, setShown: setShownHududLeads,
-            listRef: hududListRef, leadsQ: hududLeadsQ,
-          },
-        ].map(({ title, unit, q, selected, setSelected, shown, setShown, listRef, leadsQ }) => {
-          const rows: UfBreakdownRow[] = q.data ?? [];
-          const rowKey = (r: UfBreakdownRow) => r.enum_id ?? 'Nomalum';
-          const maxes = {
-            umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
-            sifatli:  Math.max(1, ...rows.map(r => r.sifatli_lid)),
-            konsB:    Math.max(1, ...rows.map(r => r.konsultatsiya_belgilandi)),
-            konsO:    Math.max(1, ...rows.map(r => r.konsultatsiya_otkazildi)),
-            sifatsiz: Math.max(1, ...rows.map(r => r.sifatsiz)),
-            bekor:    Math.max(1, ...rows.map(r => r.bekor_boldi)),
-          };
-          return (
-            <div key={title} style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>{rows.length} ta {unit}</span>
-              </div>
-              {q.isLoading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-              ) : rows.length === 0 ? (
-                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                    <thead>
-                      <tr>
-                        <th style={TH("#9E9E9E", 180)}>{title.split(" bo'yicha")[0].toUpperCase()}</th>
-                        <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
-                        <th style={TH("#00BCD4")}>SIFATLI LID</th>
-                        <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
-                        <th style={TH("#4CAF50")}>USPESHNIY LID</th>
-                        <th style={TH("#F44336")}>SIFATSIZ</th>
-                        <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
-                        <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
-                        <th style={{ ...TH("#00BCD4", 80), textAlign: "center" }}>SIFATLI KON.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.flatMap((r, i) => {
-                        const konv        = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
-                        const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
-                        const key = rowKey(r);
-                        const isOpen = selected === key;
-                        const leads: ResponsibleLeadRow[] = isOpen ? (leadsQ.data?.items ?? []) : [];
-                        return [
-                          <tr key={key}
-                              onClick={() => { setShown(10); setSelected(isOpen ? null : key); }}
-                              style={{ background: isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                              onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = "var(--bg3)"; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
-                            <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>{r.name}</td>
-                            <td style={TD}>
-                              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
-                              <MiniBar value={r.umumiy_lidlar} max={maxes.umumiy} color="#2196F3" />
-                            </td>
-                            <td style={TD}>
-                              {r.sifatli_lid > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={maxes.sifatli} color="#00BCD4" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.konsultatsiya_belgilandi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={maxes.konsB} color="#9C27B0" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.konsultatsiya_otkazildi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={maxes.konsO} color="#4CAF50" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.sifatsiz > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={maxes.sifatsiz} color="#F44336" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.bekor_boldi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={maxes.bekor} color="#FFC107" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
-                            <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={sifatliKonv} size={38} /></td>
-                          </tr>,
-                          isOpen ? (
-                            <tr key={`${key}-leads`}>
-                              <td colSpan={9} style={{ padding: "0 12px 12px" }}>
-                                <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
-                                  {leadsQ.isLoading ? (
-                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
-                                  ) : !leads.length ? (
-                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
-                                  ) : (
-                                    <>
-                                      <div ref={listRef} style={{ maxHeight: 340, overflowY: "auto" }}>
-                                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                          <thead>
-                                            <tr style={{ background: "rgba(33,150,243,0.06)" }}>
-                                              <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
-                                              <th style={SUBTH}>LID</th>
-                                              <th style={{ ...SUBTH, width: 110 }}>SANA</th>
-                                              <th style={{ ...SUBTH, width: 210 }}>BOSQICH</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {leads.slice(0, shown).map((lead, li) => {
-                                              const st = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
-                                              return (
-                                                <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
-                                                  <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
-                                                  <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                    <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`} target="_blank" rel="noreferrer"
-                                                       onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                                      {lead.title || `Lid #${lead.id}`}
-                                                    </a>
-                                                  </td>
-                                                  <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
-                                                    {lead.date_create ? String(lead.date_create).slice(0, 10) : "—"}
-                                                  </td>
-                                                  <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
-                                                </tr>
-                                              );
-                                            })}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
-                                        {shown < leads.length && (
-                                          <>
-                                            <button onClick={e => {
-                                                      e.stopPropagation();
-                                                      setShown((n: number) => n + 10);
-                                                      requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }));
-                                                    }}
-                                              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                              Yana 10 ta <ChevronDown size={12} />
-                                            </button>
-                                            <button onClick={e => {
-                                                      e.stopPropagation();
-                                                      setShown(leads.length);
-                                                      requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
-                                                    }}
-                                              style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                              Barchasi ({leads.length})
-                                            </button>
-                                          </>
-                                        )}
-                                        <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
-                                          {Math.min(shown, leads.length)} / {leads.length} ta lid
-                                        </span>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ) : null,
-                        ];
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        <UfBreakdownTable
+          title="Manba 1 bo'yicha" unit="manba" q={source1Q} bitrixPortal={bitrixPortal}
+          selected={selectedSource1} setSelected={setSelectedSource1}
+          shown={shownSource1Leads} setShown={setShownSource1Leads}
+          listRef={source1ListRef} leadsQ={source1LeadsQ}
+        />
+        <UfBreakdownTable
+          title="Hudud bo'yicha" unit="hudud" q={hududQ} bitrixPortal={bitrixPortal}
+          selected={selectedHudud} setSelected={setSelectedHudud}
+          shown={shownHududLeads} setShown={setShownHududLeads}
+          listRef={hududListRef} leadsQ={hududLeadsQ}
+        />
 
         {statsQ.error && (
           <div className="p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
