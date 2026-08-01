@@ -13,7 +13,7 @@ import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
-  getResponsibleTasks, getSourceLeads,
+  getResponsibleTasks, getSourceLeads, getLeadDaily,
   getSourceStats, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
   type SourceStatsRow, type ResponsibleLeadRow,
@@ -307,7 +307,14 @@ function smoothPath(pts: [number, number][]): string {
   return d.join(" ");
 }
 
-function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) {
+function Sparkline({ color, variant = 0, data, labels, unit = "ta", fmt }: {
+  color: string; variant?: number;
+  /** Bucketed series from /lead-daily. Falls back to the decorative wave when absent. */
+  data?: number[] | null;
+  labels?: string[] | null;
+  unit?: string;
+  fmt?: (v: number) => string;
+}) {
   // Sine-wave–style control points: y=0 is top, y=60 is bottom; peaks ~10, troughs ~52
   const variants: [number, number][][] = [
     // 0: Blue — classic 2.5-cycle sine wave
@@ -319,12 +326,39 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
     // 3: Green — upward-trending wave (used for conversion)
     [[0,54],[30,46],[58,32],[85,18],[110,30],[135,42],[158,26],[180,14],[200,12]],
   ];
-  const pts = variants[variant % variants.length];
+  // A flat series carries no shape, so treat it as "no data" and keep the decor.
+  const real = !!(data && labels && data.length >= 2 && labels.length === data.length && data.some(v => v !== data[0]));
+  const vals = real ? data! : [];
+  const vmax = real ? Math.max(1, ...vals) : 1;
+  const [hover, setHover] = useState<number | null>(null);
+  const pts: [number, number][] = real
+    ? vals.map((v, i) => [(i / (vals.length - 1)) * 200, 56 - (v / vmax) * 46] as [number, number])
+    : variants[variant % variants.length];
   const linePath = smoothPath(pts);
   const areaPath = `${linePath} L 200,60 L 0,60 Z`;
   const last = pts[pts.length - 1];
   const gid = `spk${variant}${color.replace(/[^a-z0-9]/gi, "")}`;
+  const showFmt = fmt ?? ((v: number) => fmtNum(Math.round(v)));
   return (
+    <div style={{ position: "relative" }}
+         onMouseLeave={() => setHover(null)}
+         onMouseMove={real ? (e) => {
+           const r = e.currentTarget.getBoundingClientRect();
+           if (!r.width) return;
+           const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+           setHover(Math.round(ratio * (vals.length - 1)));
+         } : undefined}>
+      {real && hover !== null && (
+        <div style={{
+          position: "absolute", left: `${(hover / (vals.length - 1)) * 100}%`, bottom: 68,
+          transform: "translateX(-50%)", background: "var(--bg2)", border: "1px solid var(--border)",
+          borderRadius: 7, padding: "4px 9px", fontSize: 11, color: "var(--text)", whiteSpace: "nowrap",
+          pointerEvents: "none", zIndex: 3, boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
+        }}>
+          <span style={{ color: "var(--text3)" }}>{labels![hover]}</span>{" · "}
+          <strong style={{ color }}>{showFmt(vals[hover])}</strong> {unit}
+        </div>
+      )}
     <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: "100%", height: 80, display: "block" }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -337,6 +371,7 @@ function Sparkline({ color, variant = 0 }: { color: string; variant?: number }) 
             strokeLinecap="round" strokeLinejoin="round" opacity="0.95" />
       <circle cx={last[0]} cy={last[1]} r="3.5" fill={color} />
     </svg>
+    </div>
   );
 }
 
@@ -345,8 +380,13 @@ type GradCardProps = {
   gradient: string; lightGradient: string; border: string; lightBorder: string; shadow: string;
   icon: React.ReactNode; title: string; children: React.ReactNode;
   sparkColor: string; sparkVariant?: number;
+  /** Bucketed series for the card's wave (from /lead-daily). */
+  sparkData?: number[] | null;
+  sparkLabels?: string[] | null;
+  sparkUnit?: string;
+  sparkFmt?: (v: number) => string;
 };
-function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, title, children, sparkColor, sparkVariant = 0 }: GradCardProps) {
+function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, title, children, sparkColor, sparkVariant = 0, sparkData, sparkLabels, sparkUnit, sparkFmt }: GradCardProps) {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
   return (
@@ -368,7 +408,7 @@ function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, 
       <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#fff" : "var(--text)", marginBottom: 3 }}>{title}</div>
       {children}
       <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
-        <Sparkline color={sparkColor} variant={sparkVariant} />
+        <Sparkline color={sparkColor} variant={sparkVariant} data={sparkData} labels={sparkLabels} unit={sparkUnit} fmt={sparkFmt} />
       </div>
     </div>
   );
@@ -460,6 +500,12 @@ export default function LidlarPage() {
   const junkQ       = useQuery({ queryKey: ["stats/junk-reasons",   appliedWithMode], queryFn: () => getJunkReasons(appliedWithMode) });
   const sourceQ     = useQuery({ queryKey: ["stats/source-stats", appliedWithMode], queryFn: () => getSourceStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
+  const dailyQ = useQuery({
+    queryKey: ["stats/lead-daily", appliedWithMode],
+    queryFn: () => getLeadDaily(appliedWithMode),
+    staleTime: 60_000,
+  });
+  const daily = dailyQ.data;
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [shownSrcLeads, setShownSrcLeads] = useState(10);
   const srcListRef = useRef<HTMLDivElement>(null);
@@ -835,28 +881,28 @@ export default function LidlarPage() {
               <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(33,150,243,0.03))"
                         border="rgba(33,150,243,0.3)" lightBorder="rgba(33,150,243,0.25)"
                         shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
-                        title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0}>
+                        title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0} sparkData={daily?.total} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Umumiy Lid</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.03))"
                         border="rgba(0,188,212,0.3)" lightBorder="rgba(0,188,212,0.25)"
                         shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
-                        title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1}>
+                        title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Sifatli Lid</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#2a1500,#6e3d00)" lightGradient="linear-gradient(135deg,rgba(255,152,0,0.07),rgba(255,152,0,0.03))"
                         border="rgba(255,152,0,0.3)" lightBorder="rgba(255,152,0,0.25)"
                         shadow="0 4px 20px rgba(255,152,0,0.15)" icon={<ArrowLeftRight size={20} style={{ color:"#FF9800" }} />}
-                        title="Jarayonda" sparkColor="#FF9800" sparkVariant={2}>
+                        title="Jarayonda" sparkColor="#FF9800" sparkVariant={2} sparkData={daily?.jarayonda} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#FF9800", lineHeight:1.1, marginBottom:3 }}>{fmtNum(jarayondaCount)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Jarayondagi lidlar</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" lightGradient="linear-gradient(135deg,rgba(76,175,80,0.07),rgba(76,175,80,0.03))"
                         border="rgba(76,175,80,0.3)" lightBorder="rgba(76,175,80,0.25)"
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
-                        title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3}>
+                        title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Tashrif o'tkazildi / umumiy lid</div>
               </GradCard>
@@ -919,7 +965,7 @@ export default function LidlarPage() {
                     </div>
                   </div>
                   <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
-                    <Sparkline color="#9C27B0" variant={2} />
+                    <Sparkline color="#9C27B0" variant={2} data={daily?.belgilandi} labels={daily?.labels} />
                   </div>
                 </div>
                 {/* Sifatsiz */}
@@ -938,7 +984,7 @@ export default function LidlarPage() {
                     </div>
                   </div>
                   <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
-                    <Sparkline color="#F44336" variant={0} />
+                    <Sparkline color="#F44336" variant={0} data={daily?.sifatsiz} labels={daily?.labels} />
                   </div>
                 </div>
                 {/* Bekor bo'ldi */}
@@ -957,7 +1003,7 @@ export default function LidlarPage() {
                     </div>
                   </div>
                   <div style={{ marginTop:"auto", marginLeft:-16, marginRight:-16 }}>
-                    <Sparkline color="#FFC107" variant={1} />
+                    <Sparkline color="#FFC107" variant={1} data={daily?.bekor} labels={daily?.labels} />
                   </div>
                 </div>
               </div>

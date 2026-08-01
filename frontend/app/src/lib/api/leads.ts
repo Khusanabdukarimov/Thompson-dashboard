@@ -762,3 +762,34 @@ export function getSourceLeads(
     offset: opts.offset,
   }, API_URL_CRM);
 }
+
+export type LeadDailyResponse = {
+  /** 'day' | 'week' | 'month' — chosen from the range length. */
+  bucket: string;
+  labels: string[];
+  total: number[];
+  jarayonda: number[];
+  sifatli: number[];
+  sifatsiz: number[];
+  bekor: number[];
+  belgilandi: number[];
+  otkazildi: number[];
+  convPct: number[];
+};
+
+/** Bucketed series behind the KPI card waves. */
+export function getLeadDaily(filter: DashFilter) {
+  return apiGet<LeadDailyResponse>("/api/dashboard/lead-daily", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_ids?.join(','),
+    stage: filter.stages?.join(','),
+    source: filter.sources?.join(','),
+    proekt: filter.proekts?.join(','),
+    course: filter.courses?.join(','),
+    source1: filter.source1s?.join(','),
+    filial: filter.filials?.join(','),
+    reason: filter.reasons?.join(','),
+    mode: filter.mode,
+  }, API_URL_CRM);
+}

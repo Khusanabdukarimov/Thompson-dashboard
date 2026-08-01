@@ -965,6 +965,75 @@ router.get('/amocrm-sources', async (_req, res) => {
  * Header KPIs + funnel per stage.  Replaces Python /api/stats.
  * Params: from, to, responsible_id, stage, source, mode
  */
+/**
+ * GET /api/dashboard/lead-daily
+ * Bucketed series behind the KPI card waves.
+ *
+ * The bucket adapts to the selected range so the wave always holds roughly
+ * 8-20 points: a week reads day by day, a quarter by week, a year by month.
+ * A fixed daily bucket would render a year as 365 spikes and a week as 7.
+ * Same scope and same metric definitions as /lead-stats, so a wave can never
+ * tell a different story from the number above it.
+ */
+router.get('/lead-daily', async (req, res) => {
+  const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null, proekt || null];
+
+  let bucket = 'month';
+  if (from && to) {
+    const span = (new Date(to) - new Date(from)) / 86400000;
+    bucket = span <= 10 ? 'day' : span <= 90 ? 'week' : 'month';
+  }
+
+  const dateCol = mode === 'amocrm' ? 'COALESCE(l.uf_amo_date, l.date_create)' : 'l.date_create';
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT date_trunc('${bucket}', (${dateCol} AT TIME ZONE 'Asia/Tashkent')) AS b,
+         COUNT(*)::int                                                   AS total,
+         COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int                     AS jarayonda,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int  AS sifatli,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATSIZ}))::int AS sifatsiz,
+         COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_BEKOR}))::int    AS bekor,
+         COUNT(*) FILTER (WHERE ${TASHRIF_BELGILANDI})::int              AS belgilandi,
+         COUNT(*) FILTER (WHERE ${TASHRIF_OTKAZILDI})::int               AS otkazildi
+       FROM leads l
+       JOIN stages s ON s.id = l.stage_id
+       WHERE ${leadDateCond(mode, 1, 2)}
+         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+         AND ${leadSrcCond(mode, 5)}
+         AND ${leadProektCond(6, req.query)}
+         ${leadModeClause(mode)}
+       GROUP BY b ORDER BY b`,
+      params
+    );
+
+    const fmt = (d) => {
+      const dt = new Date(d);
+      return bucket === 'month'
+        ? dt.toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })
+        : dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+    };
+
+    res.json({
+      bucket,
+      labels:     rows.map(r => fmt(r.b)),
+      total:      rows.map(r => r.total),
+      jarayonda:  rows.map(r => r.jarayonda),
+      sifatli:    rows.map(r => r.sifatli),
+      sifatsiz:   rows.map(r => r.sifatsiz),
+      bekor:      rows.map(r => r.bekor),
+      belgilandi: rows.map(r => r.belgilandi),
+      otkazildi:  rows.map(r => r.otkazildi),
+      convPct:    rows.map(r => (r.total > 0 ? Math.round((r.otkazildi / r.total) * 1000) / 10 : 0)),
+    });
+  } catch (err) {
+    console.error('[dashboard/lead-daily]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/lead-stats', async (req, res) => {
   const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
 
