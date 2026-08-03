@@ -1001,12 +1001,16 @@ export default function LidlarPage() {
             border: filterOpen ? "1px solid var(--border)" : "1px solid transparent",
             borderTop: "none",
             borderRadius: "0 0 10px 10px",
-            maxHeight: filterOpen ? (filterSettled ? "none" : 640) : 0,
+            // A numeric max-height both ways: "none" cannot be transitioned
+            // back to 0, which killed the close animation. Content stays
+            // mounted so there is something to collapse; overflow goes visible
+            // once open so the date popover is not clipped, and content taller
+            // than the cap still shows.
+            maxHeight: filterOpen ? 900 : 0,
             opacity: filterOpen ? 1 : 0,
             overflow: filterSettled ? "visible" : "hidden",
-            transition: "max-height .24s cubic-bezier(.4,0,.2,1), opacity .18s ease",
+            transition: "max-height .28s cubic-bezier(.4,0,.2,1), opacity .2s ease",
           }}>
-            {filterOpen && (
               <div style={{ padding: "16px 20px" }}>
                 {/* Yaratilgan sana — range picker and the quick presets share one row,
                     so the applied range is always visible next to the shortcut that set it. */}
@@ -1153,7 +1157,6 @@ export default function LidlarPage() {
                   </div>
                 )}
               </div>
-            )}
           </div>
         </div>
 
