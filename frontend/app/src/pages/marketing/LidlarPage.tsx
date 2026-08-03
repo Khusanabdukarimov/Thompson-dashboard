@@ -34,6 +34,7 @@ const localISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const todayISO   = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+const startOfYearISO  = () => `${new Date().getFullYear()}-01-01`;
 const startOfMonthISO = () => { const d = new Date(); d.setDate(1); return localISO(d); };
 
 const getDefaultFilter = (): DashFilter => ({ start_date: startOfMonthISO(), end_date: todayISO() });
@@ -71,7 +72,7 @@ function MultiSelect({
       : `${values.length} ta tanlangan`;
 
   return (
-    <div ref={ref} style={{ flex: 1, minWidth: 0, position: "relative" }}>
+    <div ref={ref} style={{ flex: "1 1 190px", minWidth: 170, position: "relative" }}>
       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
         {icon}{label}
       </label>
@@ -670,6 +671,12 @@ export default function LidlarPage() {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterSettled, setFilterSettled] = useState(false);
+  useEffect(() => {
+    if (!filterOpen) { setFilterSettled(false); return; }
+    const t = setTimeout(() => setFilterSettled(true), 240);
+    return () => clearTimeout(t);
+  }, [filterOpen]);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search] = useState("");
   const [mode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
@@ -989,11 +996,17 @@ export default function LidlarPage() {
           </button>
 
           {/* Dropdown */}
-          {filterOpen && (
-            <div style={{
-              background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none",
-              borderRadius: "0 0 10px 10px",
-            }}>
+          <div style={{
+            background: "var(--bg2)",
+            border: filterOpen ? "1px solid var(--border)" : "1px solid transparent",
+            borderTop: "none",
+            borderRadius: "0 0 10px 10px",
+            maxHeight: filterOpen ? (filterSettled ? "none" : 640) : 0,
+            opacity: filterOpen ? 1 : 0,
+            overflow: filterSettled ? "visible" : "hidden",
+            transition: "max-height .24s cubic-bezier(.4,0,.2,1), opacity .18s ease",
+          }}>
+            {filterOpen && (
               <div style={{ padding: "16px 20px" }}>
                 {/* Yaratilgan sana — range picker and the quick presets share one row,
                     so the applied range is always visible next to the shortcut that set it. */}
@@ -1006,11 +1019,14 @@ export default function LidlarPage() {
                       onChange={(s, e) => setApplied((p) => ({ ...p, start_date: s || undefined, end_date: e || undefined }))}
                       onClear={() => setApplied((p) => ({ ...p, start_date: undefined, end_date: undefined }))} />
                     {[
-                      { label: "Bugun",      start: todayISO(),     end: todayISO() },
-                      { label: "7 kun",      start: daysAgoISO(7),  end: todayISO() },
-                      { label: "30 kun",     start: daysAgoISO(30), end: todayISO() },
-                      { label: "90 kun",     start: daysAgoISO(90), end: todayISO() },
-                      { label: "Butun davr", start: "",             end: "" },
+                      { label: "Bugun",      start: todayISO(),        end: todayISO() },
+                      { label: "7 kun",      start: daysAgoISO(7),     end: todayISO() },
+                      { label: "30 kun",     start: daysAgoISO(30),    end: todayISO() },
+                      { label: "Bu oy",      start: startOfMonthISO(), end: todayISO() },
+                      // Anchored to January rather than left unbounded: the years
+                      // before this one are nearly empty, and including them
+                      // flattened every wave to a line with one spike at the end.
+                      { label: "Butun davr", start: startOfYearISO(),  end: todayISO() },
                     ].map((p) => {
                       const active = applied.start_date === (p.start || undefined) && applied.end_date === (p.end || undefined);
                       return (
@@ -1061,7 +1077,7 @@ export default function LidlarPage() {
                 </div>
 
                 {/* MultiSelect filters row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
                   <MultiSelect
                     label="Mas'ul xodim" icon={<Users size={12} />}
                     options={(filterOpts?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
@@ -1137,8 +1153,8 @@ export default function LidlarPage() {
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* ── KPI cards + Voronka ── */}
