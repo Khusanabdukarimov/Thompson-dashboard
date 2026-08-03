@@ -672,11 +672,59 @@ export default function LidlarPage() {
   const isDark = theme === 'dark';
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterSettled, setFilterSettled] = useState(false);
+  const filterBodyRef = useRef<HTMLDivElement>(null);
+  // Animate to the body's real height. A fixed cap spends the tail of the
+  // transition travelling empty space, which reads as the panel freezing.
+  const [bodyH, setBodyH] = useState(0);
+  useEffect(() => {
+    const el = filterBodyRef.current;
+    if (!el) return;
+    const measure = () => setBodyH(el.scrollHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => {
     if (!filterOpen) { setFilterSettled(false); return; }
-    const t = setTimeout(() => setFilterSettled(true), 240);
+    const t = setTimeout(() => setFilterSettled(true), 300);
     return () => clearTimeout(t);
   }, [filterOpen]);
+
+  // Hide the bar on scroll down, reveal on scroll up.
+  const filterRootRef = useRef<HTMLDivElement>(null);
+  const [filterHidden, setFilterHidden] = useState(false);
+  // Expanding or collapsing re-anchors the scroll position — a phantom "scroll
+  // down" that would otherwise hide the bar the instant it is pressed.
+  const suppressUntil = useRef(0);
+  const toggleFilter = () => {
+    setFilterOpen(o => !o);
+    setFilterHidden(false);
+    suppressUntil.current = performance.now() + 500;
+  };
+  useEffect(() => {
+    const el = filterRootRef.current;
+    if (!el) return;
+    let sp: HTMLElement | null = el.parentElement;
+    while (sp && sp !== document.body) {
+      const oy = getComputedStyle(sp).overflowY;
+      if (oy === 'auto' || oy === 'scroll') break;
+      sp = sp.parentElement;
+    }
+    if (!sp || sp === document.body) return;
+    let last = sp.scrollTop;
+    const onScroll = () => {
+      const cur = sp!.scrollTop;
+      const delta = cur - last;
+      last = cur;
+      if (performance.now() < suppressUntil.current) return;
+      if (Math.abs(delta) < 6) return;
+      if (delta > 0 && cur > 90) setFilterHidden(true);
+      else if (delta < 0) setFilterHidden(false);
+    };
+    sp.addEventListener('scroll', onScroll, { passive: true });
+    return () => sp.removeEventListener('scroll', onScroll);
+  }, []);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search] = useState("");
   const [mode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
@@ -955,10 +1003,15 @@ export default function LidlarPage() {
       <div className="flex-1 overflow-y-auto px-3 sm:px-[22px] py-3 sm:py-[18px]" style={{ background: "var(--bg)" }}>
 
         {/* ── Filter panel ── */}
-        <div ref={filterRef} style={{ position: "relative", width: "100%", marginBottom: 20 }}>
+        <div ref={(n) => { (filterRef as React.MutableRefObject<HTMLDivElement | null>).current = n; filterRootRef.current = n; }}
+             style={{
+               position: "sticky", top: 0, zIndex: 50, width: "100%", marginBottom: 20,
+               transform: filterHidden ? "translateY(-130%)" : "translateY(0)",
+               transition: "transform .28s cubic-bezier(.4,0,.2,1)",
+             }}>
           {/* Trigger button */}
           <button
-            onClick={() => setFilterOpen((o) => !o)}
+            onClick={toggleFilter}
             style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%",
               background: "var(--bg2)",
@@ -1006,12 +1059,12 @@ export default function LidlarPage() {
             // mounted so there is something to collapse; overflow goes visible
             // once open so the date popover is not clipped, and content taller
             // than the cap still shows.
-            maxHeight: filterOpen ? 900 : 0,
+            maxHeight: filterOpen ? bodyH : 0,
             opacity: filterOpen ? 1 : 0,
             overflow: filterSettled ? "visible" : "hidden",
             transition: "max-height .28s cubic-bezier(.4,0,.2,1), opacity .2s ease",
           }}>
-              <div style={{ padding: "16px 20px" }}>
+              <div ref={filterBodyRef} style={{ padding: "16px 20px" }}>
                 {/* Yaratilgan sana — range picker and the quick presets share one row,
                     so the applied range is always visible next to the shortcut that set it. */}
                 <div style={{ marginBottom: 14 }}>
