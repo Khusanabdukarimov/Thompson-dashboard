@@ -86,6 +86,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
   const [hovered, setHovered] = useState<number | null>(null);
   const [shownLeads, setShownLeads] = useState(10);
   const [openPodium, setOpenPodium] = useState<Set<string>>(new Set());
+  const [shownOps, setShownOps] = useState(20);
   const leadScrollRef = useRef<HTMLDivElement>(null);
 
   // Ranked by lead volume, ties broken by conversion. Ranking on conversion put
@@ -218,7 +219,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
             </tr>
           </thead>
           <tbody>
-            {ranked.flatMap((r, i) => {
+            {ranked.slice(0, shownOps).flatMap((r, i) => {
               const conv = conversionOf(r);
               const isHot = hovered === r.responsible_id;
               const isOpen = selected?.id === r.responsible_id;
@@ -359,6 +360,25 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
             })}
           </tbody>
           <tfoot>
+            {shownOps < ranked.length && (
+              <tr>
+                <td colSpan={10} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => setShownOps(n => n + 20)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                      Yana 20 ta <ChevronDown size={12} />
+                    </button>
+                    <button onClick={() => setShownOps(ranked.length)}
+                      style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                      Barchasi ({ranked.length})
+                    </button>
+                    <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                      {Math.min(shownOps, ranked.length)} / {ranked.length} operator
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
             <tr style={{ background: "var(--bg3)", borderTop: "2px solid var(--border)" }}>
               <td style={{ ...TD, textAlign: "center", fontSize: 11, fontWeight: 800, color: "var(--text3)" }}>—</td>
               <td style={{ ...TD, fontSize: 12, fontWeight: 800, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>

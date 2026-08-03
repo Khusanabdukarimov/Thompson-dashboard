@@ -37,6 +37,8 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const REASONS_PAGE = 12;
+  const [shownReasons, setShownReasons] = useState(REASONS_PAGE);
 
   const fetchPage = async (reason: string, offset: number) => {
     setLeadsLoading(true); setLeadsError(null);
@@ -101,7 +103,7 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
         <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
       ) : (
         <div style={{ padding: "6px 0 10px" }}>
-          {items.map((r) => {
+          {items.slice(0, shownReasons).map((r) => {
             const isOpen = openReason === r.reason;
             return (
               <div key={r.reason}>
@@ -176,6 +178,15 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
               </div>
             );
           })}
+          {shownReasons < items.length && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px 2px" }}>
+              <button onClick={() => setShownReasons(n => n + REASONS_PAGE)} style={{ ...btn, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                Yana {Math.min(REASONS_PAGE, items.length - shownReasons)} ta <ChevronDown size={12} />
+              </button>
+              <button onClick={() => setShownReasons(items.length)} style={btn}>Barchasi ({items.length})</button>
+              <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>{shownReasons} / {items.length}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
