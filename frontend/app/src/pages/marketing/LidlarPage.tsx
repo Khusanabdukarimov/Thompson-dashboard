@@ -618,6 +618,33 @@ function UfBreakdownTable({
 // ─────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────
+/** Pill switcher for tables that show the same period cut a different way. */
+function TabSwitch({ tabs, value, onChange }: {
+  tabs: [string, string][];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div style={{ display: "inline-flex", gap: 4, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: 4, marginBottom: 12 }}>
+      {tabs.map(([key, label]) => {
+        const on = value === key;
+        return (
+          <button key={key} onClick={() => onChange(key)}
+            style={{
+              border: "none", borderRadius: 7, cursor: "pointer", padding: "6px 16px",
+              fontSize: 12.5, fontWeight: 600,
+              background: on ? "#2196F3" : "transparent",
+              color: on ? "#fff" : "var(--text3)",
+              transition: "background .15s ease, color .15s ease",
+            }}>
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function LidlarPage() {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
@@ -735,6 +762,8 @@ export default function LidlarPage() {
     queryFn: () => getResponsibleTasks(selectedTaskResp!, appliedWithMode),
     enabled: selectedTaskResp !== null,
   });
+  const [tabA, setTabA] = useState<string>("masul");
+  const [tabB, setTabB] = useState<string>("manba");
   const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
   const respLeadsConvQ = useQuery({
     queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
@@ -1271,6 +1300,15 @@ export default function LidlarPage() {
           </div>
         </div>
 
+        {/* Mas'ul / Vazifalar / UTM share one slot — three views of the same
+            period that were previously three full-height tables stacked on top
+            of each other, so comparing them meant scrolling past one to reach
+            the next. */}
+        <TabSwitch
+          tabs={[["masul", "Mas'ul"], ["vazifalar", "Vazifalar"], ["utm", "UTM"]]}
+          value={tabA} onChange={setTabA}
+        />
+        {tabA === "masul" && (<>
         {/* ══════════════════════════════════════════════════════════
             Lid mas'ullar kesimida table
         ══════════════════════════════════════════════════════════ */}
@@ -1451,7 +1489,8 @@ export default function LidlarPage() {
           )}
 
         </div>
-
+        </>)}
+        {tabA === "vazifalar" && (<>
         {/* ══════════════════════════════════════════════════════════
             Vazifalar kesimida table
         ══════════════════════════════════════════════════════════ */}
@@ -1676,34 +1715,8 @@ export default function LidlarPage() {
             </div>
           );
         })()}
-
-        {/* ══════════════════════════════════════════════════════════
-            Bekor bo'lish va Sifatsiz sabablari (side-by-side)
-        ══════════════════════════════════════════════════════════ */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-          <ReasonsCard
-            title="Bekor bo'lish sabablari" barColor="#FFC107" kind="cancel" filter={applied}
-            loading={cancelQ.isLoading}
-            items={(cancelQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
-          />
-          <ReasonsCard
-            title="Sifatsiz sabablari" barColor="#F44336" kind="junk" filter={applied}
-            loading={junkQ.isLoading}
-            items={(junkQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
-          />
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
-            Sabab (Причина) bo'yicha — same funnel columns as Manba
-            bo'yicha, under Bekor bo'ldi / Sifatsiz sabablari.
-        ══════════════════════════════════════════════════════════ */}
-        <UfBreakdownTable
-          title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ} bitrixPortal={bitrixPortal}
-          selected={selectedReason} setSelected={setSelectedReason}
-          shown={shownReasonLeads} setShown={setShownReasonLeads}
-          listRef={reasonListRef} leadsQ={reasonLeadsQ}
-        />
-
+        </>)}
+        {tabA === "utm" && (<>
         {/* ══════════════════════════════════════════════════════════
             UTM bo'yicha — single table, 6-level breadcrumb navigation
         ══════════════════════════════════════════════════════════ */}
@@ -1867,6 +1880,42 @@ export default function LidlarPage() {
           );
         })()}
 
+        </>)}
+
+        {/* ══════════════════════════════════════════════════════════
+            Bekor bo'lish va Sifatsiz sabablari (side-by-side)
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+          <ReasonsCard
+            title="Bekor bo'lish sabablari" barColor="#FFC107" kind="cancel" filter={applied}
+            loading={cancelQ.isLoading}
+            items={(cancelQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
+          />
+          <ReasonsCard
+            title="Sifatsiz sabablari" barColor="#F44336" kind="junk" filter={applied}
+            loading={junkQ.isLoading}
+            items={(junkQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
+          />
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Sabab (Причина) bo'yicha — same funnel columns as Manba
+            bo'yicha, under Bekor bo'ldi / Sifatsiz sabablari.
+        ══════════════════════════════════════════════════════════ */}
+        <UfBreakdownTable
+          title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ} bitrixPortal={bitrixPortal}
+          selected={selectedReason} setSelected={setSelectedReason}
+          shown={shownReasonLeads} setShown={setShownReasonLeads}
+          listRef={reasonListRef} leadsQ={reasonLeadsQ}
+        />
+
+
+        {/* Manba / Manba 1 / Hudud — same columns, different grouping field. */}
+        <TabSwitch
+          tabs={[["manba", "Manba"], ["manba1", "Manba 1"], ["hudud", "Hudud"]]}
+          value={tabB} onChange={setTabB}
+        />
+        {tabB === "manba" && (<>
         {/* ══════════════════════════════════════════════════════════
             Manba bo'yicha table
         ══════════════════════════════════════════════════════════ */}
@@ -2066,7 +2115,8 @@ export default function LidlarPage() {
             </div>
           );
         })()}
-
+        </>)}
+        {tabB === "manba1" && (<>
         {/* ══════════════════════════════════════════════════════════
             Manba 1 / Hudud bo'yicha — same funnel columns as Manba
             bo'yicha, grouped by a UF enum field instead of source_id.
@@ -2077,12 +2127,15 @@ export default function LidlarPage() {
           shown={shownSource1Leads} setShown={setShownSource1Leads}
           listRef={source1ListRef} leadsQ={source1LeadsQ}
         />
+        </>)}
+        {tabB === "hudud" && (<>
         <UfBreakdownTable
           title="Hudud bo'yicha" unit="hudud" q={hududQ} bitrixPortal={bitrixPortal}
           selected={selectedHudud} setSelected={setSelectedHudud}
           shown={shownHududLeads} setShown={setShownHududLeads}
           listRef={hududListRef} leadsQ={hududLeadsQ}
         />
+        </>)}
 
         {statsQ.error && (
           <div className="p-3 bg-red-bg border border-red-bd text-red rounded-lg text-[12.5px]">
