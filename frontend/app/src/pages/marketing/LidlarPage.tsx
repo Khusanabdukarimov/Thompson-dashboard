@@ -448,6 +448,8 @@ function UfBreakdownTable({
 }) {
   const rows: UfBreakdownRow[] = q.data ?? [];
   const rowKey = (r: UfBreakdownRow) => r.enum_id ?? 'Nomalum';
+  const ROW_PAGE = 12;
+  const [shownRows, setShownRows] = useState(ROW_PAGE);
   const maxes = {
     umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
     sifatli:  Math.max(1, ...rows.map(r => r.sifatli_lid)),
@@ -483,7 +485,7 @@ function UfBreakdownTable({
               </tr>
             </thead>
             <tbody>
-              {rows.flatMap((r, i) => {
+              {rows.slice(0, shownRows).flatMap((r, i) => {
                 const konv        = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
                 const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
                 const key = rowKey(r);
@@ -567,6 +569,25 @@ function UfBreakdownTable({
                                         </tr>
                                       );
                                     })}
+              {shownRows < rows.length && (
+                <tr>
+                  <td colSpan={9} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <button onClick={() => setShownRows(n => n + ROW_PAGE)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                        Yana {Math.min(ROW_PAGE, rows.length - shownRows)} ta <ChevronDown size={12} />
+                      </button>
+                      <button onClick={() => setShownRows(rows.length)}
+                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                        Barchasi ({rows.length})
+                      </button>
+                      <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                        {Math.min(shownRows, rows.length)} / {rows.length}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )}
                                   </tbody>
                                 </table>
                               </div>
@@ -754,6 +775,8 @@ export default function LidlarPage() {
     queryFn: () => getPrichinaLeads(selectedReason!, appliedWithMode, { limit: 1000 }),
     enabled: selectedReason !== null,
   });
+  const MASUL_PAGE = 12;
+  const [shownMasulRows, setShownMasulRows] = useState(MASUL_PAGE);
   const [shownMasulLeads, setShownMasulLeads] = useState(10);
   const masulListRef = useRef<HTMLDivElement>(null);
   const [selectedTaskResp, setSelectedTaskResp] = useState<number | null>(null);
@@ -1174,7 +1197,7 @@ export default function LidlarPage() {
                   </div>
                 </div>
 
-                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr auto 1fr auto 1fr auto 1fr", alignItems:"stretch" }}>
+                <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr auto 1fr auto 1fr auto 1fr", alignItems:"stretch", alignContent:"center" }}>
                   {[
                     { icon:<Percent size={24} />,        val:sifatliKonvPct,  color:"#2196F3", title:"Sifatli Konversiya",     sub:"Sifatli / Umumiy",      num:sifatliLid,       den:total },
                     { icon:<ArrowLeftRight size={24} />, val:leadToConsultPct, color:"#22C55E", title:"Lid \u2192 Tashrif",       sub:"T.Belgilandi / Umumiy", num:konsultBelgilandi, den:total },
@@ -1333,7 +1356,7 @@ export default function LidlarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {byUserFiltered.map((u, i) => {
+                  {byUserFiltered.slice(0, shownMasulRows).map((u, i) => {
                     const isSel = selectedRespMasul?.id === u.responsible_id;
                     const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
                     const colCount = 2 + stageCols.length;
@@ -1470,6 +1493,25 @@ export default function LidlarPage() {
                     );
                   })}
 
+                  {shownMasulRows < byUserFiltered.length && (
+                    <tr>
+                      <td colSpan={2 + stageCols.length} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <button onClick={() => setShownMasulRows(n => n + MASUL_PAGE)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                            Yana {Math.min(MASUL_PAGE, byUserFiltered.length - shownMasulRows)} ta <ChevronDown size={12} />
+                          </button>
+                          <button onClick={() => setShownMasulRows(byUserFiltered.length)}
+                            style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                            Barchasi ({byUserFiltered.length})
+                          </button>
+                          <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                            {Math.min(shownMasulRows, byUserFiltered.length)} / {byUserFiltered.length} xodim
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {/* JAMI row */}
                   <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
                     <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
