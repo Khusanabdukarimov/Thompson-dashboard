@@ -64,6 +64,8 @@ export function DateRangePicker({ start, end, onChange, onClear, placeholder = "
   // Commit a typed field. Keeps start ≤ end; jumps the calendar to the edited date.
   const commitFrom = () => {
     if (!isValidIso(fromText)) { setFromText(start ?? ""); return; }
+    // Blurring an untouched field must not re-fire onChange (it would drop the active preset).
+    if (fromText === (start ?? "")) return;
     const s = fromText;
     const e = end && end >= s ? end : s;
     onChange(s, e);
@@ -73,8 +75,10 @@ export function DateRangePicker({ start, end, onChange, onClear, placeholder = "
   };
   const commitTo = () => {
     if (!isValidIso(toText)) { setToText(end ?? ""); return; }
+    if (toText === (end ?? "")) return;
     const e = toText;
-    const s = start && start <= e ? start : e;
+    // An open start ("from the beginning") stays open; it used to collapse to e, i.e. one day.
+    const s = start ? (start <= e ? start : e) : "";
     onChange(s, e);
     setPendingStart(null);
     const d = new Date(e);
@@ -162,7 +166,7 @@ export function DateRangePicker({ start, end, onChange, onClear, placeholder = "
         }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {start || end ? `${start ?? "…"} – ${end ?? "…"}` : placeholder}
+          {start || end ? `${start ?? "Boshidan"} – ${end ?? "…"}` : placeholder}
         </span>
         <Calendar size={13} style={{ color: "var(--text3)", flexShrink: 0 }} />
       </button>
