@@ -2,10 +2,13 @@ import { Fragment, useState, useCallback, useMemo, useRef, useEffect } from "rea
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
-  Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info,
+  Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info, Calendar, Filter, ListChecks,
+  User, ExternalLink,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { InfoTip } from "@/components/InfoTip";
+import { MultiSelect } from "@/components/MultiSelect";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { getDealFilterOptions } from "@/lib/api/deals";
 import {
   getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
@@ -100,148 +103,12 @@ function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onC
   );
 }
 
-// ── Colored TH for analytics tables (LidlarPage style) ───────────
-const THc = (color: string, minW = 120): React.CSSProperties => ({
-  padding: "11px 14px", textAlign: "left", fontSize: 12, fontWeight: 700,
-  color, textTransform: "uppercase", letterSpacing: "0.04em",
-  background: "var(--bg2)", borderBottom: "1px solid var(--border)",
-  whiteSpace: "nowrap", minWidth: minW,
-});
-const TDa: React.CSSProperties = {
-  padding: "10px 14px", verticalAlign: "middle",
-  borderBottom: "1px solid var(--border)",
-};
-
-// ── AvatarCircle ─────────────────────────────────────────────────
-const AVATAR_COLORS = [
-  "#2196F3", "#E91E63", "#9C27B0", "#00BCD4", "#FF9800",
-  "#4CAF50", "#FF5722", "#3F51B5", "#009688", "#795548",
-];
-function AvatarCircle({ name, size = 34 }: { name: string; size?: number }) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const initials = parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : (parts[0]?.[0] ?? "?").toUpperCase();
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
-  const bg = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%", background: bg, flexShrink: 0,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      color: "#fff", fontSize: size * 0.36, fontWeight: 700, userSelect: "none",
-    }}>{initials}</div>
-  );
-}
-
 // ── MiniBar ───────────────────────────────────────────────────────
 function MiniBar({ value, max, color, height = 3 }: { value: number; max: number; color: string; height?: number }) {
   const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div style={{ height, borderRadius: 2, background: "var(--bg4)", marginTop: 5, overflow: "hidden" }}>
       <div style={{ height: "100%", width: `${w}%`, background: color, borderRadius: 2, transition: "width 0.3s" }} />
-    </div>
-  );
-}
-
-// ── ConversionDonut ───────────────────────────────────────────────
-function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
-  const sw = 3;
-  const r = (size - sw * 2) / 2;
-  const circ = 2 * Math.PI * r;
-  const fill = circ - (Math.min(100, pct) / 100) * circ;
-  if (pct <= 0) {
-    return (
-      <div style={{ width: size, height: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <svg width={size} height={size} style={{ position: "absolute" }}>
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={sw} />
-        </svg>
-        <span style={{ fontSize: 10, color: "#555", zIndex: 1 }}>—</span>
-      </div>
-    );
-  }
-  const label = pct < 10 ? `${pct.toFixed(1)}%` : `${Math.round(pct)}%`;
-  return (
-    <div style={{ width: size, height: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <svg width={size} height={size} style={{ position: "absolute", transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={sw} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#4CAF50" strokeWidth={sw}
-          strokeDasharray={circ} strokeDashoffset={fill} strokeLinecap="round" />
-      </svg>
-      <span style={{ fontSize: 9, color: "#4CAF50", fontWeight: 700, zIndex: 1 }}>{label}</span>
-    </div>
-  );
-}
-
-function RoleBadge({ role }: { role?: string | null }) {
-  if (!role) return <span style={{ color: "var(--text3)", fontSize: 11 }}>—</span>;
-  const r = role.toLowerCase();
-  const isHunter = r.includes("hunter");
-  const isCloser = r.includes("closer");
-  const color = isHunter && isCloser ? "#9c27b0" : isHunter ? "#2196F3" : isCloser ? "#4caf50" : "#9E9E9E";
-  return (
-    <span style={{ fontSize: 11, fontWeight: 500, color, whiteSpace: "nowrap" }}>
-      {role}
-    </span>
-  );
-}
-
-// ── MultiSelect for Sdelkalar ─────────────────────────────────────
-function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
-  label: string;
-  options: { value: string; label: string }[];
-  values: string[];
-  onChange: (v: string[]) => void;
-  loading?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-
-  const toggle = (v: string) => onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
-
-  const displayLabel = values.length === 0
-    ? "Barchasi"
-    : values.length === 1 ? (options.find(o => o.value === values[0])?.label ?? values[0]).slice(0, 20) : `${values.length} ta tanlangan`;
-
-  return (
-    <div ref={ref} style={{ flex: 1, minWidth: 140, position: "relative" }}>
-      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>{label}</div>
-      <button type="button" onClick={() => setOpen(o => !o)}
-        style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "7px 10px", fontSize: 12, background: "var(--bg3)",
-          border: `1px solid ${values.length > 0 ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
-          color: values.length > 0 ? "#3b82f6" : "var(--text3)", borderRadius: 8, cursor: "pointer", boxSizing: "border-box",
-        }}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {loading ? "Yuklanmoqda…" : displayLabel}
-        </span>
-        <ChevronDown size={12} style={{ flexShrink: 0, marginLeft: 4, transform: open ? "rotate(180deg)" : "none" }} />
-      </button>
-      {open && (
-        <div style={{ position: "absolute", top: "100%", left: 0, minWidth: "100%", zIndex: 500, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto", marginTop: 4 }}>
-          {values.length > 0 && (
-            <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
-              <button type="button" onClick={() => onChange([])} style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Hammasini olib tashlash</button>
-            </div>
-          )}
-          {options.map(o => {
-            const checked = values.includes(o.value);
-            return (
-              <label key={o.value} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", background: checked ? "rgba(59,130,246,0.08)" : "transparent" }}>
-                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} style={{ accentColor: "#3b82f6", flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</span>
-              </label>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -288,80 +155,25 @@ function Section({ icon, title, sub, right, children }: {
 /** Hover feedback for clickable cells; inline styles cannot express :hover. */
 const PAGE_CSS = `
   .sd-click { transition: box-shadow .12s; }
-  /* Row tint as an inset shadow, not a background: the frozen #/Menejer cells set an
-     opaque inline background, and a background-based tint would stop at their edge. */
-  .sd-row:hover > td { box-shadow: inset 0 0 0 100vmax rgba(99,102,241,.05); }
-  .sd-click:hover, .sd-row:hover > td.sd-click:hover {
-    box-shadow: inset 0 0 0 1.5px rgba(99,102,241,.55), inset 0 0 0 100vmax rgba(99,102,241,.05);
-  }
+  .sd-click:hover { box-shadow: inset 0 0 0 1.5px rgba(99,102,241,.55); }
+  .sd-reason:hover { background: var(--bg3); }
+  /* Rows as in OperatorTable: lift on hover, blue tint + side rules when open.
+     Frozen cells take their background from the class (not inline) so they follow. */
+  .sd-op { transition: background .18s ease, box-shadow .18s ease; }
+  .sd-op > td.sd-sticky { background: var(--bg2); }
+  .sd-op:hover { background: var(--bg3); box-shadow: 0 4px 18px rgba(0,0,0,.28); }
+  .sd-op:hover > td.sd-sticky { background: var(--bg3); }
+  .sd-op.sd-open { background: rgba(33,150,243,.08); }
+  .sd-op.sd-open > td.sd-sticky { background: color-mix(in srgb, #2196F3 8%, var(--bg2)); }
+  .sd-op.sd-open > td:first-child { box-shadow: inset 1px 0 0 #2196F3; }
+  .sd-op.sd-open > td:last-child { box-shadow: inset -1px 0 0 #2196F3; }
+  .sd-total > td { border-top: 1px solid var(--border); }
+  .sd-op .sd-actions { opacity: 0; transition: opacity .18s ease; }
+  .sd-op:hover .sd-actions { opacity: 1; }
 `;
 
 const Loading = () => <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>;
 const Empty = () => <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>;
-
-// ── Clickable count cell ─────────────────────────────────────────
-function CountCell({ value, max, color, active, onClick, total }: {
-  value: number; max: number; color: string; active?: boolean; onClick?: () => void; total?: boolean;
-}) {
-  const clickable = value > 0 && !!onClick;
-  return (
-    <td
-      onClick={clickable ? (e) => { e.stopPropagation(); onClick!(); } : undefined}
-      title={clickable ? "Bosing — sdelkalar ro'yxati" : undefined}
-      className={clickable ? "sd-click" : undefined}
-      style={{ ...TDa, minWidth: 96, cursor: clickable ? "pointer" : "default", background: active ? `${color}1f` : undefined }}>
-      {value > 0 ? (
-        <>
-          <span style={{ fontSize: total ? 16 : 14, fontWeight: total ? 700 : 600, color: active ? color : "var(--text)" }}>
-            {fmtNum(value)}
-          </span>
-          <MiniBar value={value} max={max} color={color} />
-        </>
-      ) : (
-        <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>
-      )}
-    </td>
-  );
-}
-
-// ── Cell for the manager × stage matrix ───────────────────────────
-/**
- * Number over a bar scaled to the column's busiest manager — the same reading
- * as every other table on the page. `share` (value / row total) goes in the
- * hover hint rather than on screen, to keep the grid calm.
- */
-function MatrixCell({ value, max, color, active, onClick, total, divider, hint }: {
-  value: number; max: number; color: string; active?: boolean; onClick?: () => void;
-  total?: boolean; divider?: boolean; hint?: string;
-}) {
-  const clickable = value > 0 && !!onClick;
-  return (
-    <td
-      onClick={clickable ? (e) => { e.stopPropagation(); onClick!(); } : undefined}
-      title={clickable ? `${hint ? `${hint} · ` : ""}bosing — sdelkalar ro'yxati` : undefined}
-      className={clickable ? "sd-click" : undefined}
-      style={{
-        padding: "10px 10px", verticalAlign: "middle", borderBottom: "1px solid var(--border)",
-        borderLeft: divider ? "1px solid var(--border)" : undefined,
-        cursor: clickable ? "pointer" : "default",
-        background: active ? `${color}1f` : undefined,
-      }}>
-      {value > 0 ? (
-        <>
-          <div style={{
-            fontSize: total ? 15 : 14, fontWeight: total ? 700 : 600, lineHeight: 1.2,
-            color: active ? color : "var(--text)",
-          }}>
-            {fmtNum(value)}
-          </div>
-          <MiniBar value={value} max={max} color={color} />
-        </>
-      ) : (
-        <span style={{ fontSize: 13, color: "var(--text3)", opacity: 0.55 }}>—</span>
-      )}
-    </td>
-  );
-}
 
 const KIND_GROUPS: { kind: PipelineStage["kind"]; label: string; color: string }[] = [
   { kind: "process", label: "Jarayonda", color: "#3b82f6" },
@@ -369,13 +181,71 @@ const KIND_GROUPS: { kind: PipelineStage["kind"]; label: string; color: string }
   { kind: "lost",    label: "Yo'qotildi", color: "#F44336" },
 ];
 
+// ── Lidlar OperatorTable look (components/OperatorTable.tsx) ───────
+// Same header, cell, rank and avatar treatment as the Lidlar operator table, so the
+// two pages read the same way. That component is lead-specific, hence the copy.
+const OT_TH: React.CSSProperties = {
+  fontSize: 10.5, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em",
+  textAlign: "left", padding: "0 12px 10px", whiteSpace: "nowrap", verticalAlign: "bottom", background: "var(--bg2)",
+};
+const OT_TD: React.CSSProperties = { padding: "11px 12px", verticalAlign: "middle" };
+const RANK_MEDAL = ["🥇", "🥈", "🥉"];
+const OP_AVATAR_COLORS = ["#7C4DFF", "#2196F3", "#00BCD4", "#4CAF50", "#FF9800", "#E91E63", "#9C27B0", "#607D8B"];
+const KONV_COLOR = "#9C27B0";
+
+function OpAvatar({ name, id }: { name: string; id: number | null }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  return (
+    <div style={{ width: 30, height: 30, borderRadius: "50%", background: id == null ? "#9E9E9E" : OP_AVATAR_COLORS[id % OP_AVATAR_COLORS.length], color: "#fff", fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      {initials}
+    </div>
+  );
+}
+
+/** 🥇🥈🥉 for the top three, then #4, #5…; null (system row) is unranked. */
+const rankLabel = (rank: number | null, medals = true) =>
+  rank == null ? "—" : medals && rank < 3 ? RANK_MEDAL[rank] : `#${rank + 1}`;
+
+/** Number over a 3px bar — OperatorTable's cell. Clickable when there are deals. */
+function OtCell({ value, max, color, active, onClick, total, hint, divider }: {
+  value: number; max: number; color: string; active?: boolean; onClick?: () => void; total?: boolean; hint?: string;
+  /** Rule on the left — marks where a stage group starts in the matrix. */
+  divider?: boolean;
+}) {
+  const clickable = value > 0 && !!onClick;
+  return (
+    <td onClick={clickable ? (e) => { e.stopPropagation(); onClick!(); } : undefined}
+      title={clickable ? `${hint ? `${hint} · ` : ""}bosing — sdelkalar ro'yxati` : undefined}
+      className={clickable ? "sd-click" : undefined}
+      style={{ ...OT_TD, cursor: clickable ? "pointer" : "default", background: active ? `${color}1f` : undefined, borderLeft: divider ? "1px solid var(--border)" : undefined }}>
+      <span style={{ fontSize: total ? 14.5 : 13.5, fontWeight: total ? 800 : 600, color: value > 0 ? (active ? color : "var(--text)") : "var(--text3)" }}>
+        {fmtNum(value)}
+      </span>
+      <MiniBar value={value} max={max} color={color} />
+    </td>
+  );
+}
+
+/** Konversiya as in OperatorTable: purple % on the right over a purple bar. */
+function KonvCell({ value, max, total }: { value: number; max: number; total?: boolean }) {
+  return (
+    <td style={{ ...OT_TD, textAlign: "right" }}>
+      <span style={{ fontSize: total ? 15.5 : 15, fontWeight: 800, color: KONV_COLOR }}>{value.toFixed(1)}%</span>
+      <MiniBar value={value} max={max} color={KONV_COLOR} />
+    </td>
+  );
+}
+
 // ── Deals drill-down (shared by every table) ─────────────────────
 const DRILL_PAGE = 100;
 
-function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
-  filter: PipelineDealsFilter; colSpan: number; title: string; showReason: boolean; onClose: () => void;
+function DealsDrilldown({ filter, colSpan, title, showReason, showReportStage, onClose, inline = false, bare = false }: {
+  filter: PipelineDealsFilter; colSpan: number; title: string; showReason: boolean; showReportStage: boolean; onClose: () => void;
+  /** Render as a block (for the reasons list) instead of a table cell. */
+  inline?: boolean;
+  /** No own background/border — it sits inside a framed panel. */
+  bare?: boolean;
 }) {
-  // Учебный центр carries both Причина and Стадия (для отчетов); showReason gates the pair.
   const portal = useBitrixPortal();
   const q = useInfiniteQuery({
     queryKey: ["pipeline-deals", filter],
@@ -393,11 +263,13 @@ function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
   // A drill pinned to one manager / one stage would repeat it on every row — drop that column.
   const oneResp = !!filter.responsible_id && !String(filter.responsible_id).includes(",");
   const oneStage = !!filter.stage && !String(filter.stage).includes(",");
-  const cols = ["ID", "Sdelka", ...(oneResp ? [] : ["Mas'ul"]), ...(oneStage ? [] : ["Bosqich"]), ...(showReason ? ["Стадия (отчет)"] : []), "Manba", ...(showReason ? ["Причина"] : []), "Yaratildi", "O'zgardi"];
+  const oneReason = !!filter.reason && !String(filter.reason).includes(",");
+  const cols = ["ID", "Sdelka", ...(oneResp ? [] : ["Mas'ul"]), ...(oneStage ? [] : ["Bosqich"]), ...(showReportStage ? ["Стадия (отчет)"] : []), "Manba", ...(showReason && !oneReason ? ["Причина"] : []), "Yaratildi", "O'zgardi"];
 
+  const Wrap = inline ? "div" : "td";
   return (
-    <td colSpan={colSpan} style={{ padding: 0, background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ position: "sticky", left: 0, maxWidth: "100cqw", boxSizing: "border-box", padding: "10px 14px 12px" }}>
+    <Wrap colSpan={inline ? undefined : colSpan} style={{ padding: 0, background: bare ? "transparent" : "var(--bg)", borderBottom: bare ? "none" : "1px solid var(--border)" }}>
+      <div style={{ position: "sticky", left: 0, maxWidth: "100cqw", boxSizing: "border-box", padding: inline && !bare ? "10px 20px 12px" : "10px 14px 12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)" }}>{title}</span>
           <span style={{ fontSize: 12, color: "var(--text3)" }}>
@@ -440,9 +312,9 @@ function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
                           <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: `${kc}22`, color: kc, fontWeight: 600 }}>{d.stage_name}</span>
                         </td>
                       )}
-                      {showReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.report_stage || "—"}</td>}
+                      {showReportStage && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.report_stage || "—"}</td>}
                       <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{d.source_name}</td>
-                      {showReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.reason || "—"}</td>}
+                      {showReason && !oneReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.reason || "—"}</td>}
                       <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{fmtDateTime(d.date_create)}</td>
                       <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{fmtDateTime(d.date_modify)}</td>
                     </tr>
@@ -459,7 +331,7 @@ function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
           </button>
         )}
       </div>
-    </td>
+    </Wrap>
   );
 }
 
@@ -471,11 +343,26 @@ type MgrRow = PipelineManagerRow & { key: string; ids: string; members?: string[
 
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
+  const portal = useBitrixPortal();
   const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  // As on Lidlar: a click outside the open panel closes it. The date and dropdown
+  // popovers are DOM children of the panel, so clicks inside them do not.
+  useEffect(() => {
+    if (!filterOpen) return;
+    const h = (e: MouseEvent) => { if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [filterOpen]);
   // Always opens on Учебный центр.
   const [pipeline, setPipeline] = useState<PipelineKey>("uc");
   const [reasonScope, setReasonScope] = useState<ReasonScope>("lost");
+  const REASONS_PAGE = 12;
+  const [shownReasons, setShownReasons] = useState(REASONS_PAGE);
   const [hideEmptyStages, setHideEmptyStages] = useState(false);
+  // The preset chip the user picked. Derived-from-dates alone lights up two chips when
+  // ranges coincide (on the 8th, "7 kun" and "Bu oy" both start on the 1st).
+  const [presetLabel, setPresetLabel] = useState<string | null>("Bu oy");
   const [drill, setDrill] = useState<Drill | null>(null);
 
   const [filter, setFilter] = useState({
@@ -526,12 +413,14 @@ export default function SdelkalarPage() {
 
   const clearFilter = useCallback(() => {
     setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], report_stages: [] });
+    setPresetLabel("Bu oy");
     setDrill(null);
   }, []);
 
   const switchPipeline = (p: PipelineKey) => {
     if (p === pipeline) return;
     setPipeline(p);
+    setShownReasons(REASONS_PAGE);
     // Stage ids and Стадия (для отчетов) are per pipeline; other filters carry over.
     setFilter(s => ({ ...s, stage_ids: [], report_stages: [] }));
     setDrill(null);
@@ -544,7 +433,9 @@ export default function SdelkalarPage() {
   const lostStages = stages.filter(s => s.kind === "lost");
   const wonLabel = wonStage?.name ?? "Sotuv";
   const lostLabel = lostStages.map(s => s.name).join(" + ") || "Bekor";
-  const showReason = pipeline === "uc";
+  // Both pipelines read Причина; Стадия (для отчетов) exists only on Учебный центр.
+  const showReason = true;
+  const showReportStage = pipeline === "uc";
   const pipelineLabel = PIPELINES.find(p => p.key === pipeline)!.label;
 
   const periodLabel = `${filter.from || "boshidan"} → ${filter.to || "bugungacha"}`;
@@ -570,12 +461,12 @@ export default function SdelkalarPage() {
     return opts;
   }, [reportStagesQ.data, filter.report_stages]);
 
+  // Same shortcuts as the Lidlar filter; "Barchasi" has no lower bound — the Bitrix kanban's scope.
   const PRESETS = [
     { label: "Bugun", f: todayISO(), t: todayISO() },
     { label: "7 kun", f: daysAgoISO(7), t: todayISO() },
     { label: "30 kun", f: daysAgoISO(30), t: todayISO() },
-    { label: "90 kun", f: daysAgoISO(90), t: todayISO() },
-    // No lower bound: the same scope as the Bitrix kanban.
+    { label: "Bu oy", f: startOfMonthISO(), t: todayISO() },
     { label: "Barchasi", f: "", t: todayISO() },
   ];
 
@@ -585,12 +476,38 @@ export default function SdelkalarPage() {
   const rowOpen = (table: string, row: string) => drill?.table === table && drill.row === row;
   const toggle = (d: Drill) => setDrill(cur =>
     cur && cur.table === d.table && cur.row === d.row && cur.col === d.col ? null : d);
+  const drillPanel = () => drill && (
+    <DealsDrilldown inline
+      filter={{ ...base, ...drill.filter } as PipelineDealsFilter}
+      colSpan={1}
+      title={drill.title}
+      showReason={showReason}
+      showReportStage={showReportStage}
+      onClose={() => setDrill(null)}
+    />
+  );
+  /** Deal list under a row, framed like OperatorTable's expanded row. */
+  const framedDrill = (colSpan: number) => drill && (
+    <td colSpan={colSpan} style={{ padding: "0 12px 12px" }}>
+      <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
+        <DealsDrilldown inline bare
+          filter={{ ...base, ...drill.filter } as PipelineDealsFilter}
+          colSpan={1}
+          title={drill.title}
+          showReason={showReason}
+          showReportStage={showReportStage}
+          onClose={() => setDrill(null)}
+        />
+      </div>
+    </td>
+  );
   const drillCell = (colSpan: number) => drill && (
     <DealsDrilldown
       filter={{ ...base, ...drill.filter } as PipelineDealsFilter}
       colSpan={colSpan}
       title={drill.title}
       showReason={showReason}
+      showReportStage={showReportStage}
       onClose={() => setDrill(null)}
     />
   );
@@ -618,7 +535,6 @@ export default function SdelkalarPage() {
     return people;
   }, [managersQ.data]);
   const allMatrixStages = managersQ.data?.stages ?? stages;
-  const peopleCount = mgrRows.filter(r => r.key !== "__system__").length;
 
   const colTotal = useMemo(() => {
     const t: Record<string, number> = { total: 0, in_process: 0, won: 0, lost: 0 };
@@ -657,22 +573,28 @@ export default function SdelkalarPage() {
     return m;
   }, [mgrRows]);
 
-  /** Name cell for a manager row (avatar + name + chevron), shared by both tables. */
-  const managerCell = (r: MgrRow, open: boolean, stickyBg?: string) => (
-    <td style={{ ...TDa, ...(stickyBg ? { position: "sticky", left: 44, background: stickyBg, zIndex: 2 } : {}) }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <AvatarCircle name={r.full_name || "?"} size={32} />
+  /** Manager cell as in OperatorTable: avatar, name, quick links on hover. */
+  const opIconBtn: React.CSSProperties = { width: 22, height: 22, borderRadius: 6, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--bg4)", color: "var(--text2)", textDecoration: "none" };
+  const nameCell = (r: MgrRow, sticky: boolean) => (
+    <td className={sticky ? "sd-sticky" : undefined}
+      style={{ ...OT_TD, whiteSpace: "nowrap", ...(sticky ? { position: "sticky", left: 44, zIndex: 2 } : {}) }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <OpAvatar name={r.full_name || "?"} id={r.key === "__system__" ? null : r.responsible_id} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: open ? "#2196F3" : "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {r.full_name}
-          </div>
+          <div title={r.full_name} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>{r.full_name}</div>
           {r.members && (
-            <div style={{ fontSize: 10.5, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.members.join(", ")}>
-              {r.members.join(", ")}
-            </div>
+            <div title={r.members.join(", ")} style={{ fontSize: 10.5, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis" }}>{r.members.join(", ")}</div>
           )}
         </div>
-        {r.ids && <ChevronDown size={12} style={{ color: "var(--text3)", marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />}
+        {/* Not in the matrix: its frozen name column is fixed-width, and the (invisible) links would truncate names. */}
+        {!sticky && r.responsible_id != null && (
+          <span className="sd-actions" style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: "auto" }}>
+            <a href={`${portal}/company/personal/user/${r.responsible_id}/`} target="_blank" rel="noreferrer"
+              title="Profil" onClick={e => e.stopPropagation()} style={opIconBtn}><User size={12} /></a>
+            <a href={`${portal}/crm/deal/list/?apply_filter=Y&ASSIGNED_BY_ID=${r.responsible_id}`} target="_blank" rel="noreferrer"
+              title="Bitrix'da sdelkalari" onClick={e => e.stopPropagation()} style={opIconBtn}><ExternalLink size={12} /></a>
+          </span>
+        )}
       </div>
     </td>
   );
@@ -685,9 +607,19 @@ export default function SdelkalarPage() {
     won: Math.max(1, ...srcRows.map(r => r.won)), lost: Math.max(1, ...srcRows.map(r => r.lost)),
   };
   const reasons = reasonsQ.data;
-  const reasonItems = reasons?.available ? reasons.items : [];
+  // Ko'rsatilmagan (no reason) goes last and off the bar scale: on YANGI it is 464 of 491,
+  // and scaling to it would squash every real reason into a dot.
+  const reasonItems = useMemo(() => {
+    const items = reasons?.available ? reasons.items : [];
+    return [...items.filter(r => r.reason_id !== NONE_KEY), ...items.filter(r => r.reason_id === NONE_KEY)];
+  }, [reasons]);
   const reasonTotal = reasonItems.reduce((a, r) => a + r.total, 0);
-  const reasonMax = Math.max(1, ...reasonItems.map(r => r.total));
+  const reasonMax = Math.max(1, ...reasonItems.filter(r => r.reason_id !== NONE_KEY).map(r => r.total));
+  const konvMaxMgr = Math.max(1, ...mgrRows.filter(r => r.key !== "__system__").map(r => pct(r.won, r.total)));
+  const konvMaxSrc = Math.max(1, ...srcRows.map(r => pct(r.won, r.total)));
+  // One label width for the whole list (as ReasonsCard), so every bar starts at the same x.
+  const reasonGrid = `${Math.min(26, Math.max(6, ...reasonItems.map(r => r.reason.length)))}ch minmax(0, 1fr) 64px 52px 18px`;
+  const moreBtn: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" };
 
   // ── KPI cards ────────────────────────────────────────────────────
   const cards = [
@@ -731,92 +663,84 @@ export default function SdelkalarPage() {
       <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", background: "var(--bg)" }}>
         <style>{PAGE_CSS}</style>
 
-        {/* ── Filter panel ── */}
-        <div style={{
-          background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10,
-          marginBottom: 16, overflow: filterOpen ? "visible" : "hidden",
-          position: "sticky", top: 0, zIndex: 10,
-        }}>
-          <div
-            style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
-            onClick={() => setFilterOpen(o => !o)}
-          >
-            <Search size={14} style={{ color: "var(--text3)" }} />
-            <span style={{ fontSize: 12.5, color: "var(--text3)", flex: 1 }}>
-              {`Filtr: ${periodLabel}${activeFilterCount > 0 ? ` · ${activeFilterCount} ta qo'shimcha` : ""}`}
-            </span>
-            <span style={{ background: "rgba(99,102,241,0.15)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>{pipelineLabel}</span>
+        {/* ── Filter panel — same layout and controls as the Lidlar page ── */}
+        {/* top: -18 = minus the scroller's top padding, so the bar sits flush under the Topbar while scrolling. */}
+        <div ref={filterRef} style={{ position: "sticky", top: -18, zIndex: 50, marginBottom: 16 }}>
+          <button type="button" onClick={() => setFilterOpen(o => !o)}
+            style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%",
+              background: "var(--bg2)",
+              border: `1px solid ${filterOpen ? "#2196F3" : activeFilterCount > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`,
+              borderRadius: filterOpen ? "10px 10px 0 0" : 10,
+              padding: "10px 16px", color: "var(--text)", fontSize: 13, fontWeight: 500, cursor: "pointer", textAlign: "left",
+            }}>
+            <Search size={16} style={{ color: "var(--text3)", flexShrink: 0 }} />
+            <span style={{ color: "var(--text3)", flex: 1 }}>{`Yaratilgan sana: ${periodLabel}`}</span>
+            <span style={{ background: "rgba(99,102,241,0.15)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>{pipelineLabel}</span>
             {activeFilterCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#3b82f6", color: "#fff" }}>{activeFilterCount} filtr</span>
+              <span style={{ background: "#2196F3", color: "#fff", borderRadius: 10, padding: "2px 9px", fontSize: 11, fontWeight: 700 }}>{activeFilterCount} filtr</span>
             )}
-            <ChevronDown size={14} style={{ color: "var(--text3)", transform: filterOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
-          </div>
+            <ChevronDown size={16} style={{ color: "#9E9E9E", transform: filterOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+          </button>
 
           {filterOpen && (
-            <div style={{ borderTop: "1px solid var(--border)", padding: "16px 20px" }}>
-              {/* Quick date presets */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                {PRESETS.map(p => {
-                  const active = filter.from === p.f && filter.to === p.t;
-                  return (
-                    <button key={p.label} onClick={() => setFilter(s => ({ ...s, from: p.f, to: p.t }))}
-                      style={{
-                        padding: "5px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer",
-                        background: active ? "#3b82f6" : "var(--bg3)",
-                        border: `1px solid ${active ? "#3b82f6" : "var(--border)"}`,
-                        color: active ? "#fff" : "var(--text2)", fontWeight: active ? 600 : 400,
-                      }}>
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Dan (boshlanish)</div>
-                  <input type="date" value={filter.from}
-                    onChange={e => setFilter(s => ({ ...s, from: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Gacha (tugash)</div>
-                  <input type="date" value={filter.to}
-                    onChange={e => setFilter(s => ({ ...s, to: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 10px", fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 8 }} />
+            <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 10px 10px", padding: "16px 20px" }}>
+              {/* Yaratilgan sana — calendar range and the quick presets on one row. */}
+              <div style={{ marginBottom: 14 }}>
+                <label title="Дата создания" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  <Calendar size={12} />Yaratilgan sana
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <DateRangePicker start={filter.from || undefined} end={filter.to || undefined}
+                    onChange={(f, t) => { setPresetLabel(null); setFilter(p => ({ ...p, from: f, to: t })); }}
+                    onClear={() => { setPresetLabel("Barchasi"); setFilter(p => ({ ...p, from: "", to: todayISO() })); }} />
+                  {PRESETS.map(p => {
+                    const active = presetLabel === p.label && filter.from === p.f && filter.to === p.t;
+                    return (
+                      <button key={p.label} type="button" onClick={() => { setPresetLabel(p.label); setFilter(s => ({ ...s, from: p.f, to: p.t })); }}
+                        style={{
+                          background: active ? "#2196F3" : "var(--bg3)",
+                          border: `1px solid ${active ? "#2196F3" : "var(--border)"}`,
+                          color: active ? "#fff" : "#9E9E9E",
+                          borderRadius: 20, padding: "5px 14px", fontSize: 12, fontWeight: active ? 600 : 400,
+                          cursor: "pointer", transition: "all 0.15s",
+                        }}>
+                        {p.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-                <SdelkaMultiSelect label="Mas'ul xodim" options={respOptions} values={filter.responsible_ids}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+                <MultiSelect label="Mas'ul xodim" icon={<Users size={12} />} searchable
+                  options={respOptions} values={filter.responsible_ids}
                   onChange={v => setFilter(s => ({ ...s, responsible_ids: v }))} loading={filterQ.isLoading} />
-                <SdelkaMultiSelect label="Bosqich" options={stageOptions} values={filter.stage_ids}
+                <MultiSelect label="Bosqich" icon={<Filter size={12} />}
+                  options={stageOptions} values={filter.stage_ids}
                   onChange={v => setFilter(s => ({ ...s, stage_ids: v }))} loading={kpiQ.isLoading} />
-                <SdelkaMultiSelect label="Manba (Источник)" options={srcOptions} values={filter.sources}
+                <MultiSelect label="Manba (Источник)" icon={<TrendingUp size={12} />}
+                  options={srcOptions} values={filter.sources}
                   onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
                 {pipeline === "uc" && (
-                  <SdelkaMultiSelect label="Стадия (для отчетов)" options={reportStageOptions} values={filter.report_stages}
+                  <MultiSelect label="Стадия (для отчетов)" icon={<ListChecks size={12} />}
+                    options={reportStageOptions} values={filter.report_stages}
                     onChange={v => setFilter(s => ({ ...s, report_stages: v }))} loading={reportStagesQ.isLoading} />
                 )}
               </div>
 
               {activeFilterCount > 0 && (
-                <div style={{ paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
-                  <button onClick={clearFilter} style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>Tozalash</button>
+                <div style={{ paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+                  <button type="button" onClick={clearFilter}
+                    style={{ background: "none", border: "none", color: "#9E9E9E", fontSize: 12, cursor: "pointer", padding: "6px 10px" }}>
+                    Tozalash
+                  </button>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* What every number on the page counts — the usual source of "Bitrix shows more". */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--text3)", margin: "-4px 2px 10px" }}>
-          <Info size={12} style={{ flexShrink: 0 }} />
-          <span>
-            Ko'rsatkichlar: <b style={{ color: "var(--text2)" }}>{periodLabel}</b> oralig'ida <b style={{ color: "var(--text2)" }}>yaratilgan</b> sdelkalar,
-            hozirgi bosqichi bo'yicha. Bitrix kanbanida esa barcha vaqtdagi sdelkalar ko'rinadi — solishtirish uchun «Barchasi»ni tanlang.
-          </span>
-        </div>
         {/* ── KPI Cards (click → deals) ── */}
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 12, marginBottom: 12 }}>
           {cards.map(c => (
@@ -841,7 +765,6 @@ export default function SdelkalarPage() {
         <Section
           icon={<Layers size={16} style={{ color: "#6366f1" }} />}
           title="Bosqichlar bo'yicha menejerlar"
-          sub={`${pipelineLabel} · ${peopleCount} ta menejer · ${matrixStages.length} ta bosqich · raqamni bosing — sdelkalar`}
           right={emptyStageCount > 0 ? (
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text2)", cursor: "pointer", userSelect: "none" }}>
               <input type="checkbox" checked={hideEmptyStages} onChange={e => setHideEmptyStages(e.target.checked)} style={{ accentColor: "#6366f1" }} />
@@ -849,40 +772,33 @@ export default function SdelkalarPage() {
             </label>
           ) : undefined}>
           {managersQ.isLoading ? <Loading /> : mgrRows.length === 0 ? <Empty /> : (
-            <div style={{ overflowX: "auto" }}>
-              {/* Fits 10 stages from a 1366px screen up: 44 + 180 + 76 + 10 × 80 = 1100px. */}
-              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 44 + 180 + 76 + matrixStages.length * 80 }}>
+            <div style={{ overflowX: "auto", padding: "14px 8px 6px" }}>
+              {/* Fits 10 stages from a 1366px screen up: 44 + 176 + 76 + 10 × 78 = 1076px (+16px padding). */}
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, tableLayout: "fixed", minWidth: 44 + 176 + 76 + matrixStages.length * 78 }}>
                 <colgroup>
                   <col style={{ width: 44 }} />
-                  <col style={{ width: 180 }} />
+                  <col style={{ width: 176 }} />
                   <col style={{ width: 76 }} />
-                  {matrixStages.map(s => <col key={s.id} />)}
+                  {matrixStages.map(st => <col key={st.id} />)}
                 </colgroup>
                 <thead>
                   <tr>
-                    {/* paddingBottom/lineHeight put these labels on the stage names' baseline. */}
-                    <th rowSpan={2} style={{ ...THc("#555", 44), paddingBottom: 9, lineHeight: 1.3, position: "sticky", left: 0, zIndex: 3, verticalAlign: "bottom" }}>#</th>
-                    <th rowSpan={2} style={{ ...THc("#9E9E9E", 180), paddingBottom: 9, lineHeight: 1.3, position: "sticky", left: 44, zIndex: 3, verticalAlign: "bottom" }}>Menejer</th>
-                    <th rowSpan={2} style={{ ...THc("#2196F3", 76), paddingLeft: 10, paddingRight: 10, paddingBottom: 9, lineHeight: 1.3, verticalAlign: "bottom" }}>Jami</th>
+                    <th rowSpan={2} style={{ ...OT_TH, textAlign: "center", position: "sticky", left: 0, zIndex: 3 }}>#</th>
+                    <th rowSpan={2} style={{ ...OT_TH, position: "sticky", left: 44, zIndex: 3 }}>Menejer</th>
+                    <th rowSpan={2} style={OT_TH}>Jami</th>
                     {matrixGroups.map(g => (
-                      <th key={g.kind} colSpan={g.span} style={{
-                        padding: "9px 10px 7px", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
-                        color: g.color, textAlign: "left", background: "var(--bg2)",
-                        borderBottom: `2px solid ${g.color}`, borderLeft: "1px solid var(--border)",
-                      }}>
+                      <th key={g.kind} colSpan={g.span} style={{ ...OT_TH, padding: "0 12px 6px", borderBottom: `2px solid ${g.color}`, borderLeft: "1px solid var(--border)" }}>
                         {g.label}
                       </th>
                     ))}
                   </tr>
                   <tr>
-                    {matrixStages.map((s, i) => (
-                      <th key={s.id} title={`${s.name} · ${s.id}`} style={{
-                        padding: "8px 10px 9px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.3, color: stageColorById[s.id],
-                        textAlign: "left", verticalAlign: "bottom", whiteSpace: "normal", wordBreak: "break-word",
-                        background: "var(--bg2)", borderBottom: "1px solid var(--border)",
+                    {matrixStages.map((st, i) => (
+                      <th key={st.id} title={`${st.name} · ${st.id}`} style={{
+                        ...OT_TH, padding: "8px 12px 10px", whiteSpace: "normal", lineHeight: 1.3, wordBreak: "break-word",
                         borderLeft: isGroupStart(i) ? "1px solid var(--border)" : undefined,
                       }}>
-                        {s.name}
+                        {st.name}
                       </th>
                     ))}
                   </tr>
@@ -890,51 +806,48 @@ export default function SdelkalarPage() {
                 <tbody>
                   {mgrRows.map((r, i) => {
                     const open = rowOpen("matrix", r.key);
-                    // Frozen cells need an opaque background, so they repeat the stripe/highlight on top of it.
-                    const base = i % 2 === 0 ? "var(--bg2)" : "var(--bg)";
-                    const bg = open ? `linear-gradient(rgba(99,102,241,0.08), rgba(99,102,241,0.08)), ${base}` : base;
+                    const rank = r.key === "__system__" ? null : i;
                     const drillFor = (col: string, title: string, f: Partial<PipelineDealsFilter>) =>
                       r.ids ? () => toggle({ table: "matrix", row: r.key, col, title: `${r.full_name} · ${title}`, filter: { responsible_id: r.ids, ...f } }) : undefined;
                     return (
                       <Fragment key={r.key}>
-                        <tr className="sd-row" style={{ background: bg, cursor: r.ids ? "pointer" : "default" }}
+                        <tr className={`sd-op${open ? " sd-open" : ""}`} style={{ cursor: r.ids ? "pointer" : "default" }}
                           onClick={drillFor("all", "barcha sdelkalar", {})}>
-                          <td style={{ ...TDa, color: "var(--text3)", fontSize: 13, fontWeight: 600, position: "sticky", left: 0, background: bg, zIndex: 2 }}>
-                            {String(i + 1).padStart(2, "0")}
+                          <td className="sd-sticky" style={{ ...OT_TD, textAlign: "center", position: "sticky", left: 0, zIndex: 2 }}>
+                            <span style={{ fontSize: rank != null && rank < 3 ? 17 : 12.5, fontWeight: 700, color: "var(--text3)" }}>{rankLabel(rank)}</span>
                           </td>
-                          {managerCell(r, open, bg)}
-                          <MatrixCell total value={r.total} max={colMax.total} color={rowColor(r, "#2196F3")} active={isOpen("matrix", r.key, "all")}
+                          {nameCell(r, true)}
+                          <OtCell value={r.total} max={colMax.total} color={rowColor(r, "#2196F3")} active={isOpen("matrix", r.key, "all")}
                             onClick={drillFor("all", "barcha sdelkalar", {})} hint={`${r.full_name}: ${fmtNum(r.total)} ta sdelka`} />
-                          {matrixStages.map((s, si) => {
-                            const v = r.by_stage[s.id] ?? 0;
+                          {matrixStages.map((st, si) => {
+                            const v = r.by_stage[st.id] ?? 0;
                             return (
-                              <MatrixCell key={s.id} value={v} max={colMax[`s:${s.id}`] ?? 1} color={rowColor(r, stageColorById[s.id])} divider={isGroupStart(si)}
-                                active={isOpen("matrix", r.key, s.id)} onClick={drillFor(s.id, s.name, { stage: s.id })}
-                                hint={`${r.full_name} · ${s.name}: ${fmtNum(v)} ta — uning sdelkalarining ${fmtShare(pct(v, r.total))}%`} />
+                              <OtCell key={st.id} value={v} max={colMax[`s:${st.id}`] ?? 1} color={rowColor(r, stageColorById[st.id])} divider={isGroupStart(si)}
+                                active={isOpen("matrix", r.key, st.id)} onClick={drillFor(st.id, st.name, { stage: st.id })}
+                                hint={`${r.full_name} · ${st.name}: ${fmtNum(v)} ta — uning sdelkalarining ${fmtShare(pct(v, r.total))}%`} />
                             );
                           })}
                         </tr>
-                        {open && <tr>{drillCell(3 + matrixStages.length)}</tr>}
+                        {open && <tr>{framedDrill(3 + matrixStages.length)}</tr>}
                       </Fragment>
                     );
                   })}
-                  <tr style={{ background: "var(--bg3)" }}>
-                    <td style={{ ...TDa, position: "sticky", left: 0, background: "var(--bg3)", zIndex: 2 }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", position: "sticky", left: 44, background: "var(--bg3)", zIndex: 2 }}>JAMI</td>
-                    <MatrixCell total value={colTotal.total} max={1} color="#2196F3" active={isOpen("matrix", "__total__", "all")}
+                  <tr className="sd-total">
+                    <td style={{ ...OT_TD, position: "sticky", left: 0, background: "var(--bg2)", zIndex: 2 }} />
+                    <td style={{ ...OT_TD, position: "sticky", left: 44, background: "var(--bg2)", zIndex: 2, fontSize: 11, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Jami</td>
+                    <OtCell total value={colTotal.total} max={colTotal.total} color="#2196F3" active={isOpen("matrix", "__total__", "all")}
                       onClick={() => toggle({ table: "matrix", row: "__total__", col: "all", title: `${pipelineLabel} · barcha sdelkalar`, filter: {} })} />
-                    {matrixStages.map((s, si) => {
-                      const v = colTotal[`s:${s.id}`] ?? 0;
-                      // Totals row: full bars, as in the other tables' JAMI rows.
+                    {matrixStages.map((st, si) => {
+                      const v = colTotal[`s:${st.id}`] ?? 0;
                       return (
-                        <MatrixCell key={s.id} total value={v} max={v} color={stageColorById[s.id]} divider={isGroupStart(si)}
-                          active={isOpen("matrix", "__total__", s.id)}
-                          onClick={() => toggle({ table: "matrix", row: "__total__", col: s.id, title: `${pipelineLabel} · ${s.name}`, filter: { stage: s.id } })}
-                          hint={`${s.name}: ${fmtNum(v)} ta — jamidan ${fmtShare(pct(v, colTotal.total))}%`} />
+                        <OtCell key={st.id} total value={v} max={v} color={stageColorById[st.id]} divider={isGroupStart(si)}
+                          active={isOpen("matrix", "__total__", st.id)}
+                          onClick={() => toggle({ table: "matrix", row: "__total__", col: st.id, title: `${pipelineLabel} · ${st.name}`, filter: { stage: st.id } })}
+                          hint={`${st.name}: ${fmtNum(v)} ta — jamidan ${fmtShare(pct(v, colTotal.total))}%`} />
                       );
                     })}
                   </tr>
-                  {rowOpen("matrix", "__total__") && <tr>{drillCell(3 + matrixStages.length)}</tr>}
+                  {rowOpen("matrix", "__total__") && <tr>{framedDrill(3 + matrixStages.length)}</tr>}
                 </tbody>
               </table>
             </div>
@@ -946,59 +859,57 @@ export default function SdelkalarPage() {
         ══════════════════════════════════════════════════════════ */}
         <Section
           icon={<CheckCircle size={16} style={{ color: "#4CAF50" }} />}
-          title="Sdelka va Konversiya"
-          sub={`${peopleCount} ta menejer · konversiya = ${wonLabel} / Jami`}>
+          title="Sdelka va Konversiya">
           {managersQ.isLoading ? <Loading /> : mgrRows.length === 0 ? <Empty /> : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ overflowX: "auto", padding: "14px 8px 6px" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead>
                   <tr>
-                    <th style={THc("#555", 44)}>#</th>
-                    <th style={THc("#9E9E9E", 210)}>Menejer</th>
-                    <th style={THc("#9E9E9E", 100)}>Rol</th>
-                    <th style={THc("#2196F3")}>Jami Sdelka</th>
-                    <th style={THc("#FF9800")}>Jarayonda</th>
-                    <th style={{ ...THc("#4CAF50"), textTransform: "none" }}>{wonLabel}</th>
-                    <th style={{ ...THc("#F44336"), textTransform: "none" }}>{lostLabel}</th>
-                    <th style={{ ...THc("#4CAF50", 84), textAlign: "center" }}>Konversiya</th>
+                    <th style={{ ...OT_TH, width: "1%", textAlign: "center" }}>#</th>
+                    <th style={{ ...OT_TH, width: "1%" }}>Menejer</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>Jami sdelka</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>Jarayonda</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>{wonLabel}</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>{lostLabel}</th>
+                    <th style={{ ...OT_TH, width: "14%", textAlign: "right" }}>Konversiya</th>
                   </tr>
                 </thead>
                 <tbody>
                   {mgrRows.map((r, i) => {
                     const open = rowOpen("conv", r.key);
-                    const bg = open ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)";
+                    const rank = r.key === "__system__" ? null : i;
                     const drillFor = (col: string, title: string, f: Partial<PipelineDealsFilter>) =>
                       r.ids ? () => toggle({ table: "conv", row: r.key, col, title: `${r.full_name} · ${title}`, filter: { responsible_id: r.ids, ...f } }) : undefined;
                     return (
                       <Fragment key={r.key}>
-                        <tr className="sd-row" style={{ background: bg, cursor: r.ids ? "pointer" : "default" }} onClick={drillFor("all", "barcha sdelkalar", {})}>
-                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
-                          {managerCell(r, open)}
-                          <td style={TDa}><RoleBadge role={r.work_position} /></td>
-                          <CountCell value={r.total} max={colMax.total} color={rowColor(r, "#2196F3")} active={isOpen("conv", r.key, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
-                          <CountCell value={r.in_process} max={colMax.in_process} color={rowColor(r, "#FF9800")} active={isOpen("conv", r.key, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
-                          <CountCell value={r.won} max={colMax.won} color={rowColor(r, "#4CAF50")} active={isOpen("conv", r.key, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
-                          <CountCell value={r.lost} max={colMax.lost} color={rowColor(r, "#F44336")} active={isOpen("conv", r.key, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
-                          <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(r.won, r.total)} size={38} /></td>
+                        <tr className={`sd-op${open ? " sd-open" : ""}`} style={{ cursor: r.ids ? "pointer" : "default" }} onClick={drillFor("all", "barcha sdelkalar", {})}>
+                          <td style={{ ...OT_TD, textAlign: "center" }}>
+                            <span style={{ fontSize: rank != null && rank < 3 ? 17 : 12.5, fontWeight: 700, color: "var(--text3)" }}>{rankLabel(rank)}</span>
+                          </td>
+                          {nameCell(r, false)}
+                          <OtCell value={r.total} max={colMax.total} color={rowColor(r, "#2196F3")} active={isOpen("conv", r.key, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
+                          <OtCell value={r.in_process} max={colMax.in_process} color={rowColor(r, "#FF9800")} active={isOpen("conv", r.key, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
+                          <OtCell value={r.won} max={colMax.won} color={rowColor(r, "#4CAF50")} active={isOpen("conv", r.key, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
+                          <OtCell value={r.lost} max={colMax.lost} color={rowColor(r, "#F44336")} active={isOpen("conv", r.key, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
+                          <KonvCell value={pct(r.won, r.total)} max={konvMaxMgr} />
                         </tr>
-                        {open && <tr>{drillCell(8)}</tr>}
+                        {open && <tr>{framedDrill(7)}</tr>}
                       </Fragment>
                     );
                   })}
-                  <tr style={{ background: "var(--bg3)" }}>
-                    <td style={TDa} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
-                    <td style={TDa} />
+                  <tr className="sd-total">
+                    <td style={OT_TD} />
+                    <td style={{ ...OT_TD, fontSize: 11, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Jami</td>
                     {([["all", "total", "#2196F3", "barcha sdelkalar", {}],
                        ["process", "in_process", "#FF9800", "jarayonda", { kind: "process" }],
                        ["won", "won", "#4CAF50", wonLabel, { kind: "won" }],
                        ["lost", "lost", "#F44336", lostLabel, { kind: "lost" }]] as const).map(([col, key, color, title, f]) => (
-                      <CountCell key={col} total value={colTotal[key]} max={1} color={color} active={isOpen("conv", "__total__", col)}
+                      <OtCell key={col} total value={colTotal[key]} max={colTotal[key]} color={color} active={isOpen("conv", "__total__", col)}
                         onClick={() => toggle({ table: "conv", row: "__total__", col, title: `${pipelineLabel} · ${title}`, filter: f })} />
                     ))}
-                    <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(colTotal.won, colTotal.total)} size={38} /></td>
+                    <KonvCell total value={pct(colTotal.won, colTotal.total)} max={konvMaxMgr} />
                   </tr>
-                  {rowOpen("conv", "__total__") && <tr>{drillCell(8)}</tr>}
+                  {rowOpen("conv", "__total__") && <tr>{framedDrill(7)}</tr>}
                 </tbody>
               </table>
             </div>
@@ -1008,120 +919,87 @@ export default function SdelkalarPage() {
         {/* ══════════════════════════════════════════════════════════
             Bekor bo'lish sabablari
         ══════════════════════════════════════════════════════════ */}
-        {pipeline === "uc" ? (
-          <Section
-            icon={<Info size={16} style={{ color: "#FFC107" }} />}
-            title="Bekor bo'lish sabablari"
-            sub={`Причина maydoni · ${reasonScope === "lost" ? `«${lostLabel}» bosqichidagi sdelkalar` : "barcha bosqichlar"}`}
-            right={
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Segmented value={reasonScope} onChange={(s) => { setReasonScope(s); setDrill(d => d?.table === "reasons" ? null : d); }}
-                  options={[
-                    { value: "lost", label: "Bekor bo'lganlar", color: "#F44336" },
-                    { value: "all",  label: "Barcha sdelkalar", color: "#6366f1" },
-                  ]} />
-                <span style={{ fontSize: 20, fontWeight: 800, color: "#FFC107" }}>{fmtNum(reasonTotal)}</span>
-              </div>
-            }>
-            {reasonsQ.isLoading ? <Loading /> : reasonItems.length === 0 ? <Empty /> : (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={THc("#555", 44)}>#</th>
-                    <th style={{ ...THc("#9E9E9E", 240), textTransform: "none" }}>Причина</th>
-                    <th style={THc("#FFC107")}>Soni</th>
-                    <th style={THc("#9E9E9E", 90)}>Ulushi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reasonItems.map((r, i) => {
-                    const open = rowOpen("reasons", r.reason_id);
-                    const go = () => toggle({ table: "reasons", row: r.reason_id, col: "n", title: `Причина · ${r.reason}`, filter: { reason: r.reason_id, reason_scope: reasonScope } });
-                    return (
-                      <Fragment key={r.reason_id}>
-                        <tr onClick={go} style={{ cursor: "pointer", background: open ? "rgba(255,193,7,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
-                          <td style={{ ...TDa, fontSize: 13, color: r.reason_id === NONE_KEY ? "var(--text3)" : "var(--text)", fontStyle: r.reason_id === NONE_KEY ? "italic" : "normal" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {r.reason}
-                              <ChevronDown size={12} style={{ color: "var(--text3)", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
-                            </div>
-                          </td>
-                          <CountCell value={r.total} max={reasonMax} color="#FFC107" active={open} onClick={go} />
-                          <td style={{ ...TDa, fontSize: 13, color: "var(--text2)" }}>{pct(r.total, reasonTotal).toFixed(1)}%</td>
-                        </tr>
-                        {open && <tr>{drillCell(4)}</tr>}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </Section>
-        ) : (
-          <Section
-            icon={<Info size={16} style={{ color: "#FFC107" }} />}
-            title="Bekor bo'lish sabablari"
-            sub={pipelineLabel}>
-            <div style={{ padding: "16px 20px", display: "flex", gap: 12, alignItems: "flex-start", background: "rgba(255,193,7,0.06)", borderBottom: "1px solid var(--border)" }}>
-              <Info size={18} style={{ color: "#FFC107", flexShrink: 0, marginTop: 1 }} />
-              <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.55 }}>
-                <b style={{ color: "var(--text)" }}>«{pipelineLabel}» voronkasida bekor bo'lish sababi maydoni yo'q.</b><br />
-                Bitrix24'da bu voronka sdelkalari uchun «Bekor bo'lish sababi» ro'yxat maydoni hali yaratilmagan, shuning uchun
-                sabablar bo'yicha taqsimotni ko'rsatib bo'lmaydi. IT mutaxassisimizdan sdelka kartasiga shu maydonni qo'shishni
-                va «{lostLabel}» bosqichiga o'tkazishda uni majburiy qilishni so'rang — maydon qo'shilgach, bu jadval
-                «Учебный центр»dagi kabi avtomatik to'ladi.
-              </div>
+        <Section
+          icon={<Info size={16} style={{ color: "#FFC107" }} />}
+          title="Bekor bo'lish sabablari"
+          right={
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Segmented value={reasonScope} onChange={(s) => { setReasonScope(s); setShownReasons(REASONS_PAGE); setDrill(d => d?.table === "reasons" ? null : d); }}
+                options={[
+                  { value: "lost", label: "Bekor bo'lganlar", color: "#F44336" },
+                  { value: "all",  label: "Barcha sdelkalar", color: "#6366f1" },
+                ]} />
+              <span style={{ fontSize: 20, fontWeight: 800, color: "#FFC107" }}>{fmtNum(reasonTotal)}</span>
             </div>
-            {lostStages.length > 0 && (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={THc("#555", 44)}>#</th>
-                    <th style={{ ...THc("#9E9E9E", 240), textTransform: "none" }}>Yo'qotilgan bosqich</th>
-                    <th style={THc("#F44336")}>Soni</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lostStages.map((s, i) => {
-                    const n = kpi?.by_stage[s.id] ?? 0;
-                    const go = () => toggle({ table: "reasons", row: s.id, col: "n", title: `${pipelineLabel} · ${s.name}`, filter: { stage: s.id } });
-                    return (
-                      <Fragment key={s.id}>
-                        <tr onClick={n > 0 ? go : undefined} style={{ cursor: n > 0 ? "pointer" : "default", background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
-                          <td style={{ ...TDa, fontSize: 13, color: "var(--text)" }}>{s.name}</td>
-                          <CountCell value={n} max={Math.max(1, ...lostStages.map(x => kpi?.by_stage[x.id] ?? 0))} color="#F44336" active={rowOpen("reasons", s.id)} onClick={go} />
-                        </tr>
-                        {rowOpen("reasons", s.id) && <tr>{drillCell(3)}</tr>}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </Section>
-        )}
+          }>
+          {reasonsQ.isLoading ? <Loading /> : reasonItems.length === 0 ? <Empty /> : (
+            // Same layout as the Lidlar page's reasons panel (ReasonsCard): label column sized to the
+            // longest reason, the bar right after it, count and share in fixed columns so they line up.
+            <div style={{ padding: "6px 0 10px" }}>
+              {reasonItems.slice(0, shownReasons).map((r) => {
+                const open = rowOpen("reasons", r.reason_id);
+                const unspecified = r.reason_id === NONE_KEY;
+                const barColor = unspecified ? "#9E9E9E" : "#FFC107";
+                // One counted stage (YANGI: Bekor bo'ldi) → pin it, so the list skips a Bosqich column that would repeat it.
+                const onlyStage = reasonScope === "lost" && reasons?.available && reasons.scope_stages?.length === 1 ? reasons.scope_stages[0].id : undefined;
+                const go = () => toggle({ table: "reasons", row: r.reason_id, col: "n", title: `Причина · ${r.reason}`, filter: { reason: r.reason_id, reason_scope: reasonScope, ...(onlyStage ? { stage: onlyStage } : {}) } });
+                return (
+                  <Fragment key={r.reason_id}>
+                    <div role="button" tabIndex={0} onClick={go} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }}
+                      className="sd-reason" title={`${r.reason}: ${fmtNum(r.total)} ta — bosing, sdelkalar ro'yxati`}
+                      style={{
+                        display: "grid", gridTemplateColumns: reasonGrid, gap: 14, alignItems: "center",
+                        padding: "9px 20px", cursor: "pointer", background: open ? "rgba(255,193,7,0.07)" : undefined,
+                        borderTop: unspecified && reasonItems.length > 1 ? "1px solid var(--border)" : undefined,
+                      }}>
+                      <span style={{
+                        fontSize: 12.5, lineHeight: 1.25, wordBreak: "break-word",
+                        color: unspecified ? "var(--text3)" : open ? "var(--text)" : "var(--text2)",
+                        fontStyle: unspecified ? "italic" : "normal", fontWeight: open ? 600 : 500,
+                      }}>{r.reason}</span>
+                      <div style={{ position: "relative", height: 18 }}>
+                        <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: "translateY(-50%)", height: 8, borderRadius: 5, background: "var(--bg4)" }} />
+                        <div style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", width: `${Math.min(100, (r.total / reasonMax) * 100)}%`, minWidth: r.total > 0 ? 6 : 0, height: 8, borderRadius: 5, background: barColor, transition: "width 0.3s" }} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtNum(r.total)}</span>
+                      <span style={{ fontSize: 12, color: "var(--text2)", textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtShare(pct(r.total, reasonTotal))}%</span>
+                      <ChevronDown size={12} style={{ color: "var(--text3)", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                    </div>
+                    {open && drillPanel()}
+                  </Fragment>
+                );
+              })}
+              {shownReasons < reasonItems.length && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px 2px" }}>
+                  <button type="button" onClick={() => setShownReasons(n => n + REASONS_PAGE)} style={moreBtn}>
+                    Yana {Math.min(REASONS_PAGE, reasonItems.length - shownReasons)} ta <ChevronDown size={12} />
+                  </button>
+                  <button type="button" onClick={() => setShownReasons(reasonItems.length)} style={moreBtn}>Barchasi ({reasonItems.length})</button>
+                  <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>{shownReasons} / {reasonItems.length}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </Section>
 
         {/* ══════════════════════════════════════════════════════════
             Manba bo'yicha (Источник)
         ══════════════════════════════════════════════════════════ */}
         <Section
           icon={<Users size={16} style={{ color: "#9C27B0" }} />}
-          title="Manba bo'yicha"
-          sub={`Bitrix «Источник» (SOURCE_ID) · ${srcRows.length} ta manba`}>
+          title="Manba bo'yicha">
           {sourcesQ.isLoading ? <Loading /> : srcRows.length === 0 ? <Empty /> : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ overflowX: "auto", padding: "14px 8px 6px" }}>
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead>
                   <tr>
-                    <th style={THc("#555", 44)}>#</th>
-                    <th style={THc("#9E9E9E", 220)}>Manba</th>
-                    <th style={THc("#2196F3")}>Umumiy</th>
-                    <th style={THc("#FF9800")}>Jarayonda</th>
-                    <th style={{ ...THc("#4CAF50"), textTransform: "none" }}>{wonLabel}</th>
-                    <th style={{ ...THc("#F44336"), textTransform: "none" }}>{lostLabel}</th>
-                    <th style={{ ...THc("#4CAF50", 84), textAlign: "center" }}>Konversiya</th>
+                    <th style={{ ...OT_TH, width: "1%", textAlign: "center" }}>#</th>
+                    <th style={{ ...OT_TH, width: "1%" }}>Manba</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>Umumiy</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>Jarayonda</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>{wonLabel}</th>
+                    <th style={{ ...OT_TH, width: "17%" }}>{lostLabel}</th>
+                    <th style={{ ...OT_TH, width: "14%", textAlign: "right" }}>Konversiya</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1131,38 +1009,38 @@ export default function SdelkalarPage() {
                       () => toggle({ table: "src", row: r.source_id, col, title: `${r.source_name} · ${title}`, filter: { source: r.source_id, ...f } });
                     return (
                       <Fragment key={r.source_id}>
-                        <tr className="sd-row" style={{ cursor: "pointer", background: open ? "rgba(156,39,176,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)" }}
-                          onClick={drillFor("all", "barcha sdelkalar", {})}>
-                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
-                          <td style={{ ...TDa, fontSize: 13, color: open ? "#9C27B0" : "var(--text)", fontWeight: 500 }}>
+                        <tr className={`sd-op${open ? " sd-open" : ""}`} style={{ cursor: "pointer" }} onClick={drillFor("all", "barcha sdelkalar", {})}>
+                          <td style={{ ...OT_TD, textAlign: "center" }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text3)" }}>{rankLabel(i, false)}</span>
+                          </td>
+                          <td style={{ ...OT_TD, whiteSpace: "nowrap" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span style={{ fontStyle: r.source_id === NONE_KEY ? "italic" : "normal" }}>{r.source_name}</span>
+                              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", fontStyle: r.source_id === NONE_KEY ? "italic" : "normal" }}>{r.source_name}</span>
                               {r.source_id !== NONE_KEY && (
                                 <span title="Bitrix SOURCE_ID" style={{ fontSize: 10, fontFamily: "monospace", color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 4, padding: "0 5px" }}>
                                   {r.source_id}
                                 </span>
                               )}
-                              <ChevronDown size={12} style={{ color: "var(--text3)", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
                             </div>
                           </td>
-                          <CountCell value={r.total} max={srcMax.total} color="#2196F3" active={isOpen("src", r.source_id, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
-                          <CountCell value={r.in_process} max={srcMax.in_process} color="#FF9800" active={isOpen("src", r.source_id, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
-                          <CountCell value={r.won} max={srcMax.won} color="#4CAF50" active={isOpen("src", r.source_id, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
-                          <CountCell value={r.lost} max={srcMax.lost} color="#F44336" active={isOpen("src", r.source_id, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
-                          <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(r.won, r.total)} size={38} /></td>
+                          <OtCell value={r.total} max={srcMax.total} color="#2196F3" active={isOpen("src", r.source_id, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
+                          <OtCell value={r.in_process} max={srcMax.in_process} color="#FF9800" active={isOpen("src", r.source_id, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
+                          <OtCell value={r.won} max={srcMax.won} color="#4CAF50" active={isOpen("src", r.source_id, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
+                          <OtCell value={r.lost} max={srcMax.lost} color="#F44336" active={isOpen("src", r.source_id, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
+                          <KonvCell value={pct(r.won, r.total)} max={konvMaxSrc} />
                         </tr>
-                        {open && <tr>{drillCell(7)}</tr>}
+                        {open && <tr>{framedDrill(7)}</tr>}
                       </Fragment>
                     );
                   })}
-                  <tr style={{ background: "var(--bg3)" }}>
-                    <td style={TDa} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
-                    <CountCell total value={srcTotal.total} max={1} color="#2196F3" />
-                    <CountCell total value={srcTotal.in_process} max={1} color="#FF9800" />
-                    <CountCell total value={srcTotal.won} max={1} color="#4CAF50" />
-                    <CountCell total value={srcTotal.lost} max={1} color="#F44336" />
-                    <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(srcTotal.won, srcTotal.total)} size={38} /></td>
+                  <tr className="sd-total">
+                    <td style={OT_TD} />
+                    <td style={{ ...OT_TD, fontSize: 11, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Jami</td>
+                    <OtCell total value={srcTotal.total} max={srcTotal.total} color="#2196F3" />
+                    <OtCell total value={srcTotal.in_process} max={srcTotal.in_process} color="#FF9800" />
+                    <OtCell total value={srcTotal.won} max={srcTotal.won} color="#4CAF50" />
+                    <OtCell total value={srcTotal.lost} max={srcTotal.lost} color="#F44336" />
+                    <KonvCell total value={pct(srcTotal.won, srcTotal.total)} max={konvMaxSrc} />
                   </tr>
                 </tbody>
               </table>
