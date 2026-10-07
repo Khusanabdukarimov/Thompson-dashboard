@@ -6,6 +6,7 @@ import {
   Percent, ArrowLeftRight, Target, XCircle, ChevronDown, Search,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
+import { InfoTip } from "@/components/InfoTip";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { ReasonsCard } from "@/components/ReasonsCard";
 import { OperatorTable } from "@/components/OperatorTable";
@@ -412,8 +413,11 @@ function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, 
       }}>
         {icon}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#fff" : "var(--text)", marginBottom: 3 }}>{title}</div>
-      {description && <div style={{ fontSize: 10, lineHeight: 1.3, color: isDark ? "#AAB3C2" : "var(--text3)", marginBottom: 5 }}>{description}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: isDark ? "#fff" : "var(--text)", marginBottom: 3 }}>
+        {title}
+        {/* Explanation on demand (hover / click) instead of always-on text. */}
+        {description && <InfoTip text={description} label={`${title} — izoh`} size={15} />}
+      </div>
       {children}
       <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
         <Sparkline color={sparkColor} variant={sparkVariant} data={sparkData} labels={sparkLabels} unit={sparkUnit} fmt={sparkFmt} />
@@ -1327,8 +1331,10 @@ export default function LidlarPage() {
                       <Calendar size={20} style={{ color:"#9C27B0" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Tashriflar</div>
-                      <div style={{ fontSize:10, color: isDark ? "#AAB3C2" : "var(--text3)", marginTop:2 }}>Tashrif belgilangan / buyurgan sana maydoni to‘ldirilgan leadlar soni. Hozirgi bosqichdan mustaqil hisoblanadi.</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
+                        Tashriflar
+                        <InfoTip text="Tashrif belgilangan / buyurgan sana maydoni to‘ldirilgan leadlar soni. Hozirgi bosqichdan mustaqil hisoblanadi." label="Tashriflar — izoh" size={14} />
+                      </div>
                       <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginTop:2 }}>
                         <span style={{ fontSize:34, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
                         <span style={{ fontSize:20, fontWeight:700, color: isDark ? "#9E9E9E" : "var(--text3)" }}>/</span>
@@ -1355,8 +1361,10 @@ export default function LidlarPage() {
                       <XCircle size={20} style={{ color:"#F44336" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz</div>
-                      <div style={{ fontSize:10, color: isDark ? "#AAB3C2" : "var(--text3)", marginTop:2 }}>JUNK bosqichidagi leadlar</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
+                        Sifatsiz
+                        <InfoTip text="JUNK bosqichidagi leadlar" label="Sifatsiz — izoh" size={14} />
+                      </div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:2 }}>{fmtNum(sifatsizBekor)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
                     </div>
@@ -1375,8 +1383,10 @@ export default function LidlarPage() {
                       <XCircle size={20} style={{ color:"#FFC107" }} />
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Bekor bo'ldi</div>
-                      <div style={{ fontSize:10, color: isDark ? "#AAB3C2" : "var(--text3)", marginTop:2 }}>UC_L8G2B9 / Закрыт bosqichi</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
+                        Bekor bo'ldi
+                        <InfoTip text="UC_L8G2B9 / Закрыт bosqichi" label="Bekor bo'ldi — izoh" size={14} />
+                      </div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#FFC107", lineHeight:1.1, marginTop:2 }}>{fmtNum(bekorBoldiCount)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor bo'lgan lidlar</div>
                     </div>

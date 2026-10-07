@@ -5,6 +5,7 @@ import {
   Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
+import { InfoTip } from "@/components/InfoTip";
 import { getDealFilterOptions } from "@/lib/api/deals";
 import {
   getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
@@ -65,10 +66,12 @@ const RESP_EXCL_LC = ["data365", "data365 support", "abror", "sardor jumayev", "
 const isRespExcluded = (name: string) => RESP_EXCL_LC.some(ex => (name ?? "").trim().toLowerCase().includes(ex));
 
 // ── KPI card ─────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onClick }: {
+function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onClick, info }: {
   label: string; value: string; sub?: string;
   gradient: string; lightGradient: string; icon: React.ReactNode;
   active?: boolean; onClick?: () => void;
+  /** What the number counts — shown behind a "?" badge. */
+  info?: React.ReactNode;
 }) {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
@@ -80,7 +83,10 @@ function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onC
       display: "flex", flexDirection: "column", gap: 6, minWidth: 0, cursor: onClick ? "pointer" : "default",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.7)" : "var(--text3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 11, color: isDark ? "rgba(255,255,255,.7)" : "var(--text3)", fontWeight: 500 }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+          {info && <InfoTip text={info} label={`${label} — izoh`} size={14} />}
+        </span>
         <span style={{ opacity: .6, color: isDark ? "#fff" : "var(--text2)", flexShrink: 0 }}>{icon}</span>
       </div>
       <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#fff" : "var(--text)", lineHeight: 1.2 }}>{value}</div>
@@ -651,16 +657,19 @@ export default function SdelkalarPage() {
   const cards = [
     { id: "total", label: "Jami Sdelkalar", value: kpi?.total ?? 0, sub: `${pipelineLabel} · barcha bosqichlar`,
       gradient: "linear-gradient(135deg,#0d1b4a,#1a3a7a)", lightGradient: "linear-gradient(135deg,rgba(33,150,243,0.07),rgba(59,130,246,0.12))",
-      icon: <BarChart2 size={16} />, drill: {} },
+      icon: <BarChart2 size={16} />, drill: {},
+      info: <>Tanlangan davrda <b>yaratilgan</b> va «{pipelineLabel}» voronkasidagi barcha sdelkalar — hozirgi bosqichidan qat'i nazar. Bitrix kanbani esa barcha vaqtni ko'rsatadi.</> },
     { id: "process", label: "Yangi Sdelkalar", value: kpi?.in_process ?? 0, sub: "Jarayonda · yutilgan va yo'qotilganlarsiz",
       gradient: "linear-gradient(135deg,#1d4ed8,#3b82f6)", lightGradient: "linear-gradient(135deg,rgba(59,130,246,0.07),rgba(99,157,246,0.12))",
-      icon: <TrendingUp size={16} />, drill: { kind: "process" as const } },
+      icon: <TrendingUp size={16} />, drill: { kind: "process" as const },
+      info: <>Hali yakunlanmagan sdelkalar: «{wonLabel}» (yutilgan) va «{lostLabel}» (yo'qotilgan) bosqichlaridan tashqari barcha bosqichlardagilar.</> },
     ...STAGE_CARDS[pipeline].map((id, i) => {
       const st = stageById[id];
       return {
         id, label: st?.name ?? id, value: kpi?.by_stage[id] ?? 0,
         sub: kpi && kpi.total > 0 ? `Jamidan ${pct(kpi.by_stage[id] ?? 0, kpi.total).toFixed(1)}%` : "Bitrix bosqichi",
         ...CARD_STYLES[i % CARD_STYLES.length], drill: { stage: id },
+        info: <>Hozir Bitrix'dagi «{st?.name ?? id}» bosqichida turgan sdelkalar (shu davrda yaratilganlar orasidan). Foiz — Jami sdelkalarga nisbatan.</>,
       };
     }),
   ];
@@ -792,7 +801,7 @@ export default function SdelkalarPage() {
         {/* ── KPI Cards (click → deals) ── */}
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 12, marginBottom: 12 }}>
           {cards.map(c => (
-            <KpiCard key={c.id} label={c.label} value={fmtNum(c.value)} sub={c.sub}
+            <KpiCard key={c.id} label={c.label} value={fmtNum(c.value)} sub={c.sub} info={c.info}
               gradient={c.gradient} lightGradient={c.lightGradient} icon={c.icon}
               active={isOpen("kpi", "cards", c.id)}
               // Only with deals behind it: the card's stage replaces the Bosqich filter in the
