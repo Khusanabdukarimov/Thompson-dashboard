@@ -385,7 +385,7 @@ function Sparkline({ color, variant = 0, data, labels, unit = "ta", fmt }: {
 // ── Gradient card shell ───────────────────────────────────────────
 type GradCardProps = {
   gradient: string; lightGradient: string; border: string; lightBorder: string; shadow: string;
-  icon: React.ReactNode; title: string; children: React.ReactNode;
+  icon: React.ReactNode; title: string; description?: string; children: React.ReactNode;
   sparkColor: string; sparkVariant?: number;
   /** Bucketed series for the card's wave (from /lead-daily). */
   sparkData?: number[] | null;
@@ -393,7 +393,7 @@ type GradCardProps = {
   sparkUnit?: string;
   sparkFmt?: (v: number) => string;
 };
-function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, title, children, sparkColor, sparkVariant = 0, sparkData, sparkLabels, sparkUnit, sparkFmt }: GradCardProps) {
+function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, title, description, children, sparkColor, sparkVariant = 0, sparkData, sparkLabels, sparkUnit, sparkFmt }: GradCardProps) {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
   return (
@@ -413,6 +413,7 @@ function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, 
         {icon}
       </div>
       <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#fff" : "var(--text)", marginBottom: 3 }}>{title}</div>
+      {description && <div style={{ fontSize: 10, lineHeight: 1.3, color: isDark ? "#AAB3C2" : "var(--text3)", marginBottom: 5 }}>{description}</div>}
       {children}
       <div style={{ marginTop: "auto", marginLeft: -16, marginRight: -16 }}>
         <Sparkline color={sparkColor} variant={sparkVariant} data={sparkData} labels={sparkLabels} unit={sparkUnit} fmt={sparkFmt} />
@@ -463,7 +464,7 @@ function UfBreakdownTable({
     <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
       <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
         <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>{rows.length} ta {unit}</span>
+        <span style={{ fontSize: 12, color: "var(--text3)" }}>UF enum qiymati bo‘yicha guruhlanadi · jami, sifatli, tashrif, sifatsiz va bekor ko‘rsatkichlari · {rows.length} ta {unit}</span>
       </div>
       {q.isLoading ? (
         <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -776,6 +777,7 @@ export default function LidlarPage() {
     (applied.reasons?.length ?? 0) > 0,
     (applied.hududs?.length ?? 0) > 0,
     applied.start_date != null || applied.end_date != null,
+    applied.closed_start_date != null || applied.closed_end_date != null,
   ].filter(Boolean).length;
 
   const appliedWithMode = { ...applied, mode };
@@ -1133,6 +1135,18 @@ export default function LidlarPage() {
                   </div>
                 </div>
 
+                <div style={{ marginBottom: 14 }}>
+                  <label title="Дата закрытия" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    <Calendar size={12} />Yopilgan sana
+                  </label>
+                  <DateRangePicker
+                    start={applied.closed_start_date}
+                    end={applied.closed_end_date}
+                    onChange={(s, e) => setApplied((p) => ({ ...p, closed_start_date: s || undefined, closed_end_date: e || undefined }))}
+                    onClear={() => setApplied((p) => ({ ...p, closed_start_date: undefined, closed_end_date: undefined }))}
+                  />
+                </div>
+
                 {/* MultiSelect filters row */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
                   <MultiSelect
@@ -1225,28 +1239,28 @@ export default function LidlarPage() {
               <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(33,150,243,0.03))"
                         border="rgba(33,150,243,0.3)" lightBorder="rgba(33,150,243,0.25)"
                         shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
-                        title="Umumiy Lidlar" sparkColor="#2196F3" sparkVariant={0} sparkData={daily?.total} sparkLabels={daily?.labels}>
+                        title="Umumiy Lidlar" description="Tanlangan sana va filtrlardagi barcha leadlar." sparkColor="#2196F3" sparkVariant={0} sparkData={daily?.total} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Umumiy Lid</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.03))"
                         border="rgba(0,188,212,0.3)" lightBorder="rgba(0,188,212,0.25)"
                         shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
-                        title="Sifatli Lidlar" sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
+                        title="Sifatli Lidlar" description="Hozirgi bosqichi O‘ylab ko‘radi, Tashrif belgilandi, Kelmadi, Bekor bo‘ldi yoki Muvaffaqiyatli bo‘lgan leadlar." sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Sifatli Lid</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#2a1500,#6e3d00)" lightGradient="linear-gradient(135deg,rgba(255,152,0,0.07),rgba(255,152,0,0.03))"
                         border="rgba(255,152,0,0.3)" lightBorder="rgba(255,152,0,0.25)"
                         shadow="0 4px 20px rgba(255,152,0,0.15)" icon={<ArrowLeftRight size={20} style={{ color:"#FF9800" }} />}
-                        title="Jarayonda" sparkColor="#FF9800" sparkVariant={2} sparkData={daily?.jarayonda} sparkLabels={daily?.labels}>
+                        title="Jarayonda" description="Bitrix semantikasi P bo‘lgan, yakunlanmagan leadlar." sparkColor="#FF9800" sparkVariant={2} sparkData={daily?.jarayonda} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#FF9800", lineHeight:1.1, marginBottom:3 }}>{fmtNum(jarayondaCount)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Jarayondagi lidlar</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" lightGradient="linear-gradient(135deg,rgba(76,175,80,0.07),rgba(76,175,80,0.03))"
                         border="rgba(76,175,80,0.3)" lightBorder="rgba(76,175,80,0.25)"
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
-                        title="Yakuniy Konversiya" sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
+                        title="Yakuniy Konversiya" description="Tashrif o‘tkazildi ÷ umumiy leadlar × 100." sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Tashrif o'tkazildi / umumiy lid</div>
               </GradCard>
@@ -1265,7 +1279,7 @@ export default function LidlarPage() {
                   </div>
                   <div>
                     <div style={{ fontSize:15, fontWeight:800, color:"var(--text)", lineHeight:1.2 }}>Voronka samaradorligi</div>
-                    <div style={{ fontSize:11.5, color:"var(--text3)", marginTop:1 }}>Konversiya ko'rsatkichlari</div>
+                    <div style={{ fontSize:11.5, color:"var(--text3)", marginTop:1 }}>Har bir foiz formulasi pastdagi nisbatdan hisoblanadi.</div>
                   </div>
                 </div>
 
@@ -1314,6 +1328,7 @@ export default function LidlarPage() {
                     </div>
                     <div>
                       <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Tashriflar</div>
+                      <div style={{ fontSize:10, color: isDark ? "#AAB3C2" : "var(--text3)", marginTop:2 }}>Tashrif belgilangan / buyurgan sana maydoni to‘ldirilgan leadlar soni. Hozirgi bosqichdan mustaqil hisoblanadi.</div>
                       <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginTop:2 }}>
                         <span style={{ fontSize:34, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
                         <span style={{ fontSize:20, fontWeight:700, color: isDark ? "#9E9E9E" : "var(--text3)" }}>/</span>
@@ -1341,6 +1356,7 @@ export default function LidlarPage() {
                     </div>
                     <div>
                       <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Sifatsiz</div>
+                      <div style={{ fontSize:10, color: isDark ? "#AAB3C2" : "var(--text3)", marginTop:2 }}>JUNK bosqichidagi leadlar</div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:2 }}>{fmtNum(sifatsizBekor)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
                     </div>
@@ -1360,6 +1376,7 @@ export default function LidlarPage() {
                     </div>
                     <div>
                       <div style={{ fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>Bekor bo'ldi</div>
+                      <div style={{ fontSize:10, color: isDark ? "#AAB3C2" : "var(--text3)", marginTop:2 }}>UC_L8G2B9 / Закрыт bosqichi</div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#FFC107", lineHeight:1.1, marginTop:2 }}>{fmtNum(bekorBoldiCount)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor bo'lgan lidlar</div>
                     </div>
@@ -1380,7 +1397,7 @@ export default function LidlarPage() {
           <div style={{ padding:"16px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"baseline", gap:10 }}>
             <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid va Konversiya</span>
             <span style={{ fontSize:11.5, color:"var(--text3)" }}>
-              Umumiy lidlar bo'yicha reyting
+              Operatorlar kesimida: jami, sifatli, jarayondagi, sifatsiz, bekor va tashriflar; konversiya = tashrif / jami
             </span>
           </div>
           <div style={{ paddingTop:16 }}>
@@ -1410,7 +1427,7 @@ export default function LidlarPage() {
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
           <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
             <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid mas'ullar kesimida</span>
-            <span style={{ fontSize:12, color:"var(--text3)" }}>{byUserFiltered.length} ta xodim</span>
+            <span style={{ fontSize:12, color:"var(--text3)" }}>Leadlar hozirgi mas’ul va bosqich bo‘yicha sanaladi. JAMI — barcha xodimlar yig‘indisi. {byUserFiltered.length} ta xodim</span>
           </div>
 
           {respQ.isLoading && !responsibles.length ? (
@@ -1638,7 +1655,7 @@ export default function LidlarPage() {
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Vazifalar kesimida</span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>{taskRows.length} ta xodim</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>Vazifa yaratilgan sana bo‘yicha filtrlanadi. Kechikish muddati bilan aniqlanadi; bajarilish = tugatilgan / jami × 100. {taskRows.length} ta xodim</span>
               </div>
 
               {tasksQ.isLoading ? (
@@ -1917,6 +1934,7 @@ export default function LidlarPage() {
                 </span>
               </div>
 
+              <div style={{ padding: "8px 20px", fontSize: 12, color: "var(--text3)" }}>Leadlar reklama manbasi → medium → kampaniya → ad set → reklama → mas’ul bo‘yicha guruhlanadi. Qatorni bosib keyingi darajani oching.</div>
               {/* Table */}
               {loading ? (
                 <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -2058,7 +2076,7 @@ export default function LidlarPage() {
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Manba bo'yicha</span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>{srcRows.length} ta manba</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>source_id bo‘yicha guruhlangan: jami, sifatli, jarayondagi, sifatsiz, bekor va tashriflar · {srcRows.length} ta manba</span>
               </div>
               {sourceQ.isLoading ? (
                 <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>

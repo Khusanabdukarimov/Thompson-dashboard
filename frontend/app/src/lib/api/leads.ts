@@ -1,5 +1,10 @@
 import { apiGet, authedFetch, API_URL_CRM } from "./client";
 
+function closedDateParams(filter: { start_date?: string; end_date?: string }) {
+  const f = filter as DashFilter;
+  return { closed_from: f.closed_start_date, closed_to: f.closed_end_date };
+}
+
 export type LeadFilter = {
   start_date?: string;
   end_date?: string;
@@ -57,6 +62,8 @@ export type ResponsiblesStatsResponse = {
 export type DashFilter = {
   start_date?: string;
   end_date?: string;
+  closed_start_date?: string;
+  closed_end_date?: string;
   responsible_ids?: number[];
   stages?: string[];
   sources?: string[];
@@ -88,6 +95,8 @@ export function getDashboardStats(filter: DashFilter) {
   return apiGet<DashboardStatsResponse>("/api/dashboard/lead-stats", {
     from: filter.start_date,
     to: filter.end_date,
+    closed_from: filter.closed_start_date,
+    closed_to: filter.closed_end_date,
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),
@@ -105,6 +114,8 @@ export function getResponsiblesStats(filter: DashFilter) {
   return apiGet<ResponsiblesStatsResponse>("/api/dashboard/lead-responsibles", {
     from: filter.start_date,
     to: filter.end_date,
+    closed_from: filter.closed_start_date,
+    closed_to: filter.closed_end_date,
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),
@@ -138,6 +149,7 @@ export function getConversionStats(filter: DashFilter) {
   return apiGet<ConversionStatsResponse>("/api/dashboard/lead-conversion", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),
@@ -171,6 +183,7 @@ export function getTasksSummary(filter: Pick<DashFilter, "start_date" | "end_dat
   return apiGet<TasksSummaryResponse>("/api/dashboard/tasks-summary", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
     source1: filter.source1s?.join(','),
@@ -189,6 +202,7 @@ export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_da
   return apiGet<ReasonsResponse>("/api/dashboard/cancel-reasons", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
@@ -204,6 +218,7 @@ export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date
   return apiGet<ReasonsResponse>("/api/dashboard/junk-reasons", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
@@ -235,6 +250,7 @@ export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" |
   return apiGet<UtmStatRow[]>("/api/dashboard/utm-stats", {
     from: filter.start_date,
     to:   filter.end_date,
+    ...closedDateParams(filter),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
     source1: filter.source1s?.join(','),
@@ -258,6 +274,7 @@ export function getUtmCampaignStats(
     utm_medium: utmMedium,
     from: filter.start_date,
     to:   filter.end_date,
+    ...closedDateParams(filter),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -272,6 +289,7 @@ export function getUtmMediumStats(
     utm_source: utmSource,
     from: filter.start_date,
     to:   filter.end_date,
+    ...closedDateParams(filter),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -288,6 +306,7 @@ export function getUtmContentStats(
     utm_campaign: path.campaign,
     from: filter.start_date,
     to:   filter.end_date,
+    ...closedDateParams(filter),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -305,6 +324,7 @@ export function getUtmTermStats(
     utm_content:  path.content,
     from: filter.start_date,
     to:   filter.end_date,
+    ...closedDateParams(filter),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -333,6 +353,7 @@ export function getUtmResponsibleStats(
     utm_term:     path.term,
     from: filter.start_date,
     to:   filter.end_date,
+    ...closedDateParams(filter),
     mode: filter.mode,
   }, API_URL_CRM);
 }
@@ -353,6 +374,7 @@ export function getFormStats(filter: Pick<DashFilter, "start_date" | "end_date" 
   return apiGet<FormStatsRow[]>("/api/dashboard/form-stats", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
@@ -374,6 +396,7 @@ export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date
   return apiGet<SourceStatsRow[]>("/api/dashboard/source-stats", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
@@ -401,6 +424,7 @@ export function getSource1Stats(filter: Pick<DashFilter, "start_date" | "end_dat
   return apiGet<UfBreakdownRow[]>("/api/dashboard/source1-stats", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
@@ -416,6 +440,7 @@ export function getHududStats(filter: Pick<DashFilter, "start_date" | "end_date"
   return apiGet<UfBreakdownRow[]>("/api/dashboard/hudud-stats", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
@@ -433,6 +458,7 @@ export function getPrichinaStats(filter: Pick<DashFilter, "start_date" | "end_da
   return apiGet<UfBreakdownRow[]>("/api/dashboard/prichina-stats", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
@@ -630,6 +656,7 @@ export function getResponsibleLeads(
     responsible_id: responsibleId,
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     proekt: filter.proekts?.join(','),
     course: filter.courses?.join(','),
     source1: filter.source1s?.join(','),
@@ -644,6 +671,7 @@ export function getDealCancelReasons(filter: Pick<DashFilter, "start_date" | "en
   return apiGet<ReasonsResponse>("/api/dashboard/deal-cancel-reasons", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
   }, API_URL_CRM);
 }
@@ -788,6 +816,7 @@ export function getReasonLeads(
     reason: args.reason,
     from: args.start_date,
     to: args.end_date,
+    ...closedDateParams(args),
     responsible_id: args.responsible_ids?.join(','),
     proekt: args.proekts?.join(','),
     mode: args.mode,
@@ -833,6 +862,7 @@ export function getSourceLeads(
     source_id: sourceId,
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     mode: filter.mode,
@@ -851,6 +881,7 @@ function getUfBreakdownLeads(
     enum_id: enumId,
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     proekt: filter.proekts?.join(','),
     mode: filter.mode,
@@ -894,6 +925,7 @@ export function getLeadDaily(filter: DashFilter) {
   return apiGet<LeadDailyResponse>("/api/dashboard/lead-daily", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: filter.responsible_ids?.join(','),
     stage: filter.stages?.join(','),
     source: filter.sources?.join(','),

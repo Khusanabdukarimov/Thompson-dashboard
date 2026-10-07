@@ -90,6 +90,11 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
       <div style={{ padding: "16px 22px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text)" }}>{title}</div>
+          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
+            {kind === "cancel"
+              ? "UC_L8G2B9 / Закрыт bosqichidagi leadlar, sabab UF maydonlaridan olinadi."
+              : "JUNK / Sifatsiz bosqichidagi leadlar, sabab UF maydonlaridan olinadi."}
+          </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: barColor, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{fmtNum(grandTotal)}</div>
