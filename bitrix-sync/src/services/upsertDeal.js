@@ -30,6 +30,14 @@ function ufEnum(raw, map) {
   return map[v] || null;
 }
 
+/** Free-text UF value with runs of whitespace collapsed, so "DPU 2    (14:00)" and "DPU 2 (14:00)" match. */
+function ufText(raw) {
+  const v = ufVal(raw);
+  if (v == null) return null;
+  const t = v.replace(/\s+/g, ' ').trim();
+  return t || null;
+}
+
 function parseDate(s) {
   if (!s) return null;
   const d = new Date(s);
@@ -69,8 +77,8 @@ async function upsertDeal(r, client) {
        source_id, utm_source, date_create, date_modify, closedate,
        uf_sale_date, uf_bp_sale_date, uf_payment_date,
        uf_paid_sum, uf_remaining_sum,
-       uf_cancel_reason, contact_id, begindate, uf_amo_date, uf_service, uf_tolandi_sum, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW())
+       uf_cancel_reason, contact_id, begindate, uf_amo_date, uf_service, uf_tolandi_sum, uf_prichina, title, uf_report_stage, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -91,6 +99,9 @@ async function upsertDeal(r, client) {
        uf_amo_date      = EXCLUDED.uf_amo_date,
        uf_service       = EXCLUDED.uf_service,
        uf_tolandi_sum   = EXCLUDED.uf_tolandi_sum,
+       uf_prichina      = EXCLUDED.uf_prichina,
+       title            = EXCLUDED.title,
+       uf_report_stage  = EXCLUDED.uf_report_stage,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -115,6 +126,9 @@ async function upsertDeal(r, client) {
       parseDate(r.UF_CRM_69FEFD2D71544),
       ufVal(r.UF_CRM_69D8F71700936),
       tolandiSum,
+      ufVal(r.UF_CRM_6075517B5CAD2), // Причина — enum id, Учебный центр
+      r.TITLE || null,               // usually "Name | phone | course" — shown in drill-downs
+      ufText(r.UF_CRM_6A364190B79ED), // Стадия (для отчетов) — Sdelkalar filter
     ]
   );
 

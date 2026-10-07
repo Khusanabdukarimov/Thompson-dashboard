@@ -13,6 +13,7 @@ const taskCreated  = require('./webhooks/taskCreated');
 const taskUpdated  = require('./webhooks/taskUpdated');
 const taskDeleted  = require('./webhooks/taskDeleted');
 const dashboardRouter                    = require('./api/dashboard');
+const pipelineDealsRouter                = require('./api/pipelineDeals');
 const callsRouter                        = require('./api/calls');
 const onpbx                              = require('./services/onlinepbx');
 const { ensureSchema: callsEnsureSchema, syncUsers: syncPbxUsers, syncRecentCalls } = require('./sync/syncCalls');
@@ -48,6 +49,7 @@ app.post('/webhook/facebook', fbReceive);
 
 // ── Dashboard API ─────────────────────────────────────────────
 app.use('/api/dashboard', callsRouter);   // OnlinePBX call statistics
+app.use('/api/dashboard/pipeline', pipelineDealsRouter); // Sdelkalar: per-pipeline deal analytics
 app.use('/api/dashboard', dashboardRouter);
 
 // ── Campaigns API (Meta Ads, cached) ──────────────────────────
@@ -131,6 +133,10 @@ Promise.all([
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS begindate        TIMESTAMPTZ;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_service       TEXT;
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_tolandi_sum  NUMERIC(14,2);
+    -- Причина (UF_CRM_6075517B5CAD2) enum id; labels are resolved at read time.
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_prichina      TEXT;
+    -- Стадия (для отчетов) (UF_CRM_6A364190B79ED), free text, whitespace-normalised.
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_report_stage  TEXT;
     CREATE INDEX IF NOT EXISTS deals_date_modify_idx      ON deals(date_modify);
     CREATE INDEX IF NOT EXISTS deals_uf_sale_date_idx     ON deals(uf_sale_date);
     CREATE INDEX IF NOT EXISTS deals_uf_bp_sale_date_idx  ON deals(uf_bp_sale_date);

@@ -1,17 +1,18 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { Fragment, useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDarkMode } from "@/hooks/useDarkMode";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
-  Search,
-  TrendingUp, DollarSign, CheckCircle, Percent, ShoppingCart,
-  ChevronDown, Users, BarChart2,
+  Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
+import { getDealFilterOptions } from "@/lib/api/deals";
 import {
-  getDealKpiStats, getDealsList, getDealFilterOptions,
-  getDealsConversion, getDealsResponsibles, getDealSourceStats,
-} from "@/lib/api/deals";
-import { getDealCancelReasons } from "@/lib/api/leads";
+  getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
+  getPipelineReportStages,
+  NONE_KEY,
+  type PipelineKey, type PipelineFilter, type PipelineDealsFilter, type PipelineStage,
+  type PipelineManagerRow, type ReasonScope,
+} from "@/lib/api/pipelineDeals";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
 
@@ -22,29 +23,65 @@ const todayISO = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 const startOfMonthISO = () => { const d = new Date(); d.setDate(1); return localISO(d); };
 
-function fmtMoney(v: number) {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${fmtNum(Math.round(v))}`;
+/** "2026-09-30 18:17" in Tashkent time. */
+const fmtDateTime = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Tashkent" }).slice(0, 16) : "—";
+
+const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
+
+// ── Pipelines ────────────────────────────────────────────────────
+const PIPELINES: { key: PipelineKey; label: string }[] = [
+  { key: "uc",    label: "Учебный центр" },
+  { key: "yangi", label: "Школа | YANGI" },
+];
+
+type CardStyle = { gradient: string; lightGradient: string; icon: React.ReactNode };
+const CARD_STYLES: CardStyle[] = [
+  { gradient: "linear-gradient(135deg,#065f46,#10b981)", lightGradient: "linear-gradient(135deg,rgba(4,150,107,0.07),rgba(16,185,129,0.12))", icon: <CheckCircle size={16} /> },
+  { gradient: "linear-gradient(135deg,#92400e,#f59e0b)", lightGradient: "linear-gradient(135deg,rgba(146,64,14,0.07),rgba(245,158,11,0.12))", icon: <Layers size={16} /> },
+  { gradient: "linear-gradient(135deg,#5b21b6,#8b5cf6)", lightGradient: "linear-gradient(135deg,rgba(91,33,182,0.07),rgba(139,92,246,0.12))", icon: <TrendingUp size={16} /> },
+];
+
+/**
+ * KPI cards that count one named stage, after "Jami" and "Yangi".
+ * Labels come from Bitrix at runtime; only the stage ids are fixed here.
+ */
+const STAGE_CARDS: Record<PipelineKey, string[]> = {
+  uc:    ["NEW", "1", "WON"],      // Визит в офис Тошкент, Пробный урок, Оплата (+)
+  yangi: ["C25:WON", "C25:NEW"],   // To'lov | O'qimoqda, Tashrif buyurdi
+};
+
+const PROCESS_PALETTE = ["#2196F3", "#00BCD4", "#3F51B5", "#009688", "#673AB7", "#03A9F4", "#5C6BC0", "#26A69A", "#7E57C2", "#29B6F6"];
+function stageColor(s: PipelineStage | undefined, i = 0) {
+  if (!s) return "#9E9E9E";
+  if (s.kind === "won") return "#4CAF50";
+  if (s.kind === "lost") return "#F44336";
+  return s.color || PROCESS_PALETTE[i % PROCESS_PALETTE.length];
 }
 
+// Accounts that are not sales managers (integrations, admins). They are folded
+// into one row rather than dropped, so every table still adds up to the cards.
+const RESP_EXCL_LC = ["data365", "data365 support", "abror", "sardor jumayev", "sardor jjumayev", "main (asosiy)", "main"];
+const isRespExcluded = (name: string) => RESP_EXCL_LC.some(ex => (name ?? "").trim().toLowerCase().includes(ex));
 
 // ── KPI card ─────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, gradient, lightGradient, icon }: {
+function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onClick }: {
   label: string; value: string; sub?: string;
   gradient: string; lightGradient: string; icon: React.ReactNode;
+  active?: boolean; onClick?: () => void;
 }) {
   const { theme } = useDarkMode();
   const isDark = theme === 'dark';
   return (
-    <div style={{
+    <div onClick={onClick} title={onClick ? "Bosing — sdelkalar ro'yxati" : undefined} style={{
       borderRadius: 12, padding: "16px 18px", background: isDark ? gradient : lightGradient,
-      border: isDark ? "none" : "1px solid var(--border)",
-      display: "flex", flexDirection: "column", gap: 6, minWidth: 0
+      border: active ? "1px solid #3b82f6" : isDark ? "1px solid transparent" : "1px solid var(--border)",
+      boxShadow: active ? "0 0 0 2px rgba(59,130,246,0.25)" : "none",
+      display: "flex", flexDirection: "column", gap: 6, minWidth: 0, cursor: onClick ? "pointer" : "default",
     }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.7)" : "var(--text3)", fontWeight: 500 }}>{label}</span>
-        <span style={{ opacity: .6, color: isDark ? "#fff" : "var(--text2)" }}>{icon}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.7)" : "var(--text3)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+        <span style={{ opacity: .6, color: isDark ? "#fff" : "var(--text2)", flexShrink: 0 }}>{icon}</span>
       </div>
       <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#fff" : "var(--text)", lineHeight: 1.2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.55)" : "var(--text3)" }}>{sub}</div>}
@@ -125,7 +162,6 @@ function ConversionDonut({ pct, size = 38 }: { pct: number; size?: number }) {
   );
 }
 
-// ── MultiSelect for Sdelkalar ─────────────────────────────────────
 function RoleBadge({ role }: { role?: string | null }) {
   if (!role) return <span style={{ color: "var(--text3)", fontSize: 11 }}>—</span>;
   const r = role.toLowerCase();
@@ -139,6 +175,7 @@ function RoleBadge({ role }: { role?: string | null }) {
   );
 }
 
+// ── MultiSelect for Sdelkalar ─────────────────────────────────────
 function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
   label: string;
   options: { value: string; label: string }[];
@@ -198,164 +235,182 @@ function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
   );
 }
 
-// ── Operator deals dropdown ───────────────────────────────────────
+// ── Segmented switch (mode + pipeline) ───────────────────────────
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void;
+  options: { value: T; label: string; color: string }[];
+}) {
+  return (
+    <div style={{ display: "flex", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 2 }}>
+      {options.map(o => (
+        <button key={o.value} type="button" onClick={() => onChange(o.value)}
+          style={{
+            border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer",
+            background: value === o.value ? o.color : "transparent",
+            color: value === o.value ? "#fff" : "var(--text2)", transition: "all 0.2s", whiteSpace: "nowrap",
+          }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-function OperatorDealsDropdown({
-  responsibleId, from, to, mode,
-}: { responsibleId: string; from?: string; to?: string; mode: string }) {
+// ── Section card ─────────────────────────────────────────────────
+function Section({ icon, title, sub, right, children }: {
+  icon: React.ReactNode; title: string; sub?: string; right?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16, border: "1px solid var(--border)" }}>
+      <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {icon}
+        <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+        {sub && <span style={{ fontSize: 12, color: "var(--text3)" }}>{sub}</span>}
+        {right && <div style={{ marginLeft: "auto" }}>{right}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const Loading = () => <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>;
+const Empty = () => <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>;
+
+// ── Clickable count cell ─────────────────────────────────────────
+function CountCell({ value, max, color, active, onClick, total }: {
+  value: number; max: number; color: string; active?: boolean; onClick?: () => void; total?: boolean;
+}) {
+  const clickable = value > 0 && !!onClick;
+  return (
+    <td
+      onClick={clickable ? (e) => { e.stopPropagation(); onClick!(); } : undefined}
+      title={clickable ? "Bosing — sdelkalar ro'yxati" : undefined}
+      style={{ ...TDa, minWidth: 96, cursor: clickable ? "pointer" : "default", background: active ? `${color}1f` : undefined }}>
+      {value > 0 ? (
+        <>
+          <span style={{ fontSize: total ? 16 : 14, fontWeight: total ? 700 : 600, color: active ? color : "var(--text)", textDecoration: clickable ? "underline dotted" : "none", textUnderlineOffset: 3 }}>
+            {fmtNum(value)}
+          </span>
+          <MiniBar value={value} max={max} color={color} />
+        </>
+      ) : (
+        <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>
+      )}
+    </td>
+  );
+}
+
+// ── Deals drill-down (shared by every table) ─────────────────────
+const DRILL_PAGE = 100;
+
+function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
+  filter: PipelineDealsFilter; colSpan: number; title: string; showReason: boolean; onClose: () => void;
+}) {
+  // Учебный центр carries both Причина and Стадия (для отчетов); showReason gates the pair.
   const portal = useBitrixPortal();
-  const q = useQuery({
-    queryKey: ["op-deals", responsibleId, from, to, mode],
-    queryFn: () => getDealsList({ from, to, responsible_id: responsibleId, limit: 200, mode }),
-    staleTime: 5 * 60_000,
+  const q = useInfiniteQuery({
+    queryKey: ["pipeline-deals", filter],
+    queryFn: ({ pageParam }) => getPipelineDeals({ ...filter, limit: DRILL_PAGE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => {
+      const next = last.offset + last.items.length;
+      return next < last.total ? next : undefined;
+    },
+    staleTime: 60_000,
   });
-
-  if (q.isLoading) return (
-    <td colSpan={8} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>
-      Yuklanmoqda…
-    </td>
-  );
-
-  const items = q.data?.items ?? [];
-  if (!items.length) return (
-    <td colSpan={8} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>
-      Deallar topilmadi
-    </td>
-  );
+  // Offset paging over a live window can repeat a deal if one arrives between pages.
+  const items = useMemo(() => [...new Map((q.data?.pages ?? []).flatMap(p => p.items).map(d => [d.id, d])).values()], [q.data]);
+  const total = q.data?.pages[0]?.total ?? 0;
+  const cols = ["ID", "Sdelka", "Mas'ul", "Bosqich", ...(showReason ? ["Стадия (отчет)"] : []), "Manba", ...(showReason ? ["Причина"] : []), "Yaratildi", "O'zgardi"];
 
   return (
-    <td colSpan={8} style={{ padding: 0 }}>
-      <div style={{ maxHeight: 280, overflowY: "auto", borderTop: "1px solid var(--border)" }}>
-        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ background: "var(--bg3)", position: "sticky", top: 0 }}>
-              {["#", "Mijoz", "Summa", "Manba", "Bosqich", "Sana"].map(h => (
-                <th key={h} style={{ padding: "6px 12px", textAlign: "left", fontWeight: 600, color: "var(--text3)", fontSize: 11, borderBottom: "1px solid var(--border)" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((d, i) => (
-              <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", borderBottom: "1px solid var(--border2)" }}>
-                <td style={{ padding: "5px 12px", color: "var(--text3)", minWidth: 40 }}>
-                  <a href={`${portal}/crm/deal/details/${d.id}/`} target="_blank" rel="noreferrer"
-                    style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}
-                    onClick={e => e.stopPropagation()}>
-                    #{d.id}
-                  </a>
-                </td>
-                <td style={{ padding: "5px 12px", color: "var(--text)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.mijoz || "—"}</td>
-                <td style={{ padding: "5px 12px", color: "#00BCD4", fontWeight: 600 }}>{d.summa ? `$${fmtNum(d.summa)}` : "—"}</td>
-                <td style={{ padding: "5px 12px", color: "var(--text3)" }}>{d.manba || "—"}</td>
-                <td style={{ padding: "5px 12px" }}>
-                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: d.is_won ? "#4CAF5022" : d.is_final ? "#F4433622" : "#2196F322", color: d.is_won ? "#4CAF50" : d.is_final ? "#F44336" : "#2196F3", fontWeight: 600 }}>
-                    {d.stage_name || "—"}
-                  </span>
-                </td>
-                <td style={{ padding: "5px 12px", color: "var(--text3)" }}>{d.sana ? d.sana.slice(0, 10) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <td colSpan={colSpan} style={{ padding: 0, background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ position: "sticky", left: 0, maxWidth: "calc(100vw - 320px)", padding: "10px 14px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+          <span style={{ fontSize: 12, color: "var(--text3)" }}>
+            {q.isLoading ? "Yuklanmoqda…" : `${fmtNum(total)} ta sdelka${items.length < total ? ` · ${fmtNum(items.length)} tasi ko'rsatilgan` : ""}`}
+          </span>
+          <button type="button" onClick={onClose}
+            style={{ marginLeft: "auto", background: "none", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text3)", fontSize: 11, padding: "3px 10px", cursor: "pointer" }}>
+            Yopish
+          </button>
+        </div>
+        {q.isError ? (
+          <div style={{ fontSize: 12, color: "#ef4444" }}>Xatolik: {(q.error as Error).message}</div>
+        ) : !q.isLoading && items.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Sdelkalar topilmadi</div>
+        ) : (
+          <div style={{ maxHeight: 360, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "var(--bg3)", position: "sticky", top: 0, zIndex: 1 }}>
+                  {cols.map(h => (
+                    <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--text3)", fontSize: 11, borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((d, i) => {
+                  const kc = d.stage_kind === "won" ? "#4CAF50" : d.stage_kind === "lost" ? "#F44336" : "#2196F3";
+                  return (
+                    <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg2)" }}>
+                      <td style={{ padding: "5px 10px", whiteSpace: "nowrap" }}>
+                        <a href={`${portal}/crm/deal/details/${d.id}/`} target="_blank" rel="noreferrer"
+                          style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}>#{d.id}</a>
+                      </td>
+                      <td style={{ padding: "5px 10px", color: "var(--text)", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.title ?? undefined}>
+                        {d.title || d.phone || "—"}
+                      </td>
+                      <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.responsible || "—"}</td>
+                      <td style={{ padding: "5px 10px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: `${kc}22`, color: kc, fontWeight: 600 }}>{d.stage_name}</span>
+                      </td>
+                      {showReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.report_stage || "—"}</td>}
+                      <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{d.source_name}</td>
+                      {showReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.reason || "—"}</td>}
+                      <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{fmtDateTime(d.date_create)}</td>
+                      <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{fmtDateTime(d.date_modify)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {q.hasNextPage && (
+          <button type="button" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}
+            style={{ marginTop: 8, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 6, color: "#3b82f6", fontSize: 12, fontWeight: 600, padding: "5px 14px", cursor: "pointer" }}>
+            {q.isFetchingNextPage ? "Yuklanmoqda…" : `Yana ${fmtNum(Math.min(DRILL_PAGE, total - items.length))} ta yuklash`}
+          </button>
+        )}
       </div>
     </td>
   );
 }
 
-// ── Generic inline deals panel (used in 3 summary tables) ────────
-function DealsInlinePanel({
-  filter, colSpan = 6,
-}: { filter: Parameters<typeof getDealsList>[0]; colSpan?: number }) {
-  const portal = useBitrixPortal();
-  const q = useQuery({
-    queryKey: ["inline-deals", JSON.stringify(filter)],
-    queryFn:  () => getDealsList({ ...filter, limit: 200 }),
-    staleTime: 5 * 60_000,
-  });
+/** Which table cell's deals are open. Only one drill-down is open at a time. */
+type Drill = { table: string; row: string; col: string; title: string; filter: Partial<PipelineDealsFilter> };
 
-  if (q.isLoading) return (
-    <td colSpan={colSpan} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Yuklanmoqda…</td>
-  );
-
-  const items = q.data?.items ?? [];
-  if (!items.length) return (
-    <td colSpan={colSpan} style={{ padding: "8px 16px", fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Deallar topilmadi</td>
-  );
-
-  return (
-    <td colSpan={colSpan} style={{ padding: 0 }}>
-      <div style={{ maxHeight: 280, overflowY: "auto", borderTop: "1px solid var(--border)" }}>
-        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ background: "var(--bg3)", position: "sticky", top: 0 }}>
-              {["#", "Mijoz", "Mas'ul", "Summa", "Manba", "Bosqich", "Sana"].map(h => (
-                <th key={h} style={{ padding: "5px 10px", textAlign: "left", fontWeight: 600, color: "var(--text3)", fontSize: 11, borderBottom: "1px solid var(--border)" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((d, i) => (
-              <tr key={d.id} style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)", borderBottom: "1px solid var(--border2)" }}>
-                <td style={{ padding: "5px 10px", minWidth: 50 }}>
-                  <a href={`${portal}/crm/deal/details/${d.id}/`} target="_blank" rel="noreferrer"
-                    style={{ color: "#2196F3", fontWeight: 600, textDecoration: "none" }}
-                    onClick={e => e.stopPropagation()}>
-                    #{d.id}
-                  </a>
-                </td>
-                <td style={{ padding: "5px 10px", color: "var(--text)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.mijoz || "—"}</td>
-                <td style={{ padding: "5px 10px", color: "var(--text2)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.responsible || "—"}</td>
-                <td style={{ padding: "5px 10px", color: "#00BCD4", fontWeight: 600 }}>{d.summa ? `$${fmtNum(d.summa)}` : "—"}</td>
-                <td style={{ padding: "5px 10px", color: "var(--text3)" }}>{d.manba || "—"}</td>
-                <td style={{ padding: "5px 10px" }}>
-                  <span style={{
-                    fontSize: 11, padding: "2px 7px", borderRadius: 10,
-                    background: d.is_won ? "rgba(76,175,80,.15)" : d.is_final ? "rgba(244,67,54,.15)" : "rgba(255,152,0,.15)",
-                    color: d.is_won ? "#4CAF50" : d.is_final ? "#F44336" : "#FF9800",
-                  }}>{d.stage_name}</span>
-                </td>
-                <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{d.sana?.slice(0, 10) || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </td>
-  );
-}
-
-// ── Deal stage columns for "mas'ullar kesimida" table ─────────────
-const RESP_EXCL_LC = ["data365", "data365 support", "abror", "sardor jumayev", "sardor jjumayev", "main (asosiy)", "main"];
-const isRespExcluded = (name: string) => RESP_EXCL_LC.some(ex => (name ?? "").trim().toLowerCase().includes(ex));
-
-const DEAL_STAGE_COLS = [
-  { key: "konsultatsiya", label: "Yangi / Uchrashuv",  color: "#607D8B" },
-  { key: "kelishuv",      label: "Kelishuv bo'ldi",    color: "#4CAF50" },
-  { key: "ish_boshlandi", label: "Ish boshlandi",      color: "#3F51B5" },
-  { key: "sotuv_boldi",   label: "Sotuv bo'ldi",       color: "#00E676" },
-  { key: "bekor_boldi",   label: "Bekor bo'ldi",       color: "#F44336" },
-] as const;
+/** Manager row with the ids to filter its deals by (several for the folded row). */
+type MgrRow = PipelineManagerRow & { key: string; ids: string; members?: string[] };
 
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
-  const portal = useBitrixPortal();
   const [filterOpen, setFilterOpen] = useState(false);
   const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
-  const [expandedOp,     setExpandedOp]     = useState<string | null>(null);
-  const [expandedResp,   setExpandedResp]   = useState<string | null>(null);
-  const [expandedSource, setExpandedSource] = useState<string | null>(null);
+  // Always opens on Учебный центр.
+  const [pipeline, setPipeline] = useState<PipelineKey>("uc");
+  const [reasonScope, setReasonScope] = useState<ReasonScope>("lost");
+  const [drill, setDrill] = useState<Drill | null>(null);
 
   const [filter, setFilter] = useState({
     from: startOfMonthISO(), to: todayISO(),
     responsible_ids: [] as string[],
     stage_ids: [] as string[],
     sources: [] as string[],
+    report_stages: [] as string[],
   });
-
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"" | "won" | "lost" | "active">("");
-  const [page, setPage] = useState(1);
-  const LIMIT = 20;
 
   const filterQ = useQuery({
     queryKey: ["deal-filter-options", mode],
@@ -363,85 +418,82 @@ export default function SdelkalarPage() {
     staleTime: 5 * 60_000,
   });
 
-  // AmoCRM mode = historical import, skip date filter so all 1316 deals are visible
+  // AmoCRM mode = historical import, skip date filter so every imported deal is visible
   const apiFrom = mode === 'amocrm' ? undefined : (filter.from || undefined);
   const apiTo   = mode === 'amocrm' ? undefined : (filter.to   || undefined);
 
-  const kpiQ = useQuery({
-    queryKey: ["deals-kpi", apiFrom, apiTo, filter.responsible_ids, filter.stage_ids, filter.sources, mode],
-    queryFn: () => getDealKpiStats({
-      from: apiFrom, to: apiTo,
-      responsible_id: filter.responsible_ids.join(',') || undefined,
-      stage_id: filter.stage_ids.join(',') || undefined,
-      source: filter.sources.join(',') || undefined,
-      mode,
-    }),
+  const base: PipelineFilter = useMemo(() => ({
+    pipeline, from: apiFrom, to: apiTo, mode,
+    responsible_id: filter.responsible_ids.join(',') || undefined,
+    // AmoCRM mode already pins the source, and its Manba options are Amo labels, not SOURCE_IDs.
+    source: mode === 'amocrm' ? undefined : (filter.sources.join(',') || undefined),
+    stage: filter.stage_ids.join(',') || undefined,
+    report_stage: pipeline === "uc" && filter.report_stages.length ? JSON.stringify(filter.report_stages) : undefined,
+  }), [pipeline, apiFrom, apiTo, mode, filter.responsible_ids, filter.sources, filter.stage_ids, filter.report_stages]);
+
+  // Keep the last result on screen while a filter changes, but never across a
+  // pipeline switch: the old pipeline's numbers would sit under the new labels.
+  const samePipeline = <T,>(prev: T | undefined, key: readonly unknown[] | undefined) =>
+    (key?.[1] as PipelineFilter | undefined)?.pipeline === pipeline ? prev : undefined;
+  const kpiQ = useQuery({ queryKey: ["pipeline-kpi", base], queryFn: () => getPipelineKpi(base), placeholderData: (p, q) => samePipeline(p, q?.queryKey) });
+  const managersQ = useQuery({ queryKey: ["pipeline-managers", base], queryFn: () => getPipelineManagers(base), placeholderData: (p, q) => samePipeline(p, q?.queryKey) });
+  const sourcesQ = useQuery({ queryKey: ["pipeline-sources", base], queryFn: () => getPipelineSources(base), placeholderData: (p, q) => samePipeline(p, q?.queryKey) });
+  const reasonsQ = useQuery({
+    queryKey: ["pipeline-reasons", base, reasonScope],
+    queryFn: () => getPipelineReasons({ ...base, scope: reasonScope }),
+    placeholderData: (p, q) => (q?.queryKey[2] === reasonScope ? samePipeline(p, q?.queryKey) : undefined),
   });
 
-  const listQ = useQuery({
-    queryKey: ["deals-list", apiFrom, apiTo, filter.responsible_ids, filter.stage_ids, filter.sources, search, status, page, mode],
-    queryFn: () => getDealsList({
-      from: apiFrom, to: apiTo,
-      responsible_id: filter.responsible_ids.join(',') || undefined,
-      stage_id: filter.stage_ids.join(',') || undefined,
-      source: filter.sources.join(',') || undefined,
-      search: search || undefined,
-      status: status || undefined,
-      page, limit: LIMIT,
-      mode,
-    }),
-    placeholderData: keepPreviousData,
-  });
-
-  const convQ = useQuery({
-    queryKey: ["deals-conversion", apiFrom, apiTo, mode],
-    queryFn: () => getDealsConversion({ from: apiFrom, to: apiTo, mode }),
-    staleTime: 60_000,
-  });
-
-  const respQ = useQuery({
-    queryKey: ["deals-responsibles", apiFrom, apiTo, mode],
-    queryFn: () => getDealsResponsibles({ from: apiFrom, to: apiTo, mode }),
-    staleTime: 60_000,
-  });
-
-  const cancelQ = useQuery({
-    queryKey: ["stats/deal-cancel-reasons", apiFrom, apiTo, filter.responsible_ids, mode],
-    queryFn: () => getDealCancelReasons({
-      start_date: apiFrom,
-      end_date: apiTo,
-      responsible_ids: filter.responsible_ids.map(Number),
-    }),
-    staleTime: 60_000,
-  });
-
-  const sourceStatsQ = useQuery({
-    queryKey: ["deals-source-stats", apiFrom, apiTo, mode],
-    queryFn: () => getDealSourceStats({ from: apiFrom, to: apiTo, mode }),
+  const reportStagesQ = useQuery({
+    queryKey: ["pipeline-report-stages", pipeline, apiFrom, apiTo, mode],
+    queryFn: () => getPipelineReportStages({ pipeline, from: apiFrom, to: apiTo, mode }),
+    enabled: pipeline === "uc",
     staleTime: 60_000,
   });
 
   const clearFilter = useCallback(() => {
-    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [] });
-    setSearch("");
-    setStatus("");
-    setPage(1);
+    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], report_stages: [] });
+    setDrill(null);
   }, []);
 
+  const switchPipeline = (p: PipelineKey) => {
+    if (p === pipeline) return;
+    setPipeline(p);
+    // Stage ids and Стадия (для отчетов) are per pipeline; other filters carry over.
+    setFilter(s => ({ ...s, stage_ids: [], report_stages: [] }));
+    setDrill(null);
+  };
+
   const kpi = kpiQ.data;
+  const stages = useMemo(() => kpi?.stages ?? [], [kpi]);
+  const stageById = useMemo(() => Object.fromEntries(stages.map(s => [s.id, s])), [stages]);
+  const wonStage = stages.find(s => s.kind === "won");
+  const lostStages = stages.filter(s => s.kind === "lost");
+  const wonLabel = wonStage?.name ?? "Sotuv";
+  const lostLabel = lostStages.map(s => s.name).join(" + ") || "Bekor";
+  const showReason = pipeline === "uc";
+  const pipelineLabel = PIPELINES.find(p => p.key === pipeline)!.label;
 
   const activeFilterCount = [
     filter.responsible_ids.length > 0,
     filter.stage_ids.length > 0,
     filter.sources.length > 0,
+    filter.report_stages.length > 0,
     filter.from !== startOfMonthISO() || filter.to !== todayISO(),
   ].filter(Boolean).length;
 
   const respOptions = useMemo(() => (filterQ.data?.responsibles ?? [])
     .filter(r => !isRespExcluded(r.full_name ?? ""))
     .map(r => ({ value: String(r.id), label: r.full_name })), [filterQ.data]);
-  const stageOptions = useMemo(() => (filterQ.data?.stages ?? []).map(s => ({ value: String(s.id), label: s.name })), [filterQ.data]);
+  const stageOptions = useMemo(() => stages.map(s => ({ value: s.id, label: s.name })), [stages]);
   const srcOptions = useMemo(() => (filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })), [filterQ.data]);
+  const reportStageOptions = useMemo(() => {
+    const d = reportStagesQ.data;
+    const opts = d?.available ? d.items.map(i => ({ value: i.value, label: `${i.label} (${fmtNum(i.total)})` })) : [];
+    // Keep picked values selectable even when the date window no longer contains them.
+    for (const v of filter.report_stages) if (!opts.some(o => o.value === v)) opts.push({ value: v, label: v === NONE_KEY ? "Ko'rsatilmagan" : v });
+    return opts;
+  }, [reportStagesQ.data, filter.report_stages]);
 
   const PRESETS = [
     { label: "Bugun", f: todayISO(), t: todayISO() },
@@ -451,113 +503,138 @@ export default function SdelkalarPage() {
     { label: "Barchasi", f: daysAgoISO(365), t: todayISO() },
   ];
 
-  // ── Conversion table derived data ────────────────────────────────
-  const convRows = (convQ.data ?? []).filter(r => !isRespExcluded(r.full_name ?? ""));
-  const convMax = useMemo(() => ({
-    total: Math.max(1, ...convRows.map(r => r.total)),
-    jarayonda: Math.max(1, ...convRows.map(r => r.jarayonda)),
-    sotuv_boldi: Math.max(1, ...convRows.map(r => r.sotuv_boldi)),
-    bekor_boldi: Math.max(1, ...convRows.map(r => r.bekor_boldi)),
-    jami_sotuv: Math.max(1, ...convRows.map(r => r.jami_sotuv)),
-  }), [convRows]);
-  const convTotals = useMemo(() => convRows.reduce(
-    (acc, r) => ({
-      total: acc.total + r.total,
-      jarayonda: acc.jarayonda + r.jarayonda,
-      sotuv_boldi: acc.sotuv_boldi + r.sotuv_boldi,
-      bekor_boldi: acc.bekor_boldi + r.bekor_boldi,
-      jami_sotuv: acc.jami_sotuv + Number(r.jami_sotuv),
-    }),
-    { total: 0, jarayonda: 0, sotuv_boldi: 0, bekor_boldi: 0, jami_sotuv: 0 }
-  ), [convRows]);
+  // ── Drill-down plumbing ──────────────────────────────────────────
+  const isOpen = (table: string, row: string, col: string) =>
+    drill?.table === table && drill.row === row && drill.col === col;
+  const rowOpen = (table: string, row: string) => drill?.table === table && drill.row === row;
+  const toggle = (d: Drill) => setDrill(cur =>
+    cur && cur.table === d.table && cur.row === d.row && cur.col === d.col ? null : d);
+  const drillCell = (colSpan: number) => drill && (
+    <DealsDrilldown
+      filter={{ ...base, ...drill.filter } as PipelineDealsFilter}
+      colSpan={colSpan}
+      title={drill.title}
+      showReason={showReason}
+      onClose={() => setDrill(null)}
+    />
+  );
 
-  // ── Source stats derived data ────────────────────────────────────
-  const srcStatRows = sourceStatsQ.data ?? [];
-  const srcStatMax = useMemo(() => ({
-    umumiy:     Math.max(1, ...srcStatRows.map(r => r.umumiy)),
-    jarayonda:  Math.max(1, ...srcStatRows.map(r => r.jarayonda)),
-    bekor_boldi: Math.max(1, ...srcStatRows.map(r => r.bekor_boldi)),
-    sotuv_boldi: Math.max(1, ...srcStatRows.map(r => r.sotuv_boldi)),
-  }), [srcStatRows]);
-  const srcStatTotals = useMemo(() => srcStatRows.reduce(
-    (acc, r) => ({
-      umumiy:     acc.umumiy     + r.umumiy,
-      jarayonda:  acc.jarayonda  + r.jarayonda,
-      bekor_boldi: acc.bekor_boldi + r.bekor_boldi,
-      sotuv_boldi: acc.sotuv_boldi + r.sotuv_boldi,
-    }),
-    { umumiy: 0, jarayonda: 0, bekor_boldi: 0, sotuv_boldi: 0 }
-  ), [srcStatRows]);
+  // ── Managers (shared by the stage matrix and Sdelka va Konversiya) ──
+  const mgrRows: MgrRow[] = useMemo(() => {
+    const rows = managersQ.data?.managers ?? [];
+    const people: MgrRow[] = [];
+    const folded: PipelineManagerRow[] = [];
+    for (const m of rows) {
+      if (isRespExcluded(m.full_name)) folded.push(m);
+      else people.push({ ...m, key: String(m.responsible_id ?? "none"), ids: m.responsible_id != null ? String(m.responsible_id) : "" });
+    }
+    if (folded.length) {
+      const by_stage: Record<string, number> = {};
+      for (const m of folded) for (const [k, v] of Object.entries(m.by_stage)) by_stage[k] = (by_stage[k] ?? 0) + v;
+      const sum = (f: "total" | "in_process" | "won" | "lost") => folded.reduce((a, m) => a + m[f], 0);
+      people.push({
+        responsible_id: null, full_name: "Tizim / admin hisoblari", work_position: null, by_stage,
+        total: sum("total"), in_process: sum("in_process"), won: sum("won"), lost: sum("lost"),
+        key: "__system__", ids: folded.filter(m => m.responsible_id != null).map(m => m.responsible_id).join(","),
+        members: folded.map(m => m.full_name),
+      });
+    }
+    return people;
+  }, [managersQ.data]);
+  const matrixStages = managersQ.data?.stages ?? stages;
+  const peopleCount = mgrRows.filter(r => r.key !== "__system__").length;
 
-  // ── Responsibles table derived data ──────────────────────────────
-  const dealRespRows = (respQ.data ?? []).filter(r => !isRespExcluded(r.full_name ?? ""));
-  const dealRespMax = useMemo(() => {
-    const m: Record<string, number> = { total: 1 };
-    for (const col of DEAL_STAGE_COLS)
-      m[col.key] = Math.max(1, ...dealRespRows.map(r => (r as unknown as Record<string, number>)[col.key] ?? 0));
-    return m;
-  }, [dealRespRows]);
-  const dealRespTotals = useMemo(() => {
-    const t: Record<string, number> = { total: 0 };
-    for (const col of DEAL_STAGE_COLS) t[col.key] = 0;
-    for (const r of dealRespRows) {
-      t.total += r.total;
-      for (const col of DEAL_STAGE_COLS)
-        t[col.key] += (r as unknown as Record<string, number>)[col.key] ?? 0;
+  const colTotal = useMemo(() => {
+    const t: Record<string, number> = { total: 0, in_process: 0, won: 0, lost: 0 };
+    for (const r of mgrRows) {
+      t.total += r.total; t.in_process += r.in_process; t.won += r.won; t.lost += r.lost;
+      for (const [k, v] of Object.entries(r.by_stage)) t[`s:${k}`] = (t[`s:${k}`] ?? 0) + v;
     }
     return t;
-  }, [dealRespRows]);
+  }, [mgrRows]);
+  const colMax = useMemo(() => {
+    const m: Record<string, number> = { total: 1, in_process: 1, won: 1, lost: 1 };
+    for (const r of mgrRows) {
+      m.total = Math.max(m.total, r.total); m.in_process = Math.max(m.in_process, r.in_process);
+      m.won = Math.max(m.won, r.won); m.lost = Math.max(m.lost, r.lost);
+      for (const [k, v] of Object.entries(r.by_stage)) m[`s:${k}`] = Math.max(m[`s:${k}`] ?? 1, v);
+    }
+    return m;
+  }, [mgrRows]);
+
+  /** Name cell for a manager row (avatar + name + chevron), shared by both tables. */
+  const managerCell = (r: MgrRow, open: boolean, sticky = false) => (
+    <td style={{ ...TDa, ...(sticky ? { position: "sticky", left: 44, background: "var(--bg2)", zIndex: 2 } : {}) }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <AvatarCircle name={r.full_name || "?"} size={32} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: open ? "#2196F3" : "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {r.full_name}
+          </div>
+          {r.members && (
+            <div style={{ fontSize: 10.5, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.members.join(", ")}>
+              {r.members.join(", ")}
+            </div>
+          )}
+        </div>
+        {r.ids && <ChevronDown size={12} style={{ color: "var(--text3)", marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />}
+      </div>
+    </td>
+  );
+
+  // ── Sources / reasons ────────────────────────────────────────────
+  const srcRows = sourcesQ.data?.sources ?? [];
+  const srcTotal = srcRows.reduce((a, r) => ({ total: a.total + r.total, in_process: a.in_process + r.in_process, won: a.won + r.won, lost: a.lost + r.lost }), { total: 0, in_process: 0, won: 0, lost: 0 });
+  const srcMax = {
+    total: Math.max(1, ...srcRows.map(r => r.total)), in_process: Math.max(1, ...srcRows.map(r => r.in_process)),
+    won: Math.max(1, ...srcRows.map(r => r.won)), lost: Math.max(1, ...srcRows.map(r => r.lost)),
+  };
+  const reasons = reasonsQ.data;
+  const reasonItems = reasons?.available ? reasons.items : [];
+  const reasonTotal = reasonItems.reduce((a, r) => a + r.total, 0);
+  const reasonMax = Math.max(1, ...reasonItems.map(r => r.total));
+
+  // ── KPI cards ────────────────────────────────────────────────────
+  const cards = [
+    { id: "total", label: "Jami Sdelkalar", value: kpi?.total ?? 0, sub: `${pipelineLabel} · barcha bosqichlar`,
+      gradient: "linear-gradient(135deg,#0d1b4a,#1a3a7a)", lightGradient: "linear-gradient(135deg,rgba(33,150,243,0.07),rgba(59,130,246,0.12))",
+      icon: <BarChart2 size={16} />, drill: {} },
+    { id: "process", label: "Yangi Sdelkalar", value: kpi?.in_process ?? 0, sub: "Jarayonda · yutilgan va yo'qotilganlarsiz",
+      gradient: "linear-gradient(135deg,#1d4ed8,#3b82f6)", lightGradient: "linear-gradient(135deg,rgba(59,130,246,0.07),rgba(99,157,246,0.12))",
+      icon: <TrendingUp size={16} />, drill: { kind: "process" as const } },
+    ...STAGE_CARDS[pipeline].map((id, i) => {
+      const st = stageById[id];
+      return {
+        id, label: st?.name ?? id, value: kpi?.by_stage[id] ?? 0,
+        sub: kpi && kpi.total > 0 ? `Jamidan ${pct(kpi.by_stage[id] ?? 0, kpi.total).toFixed(1)}%` : "Bitrix bosqichi",
+        ...CARD_STYLES[i % CARD_STYLES.length], drill: { stage: id },
+      };
+    }),
+  ];
+
+  const anyError = kpiQ.error ?? managersQ.error ?? sourcesQ.error ?? reasonsQ.error;
 
   return (
     <>
       <Topbar
         title="Sdelkalar"
-        sub={`${filter.from} → ${filter.to}`}
+        sub={`${pipelineLabel} · ${filter.from} → ${filter.to}`}
         actions={
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {/* Mode Switcher */}
-            <div style={{
-              display: "flex", background: "var(--bg3)", border: "1px solid var(--border)",
-              borderRadius: 8, padding: 3, gap: 2
-            }}>
-              <button
-                onClick={() => { clearFilter(); setMode('default'); }}
-                style={{
-                  border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
-                  padding: "5px 12px", cursor: "pointer",
-                  background: mode === 'default' ? "#3b82f6" : "transparent",
-                  color: mode === 'default' ? "#fff" : "var(--text2)",
-                  transition: "all 0.2s"
-                }}
-              >
-                Barcha sdelkalar
-              </button>
-              <button
-                onClick={() => { clearFilter(); setMode('bitrix24'); }}
-                style={{
-                  border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
-                  padding: "5px 12px", cursor: "pointer",
-                  background: mode === 'bitrix24' ? "#22c55e" : "transparent",
-                  color: mode === 'bitrix24' ? "#fff" : "var(--text2)",
-                  transition: "all 0.2s"
-                }}
-              >
-                Bitrix24
-              </button>
-              <button
-                onClick={() => { clearFilter(); setMode('amocrm'); }}
-                style={{
-                  border: "none", borderRadius: 6, fontSize: 11.5, fontWeight: 600,
-                  padding: "5px 12px", cursor: "pointer",
-                  background: mode === 'amocrm' ? "#D97706" : "transparent",
-                  color: mode === 'amocrm' ? "#fff" : "var(--text2)",
-                  transition: "all 0.2s"
-                }}
-              >
-                AmoCRM
-              </button>
-            </div>
-
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <Segmented
+              value={mode}
+              onChange={(m) => { clearFilter(); setMode(m); }}
+              options={[
+                { value: 'default',  label: "Barcha sdelkalar", color: "#3b82f6" },
+                { value: 'bitrix24', label: "Bitrix24",         color: "#22c55e" },
+                { value: 'amocrm',   label: "AmoCRM",           color: "#D97706" },
+              ]}
+            />
+            <Segmented
+              value={pipeline}
+              onChange={switchPipeline}
+              options={PIPELINES.map(p => ({ value: p.key, label: p.label, color: "#6366f1" }))}
+            />
           </div>
         }
       />
@@ -578,11 +655,12 @@ export default function SdelkalarPage() {
             <span style={{ fontSize: 12.5, color: "var(--text3)", flex: 1 }}>
               {`Filtr: ${filter.from} → ${filter.to}${activeFilterCount > 0 ? ` · ${activeFilterCount} ta qo'shimcha` : ""}`}
             </span>
+            <span style={{ background: "rgba(99,102,241,0.15)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>{pipelineLabel}</span>
             {mode === 'bitrix24' && (
-              <span style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700, marginRight: 6 }}>Bitrix24</span>
+              <span style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>Bitrix24</span>
             )}
             {mode === 'amocrm' && (
-              <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700, marginRight: 6 }}>AmoCRM</span>
+              <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>AmoCRM</span>
             )}
             {activeFilterCount > 0 && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#3b82f6", color: "#fff" }}>{activeFilterCount} filtr</span>
@@ -629,9 +707,15 @@ export default function SdelkalarPage() {
                 <SdelkaMultiSelect label="Mas'ul xodim" options={respOptions} values={filter.responsible_ids}
                   onChange={v => setFilter(s => ({ ...s, responsible_ids: v }))} loading={filterQ.isLoading} />
                 <SdelkaMultiSelect label="Bosqich" options={stageOptions} values={filter.stage_ids}
-                  onChange={v => setFilter(s => ({ ...s, stage_ids: v }))} loading={filterQ.isLoading} />
-                <SdelkaMultiSelect label="Manba" options={srcOptions} values={filter.sources}
-                  onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
+                  onChange={v => setFilter(s => ({ ...s, stage_ids: v }))} loading={kpiQ.isLoading} />
+                {mode !== 'amocrm' && (
+                  <SdelkaMultiSelect label="Manba (Источник)" options={srcOptions} values={filter.sources}
+                    onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
+                )}
+                {pipeline === "uc" && (
+                  <SdelkaMultiSelect label="Стадия (для отчетов)" options={reportStageOptions} values={filter.report_stages}
+                    onChange={v => setFilter(s => ({ ...s, report_stages: v }))} loading={reportStagesQ.isLoading} />
+                )}
               </div>
 
               {activeFilterCount > 0 && (
@@ -643,465 +727,324 @@ export default function SdelkalarPage() {
           )}
         </div>
 
-        {/* ── KPI Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 12 }}>
-          <KpiCard label="Jami Sdelkalar" value={fmtNum(kpi?.total ?? 0)}
-            sub="Barcha kelishuvlar" gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)"
-            lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(59,130,246,0.12))"
-            icon={<BarChart2 size={16} />} />
-          <KpiCard label="Yangi Sdelkalar" value={fmtNum(kpi?.yangi ?? 0)}
-            sub="Jarayondagi" gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"
-            lightGradient="linear-gradient(135deg,rgba(59,130,246,0.07),rgba(99,157,246,0.12))"
-            icon={<TrendingUp size={16} />} />
-          <KpiCard label="Sotuv bo'ldi" value={fmtNum(kpi?.sotuv_boldi ?? 0)}
-            sub="Muvaffaqiyatli" gradient="linear-gradient(135deg,#065f46,#10b981)"
-            lightGradient="linear-gradient(135deg,rgba(4,150,107,0.07),rgba(16,185,129,0.12))"
-            icon={<CheckCircle size={16} />} />
-          <KpiCard label="O'rtacha Chek" value={`$${fmtNum(Math.round(kpi?.ortacha_chek ?? 0))}`}
-            sub="Won bo'yicha o'rtacha" gradient="linear-gradient(135deg,#92400e,#f59e0b)"
-            lightGradient="linear-gradient(135deg,rgba(146,64,14,0.07),rgba(245,158,11,0.12))"
-            icon={<ShoppingCart size={16} />} />
-          <KpiCard label="Konversiya" value={`${kpi?.konversiya ?? 0}%`}
-            sub="Won / Jami" gradient="linear-gradient(135deg,#5b21b6,#8b5cf6)"
-            lightGradient="linear-gradient(135deg,rgba(91,33,182,0.07),rgba(139,92,246,0.12))"
-            icon={<Percent size={16} />} />
+        {/* ── KPI Cards (click → deals) ── */}
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 12, marginBottom: 12 }}>
+          {cards.map(c => (
+            <KpiCard key={c.id} label={c.label} value={fmtNum(c.value)} sub={c.sub}
+              gradient={c.gradient} lightGradient={c.lightGradient} icon={c.icon}
+              active={isOpen("kpi", "cards", c.id)}
+              // Only with deals behind it: the card's stage replaces the Bosqich filter in the
+              // drill, so a 0 card (stage outside that filter) would list unrelated deals.
+              onClick={c.value > 0 ? () => toggle({ table: "kpi", row: "cards", col: c.id, title: `${pipelineLabel} · ${c.label}`, filter: c.drill }) : undefined} />
+          ))}
         </div>
-
-        {/* ── To'lov kartalari ── */}
-        {(() => {
-          const kutilmoqda = kpi?.jami_sotuv ?? 0;
-          const tolangan   = kpi?.tolangan   ?? 0;
-          const qoldiq     = Math.max(0, kutilmoqda - tolangan);
-          const pct = kutilmoqda > 0 ? Math.round((tolangan / kutilmoqda) * 100) : 0;
-          return (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
-              <KpiCard label="Shartnoma summasi" value={`$${fmtNum(Math.round(kutilmoqda))}`}
-                sub="Won sdelkalar jami summasi" gradient="linear-gradient(135deg,#0f3460,#1a6fa8)"
-                lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.14))"
-                icon={<DollarSign size={16} />} />
-              <KpiCard label="To'langan" value={`$${fmtNum(Math.round(tolangan))}`}
-                sub={`${pct}% to'landi`} gradient="linear-gradient(135deg,#064e3b,#059669)"
-                lightGradient="linear-gradient(135deg,rgba(5,150,105,0.07),rgba(5,150,105,0.14))"
-                icon={<CheckCircle size={16} />} />
-              <KpiCard label="Kutilmoqda (qoldiq)" value={`$${fmtNum(Math.round(qoldiq))}`}
-                sub="Hali to'lanmagan" gradient="linear-gradient(135deg,#7c2d12,#dc2626)"
-                lightGradient="linear-gradient(135deg,rgba(220,38,38,0.07),rgba(220,38,38,0.14))"
-                icon={<DollarSign size={16} />} />
-            </div>
-          );
-        })()}
+        {rowOpen("kpi", "cards") && (
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody><tr>{drillCell(1)}</tr></tbody></table>
+          </div>
+        )}
+        <div style={{ marginBottom: 16 }} />
 
         {/* ══════════════════════════════════════════════════════════
-            Sdelka va Konversiya table
+            Menejerlar × bosqichlar (live Bitrix stages)
         ══════════════════════════════════════════════════════════ */}
-        <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-          <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-            <CheckCircle size={16} style={{ color: "#4CAF50" }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Sdelka va Konversiya</span>
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>{convRows.length} ta menejer</span>
-          </div>
-
-          {convQ.isLoading ? (
-            <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-          ) : (
+        <Section
+          icon={<Layers size={16} style={{ color: "#6366f1" }} />}
+          title="Bosqichlar bo'yicha menejerlar"
+          sub={`${pipelineLabel} · ${peopleCount} ta menejer · ${matrixStages.length} ta bosqich · raqamni bosing — sdelkalar`}>
+          {managersQ.isLoading ? <Loading /> : mgrRows.length === 0 ? <Empty /> : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <colgroup>
-                  <col style={{ width: 44 }} />
-                  <col style={{ width: 200 }} />
-                  <col />
-                  <col />
-                  <col />
-                  <col />
-                  <col />
-                  <col style={{ width: 84 }} />
-                </colgroup>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...THc("#555", 44), position: "sticky", left: 0, zIndex: 3 }}>#</th>
+                    <th style={{ ...THc("#9E9E9E", 210), position: "sticky", left: 44, zIndex: 3 }}>Menejer</th>
+                    <th style={THc("#2196F3", 96)}>Jami</th>
+                    {matrixStages.map((s, i) => (
+                      <th key={s.id} style={{ ...THc(stageColor(s, i), 110), textTransform: "none", letterSpacing: 0 }} title={s.id}>
+                        {s.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {mgrRows.map((r, i) => {
+                    const open = rowOpen("matrix", r.key);
+                    const bg = open ? "rgba(99,102,241,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)";
+                    const drillFor = (col: string, title: string, f: Partial<PipelineDealsFilter>) =>
+                      r.ids ? () => toggle({ table: "matrix", row: r.key, col, title: `${r.full_name} · ${title}`, filter: { responsible_id: r.ids, ...f } }) : undefined;
+                    return (
+                      <Fragment key={r.key}>
+                        <tr style={{ background: bg, cursor: r.ids ? "pointer" : "default" }}
+                          onClick={drillFor("all", "barcha sdelkalar", {})}>
+                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600, position: "sticky", left: 0, background: "var(--bg2)", zIndex: 2 }}>
+                            {String(i + 1).padStart(2, "0")}
+                          </td>
+                          {managerCell(r, open, true)}
+                          <CountCell value={r.total} max={colMax.total} color="#2196F3" active={isOpen("matrix", r.key, "all")}
+                            onClick={drillFor("all", "barcha sdelkalar", {})} />
+                          {matrixStages.map((s, si) => (
+                            <CountCell key={s.id} value={r.by_stage[s.id] ?? 0} max={colMax[`s:${s.id}`] ?? 1} color={stageColor(s, si)}
+                              active={isOpen("matrix", r.key, s.id)} onClick={drillFor(s.id, s.name, { stage: s.id })} />
+                          ))}
+                        </tr>
+                        {open && <tr>{drillCell(3 + matrixStages.length)}</tr>}
+                      </Fragment>
+                    );
+                  })}
+                  <tr style={{ background: "var(--bg3)" }}>
+                    <td style={{ ...TDa, position: "sticky", left: 0, background: "var(--bg3)", zIndex: 2 }} />
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", position: "sticky", left: 44, background: "var(--bg3)", zIndex: 2 }}>JAMI</td>
+                    <CountCell total value={colTotal.total} max={1} color="#2196F3" active={isOpen("matrix", "__total__", "all")}
+                      onClick={() => toggle({ table: "matrix", row: "__total__", col: "all", title: `${pipelineLabel} · barcha sdelkalar`, filter: {} })} />
+                    {matrixStages.map((s, si) => (
+                      <CountCell key={s.id} total value={colTotal[`s:${s.id}`] ?? 0} max={1} color={stageColor(s, si)}
+                        active={isOpen("matrix", "__total__", s.id)}
+                        onClick={() => toggle({ table: "matrix", row: "__total__", col: s.id, title: `${pipelineLabel} · ${s.name}`, filter: { stage: s.id } })} />
+                    ))}
+                  </tr>
+                  {rowOpen("matrix", "__total__") && <tr>{drillCell(3 + matrixStages.length)}</tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+
+        {/* ══════════════════════════════════════════════════════════
+            Sdelka va Konversiya
+        ══════════════════════════════════════════════════════════ */}
+        <Section
+          icon={<CheckCircle size={16} style={{ color: "#4CAF50" }} />}
+          title="Sdelka va Konversiya"
+          sub={`${peopleCount} ta menejer · konversiya = ${wonLabel} / Jami`}>
+          {managersQ.isLoading ? <Loading /> : mgrRows.length === 0 ? <Empty /> : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
                     <th style={THc("#555", 44)}>#</th>
-                    <th style={THc("#9E9E9E", 200)}>Menejer</th>
-                    <th style={THc("#9E9E9E", 110)}>Rol</th>
+                    <th style={THc("#9E9E9E", 210)}>Menejer</th>
+                    <th style={THc("#9E9E9E", 100)}>Rol</th>
                     <th style={THc("#2196F3")}>Jami Sdelka</th>
                     <th style={THc("#FF9800")}>Jarayonda</th>
-                    <th style={THc("#4CAF50")}>Sotuv bo'ldi</th>
-                    <th style={THc("#F44336")}>Bekor bo'ldi</th>
-                    <th style={THc("#00BCD4")}>Jami Sotuv ($)</th>
+                    <th style={{ ...THc("#4CAF50"), textTransform: "none" }}>{wonLabel}</th>
+                    <th style={{ ...THc("#F44336"), textTransform: "none" }}>{lostLabel}</th>
                     <th style={{ ...THc("#4CAF50", 84), textAlign: "center" }}>Konversiya</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {convRows.map((r, i) => {
-                    const konv = r.total > 0 ? (r.sotuv_boldi / r.total) * 100 : 0;
-                    const opKey = String(r.responsible_id);
-                    const isExp = expandedOp === opKey;
+                  {mgrRows.map((r, i) => {
+                    const open = rowOpen("conv", r.key);
+                    const bg = open ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)";
+                    const drillFor = (col: string, title: string, f: Partial<PipelineDealsFilter>) =>
+                      r.ids ? () => toggle({ table: "conv", row: r.key, col, title: `${r.full_name} · ${title}`, filter: { responsible_id: r.ids, ...f } }) : undefined;
                     return (
-                      <>
-                      <tr key={r.responsible_id}
-                        style={{ background: isExp ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = isExp ? "var(--bg3)" : i % 2 === 0 ? "transparent" : "var(--bg)")}
-                        onClick={() => setExpandedOp(isExp ? null : opKey)}>
-                        <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>
-                          {String(i + 1).padStart(2, "0")}
-                        </td>
-                        <td style={TDa}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <AvatarCircle name={r.full_name || "?"} size={34} />
-                            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {r.full_name}
-                            </span>
-                            <ChevronDown size={13} style={{ color: "var(--text3)", marginLeft: "auto", transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
-                          </div>
-                        </td>
-                        <td style={TDa}><RoleBadge role={r.work_position} /></td>
-                        <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.total)}</span>
-                          <MiniBar value={r.total} max={convMax.total} color="#2196F3" />
-                        </td>
-                        <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.jarayonda)}</span>
-                          <MiniBar value={r.jarayonda} max={convMax.jarayonda} color="#FF9800" />
-                        </td>
-                        <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sotuv_boldi)}</span>
-                          <MiniBar value={r.sotuv_boldi} max={convMax.sotuv_boldi} color="#4CAF50" />
-                        </td>
-                        <td style={TDa}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span>
-                          <MiniBar value={r.bekor_boldi} max={convMax.bekor_boldi} color="#F44336" />
-                        </td>
-                        <td style={TDa}>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: "#00BCD4" }}>{fmtMoney(Number(r.jami_sotuv))}</span>
-                          <MiniBar value={Number(r.jami_sotuv)} max={convMax.jami_sotuv} color="#00BCD4" />
-                        </td>
-                        <td style={{ ...TDa, textAlign: "center" }}>
-                          <ConversionDonut pct={konv} size={38} />
-                        </td>
-                      </tr>
-                      {isExp && (
-                        <tr key={`${r.responsible_id}-deals`} style={{ background: "var(--bg2, var(--bg))" }}>
-                          <td style={{ padding: 0 }} />
-                          <OperatorDealsDropdown
-                            responsibleId={opKey}
-                            from={apiFrom}
-                            to={apiTo}
-                            mode={mode}
-                          />
+                      <Fragment key={r.key}>
+                        <tr style={{ background: bg, cursor: r.ids ? "pointer" : "default" }} onClick={drillFor("all", "barcha sdelkalar", {})}>
+                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
+                          {managerCell(r, open)}
+                          <td style={TDa}><RoleBadge role={r.work_position} /></td>
+                          <CountCell value={r.total} max={colMax.total} color="#2196F3" active={isOpen("conv", r.key, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
+                          <CountCell value={r.in_process} max={colMax.in_process} color="#FF9800" active={isOpen("conv", r.key, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
+                          <CountCell value={r.won} max={colMax.won} color="#4CAF50" active={isOpen("conv", r.key, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
+                          <CountCell value={r.lost} max={colMax.lost} color="#F44336" active={isOpen("conv", r.key, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
+                          <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(r.won, r.total)} size={38} /></td>
                         </tr>
-                      )}
-                      </>
+                        {open && <tr>{drillCell(8)}</tr>}
+                      </Fragment>
                     );
                   })}
-
-                  {/* JAMI row */}
-                  <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                    <td style={{ ...TDa, color: "#666" }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      JAMI
-                    </td>
+                  <tr style={{ background: "var(--bg3)" }}>
                     <td style={TDa} />
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.total)}</span>
-                      <MiniBar value={1} max={1} color="#2196F3" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.jarayonda)}</span>
-                      <MiniBar value={1} max={1} color="#FF9800" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.sotuv_boldi)}</span>
-                      <MiniBar value={1} max={1} color="#4CAF50" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(convTotals.bekor_boldi)}</span>
-                      <MiniBar value={1} max={1} color="#F44336" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: "#00BCD4" }}>{fmtMoney(convTotals.jami_sotuv)}</span>
-                      <MiniBar value={1} max={1} color="#00BCD4" />
-                    </td>
-                    <td style={{ ...TDa, textAlign: "center" }}>
-                      <ConversionDonut pct={convTotals.total > 0 ? (convTotals.sotuv_boldi / convTotals.total) * 100 : 0} size={38} />
-                    </td>
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+                    <td style={TDa} />
+                    {([["all", "total", "#2196F3", "barcha sdelkalar", {}],
+                       ["process", "in_process", "#FF9800", "jarayonda", { kind: "process" }],
+                       ["won", "won", "#4CAF50", wonLabel, { kind: "won" }],
+                       ["lost", "lost", "#F44336", lostLabel, { kind: "lost" }]] as const).map(([col, key, color, title, f]) => (
+                      <CountCell key={col} total value={colTotal[key]} max={1} color={color} active={isOpen("conv", "__total__", col)}
+                        onClick={() => toggle({ table: "conv", row: "__total__", col, title: `${pipelineLabel} · ${title}`, filter: f })} />
+                    ))}
+                    <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(colTotal.won, colTotal.total)} size={38} /></td>
                   </tr>
+                  {rowOpen("conv", "__total__") && <tr>{drillCell(8)}</tr>}
                 </tbody>
               </table>
             </div>
           )}
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
-            Sdelka mas'ullar kesimida table
-        ══════════════════════════════════════════════════════════ */}
-        <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
-          <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-            <Users size={16} style={{ color: "var(--text3)" }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Sdelka mas'ullar kesimida</span>
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>{dealRespRows.length} ta xodim</span>
-          </div>
-
-          {respQ.isLoading ? (
-            <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...THc("#555", 44), position: "sticky", left: 0, zIndex: 6 }}>#</th>
-                    <th style={{ ...THc("#9E9E9E", 180), position: "sticky", left: 44, zIndex: 6 }}>Mas'ul</th>
-                    {DEAL_STAGE_COLS.map(col => (
-                      <th key={col.key} style={THc(col.color)}>{col.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {dealRespRows.map((u, i) => {
-                    const rKey = String(u.responsible_id);
-                    const rExp = expandedResp === rKey;
-                    return (<>
-                    <tr key={u.responsible_id}
-                      style={{ background: rExp ? "rgba(33,150,243,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                      onClick={() => setExpandedResp(rExp ? null : rKey)}
-                      onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = rExp ? "rgba(33,150,243,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                      <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600, width: 44, position: "sticky", left: 0, background: "var(--bg2)" }}>
-                        {String(i + 1).padStart(2, "0")}
-                      </td>
-                      <td style={{ ...TDa, width: 180, position: "sticky", left: 44, background: "var(--bg2)", zIndex: 2 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <AvatarCircle name={u.full_name || "?"} size={32} />
-                          <span style={{ fontSize: 13, color: rExp ? "#2196F3" : "var(--text)", fontWeight: 500, whiteSpace: "nowrap" }}>
-                            {u.full_name}
-                          </span>
-                          <ChevronDown size={12} style={{ color: "var(--text3)", transform: rExp ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
-                        </div>
-                      </td>
-                      {DEAL_STAGE_COLS.map(col => {
-                        const cnt = (u as unknown as Record<string, number>)[col.key] ?? 0;
-                        const max = dealRespMax[col.key] ?? 1;
-                        return (
-                          <td key={col.key} style={{ ...TDa, minWidth: 120 }}>
-                            {cnt > 0 ? (
-                              <>
-                                <span style={{ fontSize: 13, color: "var(--text)" }}>{fmtNum(cnt)}</span>
-                                <MiniBar value={cnt} max={max} color={col.color} height={3} />
-                              </>
-                            ) : (
-                              <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    {rExp && (
-                      <tr key={`${rKey}-expand`} style={{ background: "var(--bg2)" }}>
-                        <DealsInlinePanel
-                          filter={{ from: apiFrom, to: apiTo, responsible_id: rKey, mode }}
-                          colSpan={2 + DEAL_STAGE_COLS.length}
-                        />
-                      </tr>
-                    )}
-                    </>);
-                  })}
-
-                  {/* JAMI row */}
-                  <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                    <td style={{ ...TDa, position: "sticky", left: 0, background: "var(--bg3)" }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", position: "sticky", left: 44, background: "var(--bg3)", zIndex: 2 }}>
-                      JAMI
-                    </td>
-                    {DEAL_STAGE_COLS.map(col => (
-                      <td key={col.key} style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-                          {fmtNum(dealRespTotals[col.key] ?? 0)}
-                        </span>
-                        <MiniBar value={1} max={1} color={col.color} />
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        </Section>
 
         {/* ══════════════════════════════════════════════════════════
             Bekor bo'lish sabablari
         ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          const cancelItems = (cancelQ.data?.items ?? []).map((r) => ({
-            ...r,
-            total: parseInt(String(r.total), 10) || 0,
-          }));
-          const cancelMax = Math.max(1, ...cancelItems.map((r) => r.total));
-          const cancelTotal = cancelItems.reduce((s, r) => s + r.total, 0);
-
-          return (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", marginBottom: 20 }}>
-              <div style={{ background: "var(--bg2)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
-                <div style={{
-                  padding: "14px 20px 12px",
-                  borderBottom: "1px solid var(--border)",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Bekor bo'lish sabablari</span>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: "#FFC107" }}>{fmtNum(cancelTotal)}</span>
-                </div>
-                {cancelQ.isLoading ? (
-                  <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-                ) : cancelItems.length === 0 ? (
-                  <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-                ) : (
-                  <div style={{ padding: "6px 0 10px" }}>
-                    {cancelItems.map((r, i) => (
-                      <div key={i} style={{ padding: "7px 20px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                          <span style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
-                            {r.reason}
-                          </span>
-                          <a
-                            href={`${portal}/crm/deal/list/?preset_filter=Y&find[STAGE_ID]=LOSE`}
-                            target="_blank" rel="noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            style={{ fontSize: 13, fontWeight: 700, color: "#FFC107", flexShrink: 0, marginLeft: 8, textDecoration: "none" }}
-                            title="Bitrix24 da ko'rish">
-                            {fmtNum(r.total)}
-                          </a>
-                        </div>
-                        <div style={{ height: 4, borderRadius: 2, background: "var(--bg4)", overflow: "hidden" }}>
-                          <div style={{
-                            height: "100%",
-                            width: `${(r.total / cancelMax) * 100}%`,
-                            background: "#FFC107",
-                            borderRadius: 2,
-                            transition: "width 0.3s",
-                          }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+        {pipeline === "uc" ? (
+          <Section
+            icon={<Info size={16} style={{ color: "#FFC107" }} />}
+            title="Bekor bo'lish sabablari"
+            sub={`Причина maydoni · ${reasonScope === "lost" ? `«${lostLabel}» bosqichidagi sdelkalar` : "barcha bosqichlar"}`}
+            right={
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <Segmented value={reasonScope} onChange={(s) => { setReasonScope(s); setDrill(d => d?.table === "reasons" ? null : d); }}
+                  options={[
+                    { value: "lost", label: "Bekor bo'lganlar", color: "#F44336" },
+                    { value: "all",  label: "Barcha sdelkalar", color: "#6366f1" },
+                  ]} />
+                <span style={{ fontSize: 20, fontWeight: 800, color: "#FFC107" }}>{fmtNum(reasonTotal)}</span>
               </div>
-            </div>
-          );
-        })()}
-
-
-        {/* ══════════════════════════════════════════════════════════
-            Manba bo'yicha table
-        ══════════════════════════════════════════════════════════ */}
-        <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
-          <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-            <BarChart2 size={16} style={{ color: "#9C27B0" }} />
-            <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Manba bo'yicha</span>
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>{srcStatRows.length} ta manba</span>
-          </div>
-
-          {sourceStatsQ.isLoading ? (
-            <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <colgroup>
-                  <col style={{ width: 44 }} />
-                  <col style={{ minWidth: 200 }} />
-                  <col />
-                  <col />
-                  <col />
-                  <col />
-                </colgroup>
+            }>
+            {reasonsQ.isLoading ? <Loading /> : reasonItems.length === 0 ? <Empty /> : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
                     <th style={THc("#555", 44)}>#</th>
-                    <th style={THc("#9E9E9E", 200)}>Manba</th>
-                    <th style={THc("#2196F3")}>Umumiy</th>
-                    <th style={THc("#FF9800")}>Jarayonda</th>
-                    <th style={THc("#F44336")}>Bekor bo'ldi</th>
-                    <th style={THc("#4CAF50")}>Sotuv bo'ldi</th>
+                    <th style={{ ...THc("#9E9E9E", 240), textTransform: "none" }}>Причина</th>
+                    <th style={THc("#FFC107")}>Soni</th>
+                    <th style={THc("#9E9E9E", 90)}>Ulushi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {srcStatRows.map((r, i) => {
-                    const sKey = String(r.source_id);
-                    const sExp = expandedSource === sKey;
-                    return (<>
-                    <tr key={r.source_id}
-                      style={{ background: sExp ? "rgba(156,39,176,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                      onClick={() => setExpandedSource(sExp ? null : sKey)}
-                      onMouseEnter={e => (e.currentTarget.style.background = "var(--bg3)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = sExp ? "rgba(156,39,176,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
-                      <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>
-                        {String(i + 1).padStart(2, "0")}
-                      </td>
-                      <td style={{ ...TDa, fontSize: 13, color: sExp ? "#9C27B0" : "var(--text)", fontWeight: 500 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          {r.source_name}
-                          <ChevronDown size={12} style={{ color: "var(--text3)", transform: sExp ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
-                        </div>
-                      </td>
-                      <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy)}</span>
-                        <MiniBar value={r.umumiy} max={srcStatMax.umumiy} color="#2196F3" />
-                      </td>
-                      <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.jarayonda)}</span>
-                        <MiniBar value={r.jarayonda} max={srcStatMax.jarayonda} color="#FF9800" />
-                      </td>
-                      <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span>
-                        <MiniBar value={r.bekor_boldi} max={srcStatMax.bekor_boldi} color="#F44336" />
-                      </td>
-                      <td style={TDa}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sotuv_boldi)}</span>
-                        <MiniBar value={r.sotuv_boldi} max={srcStatMax.sotuv_boldi} color="#4CAF50" />
-                      </td>
-                    </tr>
-                    {sExp && (
-                      <tr key={`${sKey}-expand`} style={{ background: "var(--bg2)" }}>
-                        <DealsInlinePanel
-                          filter={{ from: apiFrom, to: apiTo, source: sKey, mode }}
-                          colSpan={6}
-                        />
-                      </tr>
-                    )}
-                    </>);
+                  {reasonItems.map((r, i) => {
+                    const open = rowOpen("reasons", r.reason_id);
+                    const go = () => toggle({ table: "reasons", row: r.reason_id, col: "n", title: `Причина · ${r.reason}`, filter: { reason: r.reason_id, reason_scope: reasonScope } });
+                    return (
+                      <Fragment key={r.reason_id}>
+                        <tr onClick={go} style={{ cursor: "pointer", background: open ? "rgba(255,193,7,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)" }}>
+                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
+                          <td style={{ ...TDa, fontSize: 13, color: r.reason_id === NONE_KEY ? "var(--text3)" : "var(--text)", fontStyle: r.reason_id === NONE_KEY ? "italic" : "normal" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {r.reason}
+                              <ChevronDown size={12} style={{ color: "var(--text3)", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+                            </div>
+                          </td>
+                          <CountCell value={r.total} max={reasonMax} color="#FFC107" active={open} onClick={go} />
+                          <td style={{ ...TDa, fontSize: 13, color: "var(--text2)" }}>{pct(r.total, reasonTotal).toFixed(1)}%</td>
+                        </tr>
+                        {open && <tr>{drillCell(4)}</tr>}
+                      </Fragment>
+                    );
                   })}
+                </tbody>
+              </table>
+            )}
+          </Section>
+        ) : (
+          <Section
+            icon={<Info size={16} style={{ color: "#FFC107" }} />}
+            title="Bekor bo'lish sabablari"
+            sub={pipelineLabel}>
+            <div style={{ padding: "16px 20px", display: "flex", gap: 12, alignItems: "flex-start", background: "rgba(255,193,7,0.06)", borderBottom: "1px solid var(--border)" }}>
+              <Info size={18} style={{ color: "#FFC107", flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.55 }}>
+                <b style={{ color: "var(--text)" }}>«{pipelineLabel}» voronkasida bekor bo'lish sababi maydoni yo'q.</b><br />
+                Bitrix24'da bu voronka sdelkalari uchun «Bekor bo'lish sababi» ro'yxat maydoni hali yaratilmagan, shuning uchun
+                sabablar bo'yicha taqsimotni ko'rsatib bo'lmaydi. IT mutaxassisimizdan sdelka kartasiga shu maydonni qo'shishni
+                va «{lostLabel}» bosqichiga o'tkazishda uni majburiy qilishni so'rang — maydon qo'shilgach, bu jadval
+                «Учебный центр»dagi kabi avtomatik to'ladi.
+              </div>
+            </div>
+            {lostStages.length > 0 && (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={THc("#555", 44)}>#</th>
+                    <th style={{ ...THc("#9E9E9E", 240), textTransform: "none" }}>Yo'qotilgan bosqich</th>
+                    <th style={THc("#F44336")}>Soni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lostStages.map((s, i) => {
+                    const n = kpi?.by_stage[s.id] ?? 0;
+                    const go = () => toggle({ table: "reasons", row: s.id, col: "n", title: `${pipelineLabel} · ${s.name}`, filter: { stage: s.id } });
+                    return (
+                      <Fragment key={s.id}>
+                        <tr onClick={n > 0 ? go : undefined} style={{ cursor: n > 0 ? "pointer" : "default", background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
+                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
+                          <td style={{ ...TDa, fontSize: 13, color: "var(--text)" }}>{s.name}</td>
+                          <CountCell value={n} max={Math.max(1, ...lostStages.map(x => kpi?.by_stage[x.id] ?? 0))} color="#F44336" active={rowOpen("reasons", s.id)} onClick={go} />
+                        </tr>
+                        {rowOpen("reasons", s.id) && <tr>{drillCell(3)}</tr>}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </Section>
+        )}
 
-                  {/* JAMI row */}
-                  <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                    <td style={{ ...TDa, color: "#666" }} />
-                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      JAMI
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.umumiy)}</span>
-                      <MiniBar value={1} max={1} color="#2196F3" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.jarayonda)}</span>
-                      <MiniBar value={1} max={1} color="#FF9800" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.bekor_boldi)}</span>
-                      <MiniBar value={1} max={1} color="#F44336" />
-                    </td>
-                    <td style={TDa}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcStatTotals.sotuv_boldi)}</span>
-                      <MiniBar value={1} max={1} color="#4CAF50" />
-                    </td>
+        {/* ══════════════════════════════════════════════════════════
+            Manba bo'yicha (Источник)
+        ══════════════════════════════════════════════════════════ */}
+        <Section
+          icon={<Users size={16} style={{ color: "#9C27B0" }} />}
+          title="Manba bo'yicha"
+          sub={`Bitrix «Источник» (SOURCE_ID) · ${srcRows.length} ta manba`}>
+          {sourcesQ.isLoading ? <Loading /> : srcRows.length === 0 ? <Empty /> : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={THc("#555", 44)}>#</th>
+                    <th style={THc("#9E9E9E", 220)}>Manba</th>
+                    <th style={THc("#2196F3")}>Umumiy</th>
+                    <th style={THc("#FF9800")}>Jarayonda</th>
+                    <th style={{ ...THc("#4CAF50"), textTransform: "none" }}>{wonLabel}</th>
+                    <th style={{ ...THc("#F44336"), textTransform: "none" }}>{lostLabel}</th>
+                    <th style={{ ...THc("#4CAF50", 84), textAlign: "center" }}>Konversiya</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {srcRows.map((r, i) => {
+                    const open = rowOpen("src", r.source_id);
+                    const drillFor = (col: string, title: string, f: Partial<PipelineDealsFilter>) =>
+                      () => toggle({ table: "src", row: r.source_id, col, title: `${r.source_name} · ${title}`, filter: { source: r.source_id, ...f } });
+                    return (
+                      <Fragment key={r.source_id}>
+                        <tr style={{ cursor: "pointer", background: open ? "rgba(156,39,176,0.06)" : i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                          onClick={drillFor("all", "barcha sdelkalar", {})}>
+                          <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
+                          <td style={{ ...TDa, fontSize: 13, color: open ? "#9C27B0" : "var(--text)", fontWeight: 500 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontStyle: r.source_id === NONE_KEY ? "italic" : "normal" }}>{r.source_name}</span>
+                              {r.source_id !== NONE_KEY && (
+                                <span title="Bitrix SOURCE_ID" style={{ fontSize: 10, fontFamily: "monospace", color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 4, padding: "0 5px" }}>
+                                  {r.source_id}
+                                </span>
+                              )}
+                              <ChevronDown size={12} style={{ color: "var(--text3)", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
+                            </div>
+                          </td>
+                          <CountCell value={r.total} max={srcMax.total} color="#2196F3" active={isOpen("src", r.source_id, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
+                          <CountCell value={r.in_process} max={srcMax.in_process} color="#FF9800" active={isOpen("src", r.source_id, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
+                          <CountCell value={r.won} max={srcMax.won} color="#4CAF50" active={isOpen("src", r.source_id, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
+                          <CountCell value={r.lost} max={srcMax.lost} color="#F44336" active={isOpen("src", r.source_id, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
+                          <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(r.won, r.total)} size={38} /></td>
+                        </tr>
+                        {open && <tr>{drillCell(7)}</tr>}
+                      </Fragment>
+                    );
+                  })}
+                  <tr style={{ background: "var(--bg3)" }}>
+                    <td style={TDa} />
+                    <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
+                    <CountCell total value={srcTotal.total} max={1} color="#2196F3" />
+                    <CountCell total value={srcTotal.in_process} max={1} color="#FF9800" />
+                    <CountCell total value={srcTotal.won} max={1} color="#4CAF50" />
+                    <CountCell total value={srcTotal.lost} max={1} color="#F44336" />
+                    <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(srcTotal.won, srcTotal.total)} size={38} /></td>
                   </tr>
                 </tbody>
               </table>
             </div>
           )}
-        </div>
+        </Section>
 
-        {(kpiQ.error || listQ.error) && (
+        {anyError && (
           <div style={{
             marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12,
             background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)", color: "#ef4444"
           }}>
-            Xatolik: {((kpiQ.error ?? listQ.error) as Error).message}
+            Xatolik: {(anyError as Error).message}
           </div>
         )}
       </div>

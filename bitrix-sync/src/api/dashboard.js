@@ -734,9 +734,12 @@ router.get('/deal-filter-options', async (req, res) => {
                   ORDER BY s.name`),
       mode === 'amocrm'
         ? Promise.resolve({ rows: [] })
-        : pool.query(`SELECT DISTINCT source_id FROM deals
-                    WHERE source_id IS NOT NULL AND source_id != ''
-                    ORDER BY source_id LIMIT 30`),
+        // lead_sources mirrors Bitrix's SOURCE list (shared by leads and deals);
+        // SOURCE_NAMES below is the old portal's map and misnames ids here.
+        : pool.query(`SELECT DISTINCT d.source_id, ls.name AS source_name FROM deals d
+                    LEFT JOIN lead_sources ls ON ls.source_id = d.source_id
+                    WHERE d.source_id IS NOT NULL AND d.source_id != ''
+                    ORDER BY d.source_id`),
     ]);
 
     let sources = [];
