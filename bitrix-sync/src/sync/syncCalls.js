@@ -108,16 +108,17 @@ async function upsertCall(rec, operator, db = pool) {
 }
 
 /** Upsert a PBX extension. `name` may be null for stubs discovered via calls. */
-async function upsertUser(ext, name, enabled = true, db = pool) {
+async function upsertUser(ext, name, enabled = true, db = pool, responsibleId = null) {
   await db.query(
-    `INSERT INTO pbx_users (ext, name, enabled, synced_at)
-     VALUES ($1,$2,$3,NOW())
+    `INSERT INTO pbx_users (ext, name, enabled, responsible_id, synced_at)
+     VALUES ($1,$2,$3,$4,NOW())
      ON CONFLICT (ext) DO UPDATE SET
        -- keep a real name if we have one; never overwrite it with a stub NULL
        name    = COALESCE(EXCLUDED.name, pbx_users.name),
        enabled = EXCLUDED.enabled,
+       responsible_id = COALESCE(EXCLUDED.responsible_id, pbx_users.responsible_id),
        synced_at = NOW()`,
-    [String(ext), name, enabled],
+    [String(ext), name, enabled, responsibleId],
   );
 }
 

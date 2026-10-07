@@ -155,13 +155,14 @@ router.get('/call-stats-full', async (req, res) => {
   const to = req.query.to || null;
   const respId = req.query.responsible_id ? String(req.query.responsible_id) : null;
   const phone = req.query.phone ? String(req.query.phone).replace(/\D/g, '') : null;
+  const source = req.query.source && req.query.source !== 'all' ? String(req.query.source) : null;
   const stage = req.query.stage && req.query.stage !== 'all' ? String(req.query.stage) : null;
 
   try {
     const { rows } = await pool.query(
       `SELECT c.uuid,
-              CASE WHEN c.operator_ext ~ '^[0-9]+$' THEN c.operator_ext::int ELSE NULL END AS responsible_id,
-              u.name AS full_name,
+              COALESCE(u.responsible_id, CASE WHEN c.operator_ext ~ '^[0-9]+$' THEN c.operator_ext::int ELSE NULL END) AS responsible_id,
+              COALESCE(u.name, u.ext) AS full_name,
               c.direction, c.customer_norm, c.customer_number,
               c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
               (
@@ -175,6 +176,7 @@ router.get('/call-stats-full', async (req, res) => {
          -- $3 = to + 1 day, the callback look-ahead
          AND ($3::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
          AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
+         AND ($6::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $6::text)
          -- Bosqich filter: keep calls whose newest same-phone lead is in $5.
          AND ($5::text IS NULL OR $5::text = (
            SELECT s.bitrix_id
@@ -186,7 +188,7 @@ router.get('/call-stats-full', async (req, res) => {
            LIMIT 1
          ))
        ORDER BY c.start_stamp DESC`,
-      [from, to, to ? addDaysISO(to, 1) : null, phone, stage],
+      [from, to, to ? addDaysISO(to, 1) : null, phone, stage, source],
     );
     // Operator filter is applied inside the compute (not in SQL) so the callback
     // map stays global — a colleague's callback to the same customer still counts.
@@ -205,6 +207,7 @@ router.get('/call-list', async (req, res) => {
   const to = req.query.to || null;
   const respId = req.query.responsible_id ? String(req.query.responsible_id) : null;
   const phone = req.query.phone ? String(req.query.phone).replace(/\D/g, '') : null;
+  const source = req.query.source && req.query.source !== 'all' ? String(req.query.source) : null;
   const kind = req.query.call_kind || null; // inbound|outbound|callback
   const stage = req.query.stage && req.query.stage !== 'all' ? String(req.query.stage) : null;
 
@@ -223,6 +226,7 @@ router.get('/call-list', async (req, res) => {
               ld.stage_name,
               ld.stage_bitrix_id
        FROM pbx_calls c
+       LEFT JOIN pbx_users u ON u.ext = c.operator_ext
        -- Lead match by phone, entirely in Postgres (no Bitrix round-trips):
        -- lead_phones is normalised to the same last-9-digits form as
        -- customer_norm. Newest lead wins when a number has several.
@@ -240,13 +244,14 @@ router.get('/call-list', async (req, res) => {
          AND c.direction <> 'local'
          AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
-         AND ($3::int  IS NULL OR (c.operator_ext ~ '^[0-9]+$' AND c.operator_ext::int = $3::int))
+         AND ($3::int  IS NULL OR u.responsible_id = $3::int OR (c.operator_ext ~ '^[0-9]+$' AND c.operator_ext::int = $3::int))
          AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
          AND ($5::text IS NULL OR c.direction = $5::text)
          AND ($6::text IS NULL OR ld.stage_bitrix_id = $6::text)
+         AND ($7::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $7::text)
        ORDER BY c.start_stamp DESC
        LIMIT 1000`,
-      [from, to, respId, phone, kind === 'inbound' || kind === 'outbound' ? kind : null, stage],
+      [from, to, respId, phone, kind === 'inbound' || kind === 'outbound' ? kind : null, stage, source],
     );
     res.json(rows);
   } catch (err) {
@@ -288,10 +293,10 @@ router.get('/call-filter-options', async (_req, res) => {
   try {
     const [ops, stages] = await Promise.all([
       pool.query(
-        `SELECT DISTINCT (u.ext)::int AS id, u.name AS full_name
+         `SELECT DISTINCT COALESCE(u.responsible_id, CASE WHEN u.ext ~ '^[0-9]+$' THEN u.ext::int END) AS id, u.name AS full_name
          FROM pbx_users u
          JOIN pbx_calls c ON c.operator_ext = u.ext
-         WHERE u.ext ~ '^[0-9]+$'
+         WHERE u.ext ~ '^[0-9]+$' OR u.responsible_id IS NOT NULL
          ORDER BY full_name`,
       ),
       // Lead stages as they exist on the portal right now — the Bosqich filter
@@ -302,7 +307,7 @@ router.get('/call-filter-options', async (_req, res) => {
     ]);
     res.json({
       responsibles: ops.rows,
-      sources: [{ id: 'onlinepbx', name: 'OnlinePBX' }],
+      sources: [{ id: 'onlinepbx', name: 'OnlinePBX' }, { id: 'moizvonki', name: 'Moizvonki' }],
       stages: stages.rows,
     });
   } catch (err) {

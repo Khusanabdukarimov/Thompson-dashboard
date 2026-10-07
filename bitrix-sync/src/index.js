@@ -16,6 +16,8 @@ const dashboardRouter                    = require('./api/dashboard');
 const callsRouter                        = require('./api/calls');
 const onpbx                              = require('./services/onlinepbx');
 const { ensureSchema: callsEnsureSchema, syncUsers: syncPbxUsers, syncRecentCalls } = require('./sync/syncCalls');
+const moizvonki = require('./services/moizvonki');
+const { syncRecentMoizvonkiCalls } = require('./sync/moizvonkiCalls');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
 const marketingRouter  = require('./api/marketing');
@@ -69,24 +71,27 @@ app.get('/health', async (req, res) => {
  * ONPBX_DOMAIN / ONPBX_API_KEY are not configured.
  */
 function startCallSync() {
-  if (!onpbx.DOMAIN) {
-    console.warn('[calls] ONPBX_DOMAIN not set — call sync disabled');
-    return;
-  }
   const minutes = parseInt(process.env.CALL_SYNC_INTERVAL_MIN || '10', 10);
   const lookbackH = parseInt(process.env.CALL_SYNC_LOOKBACK_HOURS || '3', 10);
 
   const run = async () => {
     try {
-      const { total, stubbed } = await syncRecentCalls(lookbackH);
-      if (total) console.log(`[calls] ${total} calls refreshed${stubbed ? ` (${stubbed} stubbed)` : ''}`);
+      if (onpbx.DOMAIN) {
+        const { total, stubbed } = await syncRecentCalls(lookbackH);
+        if (total) console.log(`[calls] OnlinePBX: ${total} calls refreshed${stubbed ? ` (${stubbed} stubbed)` : ''}`);
+      }
+      if (moizvonki.configured()) {
+        const { total } = await syncRecentMoizvonkiCalls(lookbackH);
+        if (total) console.log(`[calls] Moizvonki: ${total} calls refreshed`);
+      }
+      if (!onpbx.DOMAIN && !moizvonki.configured()) console.warn('[calls] No telephony provider configured — call sync disabled');
     } catch (err) {
       console.error('[calls] sync failed:', err.message);
     }
   };
 
   // PBX extensions must exist before calls reference them (FK on operator_ext).
-  syncPbxUsers()
+  (onpbx.DOMAIN ? syncPbxUsers() : Promise.resolve())
     .catch((err) => console.error(`[calls] OnlinePBX user sync failed (${err.message}) — serving existing DB data`))
     .then(run);
   setInterval(run, minutes * 60_000);
