@@ -97,6 +97,10 @@ function rollup(byStage, stages) {
   return out;
 }
 
+/** Stages "Bekor bo'lish sabablari" counts: the pipeline's own list, else every lost stage. */
+const reasonStageIds = (pipe, stages) =>
+  pipe.reasonStages ?? stages.filter((s) => s.kind === 'lost').map((s) => s.id);
+
 const fail = (res, tag) => (err) => {
   console.error(`[pipeline/${tag}]`, err.message);
   res.status(500).json({ error: err.message });
@@ -232,7 +236,7 @@ router.get('/reasons', async (req, res) => {
   const scope = req.query.scope === 'all' ? 'all' : 'lost';
   try {
     const [stages, labels] = await Promise.all([getStages(pipe.categoryId), getEnumLabels(pipe.reasonField)]);
-    const lostIds = stages.filter(s => s.kind === 'lost').map(s => s.id);
+    const lostIds = reasonStageIds(pipe, stages);
     const { where, params } = buildScope(req.query, pipe, (p) =>
       scope === 'lost' ? [`s.bitrix_id = ANY(${p(lostIds)}::text[])`] : []);
     const { rows } = await pool.query(
@@ -249,6 +253,8 @@ router.get('/reasons', async (req, res) => {
       field: pipe.reasonField,
       field_label: 'Причина',
       scope,
+      // Which stages the "lost" scope covers, so the UI can name them.
+      scope_stages: stages.filter((s) => lostIds.includes(s.id)).map((s) => ({ id: s.id, name: s.name })),
       items: rows.map(r => ({
         reason_id: r.reason_id,
         reason: r.reason_id === NONE ? "Ko'rsatilmagan" : (labels[r.reason_id] || `#${r.reason_id}`),
@@ -314,7 +320,7 @@ router.get('/deals', async (req, res) => {
       if (reason && pipe.reasonField) {
         extra.push(`COALESCE(NULLIF(d.uf_prichina, ''), '${NONE}') = ANY(string_to_array(${p(String(reason))}, ','))`);
         if (reason_scope !== 'all') {
-          extra.push(`s.bitrix_id = ANY(${p(liveStages.filter(s => s.kind === 'lost').map(s => s.id))}::text[])`);
+          extra.push(`s.bitrix_id = ANY(${p(reasonStageIds(pipe, liveStages))}::text[])`);
         }
       }
       return extra;

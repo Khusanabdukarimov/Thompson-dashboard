@@ -24,8 +24,12 @@ const PIPELINES = {
   },
   yangi: {
     key: 'yangi', categoryId: 25, label: 'Школа | YANGI',
-    // No cancellation-reason field exists on this pipeline in Bitrix yet.
-    reasonField: null,
+    // Причина is the only reason field with real values on YANGI cancelled deals
+    // (27 of 491 in Oct 2026). "Nima sababdan kelmadi?" is filled on all of them,
+    // but always with the placeholder ".", and "Bekor bo'lish sababi (School)" is empty.
+    reasonField: 'UF_CRM_6075517B5CAD2',
+    // Reasons are read for "Bekor bo'ldi" only, not "To'lovdan so'ng yo'q".
+    reasonStages: ['C25:LOSE'],
     reportStage: false,
   },
 };

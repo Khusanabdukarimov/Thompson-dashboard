@@ -56,6 +56,8 @@ export type PipelineReasons =
       field: string;
       field_label: string;
       scope: ReasonScope;
+      /** Stages the "lost" scope covers (Учебный центр: every lost stage; YANGI: Bekor bo'ldi). */
+      scope_stages?: { id: string; name: string }[];
       items: { reason_id: string; reason: string; total: number }[];
     };
 
