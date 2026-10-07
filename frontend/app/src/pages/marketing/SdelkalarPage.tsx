@@ -29,6 +29,8 @@ const fmtDateTime = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Tashkent" }).slice(0, 16) : "—";
 
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
+/** "<1", "4.5", "37" — a non-zero share never rounds down to "0". */
+const fmtShare = (p: number) => (p > 0 && p < 1 ? "<1" : p < 10 ? p.toFixed(1).replace(/\.0$/, "") : String(Math.round(p)));
 
 // ── Pipelines ────────────────────────────────────────────────────
 const PIPELINES: { key: PipelineKey; label: string }[] = [
@@ -52,7 +54,10 @@ const STAGE_CARDS: Record<PipelineKey, string[]> = {
   yangi: ["C25:WON", "C25:NEW"],   // To'lov | O'qimoqda, Tashrif buyurdi
 };
 
-const PROCESS_PALETTE = ["#2196F3", "#00BCD4", "#3F51B5", "#009688", "#673AB7", "#03A9F4", "#5C6BC0", "#26A69A", "#7E57C2", "#29B6F6"];
+// Mid-tone hues: each keeps roughly ≥3.5:1 contrast against both the light and the dark
+// card background, so stage names stay readable as header text in either theme.
+// Greens and reds are left to the won / lost stages.
+const PROCESS_PALETTE = ["#3B82F6", "#0891B2", "#6366F1", "#0D9488", "#8B5CF6", "#0284C7", "#A855F7", "#2563EB", "#C026D3", "#D97706"];
 function stageColor(s: PipelineStage | undefined, i = 0) {
   if (!s) return "#9E9E9E";
   if (s.kind === "won") return "#4CAF50";
@@ -267,7 +272,8 @@ function Section({ icon, title, sub, right, children }: {
   icon: React.ReactNode; title: string; sub?: string; right?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
-    <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16, border: "1px solid var(--border)" }}>
+    // Size container: drill-down panels inside size to the card (100cqw), not the viewport.
+    <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16, border: "1px solid var(--border)", containerType: "inline-size" }}>
       <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         {icon}
         <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
@@ -281,9 +287,13 @@ function Section({ icon, title, sub, right, children }: {
 
 /** Hover feedback for clickable cells; inline styles cannot express :hover. */
 const PAGE_CSS = `
-  .sd-click { transition: box-shadow .12s, filter .12s; }
-  .sd-click:hover { box-shadow: inset 0 0 0 1.5px rgba(99,102,241,.55); filter: brightness(1.08); }
-  .sd-row:hover > td { background-image: linear-gradient(rgba(99,102,241,.05), rgba(99,102,241,.05)); }
+  .sd-click { transition: box-shadow .12s; }
+  /* Row tint as an inset shadow, not a background: the frozen #/Menejer cells set an
+     opaque inline background, and a background-based tint would stop at their edge. */
+  .sd-row:hover > td { box-shadow: inset 0 0 0 100vmax rgba(99,102,241,.05); }
+  .sd-click:hover, .sd-row:hover > td.sd-click:hover {
+    box-shadow: inset 0 0 0 1.5px rgba(99,102,241,.55), inset 0 0 0 100vmax rgba(99,102,241,.05);
+  }
 `;
 
 const Loading = () => <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>;
@@ -314,30 +324,41 @@ function CountCell({ value, max, color, active, onClick, total }: {
   );
 }
 
-// ── Heat-map cell for the manager × stage matrix ─────────────────
-/** Tint scales with value / column max, so busy stages read at a glance. */
-function HeatCell({ value, max, color, active, onClick, strong }: {
-  value: number; max: number; color: string; active?: boolean; onClick?: () => void; strong?: boolean;
+// ── Cell for the manager × stage matrix ───────────────────────────
+/**
+ * Number over a bar scaled to the column's busiest manager — the same reading
+ * as every other table on the page. `share` (value / row total) goes in the
+ * hover hint rather than on screen, to keep the grid calm.
+ */
+function MatrixCell({ value, max, color, active, onClick, total, divider, hint }: {
+  value: number; max: number; color: string; active?: boolean; onClick?: () => void;
+  total?: boolean; divider?: boolean; hint?: string;
 }) {
   const clickable = value > 0 && !!onClick;
-  const ratio = max > 0 ? value / max : 0;
-  // Faint floor so every non-zero cell is visible; the ceiling stays low enough
-  // that a full column never reads as a solid block, in either theme.
-  const alpha = value > 0 ? Math.round((0.05 + ratio * 0.27) * 255).toString(16).padStart(2, "0") : "00";
   return (
     <td
       onClick={clickable ? (e) => { e.stopPropagation(); onClick!(); } : undefined}
-      title={clickable ? "Bosing — sdelkalar ro'yxati" : undefined}
+      title={clickable ? `${hint ? `${hint} · ` : ""}bosing — sdelkalar ro'yxati` : undefined}
       className={clickable ? "sd-click" : undefined}
       style={{
-        padding: "9px 6px", textAlign: "center", borderBottom: "1px solid var(--border)",
+        padding: "10px 10px", verticalAlign: "middle", borderBottom: "1px solid var(--border)",
+        borderLeft: divider ? "1px solid var(--border)" : undefined,
         cursor: clickable ? "pointer" : "default",
-        background: value > 0 ? `${color}${alpha}` : undefined,
-        boxShadow: active ? `inset 0 0 0 2px ${color}` : undefined,
+        background: active ? `${color}1f` : undefined,
       }}>
-      {value > 0
-        ? <span style={{ fontSize: strong ? 15 : 13.5, fontWeight: strong || ratio > 0.6 ? 700 : 600, color: "var(--text)" }}>{fmtNum(value)}</span>
-        : <span style={{ color: "var(--text3)", opacity: 0.45 }}>·</span>}
+      {value > 0 ? (
+        <>
+          <div style={{
+            fontSize: total ? 15 : 14, fontWeight: total ? 700 : 600, lineHeight: 1.2,
+            color: active ? color : "var(--text)",
+          }}>
+            {fmtNum(value)}
+          </div>
+          <MiniBar value={value} max={max} color={color} />
+        </>
+      ) : (
+        <span style={{ fontSize: 13, color: "var(--text3)", opacity: 0.55 }}>—</span>
+      )}
     </td>
   );
 }
@@ -369,11 +390,14 @@ function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
   // Offset paging over a live window can repeat a deal if one arrives between pages.
   const items = useMemo(() => [...new Map((q.data?.pages ?? []).flatMap(p => p.items).map(d => [d.id, d])).values()], [q.data]);
   const total = q.data?.pages[0]?.total ?? 0;
-  const cols = ["ID", "Sdelka", "Mas'ul", "Bosqich", ...(showReason ? ["Стадия (отчет)"] : []), "Manba", ...(showReason ? ["Причина"] : []), "Yaratildi", "O'zgardi"];
+  // A drill pinned to one manager / one stage would repeat it on every row — drop that column.
+  const oneResp = !!filter.responsible_id && !String(filter.responsible_id).includes(",");
+  const oneStage = !!filter.stage && !String(filter.stage).includes(",");
+  const cols = ["ID", "Sdelka", ...(oneResp ? [] : ["Mas'ul"]), ...(oneStage ? [] : ["Bosqich"]), ...(showReason ? ["Стадия (отчет)"] : []), "Manba", ...(showReason ? ["Причина"] : []), "Yaratildi", "O'zgardi"];
 
   return (
     <td colSpan={colSpan} style={{ padding: 0, background: "var(--bg)", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ position: "sticky", left: 0, maxWidth: "calc(100vw - 320px)", padding: "10px 14px 12px" }}>
+      <div style={{ position: "sticky", left: 0, maxWidth: "100cqw", boxSizing: "border-box", padding: "10px 14px 12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)" }}>{title}</span>
           <span style={{ fontSize: 12, color: "var(--text3)" }}>
@@ -410,10 +434,12 @@ function DealsDrilldown({ filter, colSpan, title, showReason, onClose }: {
                       <td style={{ padding: "5px 10px", color: "var(--text)", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.title ?? undefined}>
                         {d.title || d.phone || "—"}
                       </td>
-                      <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.responsible || "—"}</td>
-                      <td style={{ padding: "5px 10px", whiteSpace: "nowrap" }}>
-                        <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: `${kc}22`, color: kc, fontWeight: 600 }}>{d.stage_name}</span>
-                      </td>
+                      {!oneResp && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.responsible || "—"}</td>}
+                      {!oneStage && (
+                        <td style={{ padding: "5px 10px", whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10, background: `${kc}22`, color: kc, fontWeight: 600 }}>{d.stage_name}</span>
+                        </td>
+                      )}
                       {showReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.report_stage || "—"}</td>}
                       <td style={{ padding: "5px 10px", color: "var(--text3)", whiteSpace: "nowrap" }}>{d.source_name}</td>
                       {showReason && <td style={{ padding: "5px 10px", color: "var(--text2)", whiteSpace: "nowrap" }}>{d.reason || "—"}</td>}
@@ -583,7 +609,7 @@ export default function SdelkalarPage() {
       for (const m of folded) for (const [k, v] of Object.entries(m.by_stage)) by_stage[k] = (by_stage[k] ?? 0) + v;
       const sum = (f: "total" | "in_process" | "won" | "lost") => folded.reduce((a, m) => a + m[f], 0);
       people.push({
-        responsible_id: null, full_name: "Tizim / admin hisoblari", work_position: null, by_stage,
+        responsible_id: null, full_name: "Tizim / admin", work_position: null, by_stage,
         total: sum("total"), in_process: sum("in_process"), won: sum("won"), lost: sum("lost"),
         key: "__system__", ids: folded.filter(m => m.responsible_id != null).map(m => m.responsible_id).join(","),
         members: folded.map(m => m.full_name),
@@ -606,12 +632,24 @@ export default function SdelkalarPage() {
   const matrixStages = useMemo(() => KIND_GROUPS.flatMap(g =>
     allMatrixStages.filter(s => s.kind === g.kind && (!hideEmptyStages || (colTotal[`s:${s.id}`] ?? 0) > 0))),
   [allMatrixStages, hideEmptyStages, colTotal]);
+  // Colours come from the full stage list, so hiding empty stages never recolours the rest.
+  const stageColorById = useMemo(() => {
+    let p = 0;
+    return Object.fromEntries(allMatrixStages.map(st => [st.id, stageColor(st, st.kind === "process" ? p++ : 0)]));
+  }, [allMatrixStages]);
+  /** System/admin row: neutral bars, so it never reads as the top performer. */
+  const rowColor = (r: MgrRow, c: string) => (r.key === "__system__" ? "#9E9E9E" : c);
+  /** Stage column i starts a group (or sits right after Jami) — gets a divider. */
+  const isGroupStart = (i: number) => i === 0 || matrixStages[i].kind !== matrixStages[i - 1].kind;
   const matrixGroups = KIND_GROUPS.map(g => ({ ...g, span: matrixStages.filter(s => s.kind === g.kind).length })).filter(g => g.span > 0);
   const emptyStageCount = allMatrixStages.filter(s => (colTotal[`s:${s.id}`] ?? 0) === 0).length;
 
   const colMax = useMemo(() => {
     const m: Record<string, number> = { total: 1, in_process: 1, won: 1, lost: 1 };
     for (const r of mgrRows) {
+      // The folded system/admin row would set every scale and shrink real managers'
+      // bars to slivers; it is left out (its own bars just clamp at 100%).
+      if (r.key === "__system__") continue;
       m.total = Math.max(m.total, r.total); m.in_process = Math.max(m.in_process, r.in_process);
       m.won = Math.max(m.won, r.won); m.lost = Math.max(m.lost, r.lost);
       for (const [k, v] of Object.entries(r.by_stage)) m[`s:${k}`] = Math.max(m[`s:${k}`] ?? 1, v);
@@ -791,7 +829,7 @@ export default function SdelkalarPage() {
           ))}
         </div>
         {rowOpen("kpi", "cards") && (
-          <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", marginBottom: 16, containerType: "inline-size" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody><tr>{drillCell(1)}</tr></tbody></table>
           </div>
         )}
@@ -812,22 +850,24 @@ export default function SdelkalarPage() {
           ) : undefined}>
           {managersQ.isLoading ? <Loading /> : mgrRows.length === 0 ? <Empty /> : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 254 + 84 + matrixStages.length * 92 }}>
+              {/* Fits 10 stages from a 1366px screen up: 44 + 180 + 76 + 10 × 80 = 1100px. */}
+              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 44 + 180 + 76 + matrixStages.length * 80 }}>
                 <colgroup>
                   <col style={{ width: 44 }} />
-                  <col style={{ width: 210 }} />
-                  <col style={{ width: 84 }} />
+                  <col style={{ width: 180 }} />
+                  <col style={{ width: 76 }} />
                   {matrixStages.map(s => <col key={s.id} />)}
                 </colgroup>
                 <thead>
                   <tr>
-                    <th rowSpan={2} style={{ ...THc("#555", 44), position: "sticky", left: 0, zIndex: 3, verticalAlign: "bottom" }}>#</th>
-                    <th rowSpan={2} style={{ ...THc("#9E9E9E", 210), position: "sticky", left: 44, zIndex: 3, verticalAlign: "bottom" }}>Menejer</th>
-                    <th rowSpan={2} style={{ ...THc("#2196F3", 84), textAlign: "center", verticalAlign: "bottom" }}>Jami</th>
+                    {/* paddingBottom/lineHeight put these labels on the stage names' baseline. */}
+                    <th rowSpan={2} style={{ ...THc("#555", 44), paddingBottom: 9, lineHeight: 1.3, position: "sticky", left: 0, zIndex: 3, verticalAlign: "bottom" }}>#</th>
+                    <th rowSpan={2} style={{ ...THc("#9E9E9E", 180), paddingBottom: 9, lineHeight: 1.3, position: "sticky", left: 44, zIndex: 3, verticalAlign: "bottom" }}>Menejer</th>
+                    <th rowSpan={2} style={{ ...THc("#2196F3", 76), paddingLeft: 10, paddingRight: 10, paddingBottom: 9, lineHeight: 1.3, verticalAlign: "bottom" }}>Jami</th>
                     {matrixGroups.map(g => (
                       <th key={g.kind} colSpan={g.span} style={{
-                        padding: "8px 6px 6px", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                        color: g.color, textAlign: "center", background: "var(--bg2)",
+                        padding: "9px 10px 7px", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
+                        color: g.color, textAlign: "left", background: "var(--bg2)",
                         borderBottom: `2px solid ${g.color}`, borderLeft: "1px solid var(--border)",
                       }}>
                         {g.label}
@@ -837,12 +877,11 @@ export default function SdelkalarPage() {
                   <tr>
                     {matrixStages.map((s, i) => (
                       <th key={s.id} title={`${s.name} · ${s.id}`} style={{
-                        padding: "8px 6px", fontSize: 11.5, fontWeight: 600, lineHeight: 1.25, color: "var(--text2)",
-                        textAlign: "center", verticalAlign: "bottom", whiteSpace: "normal", wordBreak: "break-word",
+                        padding: "8px 10px 9px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.3, color: stageColorById[s.id],
+                        textAlign: "left", verticalAlign: "bottom", whiteSpace: "normal", wordBreak: "break-word",
                         background: "var(--bg2)", borderBottom: "1px solid var(--border)",
-                        borderLeft: i > 0 && s.kind !== matrixStages[i - 1].kind ? "1px solid var(--border)" : undefined,
+                        borderLeft: isGroupStart(i) ? "1px solid var(--border)" : undefined,
                       }}>
-                        <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: stageColor(s, i), marginRight: 5, verticalAlign: "middle" }} />
                         {s.name}
                       </th>
                     ))}
@@ -864,12 +903,16 @@ export default function SdelkalarPage() {
                             {String(i + 1).padStart(2, "0")}
                           </td>
                           {managerCell(r, open, bg)}
-                          <HeatCell strong value={r.total} max={colMax.total} color="#2196F3" active={isOpen("matrix", r.key, "all")}
-                            onClick={drillFor("all", "barcha sdelkalar", {})} />
-                          {matrixStages.map((s, si) => (
-                            <HeatCell key={s.id} value={r.by_stage[s.id] ?? 0} max={colMax[`s:${s.id}`] ?? 1} color={stageColor(s, si)}
-                              active={isOpen("matrix", r.key, s.id)} onClick={drillFor(s.id, s.name, { stage: s.id })} />
-                          ))}
+                          <MatrixCell total value={r.total} max={colMax.total} color={rowColor(r, "#2196F3")} active={isOpen("matrix", r.key, "all")}
+                            onClick={drillFor("all", "barcha sdelkalar", {})} hint={`${r.full_name}: ${fmtNum(r.total)} ta sdelka`} />
+                          {matrixStages.map((s, si) => {
+                            const v = r.by_stage[s.id] ?? 0;
+                            return (
+                              <MatrixCell key={s.id} value={v} max={colMax[`s:${s.id}`] ?? 1} color={rowColor(r, stageColorById[s.id])} divider={isGroupStart(si)}
+                                active={isOpen("matrix", r.key, s.id)} onClick={drillFor(s.id, s.name, { stage: s.id })}
+                                hint={`${r.full_name} · ${s.name}: ${fmtNum(v)} ta — uning sdelkalarining ${fmtShare(pct(v, r.total))}%`} />
+                            );
+                          })}
                         </tr>
                         {open && <tr>{drillCell(3 + matrixStages.length)}</tr>}
                       </Fragment>
@@ -878,13 +921,18 @@ export default function SdelkalarPage() {
                   <tr style={{ background: "var(--bg3)" }}>
                     <td style={{ ...TDa, position: "sticky", left: 0, background: "var(--bg3)", zIndex: 2 }} />
                     <td style={{ ...TDa, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", position: "sticky", left: 44, background: "var(--bg3)", zIndex: 2 }}>JAMI</td>
-                    <HeatCell strong value={colTotal.total} max={0} color="#2196F3" active={isOpen("matrix", "__total__", "all")}
+                    <MatrixCell total value={colTotal.total} max={1} color="#2196F3" active={isOpen("matrix", "__total__", "all")}
                       onClick={() => toggle({ table: "matrix", row: "__total__", col: "all", title: `${pipelineLabel} · barcha sdelkalar`, filter: {} })} />
-                    {matrixStages.map((s, si) => (
-                      <HeatCell key={s.id} strong value={colTotal[`s:${s.id}`] ?? 0} max={0} color={stageColor(s, si)}
-                        active={isOpen("matrix", "__total__", s.id)}
-                        onClick={() => toggle({ table: "matrix", row: "__total__", col: s.id, title: `${pipelineLabel} · ${s.name}`, filter: { stage: s.id } })} />
-                    ))}
+                    {matrixStages.map((s, si) => {
+                      const v = colTotal[`s:${s.id}`] ?? 0;
+                      // Totals row: full bars, as in the other tables' JAMI rows.
+                      return (
+                        <MatrixCell key={s.id} total value={v} max={v} color={stageColorById[s.id]} divider={isGroupStart(si)}
+                          active={isOpen("matrix", "__total__", s.id)}
+                          onClick={() => toggle({ table: "matrix", row: "__total__", col: s.id, title: `${pipelineLabel} · ${s.name}`, filter: { stage: s.id } })}
+                          hint={`${s.name}: ${fmtNum(v)} ta — jamidan ${fmtShare(pct(v, colTotal.total))}%`} />
+                      );
+                    })}
                   </tr>
                   {rowOpen("matrix", "__total__") && <tr>{drillCell(3 + matrixStages.length)}</tr>}
                 </tbody>
@@ -927,10 +975,10 @@ export default function SdelkalarPage() {
                           <td style={{ ...TDa, color: "#555", fontSize: 13, fontWeight: 600 }}>{String(i + 1).padStart(2, "0")}</td>
                           {managerCell(r, open)}
                           <td style={TDa}><RoleBadge role={r.work_position} /></td>
-                          <CountCell value={r.total} max={colMax.total} color="#2196F3" active={isOpen("conv", r.key, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
-                          <CountCell value={r.in_process} max={colMax.in_process} color="#FF9800" active={isOpen("conv", r.key, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
-                          <CountCell value={r.won} max={colMax.won} color="#4CAF50" active={isOpen("conv", r.key, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
-                          <CountCell value={r.lost} max={colMax.lost} color="#F44336" active={isOpen("conv", r.key, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
+                          <CountCell value={r.total} max={colMax.total} color={rowColor(r, "#2196F3")} active={isOpen("conv", r.key, "all")} onClick={drillFor("all", "barcha sdelkalar", {})} />
+                          <CountCell value={r.in_process} max={colMax.in_process} color={rowColor(r, "#FF9800")} active={isOpen("conv", r.key, "process")} onClick={drillFor("process", "jarayonda", { kind: "process" })} />
+                          <CountCell value={r.won} max={colMax.won} color={rowColor(r, "#4CAF50")} active={isOpen("conv", r.key, "won")} onClick={drillFor("won", wonLabel, { kind: "won" })} />
+                          <CountCell value={r.lost} max={colMax.lost} color={rowColor(r, "#F44336")} active={isOpen("conv", r.key, "lost")} onClick={drillFor("lost", lostLabel, { kind: "lost" })} />
                           <td style={{ ...TDa, textAlign: "center" }}><ConversionDonut pct={pct(r.won, r.total)} size={38} /></td>
                         </tr>
                         {open && <tr>{drillCell(8)}</tr>}
