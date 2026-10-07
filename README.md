@@ -1,4 +1,5 @@
-# Mountain
+# Thompson
+
 
 Marketing, sotuv va payroll dashboard. Bitrix24 CRM va Meta Ads ma'lumotlarini birlashtiradi.
 
