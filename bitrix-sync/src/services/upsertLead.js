@@ -119,24 +119,15 @@ function parseDate(s) {
  * Upsert a single lead from Bitrix24 raw data.
  * Returns the leads.id.
  */
-// ISO datetime pattern: 2026-06-04T11:42:09Z (or with offset)
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
-
 async function upsertLead(r, client) {
   const db = client || pool;
 
   const stageId = await stageResolver.resolve('lead', r.STATUS_ID);
   const responsibleId = await ensureResponsible(r.ASSIGNED_BY_ID);
 
-  // For Website leads: use COMMENTS field as date_create if it's a valid ISO datetime
-  let dateCreate = parseDate(r.DATE_CREATE);
-  const isWebsite = (r.TITLE || '').trim().toLowerCase() === 'website';
-  if (isWebsite) {
-    const comment = (r.COMMENTS || '').trim();
-    if (ISO_DATE_RE.test(comment)) {
-      dateCreate = parseDate(comment);
-    }
-  }
+  // DATE_CREATE is the single source of truth for the general date filter.
+  // Do not replace it with a timestamp hidden in COMMENTS.
+  const dateCreate = parseDate(r.DATE_CREATE);
 
   // Bitrix24 manba IDlari
   const SOURCE_FB     = 'UC_O9BLGT';
@@ -187,9 +178,9 @@ async function upsertLead(r, client) {
        uf_cancel_reason, uf_junk_reason,
        name, last_name, title,
        web_form_id,
-       date_create, date_modify, synced_at
+       date_create, date_modify, date_closed, synced_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()
      )
      ON CONFLICT (id) DO UPDATE SET
        responsible_id    = EXCLUDED.responsible_id,
@@ -216,6 +207,7 @@ async function upsertLead(r, client) {
        title            = EXCLUDED.title,
        web_form_id      = EXCLUDED.web_form_id,
        date_modify      = EXCLUDED.date_modify,
+       date_closed      = EXCLUDED.date_closed,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -237,14 +229,15 @@ async function upsertLead(r, client) {
       ufVal(r.UF_CRM_1770693781846), // Tashrif belgilandiga tushgan sana (scheduled)
       ufVal(r.UF_CRM_1770695429433), // Tashrif buyurdiga tushgan sana (attended)
       r.SOURCE_ID === 'UC_1WUFJB' ? parseDate(r.UF_CRM_1778310745831) : null,
-      ufEnum(r.UF_CRM_1770976355232, CANCEL_REASON_MAP),
-      ufEnum(r.UF_CRM_1770282341169, JUNK_REASON_MAP),
+      ufVal(r.UF_CRM_BEKOR_BO_LDI_603C521DDE90) || ufEnum(r.UF_CRM_1770976355232, CANCEL_REASON_MAP),
+      ufVal(r.UF_CRM_SIFATSIZ_LID_0A5800E2C439) || ufEnum(r.UF_CRM_1770282341169, JUNK_REASON_MAP),
       r.NAME || null,
       r.LAST_NAME || null,
       r.TITLE || null,
       r.WEB_FORM_ID ? String(r.WEB_FORM_ID) : null,
       dateCreate,
       parseDate(r.DATE_MODIFY),
+      parseDate(r.DATE_CLOSED),
     ]
   );
 

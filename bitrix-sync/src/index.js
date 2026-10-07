@@ -137,6 +137,8 @@ Promise.all([
     CREATE INDEX IF NOT EXISTS deals_uf_payment_date_idx  ON deals(uf_payment_date);
     CREATE INDEX IF NOT EXISTS deals_begindate_idx        ON deals(begindate);
     CREATE INDEX IF NOT EXISTS deals_uf_service_idx       ON deals(uf_service);
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS date_closed TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS leads_date_closed_idx ON leads(date_closed);
   `).catch(err => console.error('[startup] leads/deals migration failed:', err.message)),
   pool.query(`
     UPDATE stages SET is_won = TRUE, is_final = TRUE

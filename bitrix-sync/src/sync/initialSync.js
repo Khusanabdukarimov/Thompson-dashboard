@@ -13,7 +13,7 @@ const { loadAll: loadStages } = require('../services/stageResolver');
 const LEAD_SELECT = [
   'ID', 'ASSIGNED_BY_ID', 'STATUS_ID', 'OPPORTUNITY', 'SOURCE_ID',
   'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'UTM_CONTENT', 'UTM_TERM',
-  'DATE_CREATE', 'DATE_MODIFY', 'NAME', 'LAST_NAME', 'TITLE', 'COMMENTS', 'PHONE', 'WEB_FORM_ID',
+  'DATE_CREATE', 'DATE_MODIFY', 'DATE_CLOSED', 'NAME', 'LAST_NAME', 'TITLE', 'COMMENTS', 'PHONE', 'WEB_FORM_ID',
   'UF_*', // barcha custom maydonlar — lead_uf_values jadvaliga generik yoziladi
 ];
 

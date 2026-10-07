@@ -50,12 +50,14 @@ CREATE TABLE IF NOT EXISTS leads (
   title           TEXT,
   date_create     TIMESTAMPTZ,
   date_modify     TIMESTAMPTZ,
+  date_closed     TIMESTAMPTZ,
   synced_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS leads_responsible_idx ON leads(responsible_id);
 CREATE INDEX IF NOT EXISTS leads_stage_idx ON leads(stage_id);
 CREATE INDEX IF NOT EXISTS leads_date_create_idx ON leads(date_create);
+CREATE INDEX IF NOT EXISTS leads_date_closed_idx ON leads(date_closed);
 CREATE INDEX IF NOT EXISTS leads_source_idx ON leads(source_id);
 CREATE INDEX IF NOT EXISTS leads_uf_amo_date_idx ON leads(uf_amo_date);
 
