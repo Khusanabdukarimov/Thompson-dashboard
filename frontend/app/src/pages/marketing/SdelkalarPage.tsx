@@ -241,7 +241,7 @@ function SdelkaMultiSelect({ label, options, values, onChange, loading }: {
   );
 }
 
-// ── Segmented switch (mode + pipeline) ───────────────────────────
+// ── Segmented switch (pipeline) ──────────────────────────────────
 function Segmented<T extends string>({ value, onChange, options }: {
   value: T; onChange: (v: T) => void;
   options: { value: T; label: string; color: string }[];
@@ -446,7 +446,6 @@ type MgrRow = PipelineManagerRow & { key: string; ids: string; members?: string[
 // ── Page ─────────────────────────────────────────────────────────
 export default function SdelkalarPage() {
   const [filterOpen, setFilterOpen] = useState(false);
-  const [mode, setMode] = useState<'default' | 'amocrm' | 'bitrix24'>('default');
   // Always opens on Учебный центр.
   const [pipeline, setPipeline] = useState<PipelineKey>("uc");
   const [reasonScope, setReasonScope] = useState<ReasonScope>("lost");
@@ -462,23 +461,22 @@ export default function SdelkalarPage() {
   });
 
   const filterQ = useQuery({
-    queryKey: ["deal-filter-options", mode],
-    queryFn: () => getDealFilterOptions({ mode }),
+    queryKey: ["deal-filter-options"],
+    queryFn: () => getDealFilterOptions(),
     staleTime: 5 * 60_000,
   });
 
-  // AmoCRM mode = historical import, skip date filter so every imported deal is visible
-  const apiFrom = mode === 'amocrm' ? undefined : (filter.from || undefined);
-  const apiTo   = mode === 'amocrm' ? undefined : (filter.to   || undefined);
+  // Always all deals (no Bitrix24/AmoCRM split): only the date window narrows them.
+  const apiFrom = filter.from || undefined;
+  const apiTo   = filter.to   || undefined;
 
   const base: PipelineFilter = useMemo(() => ({
-    pipeline, from: apiFrom, to: apiTo, mode,
+    pipeline, from: apiFrom, to: apiTo,
     responsible_id: filter.responsible_ids.join(',') || undefined,
-    // AmoCRM mode already pins the source, and its Manba options are Amo labels, not SOURCE_IDs.
-    source: mode === 'amocrm' ? undefined : (filter.sources.join(',') || undefined),
+    source: filter.sources.join(',') || undefined,
     stage: filter.stage_ids.join(',') || undefined,
     report_stage: pipeline === "uc" && filter.report_stages.length ? JSON.stringify(filter.report_stages) : undefined,
-  }), [pipeline, apiFrom, apiTo, mode, filter.responsible_ids, filter.sources, filter.stage_ids, filter.report_stages]);
+  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.report_stages]);
 
   // Keep the last result on screen while a filter changes, but never across a
   // pipeline switch: the old pipeline's numbers would sit under the new labels.
@@ -494,8 +492,8 @@ export default function SdelkalarPage() {
   });
 
   const reportStagesQ = useQuery({
-    queryKey: ["pipeline-report-stages", pipeline, apiFrom, apiTo, mode],
-    queryFn: () => getPipelineReportStages({ pipeline, from: apiFrom, to: apiTo, mode }),
+    queryKey: ["pipeline-report-stages", pipeline, apiFrom, apiTo],
+    queryFn: () => getPipelineReportStages({ pipeline, from: apiFrom, to: apiTo }),
     enabled: pipeline === "uc",
     staleTime: 60_000,
   });
@@ -682,16 +680,7 @@ export default function SdelkalarPage() {
         title="Sdelkalar"
         sub={`${pipelineLabel} · ${periodLabel}`}
         actions={
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-            <Segmented
-              value={mode}
-              onChange={(m) => { clearFilter(); setMode(m); }}
-              options={[
-                { value: 'default',  label: "Barcha sdelkalar", color: "#3b82f6" },
-                { value: 'bitrix24', label: "Bitrix24",         color: "#22c55e" },
-                { value: 'amocrm',   label: "AmoCRM",           color: "#D97706" },
-              ]}
-            />
+          <div style={{ display: "flex", alignItems: "center" }}>
             <Segmented
               value={pipeline}
               onChange={switchPipeline}
@@ -719,12 +708,6 @@ export default function SdelkalarPage() {
               {`Filtr: ${periodLabel}${activeFilterCount > 0 ? ` · ${activeFilterCount} ta qo'shimcha` : ""}`}
             </span>
             <span style={{ background: "rgba(99,102,241,0.15)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>{pipelineLabel}</span>
-            {mode === 'bitrix24' && (
-              <span style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>Bitrix24</span>
-            )}
-            {mode === 'amocrm' && (
-              <span style={{ background: "rgba(217,119,6,0.15)", color: "#D97706", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>AmoCRM</span>
-            )}
             {activeFilterCount > 0 && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#3b82f6", color: "#fff" }}>{activeFilterCount} filtr</span>
             )}
@@ -771,10 +754,8 @@ export default function SdelkalarPage() {
                   onChange={v => setFilter(s => ({ ...s, responsible_ids: v }))} loading={filterQ.isLoading} />
                 <SdelkaMultiSelect label="Bosqich" options={stageOptions} values={filter.stage_ids}
                   onChange={v => setFilter(s => ({ ...s, stage_ids: v }))} loading={kpiQ.isLoading} />
-                {mode !== 'amocrm' && (
-                  <SdelkaMultiSelect label="Manba (Источник)" options={srcOptions} values={filter.sources}
-                    onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
-                )}
+                <SdelkaMultiSelect label="Manba (Источник)" options={srcOptions} values={filter.sources}
+                  onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
                 {pipeline === "uc" && (
                   <SdelkaMultiSelect label="Стадия (для отчетов)" options={reportStageOptions} values={filter.report_stages}
                     onChange={v => setFilter(s => ({ ...s, report_stages: v }))} loading={reportStagesQ.isLoading} />
