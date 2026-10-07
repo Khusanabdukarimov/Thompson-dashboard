@@ -30,8 +30,8 @@ function fmtMoney(v: number) {
 
 
 // ── KPI card ─────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, description, gradient, lightGradient, icon }: {
-  label: string; value: string; sub?: string; description?: string;
+function KpiCard({ label, value, sub, gradient, lightGradient, icon }: {
+  label: string; value: string; sub?: string;
   gradient: string; lightGradient: string; icon: React.ReactNode;
 }) {
   const { theme } = useDarkMode();
@@ -48,7 +48,6 @@ function KpiCard({ label, value, sub, description, gradient, lightGradient, icon
       </div>
       <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#fff" : "var(--text)", lineHeight: 1.2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.55)" : "var(--text3)" }}>{sub}</div>}
-      {description && <div style={{ fontSize: 10, lineHeight: 1.3, color: isDark ? "rgba(255,255,255,.72)" : "var(--text3)" }}>{description}</div>}
     </div>
   );
 }
@@ -647,23 +646,23 @@ export default function SdelkalarPage() {
         {/* ── KPI Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 12 }}>
           <KpiCard label="Jami Sdelkalar" value={fmtNum(kpi?.total ?? 0)}
-            sub="Barcha kelishuvlar" description="Tanlangan sana, bosqich va manbadagi barcha deal yozuvlari." gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)"
+            sub="Barcha kelishuvlar" gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)"
             lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(59,130,246,0.12))"
             icon={<BarChart2 size={16} />} />
           <KpiCard label="Yangi Sdelkalar" value={fmtNum(kpi?.yangi ?? 0)}
-            sub="Jarayondagi" description="Yakunlanmagan deal bosqichlari." gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"
+            sub="Jarayondagi" gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"
             lightGradient="linear-gradient(135deg,rgba(59,130,246,0.07),rgba(99,157,246,0.12))"
             icon={<TrendingUp size={16} />} />
           <KpiCard label="Sotuv bo'ldi" value={fmtNum(kpi?.sotuv_boldi ?? 0)}
-            sub="Muvaffaqiyatli" description="Won/sotuv bo‘lgan deal bosqichlari." gradient="linear-gradient(135deg,#065f46,#10b981)"
+            sub="Muvaffaqiyatli" gradient="linear-gradient(135deg,#065f46,#10b981)"
             lightGradient="linear-gradient(135deg,rgba(4,150,107,0.07),rgba(16,185,129,0.12))"
             icon={<CheckCircle size={16} />} />
           <KpiCard label="O'rtacha Chek" value={`$${fmtNum(Math.round(kpi?.ortacha_chek ?? 0))}`}
-            sub="Won bo'yicha o'rtacha" description="Sotuv bo‘lgan deal summasi ÷ sotuvlar soni." gradient="linear-gradient(135deg,#92400e,#f59e0b)"
+            sub="Won bo'yicha o'rtacha" gradient="linear-gradient(135deg,#92400e,#f59e0b)"
             lightGradient="linear-gradient(135deg,rgba(146,64,14,0.07),rgba(245,158,11,0.12))"
             icon={<ShoppingCart size={16} />} />
           <KpiCard label="Konversiya" value={`${kpi?.konversiya ?? 0}%`}
-            sub="Won / Jami" description="Sotuv bo‘lgan deal ÷ jami deal × 100." gradient="linear-gradient(135deg,#5b21b6,#8b5cf6)"
+            sub="Won / Jami" gradient="linear-gradient(135deg,#5b21b6,#8b5cf6)"
             lightGradient="linear-gradient(135deg,rgba(91,33,182,0.07),rgba(139,92,246,0.12))"
             icon={<Percent size={16} />} />
         </div>
@@ -677,15 +676,15 @@ export default function SdelkalarPage() {
           return (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
               <KpiCard label="Shartnoma summasi" value={`$${fmtNum(Math.round(kutilmoqda))}`}
-                sub="Won sdelkalar jami summasi" description="Won deal’lardagi shartnoma summalari yig‘indisi." gradient="linear-gradient(135deg,#0f3460,#1a6fa8)"
+                sub="Won sdelkalar jami summasi" gradient="linear-gradient(135deg,#0f3460,#1a6fa8)"
                 lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.14))"
                 icon={<DollarSign size={16} />} />
               <KpiCard label="To'langan" value={`$${fmtNum(Math.round(tolangan))}`}
-                sub={`${pct}% to'landi`} description="To‘langan summa ÷ shartnoma summasi × 100." gradient="linear-gradient(135deg,#064e3b,#059669)"
+                sub={`${pct}% to'landi`} gradient="linear-gradient(135deg,#064e3b,#059669)"
                 lightGradient="linear-gradient(135deg,rgba(5,150,105,0.07),rgba(5,150,105,0.14))"
                 icon={<CheckCircle size={16} />} />
               <KpiCard label="Kutilmoqda (qoldiq)" value={`$${fmtNum(Math.round(qoldiq))}`}
-                sub="Hali to'lanmagan" description="Shartnoma summasi − to‘langan summa." gradient="linear-gradient(135deg,#7c2d12,#dc2626)"
+                sub="Hali to'lanmagan" gradient="linear-gradient(135deg,#7c2d12,#dc2626)"
                 lightGradient="linear-gradient(135deg,rgba(220,38,38,0.07),rgba(220,38,38,0.14))"
                 icon={<DollarSign size={16} />} />
             </div>
@@ -699,7 +698,7 @@ export default function SdelkalarPage() {
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
             <CheckCircle size={16} style={{ color: "#4CAF50" }} />
             <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Sdelka va Konversiya</span>
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>Manager kesimida: jami, jarayondagi, sotuv, summa va konversiya = sotuv / jami · {convRows.length} ta menejer</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{convRows.length} ta menejer</span>
           </div>
 
           {convQ.isLoading ? (
@@ -838,7 +837,7 @@ export default function SdelkalarPage() {
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
             <Users size={16} style={{ color: "var(--text3)" }} />
             <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Sdelka mas'ullar kesimida</span>
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>Har bir xodimning bosqichlar bo‘yicha deal soni · {dealRespRows.length} ta xodim</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{dealRespRows.length} ta xodim</span>
           </div>
 
           {respQ.isLoading ? (
@@ -995,7 +994,7 @@ export default function SdelkalarPage() {
           <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
             <BarChart2 size={16} style={{ color: "#9C27B0" }} />
             <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Manba bo'yicha</span>
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>source_id bo‘yicha guruhlangan: jami, jarayondagi, sotuv va summa · {srcStatRows.length} ta manba</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{srcStatRows.length} ta manba</span>
           </div>
 
           {sourceStatsQ.isLoading ? (
