@@ -38,6 +38,8 @@ function ufText(raw) {
   return t || null;
 }
 
+const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
 function parseDate(s) {
   if (!s) return null;
   const d = new Date(s);
@@ -99,9 +101,12 @@ async function upsertDeal(r, client) {
        uf_amo_date      = EXCLUDED.uf_amo_date,
        uf_service       = EXCLUDED.uf_service,
        uf_tolandi_sum   = EXCLUDED.uf_tolandi_sum,
-       uf_prichina      = EXCLUDED.uf_prichina,
-       title            = EXCLUDED.title,
-       uf_report_stage  = EXCLUDED.uf_report_stage,
+       -- Only when the payload carried the field: reconcile_deals.js and the scratch
+       -- scripts select a partial field list, and an absent key is "not fetched",
+       -- not "cleared". crm.deal.get (webhooks) always returns every field.
+       uf_prichina      = CASE WHEN $25::boolean THEN EXCLUDED.uf_prichina ELSE deals.uf_prichina END,
+       title            = CASE WHEN $26::boolean THEN EXCLUDED.title ELSE deals.title END,
+       uf_report_stage  = CASE WHEN $27::boolean THEN EXCLUDED.uf_report_stage ELSE deals.uf_report_stage END,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -129,6 +134,9 @@ async function upsertDeal(r, client) {
       ufVal(r.UF_CRM_6075517B5CAD2), // Причина — enum id, Учебный центр
       r.TITLE || null,               // usually "Name | phone | course" — shown in drill-downs
       ufText(r.UF_CRM_6A364190B79ED), // Стадия (для отчетов) — Sdelkalar filter
+      has(r, 'UF_CRM_6075517B5CAD2'),
+      has(r, 'TITLE'),
+      has(r, 'UF_CRM_6A364190B79ED'),
     ]
   );
 
