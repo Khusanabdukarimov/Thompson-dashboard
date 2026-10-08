@@ -1254,6 +1254,87 @@ router.get('/lead-responsibles', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/transfer-direction-responsibles
+ * Lead count per responsible, split by the "Transfer direction" UF field —
+ * same filters (and therefore the same JAMI) as /lead-responsibles, only the
+ * columns differ: one per field value instead of one per stage.
+ *
+ * Values resolve through lead_uf_enums when the field is a list; if it is a
+ * plain text field the raw value is used as both key and label. Leads with no
+ * value land in the "Nomalum" column.
+ */
+const TRANSFER_DIRECTION_FIELD = 'UF_CRM_TRANSFER_DIRECTION';
+
+router.get('/transfer-direction-responsibles', async (req, res) => {
+  const { from, to, responsible_id, stage, source, proekt, mode } = req.query;
+  const params = [from || null, to || null, responsible_id || null, stage || null, source || null, proekt || null];
+
+  try {
+    const [{ rows }, { rows: enums }] = await Promise.all([
+      pool.query(
+        `WITH fl AS (
+           SELECT l.id, l.responsible_id,
+                  COALESCE(NULLIF(v.value, ''), 'Nomalum') AS dir_key
+           FROM leads l
+           JOIN stages s ON s.id = l.stage_id
+           LEFT JOIN lead_uf_values v ON v.lead_id = l.id
+                 AND v.field_code = '${TRANSFER_DIRECTION_FIELD}'
+           WHERE ${leadDateCond(mode, 1, 2)}
+             AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+             AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+             AND ${leadSrcCond(mode, 5)}
+             AND ${leadProektCond(6, req.query)}
+             ${leadModeClause(mode)}
+         ),
+         per_dir AS (
+           SELECT responsible_id, dir_key, COUNT(*)::int AS n
+           FROM fl GROUP BY responsible_id, dir_key
+         ),
+         totals AS (
+           SELECT responsible_id, COUNT(*)::int AS total
+           FROM fl GROUP BY responsible_id
+         )
+         SELECT
+           r.id                                                          AS responsible_id,
+           TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,''))  AS full_name,
+           t.total,
+           COALESCE((
+             SELECT jsonb_object_agg(p.dir_key, p.n)
+             FROM per_dir p WHERE p.responsible_id = r.id
+           ), '{}'::jsonb)                                               AS by_direction
+         FROM responsibles r
+         JOIN totals t ON t.responsible_id = r.id
+         ORDER BY t.total DESC`,
+        params
+      ),
+      pool.query(
+        `SELECT enum_id, value FROM lead_uf_enums WHERE field_code = '${TRANSFER_DIRECTION_FIELD}'`
+      ),
+    ]);
+
+    // Columns = only the values that actually occur in this view, biggest
+    // first, "Nomalum" last — so there are no permanently empty columns.
+    const label = new Map(enums.map(e => [String(e.enum_id), e.value]));
+    const sums = new Map();
+    for (const r of rows)
+      for (const [k, n] of Object.entries(r.by_direction))
+        sums.set(k, (sums.get(k) || 0) + n);
+    const directions = [...sums.entries()]
+      .sort(([ka, a], [kb, b]) =>
+        (ka === 'Nomalum') - (kb === 'Nomalum') || b - a)
+      .map(([key]) => ({
+        key,
+        label: key === 'Nomalum' ? "Noma'lum" : (label.get(key) || key),
+      }));
+
+    res.json({ directions, responsibles: rows });
+  } catch (err) {
+    console.error('[dashboard/transfer-direction-responsibles]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/dashboard/lead-conversion
  * Per-responsible conversion funnel.  Replaces Python /api/conversion.
  */

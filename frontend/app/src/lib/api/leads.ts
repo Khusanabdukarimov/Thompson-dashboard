@@ -129,6 +129,36 @@ export function getResponsiblesStats(filter: DashFilter) {
   }, API_URL_CRM);
 }
 
+export type TransferDirectionResponse = {
+  /** Columns: the UF_CRM_TRANSFER_DIRECTION values present in this view
+   *  (biggest first, "Nomalum" = no value last). */
+  directions: { key: string; label: string }[];
+  responsibles: {
+    responsible_id: number;
+    full_name: string;
+    total: number;
+    /** Lead count per direction key; absent keys mean zero. */
+    by_direction: Record<string, number>;
+  }[];
+};
+
+export function getTransferDirectionStats(filter: DashFilter) {
+  return apiGet<TransferDirectionResponse>("/api/dashboard/transfer-direction-responsibles", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: filter.responsible_ids?.join(','),
+    stage: filter.stages?.join(','),
+    source: filter.sources?.join(','),
+    proekt: filter.proekts?.join(','),
+    course: filter.courses?.join(','),
+    source1: filter.source1s?.join(','),
+    filial: filter.filials?.join(','),
+    reason: filter.reasons?.join(','),
+    hudud: filter.hududs?.join(','),
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
 export type ConversionStatsResponse = {
   conversion: {
     responsible_id: number;

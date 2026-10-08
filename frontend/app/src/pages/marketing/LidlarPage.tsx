@@ -16,7 +16,7 @@ import {
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
   getAmocrmSources,
   getResponsibleTasks, getSourceLeads, getLeadDaily,
-  getSourceStats, getSource1Stats, getHududStats, getPrichinaStats, getSource1Leads, getHududLeads, getPrichinaLeads, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
+  getTransferDirectionStats, getSourceStats, getSource1Stats, getHududStats, getPrichinaStats, getSource1Leads, getHududLeads, getPrichinaLeads, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
   type SourceStatsRow, type UfBreakdownRow, type ResponsibleLeadRow,
 } from "@/lib/api/leads";
@@ -335,6 +335,10 @@ function GradCard({ gradient, lightGradient, border, lightBorder, shadow, icon, 
 }
 
 // ── Shared table header cell style ────────────────────────────────
+// Column accents for the Transfer direction table — the number of directions is
+// data-driven, so the palette just cycles.
+const TRANSFER_COLORS = ["#2196F3", "#00BCD4", "#9C27B0", "#4CAF50", "#FF9800", "#E91E63", "#795548", "#607D8B"];
+
 const TH = (color: string, minW = 140): React.CSSProperties => ({
   padding: "11px 14px", textAlign: "left", fontSize: 12, fontWeight: 700,
   color, textTransform: "uppercase", letterSpacing: "0.04em",
@@ -705,6 +709,7 @@ export default function LidlarPage() {
   const source1Q    = useQuery({ queryKey: ["stats/source1-stats", appliedWithMode], queryFn: () => getSource1Stats(appliedWithMode) });
   const hududQ      = useQuery({ queryKey: ["stats/hudud-stats", appliedWithMode], queryFn: () => getHududStats(appliedWithMode) });
   const reasonStatsQ = useQuery({ queryKey: ["stats/reason-stats", appliedWithMode], queryFn: () => getPrichinaStats(appliedWithMode) });
+  const transferQ   = useQuery({ queryKey: ["stats/transfer-direction", appliedWithMode], queryFn: () => getTransferDirectionStats(appliedWithMode) });
   const utmStatsQ   = useQuery({ queryKey: ["stats/utm-stats", appliedWithMode], queryFn: () => getUtmStats(appliedWithMode) });
   const dailyQ = useQuery({
     queryKey: ["stats/lead-daily", appliedWithMode],
@@ -746,6 +751,7 @@ export default function LidlarPage() {
   });
   const MASUL_PAGE = 12;
   const [shownMasulRows, setShownMasulRows] = useState(MASUL_PAGE);
+  const [shownTransferRows, setShownTransferRows] = useState(MASUL_PAGE);
   const [shownMasulLeads, setShownMasulLeads] = useState(10);
   const masulListRef = useRef<HTMLDivElement>(null);
   const [selectedTaskResp, setSelectedTaskResp] = useState<number | null>(null);
@@ -887,6 +893,38 @@ export default function LidlarPage() {
         bs[col.key] = (bs[col.key] ?? 0) + (u.by_stage?.[col.key] ?? 0);
     return bs;
   }, [enrichedResponsibles, stageCols]);
+
+  // ── "Transfer direction bo'yicha" (mas'ullar kesimida) ───────────
+  // Same search + empty-row rule as the Mas'ul table above, so both tables list
+  // the same people for the same filters.
+  const transferDirs = useMemo(() => transferQ.data?.directions ?? [], [transferQ.data]);
+  const transferRows = useMemo(() => {
+    const hasFilter =
+      (applied.proekts?.length ?? 0) > 0 ||
+      (applied.stages?.length ?? 0) > 0 ||
+      (applied.sources?.length ?? 0) > 0 ||
+      (applied.responsible_ids?.length ?? 0) > 0 ||
+      (applied.form_ids?.length ?? 0) > 0;
+    const s = search.trim().toLowerCase();
+    let rows = transferQ.data?.responsibles ?? [];
+    if (hasFilter) rows = rows.filter((u) => (u.total ?? 0) > 0);
+    if (s) rows = rows.filter((u) => u.full_name.toLowerCase().includes(s));
+    return rows;
+  }, [transferQ.data, search, applied]);
+
+  const transferMaxes = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const d of transferDirs)
+      m[d.key] = Math.max(1, ...transferRows.map((u) => u.by_direction?.[d.key] ?? 0));
+    return m;
+  }, [transferRows, transferDirs]);
+
+  const transferTotals = useMemo(() => {
+    const t: Record<string, number> = {};
+    for (const u of transferRows)
+      for (const d of transferDirs) t[d.key] = (t[d.key] ?? 0) + (u.by_direction?.[d.key] ?? 0);
+    return t;
+  }, [transferRows, transferDirs]);
 
   const isLoading = statsQ.isLoading;
 
@@ -1537,6 +1575,115 @@ export default function LidlarPage() {
             </div>
           )}
 
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            Transfer direction bo'yicha — mas'ullar kesimida
+        ══════════════════════════════════════════════════════════ */}
+        <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
+          <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
+            <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Transfer direction bo'yicha</span>
+            <span style={{ fontSize:12, color:"var(--text3)" }}>mas'ullar kesimida · {transferRows.length} ta xodim</span>
+          </div>
+
+          {transferQ.isLoading ? (
+            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
+          ) : transferQ.isError ? (
+            <div style={{ padding:24, color:"#F44336", fontSize:13 }}>Ma'lumotni yuklab bo'lmadi</div>
+          ) : transferRows.length === 0 ? (
+            <div style={{ padding:24, color:"#555", fontSize:13 }}>Ma'lumot yo'q</div>
+          ) : (
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
+                    <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
+                    <th style={TH("#2196F3", 90)}>Jami</th>
+                    {transferDirs.map((d, di) => (
+                      <th key={d.key} style={TH(TRANSFER_COLORS[di % TRANSFER_COLORS.length])}>{d.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {transferRows.slice(0, shownTransferRows).map((u, i) => (
+                    <tr key={u.responsible_id}
+                        style={{ background: i % 2 === 0 ? "transparent" : "var(--bg)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "var(--bg)")}>
+                      <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
+                        {String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td style={{ ...TD, width:180, position:"sticky", left:44, background:"var(--bg2)", zIndex:2 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                          <AvatarCircle name={u.full_name || `U${u.responsible_id}`} size={32} />
+                          <span style={{ fontSize:13, color:"var(--text)", fontWeight:500, whiteSpace:"nowrap" }}>
+                            {u.full_name || `User ${u.responsible_id}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={TD}>
+                        <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>{fmtNum(u.total)}</span>
+                      </td>
+                      {transferDirs.map((d, di) => {
+                        const cnt = u.by_direction?.[d.key] ?? 0;
+                        return (
+                          <td key={d.key} style={{ ...TD, minWidth:90 }}>
+                            {cnt > 0 ? (
+                              <>
+                                <span style={{ fontSize:13, color:"var(--text)" }}>{fmtNum(cnt)}</span>
+                                <MiniBar value={cnt} max={transferMaxes[d.key] ?? 1} color={TRANSFER_COLORS[di % TRANSFER_COLORS.length]} height={3} />
+                              </>
+                            ) : (
+                              <span style={{ fontSize:13, color:"var(--text3)" }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+
+                  {shownTransferRows < transferRows.length && (
+                    <tr>
+                      <td colSpan={3 + transferDirs.length} style={{ padding:"10px 12px", borderTop:"1px solid var(--border)" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <button onClick={() => setShownTransferRows(n => n + MASUL_PAGE)}
+                            style={{ display:"inline-flex", alignItems:"center", gap:5, background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:7, color:"var(--text2)", fontSize:11.5, fontWeight:600, padding:"5px 12px", cursor:"pointer" }}>
+                            Yana {Math.min(MASUL_PAGE, transferRows.length - shownTransferRows)} ta <ChevronDown size={12} />
+                          </button>
+                          <button onClick={() => setShownTransferRows(transferRows.length)}
+                            style={{ background:"transparent", border:"1px solid var(--border)", borderRadius:7, color:"var(--text2)", fontSize:11.5, fontWeight:600, padding:"5px 12px", cursor:"pointer" }}>
+                            Barchasi ({transferRows.length})
+                          </button>
+                          <span style={{ fontSize:11, color:"var(--text3)", marginLeft:"auto" }}>
+                            {Math.min(shownTransferRows, transferRows.length)} / {transferRows.length} xodim
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {/* JAMI row */}
+                  <tr style={{ background:"var(--bg3)", borderTop:"1px solid var(--border2)" }}>
+                    <td style={{ ...TD, position:"sticky", left:0, background:"var(--bg3)" }} />
+                    <td style={{ ...TD, fontSize:13, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
+                      JAMI
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>
+                        {fmtNum(transferRows.reduce((a, u) => a + u.total, 0))}
+                      </span>
+                    </td>
+                    {transferDirs.map((d, di) => (
+                      <td key={d.key} style={TD}>
+                        <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{fmtNum(transferTotals[d.key] ?? 0)}</span>
+                        <MiniBar value={1} max={1} color={TRANSFER_COLORS[di % TRANSFER_COLORS.length]} height={3} />
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
         </>)}
         {tabA === "vazifalar" && (<>
