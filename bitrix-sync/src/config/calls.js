@@ -92,6 +92,18 @@ function normalizePhone(num) {
   return digits.slice(-9);
 }
 
+/**
+ * The team tag a PBX extension carries in its name: "Hosiyat | TLC", "Laylo l TLC"
+ * (a mistyped separator), "Vakant | TLC ga" → "TLC". Last tag wins; null when the
+ * name has none (IH Uzb, HR 205, Schoolify 1, ...). The call page groups its operator
+ * picker by this.
+ */
+const TEAM_TAGS = /\b(TLC|TIS|TL)\b/gi;
+function teamOf(name) {
+  const found = [...String(name || '').matchAll(TEAM_TAGS)];
+  return found.length ? found[found.length - 1][1].toUpperCase() : null;
+}
+
 /** hangup_cause values that mean the far end never answered (for reporting). */
 const NO_ANSWER_CAUSES = new Set([
   'ORIGINATOR_CANCEL', 'NO_ANSWER', 'NO_USER_RESPONSE', 'USER_BUSY',
@@ -106,4 +118,5 @@ module.exports = {
   operatorExt,
   customerNumber,
   normalizePhone,
+  teamOf,
 };

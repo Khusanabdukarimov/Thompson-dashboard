@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import { groupOptions, groupState, toggleGroup, type SelectOption } from "./multiSelectGroups";
 
 /**
  * Filter dropdown shared by the Lidlar and Sdelkalar filter panels: checkbox
  * list with "select all / clear all". `searchable` adds a type-to-filter box
- * for long lists (e.g. managers).
+ * for long lists (e.g. managers). Options carrying a `group` are listed under
+ * group headings whose checkbox ticks the whole group (e.g. operators by team).
  */
 export function MultiSelect({
   label, icon, options, values, onChange, loading, searchable = false,
 }: {
   label: string;
   icon: React.ReactNode;
-  options: { value: string; label: string }[];
+  options: SelectOption[];
   values: string[];
   onChange: (v: string[]) => void;
   loading?: boolean;
@@ -36,6 +38,26 @@ export function MultiSelect({
 
   const toggle = (v: string) => {
     onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
+  };
+
+  // null → plain list. Groups are built from what the search leaves, so a header
+  // only ever ticks the options currently visible under it.
+  const grouped = useMemo(() => groupOptions(shown), [shown]);
+
+  const renderOption = (o: SelectOption) => {
+    const checked = values.includes(o.value);
+    return (
+      <label key={o.value}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: grouped ? "7px 12px 7px 24px" : "7px 12px", cursor: "pointer", background: checked ? "rgba(33,150,243,0.08)" : "transparent" }}
+        onMouseEnter={e => { if (!checked) (e.currentTarget as HTMLElement).style.background = "var(--bg3)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = checked ? "rgba(33,150,243,0.08)" : "transparent"; }}
+      >
+        <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} style={{ accentColor: "#2196F3", flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {o.label}
+        </span>
+      </label>
+    );
   };
 
   const displayLabel = values.length === 0
@@ -98,21 +120,24 @@ export function MultiSelect({
               )}
             </div>
           )}
-          {shown.map(o => {
-            const checked = values.includes(o.value);
+          {grouped ? grouped.map(g => {
+            const state = groupState(values, g.items);
             return (
-              <label key={o.value}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", background: checked ? "rgba(33,150,243,0.08)" : "transparent" }}
-                onMouseEnter={e => { if (!checked) (e.currentTarget as HTMLElement).style.background = "var(--bg3)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = checked ? "rgba(33,150,243,0.08)" : "transparent"; }}
-              >
-                <input type="checkbox" checked={checked} onChange={() => toggle(o.value)} style={{ accentColor: "#2196F3", flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {o.label}
-                </span>
-              </label>
+              <div key={g.name}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", background: "var(--bg3)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+                  <input type="checkbox" checked={state === "all"}
+                    ref={el => { if (el) el.indeterminate = state === "some"; }}
+                    onChange={() => onChange(toggleGroup(values, g.items))}
+                    style={{ accentColor: "#2196F3", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{g.name}</span>
+                  <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
+                    {g.items.filter(o => values.includes(o.value)).length}/{g.items.length}
+                  </span>
+                </label>
+                {g.items.map(renderOption)}
+              </div>
             );
-          })}
+          }) : shown.map(renderOption)}
           {searchable && shown.length === 0 && (
             <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--text3)" }}>Topilmadi</div>
           )}

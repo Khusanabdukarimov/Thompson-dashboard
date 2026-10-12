@@ -573,7 +573,8 @@ export type CallDashboardFilter = {
 };
 
 export type CallFilterOptions = {
-  responsibles: { id: number; full_name: string }[];
+  /** `team`: the TLC / TIS / TL tag in the operator's PBX name, null if none. */
+  responsibles: { id: number; full_name: string; team?: string | null }[];
   sources: { id: string; name: string }[];
   stages: { bitrix_id: string; name: string }[];
 };

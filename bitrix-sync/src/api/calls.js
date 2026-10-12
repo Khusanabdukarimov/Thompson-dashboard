@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { computeCallStatsFull } = require('../services/callStats');
+const { teamOf } = require('../config/calls');
 
 const router = Router();
 
@@ -327,8 +328,9 @@ router.get('/call-daily', async (req, res) => {
 // ── Filter options + ops ────────────────────────────────────────
 /**
  * GET /call-filter-options — reference shape { responsibles, sources }.
- * A "responsible" is a PBX extension (id = ext number). Only extensions that
- * actually placed/took a call are offered.
+ * A "responsible" is a PBX extension (id = Bitrix user id, else the ext number). Only
+ * extensions that actually placed/took a call are offered. `team` is the tag in the
+ * extension's name (TLC / TIS / TL, null if none) — the picker groups by it.
  */
 router.get('/call-filter-options', async (_req, res) => {
   try {
@@ -347,7 +349,7 @@ router.get('/call-filter-options', async (_req, res) => {
       ),
     ]);
     res.json({
-      responsibles: ops.rows,
+      responsibles: ops.rows.map((r) => ({ ...r, team: teamOf(r.full_name) })),
       sources: [{ id: 'onlinepbx', name: 'OnlinePBX' }, { id: 'moizvonki', name: 'Moizvonki' }],
       stages: stages.rows,
     });

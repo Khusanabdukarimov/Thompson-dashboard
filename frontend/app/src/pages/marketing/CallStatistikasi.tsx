@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
@@ -158,6 +158,9 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
   );
 }
 
+// Team tags carried in PBX operator names, in the order the picker lists them.
+const TEAM_ORDER = ["TLC", "TIS", "TL"];
+
 // ── Date presets ─────────────────────────────────────────────────
 const CALL_PRESETS = [
   { label: "Bugun",  f: todayISO(),        t: todayISO() },
@@ -240,6 +243,15 @@ export default function CallStatistikasi() {
     queryFn: getCallFilterOptions,
   });
 
+  // Operators grouped by the team tag in their PBX name (TLC / TIS / TL), the known teams
+  // first, then everyone without a tag; alphabetical inside each group.
+  const responsibleOptions = useMemo(() => {
+    const rank = (t: string | null | undefined) => { const i = TEAM_ORDER.indexOf(t ?? ""); return i === -1 ? TEAM_ORDER.length : i; };
+    return [...(filterOptionsQ.data?.responsibles ?? [])]
+      .sort((a, b) => rank(a.team) - rank(b.team) || (a.team ?? "").localeCompare(b.team ?? "") || a.full_name.localeCompare(b.full_name))
+      .map(r => ({ value: String(r.id), label: r.full_name, group: r.team ?? undefined }));
+  }, [filterOptionsQ.data]);
+
   const data: PyCallStatsResult | undefined = statsQ.data;
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
   const failedCalls = data?.failed_calls ?? 0;
@@ -312,7 +324,7 @@ export default function CallStatistikasi() {
               {/* Other filters row */}
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
                 <MultiSelect label="Mas'ul xodim" icon={<Users size={12} />} searchable
-                  options={(filterOptionsQ.data?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
+                  options={responsibleOptions}
                   values={filters.responsible_ids}
                   onChange={v => update({ responsible_ids: v })}
                   loading={filterOptionsQ.isLoading} />
