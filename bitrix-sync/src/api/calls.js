@@ -26,6 +26,14 @@ const CALL_WHERE = `
   AND ($3::text IS NULL OR c.operator_ext = ANY(string_to_array($3, ',')))
   AND ($4::text IS NULL OR c.direction    = ANY(string_to_array($4, ',')))`;
 
+// Internal = extension ↔ extension (101 → 100). The PBX tags most of them 'local',
+// but some arrive as inbound/outbound with an extension on BOTH sides (e.g. 100 → 100),
+// so direction alone is not enough. Needs INTERNAL_JOINS on the query.
+const INTERNAL_JOINS = `
+       LEFT JOIN pbx_users ia ON ia.ext = c.caller_number
+       LEFT JOIN pbx_users ib ON ib.ext = c.destination_number`;
+const IS_INTERNAL = `(c.direction = 'local' OR (ia.ext IS NOT NULL AND ib.ext IS NOT NULL))`;
+
 const params = (q) => [q.from || null, q.to || null, q.operator_ext || null, q.direction || null];
 
 // ── Per-operator call scorecard ─────────────────────────────────
@@ -153,7 +161,10 @@ function fullFilterWhere() {
 router.get('/call-stats-full', async (req, res) => {
   const from = req.query.from || null;
   const to = req.query.to || null;
-  const respId = req.query.responsible_id ? String(req.query.responsible_id) : null;
+  // One or several operators ("12,14,100"); anything non-numeric is dropped.
+  // Blank entries are dropped BEFORE Number(): Number('') is 0, which would filter to "operator 0".
+  const respIds = String(req.query.responsible_id || '').split(',').map((x) => x.trim()).filter(Boolean)
+    .map(Number).filter((n) => Number.isInteger(n));
   const phone = req.query.phone ? String(req.query.phone).replace(/\D/g, '') : null;
   const source = req.query.source && req.query.source !== 'all' ? String(req.query.source) : null;
   const stage = req.query.stage && req.query.stage !== 'all' ? String(req.query.stage) : null;
@@ -165,12 +176,13 @@ router.get('/call-stats-full', async (req, res) => {
               COALESCE(u.name, u.ext) AS full_name,
               c.direction, c.customer_norm, c.customer_number,
               c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
+              ${IS_INTERNAL} AS internal,
               (
                 ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
                 AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
               ) AS in_range
        FROM pbx_calls c
-       LEFT JOIN pbx_users u ON u.ext = c.operator_ext
+       LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
        WHERE c.start_stamp IS NOT NULL
          AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          -- $3 = to + 1 day, the callback look-ahead
@@ -192,7 +204,7 @@ router.get('/call-stats-full', async (req, res) => {
     );
     // Operator filter is applied inside the compute (not in SQL) so the callback
     // map stays global — a colleague's callback to the same customer still counts.
-    res.json(computeCallStatsFull(rows, from || '', to || '', respId ? Number(respId) : null));
+    res.json(computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null));
   } catch (err) {
     fail(res, 'call-stats-full')(err);
   }
@@ -226,7 +238,7 @@ router.get('/call-list', async (req, res) => {
               ld.stage_name,
               ld.stage_bitrix_id
        FROM pbx_calls c
-       LEFT JOIN pbx_users u ON u.ext = c.operator_ext
+       LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
        -- Lead match by phone, entirely in Postgres (no Bitrix round-trips):
        -- lead_phones is normalised to the same last-9-digits form as
        -- customer_norm. Newest lead wins when a number has several.
@@ -241,7 +253,7 @@ router.get('/call-list', async (req, res) => {
          LIMIT 1
        ) ld ON c.customer_norm IS NOT NULL
        WHERE c.start_stamp IS NOT NULL
-         AND c.direction <> 'local'
+         AND NOT ${IS_INTERNAL}
          AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
          AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
          AND ($3::int  IS NULL OR u.responsible_id = $3::int OR (c.operator_ext ~ '^[0-9]+$' AND c.operator_ext::int = $3::int))

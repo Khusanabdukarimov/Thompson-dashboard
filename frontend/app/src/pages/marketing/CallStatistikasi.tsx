@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
   Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
-  Download, PhoneOff, Search,
+  Download, PhoneOff, Search, Users,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
+import { MultiSelect } from "@/components/MultiSelect";
 import { getConfig } from "@/lib/api/config";
 import {
   getPyCallStats, getCallList, getCallFilterOptions,
@@ -51,7 +52,7 @@ function fmtPct(pct: number): string {
 type CallFilterState = {
   start_date: string;
   end_date: string;
-  responsible_id: string;
+  responsible_ids: string[];
   phone: string;
   source: string;
   call_kind: string;
@@ -83,7 +84,7 @@ function defaultCallFilters(): CallFilterState {
   return {
     start_date: localISO(new Date(now.getFullYear(), now.getMonth(), 1)),
     end_date: todayISO(),
-    responsible_id: "all",
+    responsible_ids: [],
     phone: "",
     source: "all",
     call_kind: "all",
@@ -101,11 +102,10 @@ function parseFilterNumber(value: string): number | undefined {
 }
 
 function toApiFilter(filter: CallFilterState): CallDashboardFilter {
-  const responsibleId = filter.responsible_id !== "all" ? Number(filter.responsible_id) : undefined;
   return {
     start_date: filter.start_date,
     end_date: filter.end_date,
-    responsible_id: Number.isFinite(responsibleId) ? responsibleId : undefined,
+    responsible_id: filter.responsible_ids.join(",") || undefined,
     phone: filter.phone.trim() || undefined,
     source: filter.source !== "all" ? filter.source : undefined,
     call_kind: filter.call_kind !== "all" ? filter.call_kind : undefined,
@@ -118,7 +118,7 @@ function toApiFilter(filter: CallFilterState): CallDashboardFilter {
 
 function activeFilterCount(filter: CallFilterState) {
   return [
-    filter.responsible_id !== "all",
+    filter.responsible_ids.length > 0,
     Boolean(filter.phone.trim()),
     filter.source !== "all",
     filter.call_kind !== "all",
@@ -311,13 +311,11 @@ export default function CallStatistikasi() {
 
               {/* Other filters row */}
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-                <div style={{ flex: "1 1 160px", minWidth: 140 }}>
-                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Mas'ul xodim</div>
-                  <select value={filters.responsible_id} onChange={e => update({ responsible_id: e.target.value })} style={selStyle}>
-                    <option value="all">{filterOptionsQ.isLoading ? "Yuklanmoqda..." : "Barchasi"}</option>
-                    {(filterOptionsQ.data?.responsibles ?? []).map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
-                  </select>
-                </div>
+                <MultiSelect label="Mas'ul xodim" icon={<Users size={12} />} searchable
+                  options={(filterOptionsQ.data?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
+                  values={filters.responsible_ids}
+                  onChange={v => update({ responsible_ids: v })}
+                  loading={filterOptionsQ.isLoading} />
                 <div style={{ flex: "1 1 140px", minWidth: 130 }}>
                   <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Holat</div>
                   <select value={filters.status} onChange={e => update({ status: e.target.value })} style={selStyle}>

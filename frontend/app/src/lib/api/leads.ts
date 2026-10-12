@@ -561,7 +561,8 @@ export type CallListRow = {
 export type CallDashboardFilter = {
   start_date?: string;
   end_date?: string;
-  responsible_id?: number;
+  /** One id, or several comma-separated ("12,14"). */
+  responsible_id?: number | string;
   phone?: string;
   source?: string;
   call_kind?: string;

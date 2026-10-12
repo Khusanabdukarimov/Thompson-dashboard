@@ -4,7 +4,11 @@
  *
  * Definitions, all confirmed against OnlinePBX:
  *   direction        accountcode (inbound / outbound / local=internal)
- *   Все (all)        inbound + outbound + internal
+ *   Все (all)        inbound + outbound. Internal calls (extension → extension,
+ *                    e.g. 101 → 100) are NOT counted: not in the total, not in any
+ *                    operator row, not in the callback map. OnlinePBX's own "Все"
+ *                    does include them, so this total is lower than the panel's by
+ *                    exactly `internal_calls`.
  *   answered/success talk_time > 0 (a real conversation)
  *   Пропущенные      inbound not answered
  *   НДЗ              outbound not answered
@@ -30,16 +34,18 @@ const ms = (v) => {
 /**
  * @param rows { responsible_id, full_name, direction, customer_norm,
  *               start_stamp, duration, talk, answered, in_range }[]
- * @param filterOpId  when set, totals + rows are scoped to this operator, but
- *                    the callback map stays global (a colleague's callback to the
- *                    same customer still counts as reached).
+ * @param rows        … plus `internal` (extension-to-extension, see config/calls.js)
+ * @param filterOpId  one id or an array of ids; when set, totals + rows are scoped
+ *                    to those operators, but the callback map stays global (a
+ *                    colleague's callback to the same customer still counts as reached).
  */
 function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
-  const keep = (r) => filterOpId == null || Number(r.responsible_id) === Number(filterOpId);
+  const only = filterOpId == null ? null : [].concat(filterOpId).map(Number);
+  const keep = (r) => !only || only.length === 0 || only.includes(Number(r.responsible_id));
   // Answered-contact times per number (any direction), for callback detection.
   const contact = new Map();
   for (const r of rows) {
-    if (!r.answered || !r.customer_norm) continue;
+    if (!r.answered || !r.customer_norm || r.internal) continue;
     const t = ms(r.start_stamp);
     if (t == null) continue;
     if (!contact.has(r.customer_norm)) contact.set(r.customer_norm, []);
@@ -75,7 +81,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
   for (const r of rows) {
     if (!r.in_range) continue;
     if (!keep(r)) continue;
-    if (r.direction === 'local') { internal += 1; continue; }
+    if (r.direction === 'local' || r.internal) { internal += 1; continue; }
     if (r.direction !== 'inbound' && r.direction !== 'outbound') continue;
 
     const dur = Number(r.duration || 0);
@@ -140,7 +146,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
   const success = external - missed - ndz;
   return {
     date_from: dateFrom || '', date_to: dateTo || '',
-    total_calls: external + internal,           // Все — matches OnlinePBX
+    total_calls: external,                      // Все, without internal calls
     external_calls: external,
     inbound_calls: inbound, outbound_calls: outbound, internal_calls: internal, callback_calls: 0,
     success_calls: success, failed_calls: missed + ndz, ndz_calls: ndz, missed_inbound: missed,
