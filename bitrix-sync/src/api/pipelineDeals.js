@@ -4,7 +4,8 @@
  *
  * Every endpoint takes ?pipeline=uc|yangi plus the shared filters
  *   from, to (YYYY-MM-DD, Tashkent date of d.date_create), mode,
- *   responsible_id, source, stage (comma-separated lists),
+ *   responsible_id, source, stage, source1, prichina (comma-separated lists;
+ *   source1 / prichina are Источник 1 / Причина enum option ids),
  *   report_stage (JSON array of Стадия (для отчетов) values — free text, so not CSV)
  * and counts deals by their CURRENT stage, so a table row always adds up to the
  * Bitrix kanban for the same created-date window.
@@ -15,7 +16,7 @@
  */
 const { Router } = require('express');
 const pool = require('../db/pool');
-const { getPipeline, getStages, getEnumLabels, categoryCond } = require('../services/pipelines');
+const { getPipeline, getStages, getEnumLabels, categoryCond, SOURCE1_FIELD } = require('../services/pipelines');
 
 const router = Router();
 
@@ -34,6 +35,15 @@ function parseJsonList(v) {
     const a = JSON.parse(String(v));
     return Array.isArray(a) && a.length > 0 && a.length <= 1000 && a.every((x) => typeof x === 'string') ? a : null;
   } catch { return null; }
+}
+
+/**
+ * ?source1=1016,1018 → ['1016','1018'], or null when empty/malformed. Enum option
+ * ids are numeric, so anything else means a bad request, not a value to match.
+ */
+function parseIdList(v) {
+  const ids = String(v).split(',').map((x) => x.trim());
+  return ids.length > 0 && ids.every((x) => /^\d+$/.test(x)) ? ids : null;
 }
 
 /** Resolves ?pipeline= or answers 400. */
@@ -60,6 +70,15 @@ function buildScope(q, pipe, extra = () => []) {
   if (q.responsible_id) where.push(`d.responsible_id::text = ANY(string_to_array(${p(String(q.responsible_id))}, ','))`);
   if (q.source)         where.push(`COALESCE(NULLIF(d.source_id, ''), '${NONE}') = ANY(string_to_array(${p(String(q.source))}, ','))`);
   if (q.stage)          where.push(`s.bitrix_id = ANY(string_to_array(${p(String(q.stage))}, ','))`);
+  // Enum filters. An unreadable list matches nothing rather than silently matching everything.
+  if (q.source1) {
+    const ids = parseIdList(q.source1);
+    where.push(ids ? `d.uf_source1 = ANY(${p(ids)}::text[])` : 'FALSE');
+  }
+  if (q.prichina && pipe.reasonField) {
+    const ids = parseIdList(q.prichina);
+    where.push(ids ? `d.uf_prichina = ANY(${p(ids)}::text[])` : 'FALSE');
+  }
   if (pipe.reportStage && q.report_stage) {
     const reportStages = parseJsonList(q.report_stage);
     // A filter that cannot be read matches nothing rather than silently matching everything.
@@ -113,6 +132,25 @@ router.get('/meta', async (req, res) => {
     const stages = await getStages(pipe.categoryId);
     res.json({ key: pipe.key, label: pipe.label, category_id: pipe.categoryId, has_reason: !!pipe.reasonField, stages });
   } catch (err) { fail(res, 'meta')(err); }
+});
+
+/**
+ * GET /filter-options — options for the "Manba 1" and "Sabab" pickers: every
+ * option of the Bitrix enum (not just those present in the window, so picking
+ * one never hides the others), alphabetical like the Lidlar pickers.
+ */
+router.get('/filter-options', async (req, res) => {
+  const pipe = pipelineOr400(req, res); if (!pipe) return;
+  try {
+    const [source1, reasons] = await Promise.all([
+      getEnumLabels(SOURCE1_FIELD),
+      pipe.reasonField ? getEnumLabels(pipe.reasonField) : {},
+    ]);
+    const options = (labels) => Object.entries(labels)
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ source1s: options(source1), reasons: options(reasons) });
+  } catch (err) { fail(res, 'filter-options')(err); }
 });
 
 /** GET /kpi — deal counts for the KPI cards: per stage and rolled up. */

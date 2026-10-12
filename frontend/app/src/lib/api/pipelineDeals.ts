@@ -25,6 +25,9 @@ export type PipelineFilter = {
   responsible_id?: string;
   source?: string;
   stage?: string;
+  /** Источник 1 / Причина enum option ids, comma-separated ("Manba 1" / "Sabab" filters). */
+  source1?: string;
+  prichina?: string;
   /** JSON array of Стадия (для отчетов) values — free text, so not comma-separated. */
   report_stage?: string;
 };
@@ -103,6 +106,16 @@ export function getPipelineSources(f: PipelineFilter) {
 
 export function getPipelineReasons(f: PipelineFilter & { scope: ReasonScope }) {
   return apiGet<PipelineReasons>('/api/dashboard/pipeline/reasons', q(f), API_URL_CRM);
+}
+
+export type PipelineFilterOptions = {
+  source1s: { id: string; name: string }[];
+  reasons: { id: string; name: string }[];
+};
+
+/** Options for the "Manba 1" and "Sabab" pickers (the whole Bitrix enum, alphabetical). */
+export function getPipelineFilterOptions(f: Pick<PipelineFilter, 'pipeline'>) {
+  return apiGet<PipelineFilterOptions>('/api/dashboard/pipeline/filter-options', q(f), API_URL_CRM);
 }
 
 export type ReportStageOptions =

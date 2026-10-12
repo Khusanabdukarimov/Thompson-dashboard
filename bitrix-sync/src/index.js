@@ -137,6 +137,8 @@ Promise.all([
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_prichina      TEXT;
     -- Стадия (для отчетов) (UF_CRM_6A364190B79ED), free text, whitespace-normalised.
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_report_stage  TEXT;
+    -- Источник 1 (UF_CRM_6180BEE07D2B3) enum id; labels are resolved at read time.
+    ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_source1       TEXT;
     CREATE INDEX IF NOT EXISTS deals_date_modify_idx      ON deals(date_modify);
     CREATE INDEX IF NOT EXISTS deals_uf_sale_date_idx     ON deals(uf_sale_date);
     CREATE INDEX IF NOT EXISTS deals_uf_bp_sale_date_idx  ON deals(uf_bp_sale_date);

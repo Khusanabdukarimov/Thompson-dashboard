@@ -2,11 +2,13 @@
  * One-time backfill for the Sdelkalar pipelines (Учебный центр = category 0,
  * Школа | YANGI = category 25): copies TITLE, Причина (UF_CRM_6075517B5CAD2) and
  * Стадия (для отчетов) (UF_CRM_6A364190B79ED) from Bitrix into deals.title /
- * deals.uf_prichina / deals.uf_report_stage for deals already in the DB.
+ * deals.uf_prichina / deals.uf_report_stage for deals already in the DB, plus
+ * Источник 1 (UF_CRM_6180BEE07D2B3) into deals.uf_source1 (Manba 1 filter).
  *
- * New and changed deals get all three from the webhooks via upsertDeal; this only
- * covers history. Touches nothing but those three columns, and only rows that
+ * New and changed deals get all four from the webhooks via upsertDeal; this only
+ * covers history. Touches nothing but those four columns, and only rows that
  * exist — it never inserts deals.
+ * Idempotent: rows that already match are skipped, so it is safe to re-run.
  *
  * Same paging as backfillLeadUf: ID cursor (start=-1), sleep on OVERLOAD_LIMIT.
  * One pass per category: bitrix.buildUrl flattens a filter array to "0,25",
@@ -20,6 +22,7 @@ const { bitrixCall } = require('../services/bitrix');
 
 const PRICHINA = 'UF_CRM_6075517B5CAD2';
 const REPORT_STAGE = 'UF_CRM_6A364190B79ED';
+const SOURCE1 = 'UF_CRM_6180BEE07D2B3';
 const CATEGORIES = [0, 25];
 const PAGE_DELAY_MS = 1200;
 const OVERLOAD_WAIT_MS = 5 * 60 * 1000;
@@ -32,7 +35,7 @@ async function fetchPage(categoryId, lastId) {
       res = await bitrixCall('crm.deal.list', {
         order: { ID: 'ASC' },
         filter: { '>ID': lastId, CATEGORY_ID: categoryId },
-        select: ['ID', 'TITLE', PRICHINA, REPORT_STAGE],
+        select: ['ID', 'TITLE', PRICHINA, REPORT_STAGE, SOURCE1],
         start: -1,
       });
     } catch (e) {
@@ -52,9 +55,10 @@ async function fetchPage(categoryId, lastId) {
 }
 
 async function main() {
-  console.log('=== Deal title + Причина + Стадия (для отчетов) backfill ===');
+  console.log('=== Deal title + Причина + Стадия (для отчетов) + Источник 1 backfill ===');
   await pool.query('ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_prichina TEXT');
   await pool.query('ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_report_stage TEXT');
+  await pool.query('ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_source1 TEXT');
 
   const resumeFrom = parseInt(process.argv[2] || '0', 10) || 0;
   let seen = 0, updated = 0;
@@ -66,7 +70,7 @@ async function main() {
     for (;;) {
       const rows = await fetchPage(categoryId, lastId);
       if (!rows.length) break;
-      const ids = [], titles = [], reasons = [], stages = [];
+      const ids = [], titles = [], reasons = [], stages = [], sources1 = [];
       for (const r of rows) {
         const p = Array.isArray(r[PRICHINA]) ? r[PRICHINA][0] : r[PRICHINA];
         ids.push(parseInt(r.ID, 10));
@@ -75,14 +79,16 @@ async function main() {
         // Same normalisation as upsertDeal's ufText, so backfilled and live values match.
         const st = r[REPORT_STAGE] == null ? '' : String(Array.isArray(r[REPORT_STAGE]) ? r[REPORT_STAGE][0] ?? '' : r[REPORT_STAGE]);
         stages.push(st.replace(/\s+/g, ' ').trim() || null);
+        const s1 = Array.isArray(r[SOURCE1]) ? r[SOURCE1][0] : r[SOURCE1];
+        sources1.push(s1 != null && String(s1) !== '' ? String(s1) : null);
       }
       const { rowCount } = await pool.query(
-        `UPDATE deals d SET title = v.t, uf_prichina = v.p, uf_report_stage = v.s
-         FROM unnest($1::int[], $2::text[], $3::text[], $4::text[]) AS v(id, t, p, s)
+        `UPDATE deals d SET title = v.t, uf_prichina = v.p, uf_report_stage = v.s, uf_source1 = v.s1
+         FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::text[]) AS v(id, t, p, s, s1)
          WHERE d.id = v.id
            AND (d.title IS DISTINCT FROM v.t OR d.uf_prichina IS DISTINCT FROM v.p
-                OR d.uf_report_stage IS DISTINCT FROM v.s)`,
-        [ids, titles, reasons, stages]
+                OR d.uf_report_stage IS DISTINCT FROM v.s OR d.uf_source1 IS DISTINCT FROM v.s1)`,
+        [ids, titles, reasons, stages, sources1]
       );
       updated += rowCount;
       seen += rows.length;

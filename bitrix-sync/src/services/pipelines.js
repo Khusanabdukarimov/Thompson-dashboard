@@ -14,6 +14,9 @@
  */
 const { bitrixCall } = require('./bitrix');
 
+// Источник 1 (enumeration) — same field and options on both pipelines; deals.uf_source1.
+const SOURCE1_FIELD = 'UF_CRM_6180BEE07D2B3';
+
 const PIPELINES = {
   uc: {
     key: 'uc', categoryId: 0, label: 'Учебный центр',
@@ -137,4 +140,4 @@ function categoryCond(categoryId, alias = 's') {
     : `${alias}.bitrix_id LIKE 'C${Number(categoryId)}:%'`;
 }
 
-module.exports = { PIPELINES, getPipeline, getStages, getEnumLabels, categoryCond };
+module.exports = { PIPELINES, SOURCE1_FIELD, getPipeline, getStages, getEnumLabels, categoryCond };

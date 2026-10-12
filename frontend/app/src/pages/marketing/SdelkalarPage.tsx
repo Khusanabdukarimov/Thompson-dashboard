@@ -3,7 +3,7 @@ import { useDarkMode } from "@/hooks/useDarkMode";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
   Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info, Calendar, Filter, ListChecks,
-  User, ExternalLink,
+  User, ExternalLink, XCircle,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { InfoTip } from "@/components/InfoTip";
@@ -12,7 +12,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { getDealFilterOptions } from "@/lib/api/deals";
 import {
   getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
-  getPipelineReportStages,
+  getPipelineReportStages, getPipelineFilterOptions,
   NONE_KEY,
   type PipelineKey, type PipelineFilter, type PipelineDealsFilter, type PipelineStage,
   type PipelineManagerRow, type ReasonScope,
@@ -370,6 +370,8 @@ export default function SdelkalarPage() {
     responsible_ids: [] as string[],
     stage_ids: [] as string[],
     sources: [] as string[],
+    source1s: [] as string[],
+    reasons: [] as string[],
     report_stages: [] as string[],
   });
 
@@ -388,8 +390,10 @@ export default function SdelkalarPage() {
     responsible_id: filter.responsible_ids.join(',') || undefined,
     source: filter.sources.join(',') || undefined,
     stage: filter.stage_ids.join(',') || undefined,
+    source1: filter.source1s.join(',') || undefined,
+    prichina: filter.reasons.join(',') || undefined,
     report_stage: pipeline === "uc" && filter.report_stages.length ? JSON.stringify(filter.report_stages) : undefined,
-  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.report_stages]);
+  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.source1s, filter.reasons, filter.report_stages]);
 
   // Keep the last result on screen while a filter changes, but never across a
   // pipeline switch: the old pipeline's numbers would sit under the new labels.
@@ -404,6 +408,13 @@ export default function SdelkalarPage() {
     placeholderData: (p, q) => (q?.queryKey[2] === reasonScope ? samePipeline(p, q?.queryKey) : undefined),
   });
 
+  // Whole Bitrix enums for Manba 1 / Sabab, so options stay stable while other filters change.
+  const enumOptsQ = useQuery({
+    queryKey: ["pipeline-filter-options", pipeline],
+    queryFn: () => getPipelineFilterOptions({ pipeline }),
+    staleTime: 5 * 60_000,
+  });
+
   const reportStagesQ = useQuery({
     queryKey: ["pipeline-report-stages", pipeline, apiFrom, apiTo],
     queryFn: () => getPipelineReportStages({ pipeline, from: apiFrom, to: apiTo }),
@@ -412,7 +423,7 @@ export default function SdelkalarPage() {
   });
 
   const clearFilter = useCallback(() => {
-    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], report_stages: [] });
+    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], source1s: [], reasons: [], report_stages: [] });
     setPresetLabel("Bu oy");
     setDrill(null);
   }, []);
@@ -444,6 +455,8 @@ export default function SdelkalarPage() {
     filter.responsible_ids.length > 0,
     filter.stage_ids.length > 0,
     filter.sources.length > 0,
+    filter.source1s.length > 0,
+    filter.reasons.length > 0,
     filter.report_stages.length > 0,
     filter.from !== startOfMonthISO() || filter.to !== todayISO(),
   ].filter(Boolean).length;
@@ -453,6 +466,8 @@ export default function SdelkalarPage() {
     .map(r => ({ value: String(r.id), label: r.full_name })), [filterQ.data]);
   const stageOptions = useMemo(() => stages.map(s => ({ value: s.id, label: s.name })), [stages]);
   const srcOptions = useMemo(() => (filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })), [filterQ.data]);
+  const source1Options = useMemo(() => (enumOptsQ.data?.source1s ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
+  const reasonOptions = useMemo(() => (enumOptsQ.data?.reasons ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
   const reportStageOptions = useMemo(() => {
     const d = reportStagesQ.data;
     const opts = d?.available ? d.items.map(i => ({ value: i.value, label: `${i.label} (${fmtNum(i.total)})` })) : [];
@@ -722,6 +737,12 @@ export default function SdelkalarPage() {
                 <MultiSelect label="Manba (Источник)" icon={<TrendingUp size={12} />}
                   options={srcOptions} values={filter.sources}
                   onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
+                <MultiSelect label="Manba 1" icon={<TrendingUp size={12} />}
+                  options={source1Options} values={filter.source1s}
+                  onChange={v => setFilter(s => ({ ...s, source1s: v }))} loading={enumOptsQ.isLoading} />
+                <MultiSelect label="Sabab" icon={<XCircle size={12} />}
+                  options={reasonOptions} values={filter.reasons}
+                  onChange={v => setFilter(s => ({ ...s, reasons: v }))} loading={enumOptsQ.isLoading} />
                 {pipeline === "uc" && (
                   <MultiSelect label="Стадия (для отчетов)" icon={<ListChecks size={12} />}
                     options={reportStageOptions} values={filter.report_stages}
