@@ -173,6 +173,7 @@ router.get('/call-stats-full', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.uuid,
               COALESCE(u.responsible_id, CASE WHEN c.operator_ext ~ '^[0-9]+$' THEN c.operator_ext::int ELSE NULL END) AS responsible_id,
+              c.operator_ext,
               COALESCE(u.name, u.ext) AS full_name,
               c.direction, c.customer_norm, c.customer_number,
               c.start_stamp, c.duration, c.talk_time AS talk, c.answered,

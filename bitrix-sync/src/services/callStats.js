@@ -75,8 +75,13 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
   };
 
   const ops = new Map();
+  // One row per Bitrix user. An operator the PBX knows but Bitrix does not (a Moizvonki
+  // manager) keeps their own row, keyed by extension — before, they all shared the "queue"
+  // row, which then took its name from whichever call happened to come first. Only calls
+  // that rang out with NO operator (and Bitrix owners without a row) share the queue row.
   const getOp = (r) => {
-    const key = r.responsible_id != null ? String(r.responsible_id) : 'queue';
+    const key = r.responsible_id != null ? String(r.responsible_id)
+      : r.operator_ext ? `ext:${r.operator_ext}` : 'queue';
     if (!ops.has(key)) {
       ops.set(key, {
         responsible_id: r.responsible_id != null ? Number(r.responsible_id) : null,
