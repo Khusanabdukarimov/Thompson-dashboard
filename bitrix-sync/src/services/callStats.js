@@ -10,7 +10,15 @@
  *                    does include them, so this total is lower than the panel's by
  *                    exactly `internal_calls`.
  *   answered/success talk_time > 0 (a real conversation)
- *   Пропущенные      inbound not answered
+ *   Пропущенные      inbound not answered. WHOSE missed call it is comes from Bitrix24
+ *                    (bx_missed_calls: the responsible of the CRM entity the call was
+ *                    registered against), because the PBX attributes a call that rang
+ *                    out in a queue to nobody — per-operator Propushenniy was 0. The
+ *                    Propushenniy card, "Ne perezvonili", "Reaksiya vaqti" and the
+ *                    per-operator columns all use those events; Muvaffaqiyatsiz /
+ *                    success_calls stay PBX-based (they are derived from the PBX's own
+ *                    answered/unanswered split), so the two missed counts can differ by
+ *                    the few calls the PBX and Bitrix disagree on.
  *   НДЗ              outbound not answered
  *   Не перезвонили   a missed inbound with NO answered contact (either
  *                    direction) to that number within 24h — NOT just an outbound
@@ -38,8 +46,16 @@ const ms = (v) => {
  * @param filterOpId  one id or an array of ids; when set, totals + rows are scoped
  *                    to those operators, but the callback map stays global (a
  *                    colleague's callback to the same customer still counts as reached).
+ * @param bxMissed    Bitrix24 missed inbound calls { call_start, phone_norm, responsible_id }[]
+ *                    already limited to the date range. An array (even empty) switches the
+ *                    Propushenniy figures to them; null/undefined keeps the PBX's own missed
+ *                    calls (used when the table is unavailable, or for the Moizvonki source).
+ *                    responsible_id is a Bitrix user id, matched to the operator row with the
+ *                    same id; an owner without a row (a non-call-centre manager, Data365)
+ *                    lands on the "Call Centre — javobsiz" row.
  */
-function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
+function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMissed = null) {
+  const useBx = Array.isArray(bxMissed);
   const only = filterOpId == null ? null : [].concat(filterOpId).map(Number);
   const keep = (r) => !only || only.length === 0 || only.includes(Number(r.responsible_id));
   // Answered-contact times per number (any direction), for callback detection.
@@ -96,15 +112,31 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
       if (r.customer_norm) b._in.add(r.customer_norm);
       if (answered) b.success_calls += 1;
       else {
-        missed += 1; b.missed_inbound += 1; b.failed_calls += 1;
-        const ev = { num: r.customer_norm, at: ms(r.start_stamp) };
-        b._missed.push(ev); missedEvents.push(ev);
+        missed += 1; b.failed_calls += 1;
+        if (!useBx) {
+          b.missed_inbound += 1;
+          const ev = { num: r.customer_norm, at: ms(r.start_stamp) };
+          b._missed.push(ev); missedEvents.push(ev);
+        }
       }
     } else {
       outbound += 1; b.outbound_calls += 1; b.talk_out += talk; b.dur_out += dur;
       if (r.customer_norm) b._out.add(r.customer_norm);
       if (answered) b.success_calls += 1;
       else { ndz += 1; b.ndz_calls += 1; b.failed_calls += 1; }
+    }
+  }
+
+  if (useBx) {
+    for (const e of bxMissed) {
+      const at = ms(e.call_start);
+      if (at == null) continue;
+      const rid = e.responsible_id != null ? String(e.responsible_id) : null;
+      // Rows exist only for people with PBX calls in range; anyone else is nobody's row.
+      const b = (rid != null && ops.get(rid)) || getOp({ responsible_id: null });
+      if (!keep({ responsible_id: b.responsible_id })) continue;
+      const ev = { num: e.phone_norm, at };
+      b.missed_inbound += 1; b._missed.push(ev); missedEvents.push(ev);
     }
   }
 
@@ -118,7 +150,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
   }
 
   const responsibles = [...ops.values()]
-    .filter((b) => b.inbound_calls + b.outbound_calls > 0)
+    .filter((b) => b.inbound_calls + b.outbound_calls + b.missed_inbound > 0)
     .map((b) => {
       for (const m of b._missed) {
         if (m.num && m.at != null && contactedWithin(m.num, m.at)) b.missed_recalled += 1;
@@ -149,7 +181,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null) {
     total_calls: external,                      // Все, without internal calls
     external_calls: external,
     inbound_calls: inbound, outbound_calls: outbound, internal_calls: internal, callback_calls: 0,
-    success_calls: success, failed_calls: missed + ndz, ndz_calls: ndz, missed_inbound: missed,
+    success_calls: success, failed_calls: missed + ndz, ndz_calls: ndz, missed_inbound: missedEvents.length,
     total_duration: talkExt,                    // разговоров (talk) — shown by the total card
     call_duration_total: durExt,                // длительность (call length)
     avg_duration: external ? Math.round(durExt / external) : 0,

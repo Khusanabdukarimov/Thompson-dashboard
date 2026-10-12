@@ -24,13 +24,14 @@ async function syncResponsibles() {
     const id = parseInt(u.ID, 10);
     if (!id) continue;
     await pool.query(
-      `INSERT INTO responsibles (id, name, last_name, email, work_position, active, synced_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `INSERT INTO responsibles (id, name, last_name, email, work_position, phone_inner, active, synced_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
        ON CONFLICT (id) DO UPDATE SET
          name          = EXCLUDED.name,
          last_name     = EXCLUDED.last_name,
          email         = EXCLUDED.email,
          work_position = EXCLUDED.work_position,
+         phone_inner   = EXCLUDED.phone_inner,
          active        = EXCLUDED.active,
          synced_at     = NOW()`,
       [
@@ -39,6 +40,7 @@ async function syncResponsibles() {
         u.LAST_NAME || null,
         u.EMAIL || null,
         u.WORK_POSITION || null,
+        String(u.UF_PHONE_INNER || '').trim() || null, // internal phone = PBX extension
         u.ACTIVE !== false && u.ACTIVE !== 'N',
       ]
     );
@@ -53,6 +55,9 @@ async function syncResponsibles() {
   );
 
   console.log(`[responsibleSync] ${n} users synced`);
+  // Extension numbers may just have changed hands; re-link the PBX operators.
+  try { await require('../sync/syncCalls').linkUsersByInnerPhone(); }
+  catch (err) { console.warn('[responsibleSync] PBX link skipped:', err.message); }
   return n;
 }
 

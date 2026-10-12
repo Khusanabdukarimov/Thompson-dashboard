@@ -202,9 +202,37 @@ router.get('/call-stats-full', async (req, res) => {
        ORDER BY c.start_stamp DESC`,
       [from, to, to ? addDaysISO(to, 1) : null, phone, stage, source],
     );
+    // Whose missed call is it? Bitrix24 knows (the CRM entity's responsible); the PBX does
+    // not — a queue call that rang out has no operator. Moizvonki calls are not in Bitrix's
+    // list, so that source keeps the PBX's own figures, as does any failure to read the table.
+    let bxMissed = null;
+    if (source !== 'moizvonki') {
+      try {
+        ({ rows: bxMissed } = await pool.query(
+          `SELECT m.call_start, m.phone_norm, m.responsible_id
+           FROM bx_missed_calls m
+           WHERE ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+             AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+             AND ($3::text IS NULL OR m.phone_norm LIKE '%' || $3 || '%')
+             -- same Bosqich rule as the call rows: the newest lead with this phone is in $4
+             AND ($4::text IS NULL OR $4::text = (
+               SELECT s.bitrix_id
+               FROM lead_phones lp
+               JOIN leads l ON l.id = lp.lead_id
+               LEFT JOIN stages s ON s.id = l.stage_id
+               WHERE RIGHT(regexp_replace(lp.phone, '\\D', '', 'g'), 9) = m.phone_norm
+               ORDER BY l.date_create DESC NULLS LAST
+               LIMIT 1
+             ))`,
+          [from, to, phone, stage],
+        ));
+      } catch (err) {
+        console.warn(`[calls/call-stats-full] bx_missed_calls unavailable, using PBX missed calls: ${err.message}`);
+      }
+    }
     // Operator filter is applied inside the compute (not in SQL) so the callback
     // map stays global — a colleague's callback to the same customer still counts.
-    res.json(computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null));
+    res.json(computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null, bxMissed));
   } catch (err) {
     fail(res, 'call-stats-full')(err);
   }

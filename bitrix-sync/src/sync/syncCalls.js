@@ -137,8 +137,34 @@ async function syncUsers() {
        LOWER(TRIM(COALESCE(r.last_name,'') || ' ' || COALESCE(r.name,'')))
      )`,
   );
-  console.log(`[calls] pbx users: ${users.length} (${rowCount} linked to Bitrix users)`);
+  console.log(`[calls] pbx users: ${users.length} (${rowCount} linked to Bitrix users by name)`);
+  await linkUsersByInnerPhone();
   return users.length;
+}
+
+/**
+ * Link each PBX extension to the Bitrix user whose "internal phone"
+ * (UF_PHONE_INNER, mirrored in responsibles.phone_inner) is that extension.
+ *
+ * This is the authoritative link — it is how Bitrix itself ties a PBX user to a
+ * person — and it replaces the name match above, which only caught 7 of 28
+ * extensions because PBX names ("Hosiyat | TLC", "Vakant | TLC ga") are not Bitrix
+ * names. Consequence: a missed call's owner (a Bitrix user id) can be
+ * placed on the operator's row. Idempotent; a no-op until responsibles is synced.
+ */
+async function linkUsersByInnerPhone(db = pool) {
+  const { rowCount } = await db.query(
+    `UPDATE pbx_users pu SET responsible_id = x.id
+     FROM (
+       -- one user per extension: an active one wins if Bitrix ever lists two
+       SELECT DISTINCT ON (phone_inner) phone_inner, id
+       FROM responsibles WHERE phone_inner IS NOT NULL AND phone_inner <> ''
+       ORDER BY phone_inner, active DESC, id
+     ) x
+     WHERE x.phone_inner = pu.ext AND pu.responsible_id IS DISTINCT FROM x.id`,
+  );
+  if (rowCount) console.log(`[calls] ${rowCount} PBX extension(s) linked to Bitrix users by internal phone`);
+  return rowCount;
 }
 
 // mongo_history/search.json has TWO independent gotchas, both verified live
@@ -233,4 +259,4 @@ async function syncRecentCalls(lookbackHours = 3) {
   return syncCallRange(to - lookbackHours * 3600, to);
 }
 
-module.exports = { ensureSchema, syncUsers, syncCallRange, syncRecentCalls, upsertCall, upsertUser, nowUnix };
+module.exports = { ensureSchema, syncUsers, linkUsersByInnerPhone, syncCallRange, syncRecentCalls, upsertCall, upsertUser, nowUnix };

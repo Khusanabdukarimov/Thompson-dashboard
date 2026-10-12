@@ -19,6 +19,8 @@ const onpbx                              = require('./services/onlinepbx');
 const { ensureSchema: callsEnsureSchema, syncUsers: syncPbxUsers, syncRecentCalls } = require('./sync/syncCalls');
 const moizvonki = require('./services/moizvonki');
 const { syncRecentMoizvonkiCalls } = require('./sync/moizvonkiCalls');
+const { ensureSchema: bxMissedEnsureSchema, syncRecentBxMissed } = require('./sync/bxMissedCalls');
+const { linkUsersByInnerPhone } = require('./sync/syncCalls');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
 const marketingRouter  = require('./api/marketing');
@@ -90,6 +92,15 @@ function startCallSync() {
     } catch (err) {
       console.error('[calls] sync failed:', err.message);
     }
+    // Bitrix24 missed calls (they carry the responsible the PBX cannot name). Separate
+    // from the PBX sweep so a Bitrix outage never blocks, or is blocked by, the PBX.
+    try {
+      await linkUsersByInnerPhone();
+      const { total, unresolved } = await syncRecentBxMissed(lookbackH);
+      if (total) console.log(`[calls] Bitrix24 missed: ${total} calls refreshed${unresolved ? ` (${unresolved} without an owner)` : ''}`);
+    } catch (err) {
+      console.error('[calls] Bitrix24 missed-call sync failed:', err.message);
+    }
   };
 
   // PBX extensions must exist before calls reference them (FK on operator_ext).
@@ -141,6 +152,8 @@ Promise.all([
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_source1       TEXT;
     -- Филиал (UF_CRM_6075517B4499E) enum id; labels are resolved at read time.
     ALTER TABLE deals ADD COLUMN IF NOT EXISTS uf_filial        TEXT;
+    -- Bitrix user's "internal phone" (UF_PHONE_INNER) = their PBX extension; links pbx_users to Bitrix users.
+    ALTER TABLE responsibles ADD COLUMN IF NOT EXISTS phone_inner TEXT;
     CREATE INDEX IF NOT EXISTS deals_date_modify_idx      ON deals(date_modify);
     CREATE INDEX IF NOT EXISTS deals_uf_sale_date_idx     ON deals(uf_sale_date);
     CREATE INDEX IF NOT EXISTS deals_uf_bp_sale_date_idx  ON deals(uf_bp_sale_date);
@@ -162,6 +175,7 @@ Promise.all([
   rejaEnsureSchema().catch(err => console.error('[startup] reja migration failed:', err.message)),
   require('./services/ufSync').ensureSchema().catch(err => console.error('[startup] ufSync migration failed:', err.message)),
   callsEnsureSchema().catch(err => console.error('[startup] pbx migration failed:', err.message)),
+  bxMissedEnsureSchema().catch(err => console.error('[startup] bx missed-calls migration failed:', err.message)),
 ]).then(() => {
   app.listen(PORT, () => {
     startCallSync();
