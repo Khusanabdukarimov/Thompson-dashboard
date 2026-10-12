@@ -16,13 +16,15 @@ const { bitrixCall } = require('./bitrix');
 
 // Источник 1 (enumeration) — same field and options on both pipelines; deals.uf_source1.
 const SOURCE1_FIELD = 'UF_CRM_6180BEE07D2B3';
+// Филиал (enumeration, 36 options) — same on both pipelines; deals.uf_filial.
+const FILIAL_FIELD = 'UF_CRM_6075517B4499E';
 
 const PIPELINES = {
   uc: {
     key: 'uc', categoryId: 0, label: 'Учебный центр',
     // Причина (enumeration) — the only reason field this pipeline has.
     reasonField: 'UF_CRM_6075517B5CAD2',
-    // Стадия (для отчетов) — free text kept in deals.uf_report_stage; filterable.
+    // Стадия (для отчетов) — free text kept in deals.uf_report_stage; shown in drill-downs.
     reportStage: true,
   },
   yangi: {
@@ -140,4 +142,4 @@ function categoryCond(categoryId, alias = 's') {
     : `${alias}.bitrix_id LIKE 'C${Number(categoryId)}:%'`;
 }
 
-module.exports = { PIPELINES, SOURCE1_FIELD, getPipeline, getStages, getEnumLabels, categoryCond };
+module.exports = { PIPELINES, SOURCE1_FIELD, FILIAL_FIELD, getPipeline, getStages, getEnumLabels, categoryCond };

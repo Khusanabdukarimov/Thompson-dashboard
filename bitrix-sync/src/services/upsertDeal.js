@@ -79,8 +79,8 @@ async function upsertDeal(r, client) {
        source_id, utm_source, date_create, date_modify, closedate,
        uf_sale_date, uf_bp_sale_date, uf_payment_date,
        uf_paid_sum, uf_remaining_sum,
-       uf_cancel_reason, contact_id, begindate, uf_amo_date, uf_service, uf_tolandi_sum, uf_prichina, title, uf_report_stage, uf_source1, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW())
+       uf_cancel_reason, contact_id, begindate, uf_amo_date, uf_service, uf_tolandi_sum, uf_prichina, title, uf_report_stage, uf_source1, uf_filial, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW())
      ON CONFLICT (id) DO UPDATE SET
        responsible_id   = EXCLUDED.responsible_id,
        stage_id         = EXCLUDED.stage_id,
@@ -104,10 +104,11 @@ async function upsertDeal(r, client) {
        -- Only when the payload carried the field: reconcile_deals.js and the scratch
        -- scripts select a partial field list, and an absent key is "not fetched",
        -- not "cleared". crm.deal.get (webhooks) always returns every field.
-       uf_prichina      = CASE WHEN $26::boolean THEN EXCLUDED.uf_prichina ELSE deals.uf_prichina END,
-       title            = CASE WHEN $27::boolean THEN EXCLUDED.title ELSE deals.title END,
-       uf_report_stage  = CASE WHEN $28::boolean THEN EXCLUDED.uf_report_stage ELSE deals.uf_report_stage END,
-       uf_source1       = CASE WHEN $29::boolean THEN EXCLUDED.uf_source1 ELSE deals.uf_source1 END,
+       uf_prichina      = CASE WHEN $27::boolean THEN EXCLUDED.uf_prichina ELSE deals.uf_prichina END,
+       title            = CASE WHEN $28::boolean THEN EXCLUDED.title ELSE deals.title END,
+       uf_report_stage  = CASE WHEN $29::boolean THEN EXCLUDED.uf_report_stage ELSE deals.uf_report_stage END,
+       uf_source1       = CASE WHEN $30::boolean THEN EXCLUDED.uf_source1 ELSE deals.uf_source1 END,
+       uf_filial        = CASE WHEN $31::boolean THEN EXCLUDED.uf_filial ELSE deals.uf_filial END,
        synced_at        = NOW()
      RETURNING id`,
     [
@@ -136,10 +137,12 @@ async function upsertDeal(r, client) {
       r.TITLE || null,               // usually "Name | phone | course" — shown in drill-downs
       ufText(r.UF_CRM_6A364190B79ED), // Стадия (для отчетов) — Sdelkalar filter
       ufVal(r.UF_CRM_6180BEE07D2B3) || null, // Источник 1 — enum id, Sdelkalar "Manba 1" filter
+      ufVal(r.UF_CRM_6075517B4499E) || null, // Филиал — enum id, Sdelkalar "Filial" filter
       has(r, 'UF_CRM_6075517B5CAD2'),
       has(r, 'TITLE'),
       has(r, 'UF_CRM_6A364190B79ED'),
       has(r, 'UF_CRM_6180BEE07D2B3'),
+      has(r, 'UF_CRM_6075517B4499E'),
     ]
   );
 

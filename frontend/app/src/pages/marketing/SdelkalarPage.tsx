@@ -2,7 +2,7 @@ import { Fragment, useState, useCallback, useMemo, useRef, useEffect } from "rea
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
-  Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info, Calendar, Filter, ListChecks,
+  Search, TrendingUp, CheckCircle, ChevronDown, Users, BarChart2, Layers, Info, Calendar, Filter,
   User, ExternalLink, XCircle,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
@@ -12,7 +12,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { getDealFilterOptions } from "@/lib/api/deals";
 import {
   getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
-  getPipelineReportStages, getPipelineFilterOptions,
+  getPipelineFilterOptions,
   NONE_KEY,
   type PipelineKey, type PipelineFilter, type PipelineDealsFilter, type PipelineStage,
   type PipelineManagerRow, type ReasonScope,
@@ -372,7 +372,7 @@ export default function SdelkalarPage() {
     sources: [] as string[],
     source1s: [] as string[],
     reasons: [] as string[],
-    report_stages: [] as string[],
+    filials: [] as string[],
   });
 
   const filterQ = useQuery({
@@ -392,8 +392,8 @@ export default function SdelkalarPage() {
     stage: filter.stage_ids.join(',') || undefined,
     source1: filter.source1s.join(',') || undefined,
     prichina: filter.reasons.join(',') || undefined,
-    report_stage: pipeline === "uc" && filter.report_stages.length ? JSON.stringify(filter.report_stages) : undefined,
-  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.source1s, filter.reasons, filter.report_stages]);
+    filial: filter.filials.join(',') || undefined,
+  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.source1s, filter.reasons, filter.filials]);
 
   // Keep the last result on screen while a filter changes, but never across a
   // pipeline switch: the old pipeline's numbers would sit under the new labels.
@@ -408,22 +408,15 @@ export default function SdelkalarPage() {
     placeholderData: (p, q) => (q?.queryKey[2] === reasonScope ? samePipeline(p, q?.queryKey) : undefined),
   });
 
-  // Whole Bitrix enums for Manba 1 / Sabab, so options stay stable while other filters change.
+  // Whole Bitrix enums for Manba 1 / Sabab / Filial, so options stay stable while other filters change.
   const enumOptsQ = useQuery({
     queryKey: ["pipeline-filter-options", pipeline],
     queryFn: () => getPipelineFilterOptions({ pipeline }),
     staleTime: 5 * 60_000,
   });
 
-  const reportStagesQ = useQuery({
-    queryKey: ["pipeline-report-stages", pipeline, apiFrom, apiTo],
-    queryFn: () => getPipelineReportStages({ pipeline, from: apiFrom, to: apiTo }),
-    enabled: pipeline === "uc",
-    staleTime: 60_000,
-  });
-
   const clearFilter = useCallback(() => {
-    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], source1s: [], reasons: [], report_stages: [] });
+    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], source1s: [], reasons: [], filials: [] });
     setPresetLabel("Bu oy");
     setDrill(null);
   }, []);
@@ -432,8 +425,8 @@ export default function SdelkalarPage() {
     if (p === pipeline) return;
     setPipeline(p);
     setShownReasons(REASONS_PAGE);
-    // Stage ids and Стадия (для отчетов) are per pipeline; other filters carry over.
-    setFilter(s => ({ ...s, stage_ids: [], report_stages: [] }));
+    // Stage ids are per pipeline; other filters carry over.
+    setFilter(s => ({ ...s, stage_ids: [] }));
     setDrill(null);
   };
 
@@ -457,7 +450,7 @@ export default function SdelkalarPage() {
     filter.sources.length > 0,
     filter.source1s.length > 0,
     filter.reasons.length > 0,
-    filter.report_stages.length > 0,
+    filter.filials.length > 0,
     filter.from !== startOfMonthISO() || filter.to !== todayISO(),
   ].filter(Boolean).length;
 
@@ -468,13 +461,7 @@ export default function SdelkalarPage() {
   const srcOptions = useMemo(() => (filterQ.data?.sources ?? []).map(s => ({ value: s.id, label: s.name })), [filterQ.data]);
   const source1Options = useMemo(() => (enumOptsQ.data?.source1s ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
   const reasonOptions = useMemo(() => (enumOptsQ.data?.reasons ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
-  const reportStageOptions = useMemo(() => {
-    const d = reportStagesQ.data;
-    const opts = d?.available ? d.items.map(i => ({ value: i.value, label: `${i.label} (${fmtNum(i.total)})` })) : [];
-    // Keep picked values selectable even when the date window no longer contains them.
-    for (const v of filter.report_stages) if (!opts.some(o => o.value === v)) opts.push({ value: v, label: v === NONE_KEY ? "Ko'rsatilmagan" : v });
-    return opts;
-  }, [reportStagesQ.data, filter.report_stages]);
+  const filialOptions = useMemo(() => (enumOptsQ.data?.filials ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
 
   // Same shortcuts as the Lidlar filter; "Barchasi" has no lower bound — the Bitrix kanban's scope.
   const PRESETS = [
@@ -743,11 +730,9 @@ export default function SdelkalarPage() {
                 <MultiSelect label="Sabab" icon={<XCircle size={12} />}
                   options={reasonOptions} values={filter.reasons}
                   onChange={v => setFilter(s => ({ ...s, reasons: v }))} loading={enumOptsQ.isLoading} />
-                {pipeline === "uc" && (
-                  <MultiSelect label="Стадия (для отчетов)" icon={<ListChecks size={12} />}
-                    options={reportStageOptions} values={filter.report_stages}
-                    onChange={v => setFilter(s => ({ ...s, report_stages: v }))} loading={reportStagesQ.isLoading} />
-                )}
+                <MultiSelect label="Filial" icon={<Users size={12} />}
+                  options={filialOptions} values={filter.filials}
+                  onChange={v => setFilter(s => ({ ...s, filials: v }))} loading={enumOptsQ.isLoading} />
               </div>
 
               {activeFilterCount > 0 && (

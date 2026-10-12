@@ -4,9 +4,8 @@
  *
  * Every endpoint takes ?pipeline=uc|yangi plus the shared filters
  *   from, to (YYYY-MM-DD, Tashkent date of d.date_create), mode,
- *   responsible_id, source, stage, source1, prichina (comma-separated lists;
- *   source1 / prichina are Источник 1 / Причина enum option ids),
- *   report_stage (JSON array of Стадия (для отчетов) values — free text, so not CSV)
+ *   responsible_id, source, stage, source1, prichina, filial (comma-separated lists;
+ *   source1 / prichina / filial are Источник 1 / Причина / Филиал enum option ids)
  * and counts deals by their CURRENT stage, so a table row always adds up to the
  * Bitrix kanban for the same created-date window.
  *
@@ -16,7 +15,7 @@
  */
 const { Router } = require('express');
 const pool = require('../db/pool');
-const { getPipeline, getStages, getEnumLabels, categoryCond, SOURCE1_FIELD } = require('../services/pipelines');
+const { getPipeline, getStages, getEnumLabels, categoryCond, SOURCE1_FIELD, FILIAL_FIELD } = require('../services/pipelines');
 
 const router = Router();
 
@@ -24,18 +23,6 @@ const router = Router();
 // drilled into like any other bucket.
 const NONE = '__none__';
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
-
-/**
- * ?report_stage=["Визит назначен","__none__"] → string[], or null when malformed.
- * Values are bound as a parameter, so length is not capped: any option /report-stages
- * offers must be accepted back verbatim.
- */
-function parseJsonList(v) {
-  try {
-    const a = JSON.parse(String(v));
-    return Array.isArray(a) && a.length > 0 && a.length <= 1000 && a.every((x) => typeof x === 'string') ? a : null;
-  } catch { return null; }
-}
 
 /**
  * ?source1=1016,1018 → ['1016','1018'], or null when empty/malformed. Enum option
@@ -79,12 +66,9 @@ function buildScope(q, pipe, extra = () => []) {
     const ids = parseIdList(q.prichina);
     where.push(ids ? `d.uf_prichina = ANY(${p(ids)}::text[])` : 'FALSE');
   }
-  if (pipe.reportStage && q.report_stage) {
-    const reportStages = parseJsonList(q.report_stage);
-    // A filter that cannot be read matches nothing rather than silently matching everything.
-    where.push(reportStages
-      ? `COALESCE(NULLIF(d.uf_report_stage, ''), '${NONE}') = ANY(${p(reportStages)}::text[])`
-      : 'FALSE');
+  if (q.filial) {
+    const ids = parseIdList(q.filial);
+    where.push(ids ? `d.uf_filial = ANY(${p(ids)}::text[])` : 'FALSE');
   }
   where.push(...extra(p));
   return { where: where.join('\n         AND '), params };
@@ -135,21 +119,22 @@ router.get('/meta', async (req, res) => {
 });
 
 /**
- * GET /filter-options — options for the "Manba 1" and "Sabab" pickers: every
+ * GET /filter-options — options for the "Manba 1", "Sabab" and "Filial" pickers: every
  * option of the Bitrix enum (not just those present in the window, so picking
  * one never hides the others), alphabetical like the Lidlar pickers.
  */
 router.get('/filter-options', async (req, res) => {
   const pipe = pipelineOr400(req, res); if (!pipe) return;
   try {
-    const [source1, reasons] = await Promise.all([
+    const [source1, reasons, filials] = await Promise.all([
       getEnumLabels(SOURCE1_FIELD),
       pipe.reasonField ? getEnumLabels(pipe.reasonField) : {},
+      getEnumLabels(FILIAL_FIELD),
     ]);
     const options = (labels) => Object.entries(labels)
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    res.json({ source1s: options(source1), reasons: options(reasons) });
+    res.json({ source1s: options(source1), reasons: options(reasons), filials: options(filials) });
   } catch (err) { fail(res, 'filter-options')(err); }
 });
 
@@ -300,34 +285,6 @@ router.get('/reasons', async (req, res) => {
       })),
     });
   } catch (err) { fail(res, 'reasons')(err); }
-});
-
-/**
- * GET /report-stages — options for the Стадия (для отчетов) filter: every value
- * in the pipeline/date/mode window with its deal count. The other filters are
- * deliberately not applied, so picking a value never hides the others.
- */
-router.get('/report-stages', async (req, res) => {
-  const pipe = pipelineOr400(req, res); if (!pipe) return;
-  if (!pipe.reportStage) return res.json({ available: false, items: [] });
-  try {
-    const { from, to, mode } = req.query;
-    const { where, params } = buildScope({ from, to, mode }, pipe);
-    const { rows } = await pool.query(
-      `SELECT COALESCE(NULLIF(d.uf_report_stage, ''), '${NONE}') AS value, COUNT(*)::int AS total
-       FROM deals d
-       JOIN stages s ON s.id = d.stage_id
-       WHERE ${where}
-       GROUP BY 1
-       ORDER BY total DESC`,
-      params
-    );
-    res.json({
-      available: true,
-      field_label: 'Стадия (для отчетов)',
-      items: rows.map((r) => ({ value: r.value, label: r.value === NONE ? "Ko'rsatilmagan" : r.value, total: r.total })),
-    });
-  } catch (err) { fail(res, 'report-stages')(err); }
 });
 
 /**

@@ -25,11 +25,10 @@ export type PipelineFilter = {
   responsible_id?: string;
   source?: string;
   stage?: string;
-  /** Источник 1 / Причина enum option ids, comma-separated ("Manba 1" / "Sabab" filters). */
+  /** Источник 1 / Причина / Филиал enum option ids, comma-separated ("Manba 1" / "Sabab" / "Filial" filters). */
   source1?: string;
   prichina?: string;
-  /** JSON array of Стадия (для отчетов) values — free text, so not comma-separated. */
-  report_stage?: string;
+  filial?: string;
 };
 
 type Rollup = { total: number; in_process: number; won: number; lost: number };
@@ -111,20 +110,12 @@ export function getPipelineReasons(f: PipelineFilter & { scope: ReasonScope }) {
 export type PipelineFilterOptions = {
   source1s: { id: string; name: string }[];
   reasons: { id: string; name: string }[];
+  filials: { id: string; name: string }[];
 };
 
-/** Options for the "Manba 1" and "Sabab" pickers (the whole Bitrix enum, alphabetical). */
+/** Options for the "Manba 1", "Sabab" and "Filial" pickers (the whole Bitrix enum, alphabetical). */
 export function getPipelineFilterOptions(f: Pick<PipelineFilter, 'pipeline'>) {
   return apiGet<PipelineFilterOptions>('/api/dashboard/pipeline/filter-options', q(f), API_URL_CRM);
-}
-
-export type ReportStageOptions =
-  | { available: false; items: [] }
-  | { available: true; field_label: string; items: { value: string; label: string; total: number }[] };
-
-/** Стадия (для отчетов) values in the pipeline/date/mode window — options for its filter. */
-export function getPipelineReportStages(f: Pick<PipelineFilter, 'pipeline' | 'from' | 'to' | 'mode'>) {
-  return apiGet<ReportStageOptions>('/api/dashboard/pipeline/report-stages', q(f), API_URL_CRM);
 }
 
 export function getPipelineDeals(f: PipelineDealsFilter & { limit?: number; offset?: number }) {
