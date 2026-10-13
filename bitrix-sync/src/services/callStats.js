@@ -24,6 +24,10 @@
  *                    direction) to that number within 24h — NOT just an outbound
  *                    callback; a customer who calls again and gets through counts
  *   разговоров       Σ talk_time   ·   длительность   Σ duration
+ *   avg_duration     average TALK time per ANSWERED call (Σ talk_time / answered). It used to be
+ *                    Σ duration / ALL external calls: 68% of calls are unanswered and only ring
+ *                    (~25 s), so that mixed ringing with conversations and read 56 s against a
+ *                    real 108 s per answered call.
  * Operator attribution follows OnlinePBX's own (see config/calls.js): inbound by
  * destination extension, so queue-missed calls belong to the queue, not a person.
  *
@@ -173,7 +177,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
         inbound_duration: b.talk_in, outbound_duration: b.talk_out, total_duration: talkTotal,
         // Call length (длительность) kept separately for anyone who needs it.
         call_dur_in: b.dur_in, call_dur_out: b.dur_out, call_dur_total: b.dur_in + b.dur_out,
-        avg_duration: total ? Math.round((b.dur_in + b.dur_out) / total) : 0,
+        avg_duration: b.success_calls ? Math.round(talkTotal / b.success_calls) : 0,
       };
       return out;
     })
@@ -189,7 +193,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     success_calls: success, failed_calls: missed + ndz, ndz_calls: ndz, missed_inbound: missedEvents.length,
     total_duration: talkExt,                    // разговоров (talk) — shown by the total card
     call_duration_total: durExt,                // длительность (call length)
-    avg_duration: external ? Math.round(durExt / external) : 0,
+    avg_duration: success ? Math.round(talkExt / success) : 0, // talk per answered call
     success_pct: pctOf(success, external), failed_pct: pctOf(missed + ndz, external),
     ne_perezvonili: nePerezvonili,
     reaksiya_vaqti: reactions.length ? Math.round(reactions.reduce((s, n) => s + n, 0) / reactions.length) : 0,

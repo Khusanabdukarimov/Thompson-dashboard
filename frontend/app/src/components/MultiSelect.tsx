@@ -6,7 +6,8 @@ import { groupOptions, groupState, toggleGroup, type SelectOption } from "./mult
  * Filter dropdown shared by the Lidlar and Sdelkalar filter panels: checkbox
  * list with "select all / clear all". `searchable` adds a type-to-filter box
  * for long lists (e.g. managers). Options carrying a `group` are listed under
- * group headings whose checkbox ticks the whole group (e.g. operators by team).
+ * collapsible group headings (e.g. operators by team): the heading opens/closes
+ * the group, its checkbox ticks the whole group without opening it.
  */
 export function MultiSelect({
   label, icon, options, values, onChange, loading, searchable = false,
@@ -21,6 +22,8 @@ export function MultiSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Groups the user has opened. All start closed; a search opens every group it matches.
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -43,6 +46,7 @@ export function MultiSelect({
   // null → plain list. Groups are built from what the search leaves, so a header
   // only ever ticks the options currently visible under it.
   const grouped = useMemo(() => groupOptions(shown), [shown]);
+  const searching = query.trim() !== "";
 
   const renderOption = (o: SelectOption) => {
     const checked = values.includes(o.value);
@@ -122,19 +126,25 @@ export function MultiSelect({
           )}
           {grouped ? grouped.map(g => {
             const state = groupState(values, g.items);
+            const isOpen = searching || openGroups.includes(g.name);
             return (
               <div key={g.name}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", background: "var(--bg3)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+                <div role="button" aria-expanded={isOpen} tabIndex={0}
+                  onClick={() => { if (!searching) setOpenGroups(o => o.includes(g.name) ? o.filter(n => n !== g.name) : [...o, g.name]); }}
+                  onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); e.currentTarget.click(); } }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: searching ? "default" : "pointer", background: "var(--bg3)", borderTop: "1px solid var(--border)", borderBottom: isOpen ? "1px solid var(--border)" : "none", userSelect: "none" }}>
                   <input type="checkbox" checked={state === "all"}
                     ref={el => { if (el) el.indeterminate = state === "some"; }}
+                    onClick={e => e.stopPropagation()}
                     onChange={() => onChange(toggleGroup(values, g.items))}
                     style={{ accentColor: "#2196F3", flexShrink: 0 }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{g.name}</span>
                   <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
                     {g.items.filter(o => values.includes(o.value)).length}/{g.items.length}
                   </span>
-                </label>
-                {g.items.map(renderOption)}
+                  <ChevronDown size={12} style={{ flexShrink: 0, color: "var(--text3)", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                </div>
+                {isOpen && g.items.map(renderOption)}
               </div>
             );
           }) : shown.map(renderOption)}

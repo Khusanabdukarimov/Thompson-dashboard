@@ -36,11 +36,11 @@ function fmtDur(secs: number): string {
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
-function fmtDurMin(secs: number): string {
-  if (!secs) return "0 min";
-  const m = Math.floor(secs / 60);
-  const frac = Math.round((secs % 60) / 6);
-  return frac > 0 ? `${m},${frac} min` : `${m} min`;
+/** "1 min 48 s" / "57 s". Spelled out: decimal minutes ("0,9 min") read as seconds-in-a-minute and mislead. */
+function fmtAvgDur(secs: number): string {
+  if (!secs) return "0 s";
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return m > 0 ? `${m} min ${s} s` : `${s} s`;
 }
 
 function fmtPct(pct: number): string {
@@ -407,7 +407,7 @@ export default function CallStatistikasi() {
         {/* ── Row 2 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
           <Card label="O'rtacha davomiyligi" accentColor="#9C27B0"
-            value={fmtDurMin(data?.avg_duration ?? 0)}
+            value={fmtAvgDur(data?.avg_duration ?? 0)} sub="javob berilganlar bo'yicha"
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)" />
           <Card label="NDZ (javob berilmagan)" accentColor="#607D8B"
             value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
