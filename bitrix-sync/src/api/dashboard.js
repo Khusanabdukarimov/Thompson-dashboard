@@ -1260,8 +1260,8 @@ router.get('/lead-responsibles', async (req, res) => {
  * columns differ: one per field value instead of one per stage.
  *
  * Values resolve through lead_uf_enums when the field is a list; if it is a
- * plain text field the raw value is used as both key and label. Leads with no
- * value land in the "Nomalum" column.
+ * plain text field the raw value is used as both key and label. Every option of
+ * the list is a column (used or not); leads with no value land in "Nomalum".
  */
 const TRANSFER_DIRECTION_FIELD = 'UF_CRM_TRANSFER_DIRECTION';
 
@@ -1312,20 +1312,22 @@ router.get('/transfer-direction-responsibles', async (req, res) => {
       ),
     ]);
 
-    // Columns = only the values that actually occur in this view, biggest
-    // first, "Nomalum" last — so there are no permanently empty columns.
+    // Columns = EVERY option of the Bitrix list, in the order of the field's settings page
+    // (enum ids rise in that order), so the table always shows the full set — including
+    // options nobody has used yet. Values present in the data but not in the list (a
+    // deleted option, or a plain-text field) follow, and "Nomalum" (no value) is last.
     const label = new Map(enums.map(e => [String(e.enum_id), e.value]));
-    const sums = new Map();
+    const listed = enums.map(e => String(e.enum_id))
+      .sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+    const extra = new Set();
     for (const r of rows)
-      for (const [k, n] of Object.entries(r.by_direction))
-        sums.set(k, (sums.get(k) || 0) + n);
-    const directions = [...sums.entries()]
-      .sort(([ka, a], [kb, b]) =>
-        (ka === 'Nomalum') - (kb === 'Nomalum') || b - a)
-      .map(([key]) => ({
-        key,
-        label: key === 'Nomalum' ? "Noma'lum" : (label.get(key) || key),
-      }));
+      for (const k of Object.keys(r.by_direction))
+        if (k !== 'Nomalum' && !label.has(k)) extra.add(k);
+    const directions = [
+      ...listed.map(key => ({ key, label: label.get(key) })),
+      ...[...extra].sort().map(key => ({ key, label: key })),
+      { key: 'Nomalum', label: "Noma'lum" },
+    ];
 
     res.json({ directions, responsibles: rows });
   } catch (err) {
