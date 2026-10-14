@@ -396,7 +396,6 @@ router.get('/call-not-recalled', async (req, res) => {
         not_reached: base.length - late.length,                     // never, or the 24h is still running
         still_open: base.filter((x) => x.status === 'open').length,
         avg_wait_s: avg(base.filter((x) => x.wait_s != null).map((x) => x.wait_s)),
-        avg_delay_s: avg(late.map((x) => x.delay_s)),               // how long the late callbacks took
         missed_total: stats.missed_detail.total,                    // every missed call in the period
       },
       offset, limit,

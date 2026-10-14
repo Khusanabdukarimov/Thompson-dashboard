@@ -422,7 +422,7 @@ export default function CallStatistikasi() {
         {/* ── Row 2 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
           <Card label="O'rtacha davomiyligi" accentColor="#9C27B0"
-            value={fmtAvgDur(data?.avg_duration ?? 0)} sub="javob berilganlar bo'yicha"
+            value={fmtAvgDur(data?.avg_duration ?? 0)}
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)" />
           <Card label="NDZ (javob berilmagan)" accentColor="#607D8B"
             value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}

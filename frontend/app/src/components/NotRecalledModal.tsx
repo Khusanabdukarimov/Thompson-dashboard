@@ -156,10 +156,9 @@ export function NotRecalledModal({ filter, portal, onClose }: {
                 <Stat label="Qayta chiqilgan" value={fmtNum(s.late)} color="#4CAF50" />
                 <Stat label="Chiqilmagan" value={fmtNum(s.not_reached)} color="#F44336" />
                 <Stat label="O'rt. kutish" value={fmtHMS(s.avg_wait_s)} color="#9C27B0" />
-                <Stat label="O'rt. javob vaqti" value={fmtHMS(s.avg_delay_s)} color="#607D8B" />
               </div>
               <div style={{ padding: "0 22px 12px", fontSize: 11.5, color: "var(--text3)" }}>
-                "Qayta chiqilgan" — {hours} soatdan keyin bog'lanilganlar (o'rt. javob vaqti shularniki).
+                "Qayta chiqilgan" — {hours} soatdan keyin bog'lanilganlar.
                 {s.still_open > 0 && <> "Chiqilmagan" ichida {fmtNum(s.still_open)} ta uchun {hours} soat hali tugamagan.</>}
                 {" "}Davrdagi barcha javobsiz qo'ng'iroq: {fmtNum(s.missed_total)} ta.
               </div>

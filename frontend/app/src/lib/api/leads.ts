@@ -832,7 +832,7 @@ export type NotRecalledResponse = {
   source: "bitrix24" | "pbx";
   summary: {
     total: number; unique_numbers: number; late: number; not_reached: number; still_open: number;
-    avg_wait_s: number; avg_delay_s: number; missed_total: number;
+    avg_wait_s: number; missed_total: number;
   };
   /** The slice of the list this response carries; `summary` always covers the whole list. */
   offset: number;
