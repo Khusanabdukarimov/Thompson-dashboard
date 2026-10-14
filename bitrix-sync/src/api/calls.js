@@ -153,90 +153,257 @@ function fullFilterWhere() {
 }
 
 /**
- * GET /call-stats-full — the whole CallStatistikasi payload (PyCallStatsResult).
+ * What the call page's numbers are computed from, shared by /call-stats-full and
+ * /call-not-recalled so that the card and the list behind it can not drift apart.
  *
- * Rows are pulled for [from, to+1 day] with an `in_range` flag: the extra day
+ * PBX rows are pulled for [from, to+1 day] with an `in_range` flag: the extra day
  * lets a call missed on the last day still find a next-day callback, while only
  * in-range rows are counted. All metric logic lives in services/callStats.js.
  */
-router.get('/call-stats-full', async (req, res) => {
-  const from = req.query.from || null;
-  const to = req.query.to || null;
-  // One or several operators ("12,14,100"); anything non-numeric is dropped.
-  // Blank entries are dropped BEFORE Number(): Number('') is 0, which would filter to "operator 0".
-  const respIds = String(req.query.responsible_id || '').split(',').map((x) => x.trim()).filter(Boolean)
-    .map(Number).filter((n) => Number.isInteger(n));
-  const phone = req.query.phone ? String(req.query.phone).replace(/\D/g, '') : null;
-  const source = req.query.source && req.query.source !== 'all' ? String(req.query.source) : null;
-  const stage = req.query.stage && req.query.stage !== 'all' ? String(req.query.stage) : null;
+const INPUTS_TTL_MS = 90_000;      // the data is only as fresh as the 10-min sync anyway
+const INPUTS_MAX_KEYS = 6;
+const INPUTS_MAX_ROWS = 80_000;    // a year-wide range is not worth holding in memory
+const inputsCache = new Map();     // key -> { at, promise }
 
+/** One or several operators ("12,14,100"); blanks are dropped BEFORE Number() (Number('') is 0 = "operator 0"). */
+function parseRespIds(query) {
+  return String(query.responsible_id || '').split(',').map((x) => x.trim()).filter(Boolean)
+    .map(Number).filter((n) => Number.isInteger(n));
+}
+
+/**
+ * loadCallInputs with a short-lived cache. The page asks for the stats, a moment later
+ * for the "Ne perezvonili" list, then for each further page of it — all with the same
+ * filters — and the slow part is reading the PBX rows (~2-7 s for a month). So they are
+ * read once and reused. Operators are not part of the key: they filter inside the compute.
+ * Callers must treat the returned rows / events as read-only.
+ */
+async function loadCallInputs(query) {
+  const from = query.from || null;
+  const to = query.to || null;
+  const respIds = parseRespIds(query);
+  const phone = query.phone ? String(query.phone).replace(/\D/g, '') : null;
+  const source = query.source && query.source !== 'all' ? String(query.source) : null;
+  const stage = query.stage && query.stage !== 'all' ? String(query.stage) : null;
+  const key = JSON.stringify([from, to, phone, source, stage]);
+
+  const hit = inputsCache.get(key);
+  if (hit && Date.now() - hit.at < INPUTS_TTL_MS) return { ...(await hit.promise), respIds };
+
+  const promise = readCallInputs({ from, to, phone, source, stage });
+  inputsCache.set(key, { at: Date.now(), promise });
+  while (inputsCache.size > INPUTS_MAX_KEYS) inputsCache.delete(inputsCache.keys().next().value);
   try {
-    const { rows } = await pool.query(
-      `SELECT c.uuid,
-              COALESCE(u.responsible_id, CASE WHEN c.operator_ext ~ '^[0-9]+$' THEN c.operator_ext::int ELSE NULL END) AS responsible_id,
-              c.operator_ext,
-              COALESCE(u.name, u.ext) AS full_name,
-              c.direction, c.customer_norm, c.customer_number,
-              c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
-              ${IS_INTERNAL} AS internal,
-              (
-                ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-                AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
-              ) AS in_range
-       FROM pbx_calls c
-       LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
-       WHERE c.start_stamp IS NOT NULL
-         AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-         -- $3 = to + 1 day, the callback look-ahead
-         AND ($3::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
-         AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
-         AND ($6::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $6::text)
-         -- Bosqich filter: keep calls whose newest same-phone lead is in $5.
-         AND ($5::text IS NULL OR $5::text = (
-           SELECT s.bitrix_id
-           FROM lead_phones lp
-           JOIN leads l ON l.id = lp.lead_id
-           LEFT JOIN stages s ON s.id = l.stage_id
-           WHERE RIGHT(regexp_replace(lp.phone, '\\D', '', 'g'), 9) = c.customer_norm
-           ORDER BY l.date_create DESC NULLS LAST
-           LIMIT 1
-         ))
-       ORDER BY c.start_stamp DESC`,
-      [from, to, to ? addDaysISO(to, 1) : null, phone, stage, source],
-    );
-    // Whose missed call is it? Bitrix24 knows (the CRM entity's responsible); the PBX does
-    // not — a queue call that rang out has no operator. Moizvonki calls are not in Bitrix's
-    // list, so that source keeps the PBX's own figures, as does any failure to read the table.
-    let bxMissed = null;
-    if (source !== 'moizvonki') {
-      try {
-        ({ rows: bxMissed } = await pool.query(
-          `SELECT m.call_start, m.phone_norm, m.responsible_id
-           FROM bx_missed_calls m
-           WHERE ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-             AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
-             AND ($3::text IS NULL OR m.phone_norm LIKE '%' || $3 || '%')
-             -- same Bosqich rule as the call rows: the newest lead with this phone is in $4
-             AND ($4::text IS NULL OR $4::text = (
-               SELECT s.bitrix_id
-               FROM lead_phones lp
-               JOIN leads l ON l.id = lp.lead_id
-               LEFT JOIN stages s ON s.id = l.stage_id
-               WHERE RIGHT(regexp_replace(lp.phone, '\\D', '', 'g'), 9) = m.phone_norm
-               ORDER BY l.date_create DESC NULLS LAST
-               LIMIT 1
-             ))`,
-          [from, to, phone, stage],
-        ));
-      } catch (err) {
-        console.warn(`[calls/call-stats-full] bx_missed_calls unavailable, using PBX missed calls: ${err.message}`);
-      }
+    const inputs = await promise;
+    if (inputs.rows.length > INPUTS_MAX_ROWS) inputsCache.delete(key);
+    return { ...inputs, respIds };
+  } catch (err) {
+    inputsCache.delete(key);            // never cache a failure
+    throw err;
+  }
+}
+
+async function readCallInputs({ from, to, phone, source, stage }) {
+  const { rows } = await pool.query(
+    `SELECT c.uuid,
+            COALESCE(u.responsible_id, CASE WHEN c.operator_ext ~ '^[0-9]+$' THEN c.operator_ext::int ELSE NULL END) AS responsible_id,
+            c.operator_ext, c.hangup_cause,
+            COALESCE(u.name, u.ext) AS full_name,
+            c.direction, c.customer_norm, c.customer_number,
+            c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
+            ${IS_INTERNAL} AS internal,
+            (
+              ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+              AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+            ) AS in_range
+     FROM pbx_calls c
+     LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
+     WHERE c.start_stamp IS NOT NULL
+       AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+       -- $3 = to + 1 day, the callback look-ahead
+       AND ($3::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
+       AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
+       AND ($6::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $6::text)
+       -- Bosqich filter: keep calls whose newest same-phone lead is in $5.
+       AND ($5::text IS NULL OR $5::text = (
+         SELECT s.bitrix_id
+         FROM lead_phones lp
+         JOIN leads l ON l.id = lp.lead_id
+         LEFT JOIN stages s ON s.id = l.stage_id
+         WHERE RIGHT(regexp_replace(lp.phone, '\\D', '', 'g'), 9) = c.customer_norm
+         ORDER BY l.date_create DESC NULLS LAST
+         LIMIT 1
+       ))
+     ORDER BY c.start_stamp DESC`,
+    [from, to, to ? addDaysISO(to, 1) : null, phone, stage, source],
+  );
+  // Whose missed call is it? Bitrix24 knows (the CRM entity's responsible); the PBX does
+  // not — a queue call that rang out has no operator. Moizvonki calls are not in Bitrix's
+  // list, so that source keeps the PBX's own figures, as does any failure to read the table.
+  let bxMissed = null;
+  if (source !== 'moizvonki') {
+    try {
+      ({ rows: bxMissed } = await pool.query(
+        `SELECT m.id, m.call_start, m.phone, m.phone_norm, m.responsible_id, m.crm_entity_type, m.crm_entity_id
+         FROM bx_missed_calls m
+         WHERE ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+           AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+           AND ($3::text IS NULL OR m.phone_norm LIKE '%' || $3 || '%')
+           -- same Bosqich rule as the call rows: the newest lead with this phone is in $4
+           AND ($4::text IS NULL OR $4::text = (
+             SELECT s.bitrix_id
+             FROM lead_phones lp
+             JOIN leads l ON l.id = lp.lead_id
+             LEFT JOIN stages s ON s.id = l.stage_id
+             WHERE RIGHT(regexp_replace(lp.phone, '\\D', '', 'g'), 9) = m.phone_norm
+             ORDER BY l.date_create DESC NULLS LAST
+             LIMIT 1
+           ))`,
+        [from, to, phone, stage],
+      ));
+    } catch (err) {
+      console.warn(`[calls/call-stats-full] bx_missed_calls unavailable, using PBX missed calls: ${err.message}`);
     }
+  }
+  return { rows, bxMissed, from, to };
+}
+
+/** GET /call-stats-full — the whole CallStatistikasi payload (PyCallStatsResult). */
+router.get('/call-stats-full', async (req, res) => {
+  try {
+    const { rows, bxMissed, from, to, respIds } = await loadCallInputs(req.query);
     // Operator filter is applied inside the compute (not in SQL) so the callback
     // map stays global — a colleague's callback to the same customer still counts.
     res.json(computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null, bxMissed));
   } catch (err) {
     fail(res, 'call-stats-full')(err);
+  }
+});
+
+/**
+ * GET /call-not-recalled — the list behind the "Ne perezvonili" card: every missed call
+ * nobody talked to the customer about within 24h. Same filters as /call-stats-full and
+ * the same compute, so the rows always add up to the card.
+ *
+ * Paged on the server: ?limit= (default 20, max 1000) &offset=. `summary` always covers the
+ * whole list; only the rows of the requested page are enriched, so a page is cheap even
+ * when the list has thousands of calls (and the PBX rows behind it are cached, see
+ * loadCallInputs, so the next page does not hit the database for them again).
+ *
+ * What the PBX knows about a call (who it rang, how long the customer waited, why it
+ * ended) comes from the PBX rows already in memory, matched on number and start time
+ * (±2 min). The lead (the one Bitrix linked, else the newest with that phone), its stage
+ * and its responsible are looked up for the page's rows only.
+ *
+ * status: never   no conversation with that number since;
+ *         late    reached, but after the 24h (callback_at / delay_s say when);
+ *         open    the 24h are not over yet — a callback may still come.
+ */
+const NOT_RECALLED_DEFAULT_LIMIT = 20;
+const NOT_RECALLED_MAX_LIMIT = 1000;
+const PBX_MATCH_WINDOW_MS = 120_000;
+
+/** (number, time) → the PBX row of that missed call: inbound, unanswered, same number, nearest start within ±2 min. */
+function buildPbxMatcher(rows) {
+  const byNum = new Map();
+  for (const r of rows) {
+    if (r.direction !== 'inbound' || r.answered || r.internal || !r.customer_norm) continue;
+    const t = new Date(r.start_stamp).getTime();
+    if (Number.isNaN(t)) continue;
+    if (!byNum.has(r.customer_norm)) byNum.set(r.customer_norm, []);
+    byNum.get(r.customer_norm).push({ t, r });
+  }
+  return (num, at) => {
+    let best = null, bestGap = PBX_MATCH_WINDOW_MS + 1;
+    for (const c of byNum.get(num) || []) {
+      const gap = Math.abs(c.t - at);
+      if (gap <= PBX_MATCH_WINDOW_MS && gap < bestGap) { best = c.r; bestGap = gap; }
+    }
+    return best;
+  };
+}
+
+router.get('/call-not-recalled', async (req, res) => {
+  try {
+    const limit = Math.min(NOT_RECALLED_MAX_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || NOT_RECALLED_DEFAULT_LIMIT));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const { rows, bxMissed, from, to, respIds } = await loadCallInputs(req.query);
+    const stats = computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null, bxMissed, { detail: true });
+    const events = stats.missed_detail.not_recalled.slice().sort((a, b) => b.at - a.at);
+
+    // PBX side, for every event (cheap: in memory) so the summary covers the whole list.
+    const match = buildPbxMatcher(rows);
+    const attempts = new Map();
+    for (const e of events) if (e.num) attempts.set(e.num, (attempts.get(e.num) || 0) + 1);
+    const base = events.map((e) => {
+      const p = e.num ? match(e.num, e.at) : null;
+      return {
+        key: e.key,
+        phone: e.phone || e.num || null,
+        call_start: new Date(e.at).toISOString(),
+        matched: !!p,                                        // false = the PBX has no record of this call
+        operator: p && p.operator_ext ? p.full_name : null,  // null while matched = it rang out in the queue
+        wait_s: p ? Number(p.duration) || 0 : null,
+        reason: p ? p.hangup_cause || null : null,
+        attempts: e.num ? attempts.get(e.num) : 1,
+        status: e.status,
+        callback_at: e.callback_at ? new Date(e.callback_at).toISOString() : null,
+        delay_s: e.callback_at ? Math.round((e.callback_at - e.at) / 1000) : null,
+      };
+    });
+
+    // Lead / stage / responsible — only for the rows being returned.
+    const pageEvents = events.slice(offset, offset + limit);
+    const { rows: lookup } = pageEvents.length ? await pool.query(
+      `SELECT e.k AS key, lead.lead_id, lead.stage_name, lead.stage_bid,
+              TRIM(COALESCE(r.name, '') || ' ' || COALESCE(r.last_name, '')) AS responsible,
+              COALESCE(e.rid, lead.lead_resp) AS responsible_id
+       FROM unnest($1::text[], $2::text[], $3::int[], $4::bigint[]) AS e(k, num, rid, hint)
+       LEFT JOIN LATERAL (
+         SELECT l.id AS lead_id, l.responsible_id AS lead_resp, s.name AS stage_name, s.bitrix_id AS stage_bid
+         FROM leads l LEFT JOIN stages s ON s.id = l.stage_id
+         WHERE l.id = CASE WHEN e.hint > 0 THEN e.hint ELSE (
+           SELECT l2.id FROM lead_phones lp JOIN leads l2 ON l2.id = lp.lead_id
+           WHERE RIGHT(regexp_replace(lp.phone, '\\D', '', 'g'), 9) = e.num
+           ORDER BY l2.date_create DESC NULLS LAST LIMIT 1) END
+       ) lead ON TRUE
+       LEFT JOIN responsibles r ON r.id = COALESCE(e.rid, lead.lead_resp)`,
+      [pageEvents.map((e) => e.key), pageEvents.map((e) => e.num || ''), pageEvents.map((e) => e.rid), pageEvents.map((e) => e.hint || 0)],
+    ) : { rows: [] };
+    const leadByKey = new Map(lookup.map((l) => [l.key, l]));
+    const items = base.slice(offset, offset + limit).map((it) => {
+      const l = leadByKey.get(it.key) || {};
+      return {
+        ...it,
+        lead_id: l.lead_id != null ? Number(l.lead_id) : null,
+        stage_name: l.stage_name || null,
+        stage_bid: l.stage_bid || null,
+        responsible: l.responsible || null,
+        responsible_id: l.responsible_id != null ? Number(l.responsible_id) : null,
+      };
+    });
+
+    const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
+    const late = base.filter((x) => x.status === 'late');
+    res.json({
+      window_hours: 24,
+      source: Array.isArray(bxMissed) ? 'bitrix24' : 'pbx',
+      summary: {                                                    // always the whole list, whatever the page
+        total: base.length,                                         // == the card
+        unique_numbers: new Set(events.map((e) => e.num || e.key)).size,
+        late: late.length,                                          // reached, but after the 24h
+        not_reached: base.length - late.length,                     // never, or the 24h is still running
+        still_open: base.filter((x) => x.status === 'open').length,
+        avg_wait_s: avg(base.filter((x) => x.wait_s != null).map((x) => x.wait_s)),
+        avg_delay_s: avg(late.map((x) => x.delay_s)),               // how long the late callbacks took
+        missed_total: stats.missed_detail.total,                    // every missed call in the period
+      },
+      offset, limit,
+      items,
+    });
+  } catch (err) {
+    fail(res, 'call-not-recalled')(err);
   }
 });
 

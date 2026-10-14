@@ -57,8 +57,12 @@ const ms = (v) => {
  *                    responsible_id is a Bitrix user id, matched to the operator row with the
  *                    same id; an owner without a row (a non-call-centre manager, Data365)
  *                    lands on the "Call Centre — javobsiz" row.
+ * @param opts        { detail: true } also returns `missed_detail` — every missed call that
+ *                    was NOT called back, with why (the list behind the "Ne perezvonili"
+ *                    card, so the list and the card can never disagree) — and `now` (ms)
+ *                    pins the clock for the "24h not over yet" test.
  */
-function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMissed = null) {
+function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMissed = null, opts = {}) {
   const useBx = Array.isArray(bxMissed);
   const only = filterOpId == null ? null : [].concat(filterOpId).map(Number);
   const keep = (r) => !only || only.length === 0 || only.includes(Number(r.responsible_id));
@@ -124,7 +128,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
         missed += 1; b.failed_calls += 1;
         if (!useBx) {
           b.missed_inbound += 1;
-          const ev = { num: r.customer_norm, at: ms(r.start_stamp) };
+          const ev = { key: `pbx:${r.uuid}`, num: r.customer_norm, at: ms(r.start_stamp), phone: r.customer_number || null, rid: null, hint: 0 };
           b._missed.push(ev); missedEvents.push(ev);
         }
       }
@@ -144,18 +148,40 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
       // Rows exist only for people with PBX calls in range; anyone else is nobody's row.
       const b = (rid != null && ops.get(rid)) || getOp({ responsible_id: null });
       if (!keep({ responsible_id: b.responsible_id })) continue;
-      const ev = { num: e.phone_norm, at };
+      const ev = {
+        key: `bx:${e.id}`, num: e.phone_norm, at, phone: e.phone || null,
+        rid: e.responsible_id != null ? Number(e.responsible_id) : null,
+        // the lead Bitrix itself linked the call to (0 = none: a contact, or nothing)
+        hint: e.crm_entity_type === 'LEAD' ? Number(e.crm_entity_id) || 0 : 0,
+      };
       b.missed_inbound += 1; b._missed.push(ev); missedEvents.push(ev);
     }
   }
 
-  let nePerezvonili = 0;
+  let nePerezvonili = 0, recalledCount = 0;
   const reactions = [];
+  const notRecalled = []; // only filled when opts.detail
+  const now = opts.now ?? Date.now();
   for (const ev of missedEvents) {
-    if (!ev.num || ev.at == null) { nePerezvonili += 1; continue; }
+    if (!ev.num || ev.at == null) {
+      nePerezvonili += 1;
+      if (opts.detail) notRecalled.push({ ...ev, status: 'nophone', callback_at: null });
+      continue;
+    }
     const fc = firstContactAfter(ev.num, ev.at);
-    if (fc) reactions.push(Math.round((fc - ev.at) / 1000));
-    else nePerezvonili += 1;
+    if (fc) { reactions.push(Math.round((fc - ev.at) / 1000)); recalledCount += 1; continue; }
+    nePerezvonili += 1;
+    if (opts.detail) {
+      // open: the 24h are not over, a callback may still come. late: reached, but after
+      // the 24h. never: nobody has talked to this number since.
+      let status = 'never', callbackAt = null;
+      if (ev.at + RECALL_WINDOW_MS > now) status = 'open';
+      else {
+        const later = (contact.get(ev.num) || []).filter((t) => t > ev.at);
+        if (later.length) { status = 'late'; callbackAt = Math.min(...later); }
+      }
+      notRecalled.push({ ...ev, status, callback_at: callbackAt });
+    }
   }
 
   const responsibles = [...ops.values()]
@@ -185,7 +211,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
 
   const external = inbound + outbound;
   const success = external - missed - ndz;
-  return {
+  const result = {
     date_from: dateFrom || '', date_to: dateTo || '',
     total_calls: external,                      // Все, without internal calls
     external_calls: external,
@@ -199,6 +225,8 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     reaksiya_vaqti: reactions.length ? Math.round(reactions.reduce((s, n) => s + n, 0) / reactions.length) : 0,
     responsibles,
   };
+  if (opts.detail) result.missed_detail = { total: missedEvents.length, recalled: recalledCount, not_recalled: notRecalled };
+  return result;
 }
 
 module.exports = { computeCallStatsFull };

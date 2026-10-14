@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MultiSelect } from "@/components/MultiSelect";
+import { NotRecalledModal } from "@/components/NotRecalledModal";
 import { getConfig } from "@/lib/api/config";
 import {
   getPyCallStats, getCallList, getCallFilterOptions,
@@ -131,14 +132,21 @@ function activeFilterCount(filter: CallFilterState) {
 
 
 // ── Metric Card ───────────────────────────────────────────────────
-function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor }: {
+function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint }: {
   label: string; value: React.ReactNode; sub?: string;
   icon: React.ReactNode; iconBg: string;
   badge?: string; badgeColor?: string; valueColor?: string; accentColor?: string;
+  /** Makes the card a button; `hint` is the small "open" caption in its corner. */
+  onClick?: () => void; hint?: string;
 }) {
   const accent = accentColor || "#2196F3";
   return (
-    <div style={{ position: "relative", minHeight: 112, background: `linear-gradient(145deg, ${accent}12 0%, var(--bg) 42%, var(--bg) 100%)`, border: `1px solid ${accent}33`, borderRadius: 14, padding: "18px 20px 18px", display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+    <div
+      {...(onClick ? {
+        role: "button", tabIndex: 0, title: hint, onClick,
+        onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } },
+      } : {})}
+      style={{ position: "relative", minHeight: 112, background: `linear-gradient(145deg, ${accent}12 0%, var(--bg) 42%, var(--bg) 100%)`, border: `1px solid ${accent}33`, borderRadius: 14, padding: "18px 20px 18px", display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
         <span style={{ fontSize: 12.5, color: accent, fontWeight: 700, lineHeight: 1.3 }}>{label}</span>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
@@ -149,6 +157,11 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
           <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: `${badgeColor}18`, border: `1.5px solid ${badgeColor}35`, borderRadius: 6, padding: "2px 8px", lineHeight: 1.7, marginBottom: 2 }}>{badge}</span>
         )}
       </div>
+      {onClick && hint && (
+        <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11.5, fontWeight: 600, color: accent, background: `${accent}14`, border: `1px solid ${accent}30`, borderRadius: 6, padding: "3px 8px" }}>
+          {hint} →
+        </div>
+      )}
       {sub && (
         <div style={{ position: "absolute", right: 14, bottom: 12, fontSize: 11.5, color: accent, display: "inline-flex", alignItems: "center", gap: 4, background: `${accent}14`, border: `1px solid ${accent}30`, borderRadius: 6, padding: "3px 8px" }}>
           <Clock size={11} />{sub}
@@ -226,6 +239,8 @@ export default function CallStatistikasi() {
   const [filters, setFilters]       = useState<CallFilterState>(() => defaultCallFilters());
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
+  const [showNotRecalled, setShowNotRecalled] = useState(false);
+  const portal = useBitrixPortal();
   const pageScrollRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const apiFilter = toApiFilter(filters);
@@ -420,7 +435,8 @@ export default function CallStatistikasi() {
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
           <Card label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
-            icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)" />
+            icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
+            onClick={() => setShowNotRecalled(true)} hint="Ro'yxat" />
         </div>
 
         {/* ── Main stats table ── */}
@@ -524,6 +540,7 @@ export default function CallStatistikasi() {
 
 
       </div>
+      {showNotRecalled && <NotRecalledModal filter={apiFilter} portal={portal} onClose={() => setShowNotRecalled(false)} />}
     </div>
   );
 }

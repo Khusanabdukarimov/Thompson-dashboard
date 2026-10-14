@@ -803,6 +803,43 @@ export type PyResponsibleCallStats = {
   unique_total:      number;
 };
 
+/** One missed call nobody talked to the customer about within 24h (a row of the "Ne perezvonili" list). */
+export type NotRecalledItem = {
+  key: string;
+  phone: string | null;
+  call_start: string;
+  /** false = the PBX has no record of this call, so operator / wait / reason are unknown. */
+  matched: boolean;
+  /** Operator the call rang; null while `matched` means it rang out in the queue. */
+  operator: string | null;
+  wait_s: number | null;
+  reason: string | null;
+  /** How many times this number is in the list. */
+  attempts: number;
+  /** never: not reached since · late: reached, but after the 24h · open: the 24h are still running. */
+  status: "never" | "late" | "open" | "nophone";
+  callback_at: string | null;
+  delay_s: number | null;
+  lead_id: number | null;
+  stage_name: string | null;
+  stage_bid: string | null;
+  responsible: string | null;
+  responsible_id: number | null;
+};
+
+export type NotRecalledResponse = {
+  window_hours: number;
+  source: "bitrix24" | "pbx";
+  summary: {
+    total: number; unique_numbers: number; late: number; not_reached: number; still_open: number;
+    avg_wait_s: number; avg_delay_s: number; missed_total: number;
+  };
+  /** The slice of the list this response carries; `summary` always covers the whole list. */
+  offset: number;
+  limit: number;
+  items: NotRecalledItem[];
+};
+
 export type PyCallStatsResult = {
   date_from:      string;
   date_to:        string;
@@ -822,6 +859,15 @@ export type PyCallStatsResult = {
   reaksiya_vaqti: number;
   responsibles:   PyResponsibleCallStats[];
 };
+
+/** The list behind the "Ne perezvonili" card — same filters, so it always adds up to the card. */
+export function getNotRecalledCalls(filter: CallDashboardFilter, page: { offset: number; limit: number } = { offset: 0, limit: 20 }) {
+  return apiGet<NotRecalledResponse>("/api/dashboard/call-not-recalled", {
+    ...callFilterParams(filter),
+    offset: page.offset,
+    limit: page.limit,
+  }, API_URL_CRM);
+}
 
 export function getPyCallStats(filter: CallDashboardFilter) {
   return apiGet<PyCallStatsResult>("/api/dashboard/call-stats-full", {
