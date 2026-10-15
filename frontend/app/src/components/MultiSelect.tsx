@@ -24,6 +24,19 @@ export function MultiSelect({
   const [query, setQuery] = useState("");
   // Groups the user has opened. All start closed; a search opens every group it matches.
   const [openGroups, setOpenGroups] = useState<string[]>([]);
+  // "Barchasini tanlash" sends [] (no filter), which alone looks exactly like the
+  // untouched picker — so remember the choice and render every box ticked.
+  const [allMode, setAllMode] = useState(false);
+  // A selection set from outside (a preset, a drill-down) ends "all ticked".
+  if (allMode && values.length > 0) setAllMode(false);
+  const ticked = allMode && values.length === 0 ? options.map(o => o.value) : values;
+
+  /** Emit a selection; every option ticked collapses to [] ("no filter"). */
+  const emit = (next: string[]) => {
+    const all = options.length > 0 && options.every(o => next.includes(o.value));
+    setAllMode(all);
+    onChange(all ? [] : next);
+  };
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -40,7 +53,7 @@ export function MultiSelect({
   }, [options, query]);
 
   const toggle = (v: string) => {
-    onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
+    emit(ticked.includes(v) ? ticked.filter(x => x !== v) : [...ticked, v]);
   };
 
   // null → plain list. Groups are built from what the search leaves, so a header
@@ -49,7 +62,7 @@ export function MultiSelect({
   const searching = query.trim() !== "";
 
   const renderOption = (o: SelectOption) => {
-    const checked = values.includes(o.value);
+    const checked = ticked.includes(o.value);
     return (
       <label key={o.value}
         style={{ display: "flex", alignItems: "center", gap: 8, padding: grouped ? "7px 12px 7px 24px" : "7px 12px", cursor: "pointer", background: checked ? "rgba(33,150,243,0.08)" : "transparent" }}
@@ -109,15 +122,12 @@ export function MultiSelect({
             <div style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)", display: "flex", gap: 12 }}>
               {/* Every option ticked means "no filter": an explicit id list would silently drop
                   rows whose value is not offered (inactive or system users, unassigned deals). */}
-              <button type="button" onClick={() => {
-                const next = [...new Set([...values, ...shown.map(o => o.value)])];
-                onChange(options.every(o => next.includes(o.value)) ? [] : next);
-              }}
+              <button type="button" onClick={() => emit([...new Set([...ticked, ...shown.map(o => o.value)])])}
                 style={{ fontSize: 11, color: "#2196F3", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                 Barchasini tanlash
               </button>
-              {values.length > 0 && (
-                <button type="button" onClick={() => onChange([])}
+              {ticked.length > 0 && (
+                <button type="button" onClick={() => { setAllMode(false); onChange([]); }}
                   style={{ fontSize: 11, color: "#9E9E9E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                   Hammasini olib tashlash
                 </button>
@@ -125,7 +135,7 @@ export function MultiSelect({
             </div>
           )}
           {grouped ? grouped.map(g => {
-            const state = groupState(values, g.items);
+            const state = groupState(ticked, g.items);
             const isOpen = searching || openGroups.includes(g.name);
             return (
               <div key={g.name}>
@@ -136,11 +146,11 @@ export function MultiSelect({
                   <input type="checkbox" checked={state === "all"}
                     ref={el => { if (el) el.indeterminate = state === "some"; }}
                     onClick={e => e.stopPropagation()}
-                    onChange={() => onChange(toggleGroup(values, g.items))}
+                    onChange={() => emit(toggleGroup(ticked, g.items))}
                     style={{ accentColor: "#2196F3", flexShrink: 0 }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{g.name}</span>
                   <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
-                    {g.items.filter(o => values.includes(o.value)).length}/{g.items.length}
+                    {g.items.filter(o => ticked.includes(o.value)).length}/{g.items.length}
                   </span>
                   <ChevronDown size={12} style={{ flexShrink: 0, color: "var(--text3)", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
                 </div>
