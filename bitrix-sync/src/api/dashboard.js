@@ -65,13 +65,15 @@ const TASHRIF_BELGILANDI = ufSet('l.uf_tashrif_sanasi');
 const TASHRIF_OTKAZILDI  = ufSet('l.uf_tashrif_buyurdi');
 
 // ── The dashboard's lead scope ─────────────────────────────────────
-// Every lead figure on the Lidlar page is scoped to these two conditions, and
-// nothing else. They are always on — "Tozalash" clears the visible filters but
-// never widens the scope — so the page is always answering the same question as
-// this Bitrix filter:
+// Every lead figure on the Lidlar page is scoped to the Proekt allow-list below
+// (plus the "land" title exclusion in leadScopeCond), and nothing else. It is
+// always on — "Tozalash" clears the visible filters but never widens the scope —
+// so the page is always answering the same question as this Bitrix filter:
 //
-//     Proekt: O'quv markaz, Maktab      Proekt2: anything except HR
+//     Proekt: O'quv markaz, Maktab, Kids
 //
+// Proekt 2 (HR / Студент / Жалоба) is NOT part of the scope: leads tagged HR used
+// to be dropped here without a trace. It is an ordinary picker now (UF_FILTERS).
 // Proekt is an allow-list, not a deny-list. It used to be
 // `NOT IN (Bog'cha, IH)`, which silently let through every lead with no Proekt
 // value at all — the single biggest reason the cards disagreed with Bitrix.
@@ -79,17 +81,14 @@ const PROEKT_FIELD = 'UF_CRM_1781879563298';
 const PROEKT_ALLOWED = "'3571','3573','5113'"; // O'quv markaz, Maktab, Kids
                                                // excluded: 3575 Bog'cha, 3577 IH
 
-// Proekt2 (UF_CRM_1782148374198): internal HR / Студент / Жалоба tagging.
-// Only HR (5159) is dropped — Студент (5161) and Жалоба (5163) are real leads.
+// Proekt 2 (UF_CRM_1782148374198): HR (5159) / Студент (5161) / Жалоба (5163).
+// A filter the user picks ("Proekt 2"); nothing is hidden by default.
 const PROEKT2_FIELD = 'UF_CRM_1782148374198';
-const PROEKT2_HIDDEN = "'5159'"; // HR
 
 /** The always-on scope, for any query that has a lead id to constrain. */
 const leadScopeCond = (col) =>
   `${col} IN (SELECT lead_id FROM lead_uf_values
                WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_ALLOWED}))
-   AND ${col} NOT IN (SELECT lead_id FROM lead_uf_values
-                       WHERE field_code = '${PROEKT2_FIELD}' AND value IN (${PROEKT2_HIDDEN}))
    AND NOT EXISTS (SELECT 1 FROM leads lx WHERE lx.id = ${col} AND lx.title ILIKE '%land%')`;
 
 // Reason fields, resolved against lead_uf_enums (kept current by ufSync) rather
@@ -131,6 +130,7 @@ const UF_FILTERS = [
   ['filial',  'UF_CRM_1618299635672'], // Филиал
   ['reason',  'UF_CRM_1618300665524'], // Причина
   ['hudud',   'UF_CRM_1701529319467'], // Вилоят
+  ['proekt2', PROEKT2_FIELD],          // Proekt 2 (HR / Студент / Жалоба)
 ];
 
 const SOURCE1_FIELD = 'UF_CRM_1635794595';
@@ -1452,6 +1452,7 @@ router.get('/lead-filter-options', async (req, res) => {
       filials:  byField('UF_CRM_1618299635672'),
       reasons:  byField('UF_CRM_1618300665524'),
       hududs:   byField(HUDUD_FIELD),
+      proekt2s: byField(PROEKT2_FIELD),
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);

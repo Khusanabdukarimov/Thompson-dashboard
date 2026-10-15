@@ -699,6 +699,7 @@ export default function LidlarPage() {
     (applied.filials?.length ?? 0) > 0,
     (applied.reasons?.length ?? 0) > 0,
     (applied.hududs?.length ?? 0) > 0,
+    (applied.proekt2s?.length ?? 0) > 0,
     applied.start_date != null || applied.end_date != null,
     applied.closed_start_date != null || applied.closed_end_date != null,
   ].filter(Boolean).length;
@@ -1136,10 +1137,10 @@ export default function LidlarPage() {
                   />
                 </div>
 
-                {/* Kurslar / Manba 1 / Filial / Sabab / Hudud — the Bitrix enum
+                {/* Kurslar / Manba 1 / Filial / Sabab / Hudud / Proekt 2 — the Bitrix enum
                     fields the team filters reports by. Options come from
                     lead_uf_enums, so new values appear without a code change. */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
                   <MultiSelect
                     label="Kurslar" icon={<Filter size={12} />}
                     options={(filterOpts?.courses ?? []).map(o => ({ value: o.id, label: o.name }))}
@@ -1173,6 +1174,13 @@ export default function LidlarPage() {
                     options={(filterOpts?.hududs ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.hududs ?? []}
                     onChange={(v) => setApplied(p => ({ ...p, hududs: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Proekt 2" icon={<Filter size={12} />}
+                    options={(filterOpts?.proekt2s ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.proekt2s ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, proekt2s: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
                 </div>
