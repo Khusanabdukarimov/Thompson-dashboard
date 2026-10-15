@@ -2,7 +2,7 @@
 // products pick dates the same way. Self-contained: only lucide icons and
 // the shared CSS theme vars.
 import { useEffect, useRef, useState } from "react";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const UZ_MONTHS = [
   "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
@@ -44,6 +44,8 @@ export function DateRangePicker({ start, end, onChange, onClear, placeholder = "
   const [fromText, setFromText] = useState(start ?? "");
   const [toText, setToText] = useState(end ?? "");
   const ref = useRef<HTMLDivElement>(null);
+  // An × in the field clears the range in one click (the popover's "Tozalash" needs two).
+  const clearable = !!onClear && !!(start || end);
 
   // Keep the typed inputs in sync when the applied range changes elsewhere (presets, clicks).
   useEffect(() => { setFromText(start ?? ""); }, [start]);
@@ -165,11 +167,31 @@ export function DateRangePicker({ start, end, onChange, onClear, placeholder = "
           fontSize: 12, padding: "8px 10px", cursor: "pointer", boxSizing: "border-box", whiteSpace: "nowrap",
         }}
       >
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>
           {start || end ? `${start ?? "Boshidan"} – ${end ?? "…"}` : placeholder}
         </span>
+        {/* room for the clear button, which sits on top of this spot (a button can't nest in a button) */}
+        {clearable && <span style={{ width: 18, flexShrink: 0 }} />}
         <Calendar size={13} style={{ color: "var(--text3)", flexShrink: 0 }} />
       </button>
+      {clearable && (
+        <button
+          type="button"
+          aria-label="Sanani tozalash"
+          title="Tozalash"
+          onClick={() => { setOpen(false); setPendingStart(null); onClear?.(); }}
+          onMouseEnter={e => { e.currentTarget.style.color = "var(--text)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "var(--text3)"; }}
+          style={{
+            position: "absolute", right: 31, top: "50%", transform: "translateY(-50%)",
+            width: 18, height: 18, borderRadius: 9, border: "none", padding: 0, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "var(--bg3)", color: "var(--text3)",
+          }}
+        >
+          <X size={11} />
+        </button>
+      )}
 
       {open && (
         <div style={{
