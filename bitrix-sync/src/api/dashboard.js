@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFrom, tzTo, tzFromOpt, tzToOpt } = require('./tzDate');
 const { DELETED, DELETED_NAME, sourceKey, deletedMatch, sourceOptionsSql } = require('./sourceBucket');
+const { REGIONS, REGION_OTHER } = require('../config/regions');
 const fs = require('fs');
 const path = require('path');
 
@@ -200,7 +201,32 @@ function ufFilterCond(q, col = 'l.id') {
              WHERE field_code = '${field}' AND value <> '')`);
     sql += `\n    AND (${parts.join(' OR ')})`;
   }
-  return sql;
+  return sql + regionCond(q, col);
+}
+
+/**
+ * Viloyat filter (?region=toshkent,navoiy,…): a grouping of Филиал values by name,
+ * see config/regions.js. "boshqa" = a Филиал outside every region, UF_NONE = no Филиал.
+ */
+const FILIAL_FIELD_L = 'UF_CRM_1618299635672';
+const sqlStr = (s) => `'${String(s).replace(/'/g, "''")}'`;
+const ALL_REGION_FILIALS = REGIONS.flatMap(r => r.filials);
+function regionCond(q, col) {
+  const want = String(q?.region ?? '').split(',').map(v => v.trim()).filter(Boolean);
+  if (!want.length) return '';
+  const byName = `SELECT v.lead_id FROM lead_uf_values v
+             JOIN lead_uf_enums e ON e.field_code = v.field_code AND e.enum_id = v.value
+             WHERE v.field_code = '${FILIAL_FIELD_L}'`;
+  const parts = [];
+  const names = REGIONS.filter(r => want.includes(r.id)).flatMap(r => r.filials);
+  if (names.length) parts.push(`${col} IN (${byName} AND e.value IN (${names.map(sqlStr).join(',')}))`);
+  if (want.includes(REGION_OTHER.id)) parts.push(`${col} IN (SELECT v.lead_id FROM lead_uf_values v
+             LEFT JOIN lead_uf_enums e ON e.field_code = v.field_code AND e.enum_id = v.value
+             WHERE v.field_code = '${FILIAL_FIELD_L}' AND v.value <> ''
+               AND (e.value IS NULL OR e.value NOT IN (${ALL_REGION_FILIALS.map(sqlStr).join(',')})))`);
+  if (want.includes(UF_NONE)) parts.push(`${col} NOT IN (SELECT lead_id FROM lead_uf_values
+             WHERE field_code = '${FILIAL_FIELD_L}' AND value <> '')`);
+  return `\n    AND ${parts.length ? `(${parts.join(' OR ')})` : 'FALSE'}`;
 }
 
 /** Scope plus the user's optional Proekt picker (a subset of the allow-list). */
@@ -1468,6 +1494,7 @@ router.get('/lead-filter-options', async (req, res) => {
       reasons:  byField('UF_CRM_1618300665524'),
       hududs:   byField(HUDUD_FIELD),
       proekt2s: byField(PROEKT2_FIELD),
+      regions: [...REGIONS, REGION_OTHER].map(r => ({ id: r.id, name: r.name })).concat({ id: UF_NONE, name: UF_NONE_LABEL }),
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);

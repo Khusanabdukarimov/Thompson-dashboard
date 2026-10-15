@@ -700,6 +700,7 @@ export default function LidlarPage() {
     (applied.reasons?.length ?? 0) > 0,
     (applied.hududs?.length ?? 0) > 0,
     (applied.proekt2s?.length ?? 0) > 0,
+    (applied.regions?.length ?? 0) > 0,
     applied.start_date != null || applied.end_date != null,
     applied.closed_start_date != null || applied.closed_end_date != null,
   ].filter(Boolean).length;
@@ -1181,6 +1182,13 @@ export default function LidlarPage() {
                     options={(filterOpts?.proekt2s ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.proekt2s ?? []}
                     onChange={(v) => setApplied(p => ({ ...p, proekt2s: v.length ? v : undefined }))}
+                    loading={filterOptsQ.isLoading}
+                  />
+                  <MultiSelect
+                    label="Viloyat" icon={<Filter size={12} />}
+                    options={(filterOpts?.regions ?? []).map(o => ({ value: o.id, label: o.name }))}
+                    values={applied.regions ?? []}
+                    onChange={(v) => setApplied(p => ({ ...p, regions: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
                 </div>
