@@ -16,6 +16,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFrom, tzTo } = require('./tzDate');
+const { DELETED, DELETED_NAME, sourceKey, deletedMatch } = require('./sourceBucket');
 const { getPipeline, getStages, getEnumLabels, categoryCond, SOURCE1_FIELD, FILIAL_FIELD } = require('../services/pipelines');
 
 const router = Router();
@@ -23,6 +24,10 @@ const router = Router();
 // Deals without a source / reason are grouped under this key so they can be
 // drilled into like any other bucket.
 const NONE = '__none__';
+
+/** Display name for a source key: "Manbasiz", the deleted bucket, the Bitrix name, or "O'chirilgan manba (CODE)". */
+const srcName = (id, name) =>
+  id === NONE ? 'Manbasiz' : id === DELETED ? DELETED_NAME : (name || `${DELETED_NAME} (${id})`);
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
 /**
@@ -56,7 +61,10 @@ function buildScope(q, pipe, extra = () => []) {
   if (q.mode === 'amocrm')   where.push(`d.source_id = 'UC_1WUFJB'`);
   if (q.mode === 'bitrix24') where.push(`(d.source_id IS NULL OR d.source_id <> 'UC_1WUFJB')`);
   if (q.responsible_id) where.push(`d.responsible_id::text = ANY(string_to_array(${p(String(q.responsible_id))}, ','))`);
-  if (q.source)         where.push(`COALESCE(NULLIF(d.source_id, ''), '${NONE}') = ANY(string_to_array(${p(String(q.source))}, ','))`);
+  if (q.source) {
+    const ph = p(String(q.source));
+    where.push(`(COALESCE(NULLIF(d.source_id, ''), '${NONE}') = ANY(string_to_array(${ph}, ',')) OR ${deletedMatch('d.source_id', ph)})`);
+  }
   if (q.stage)          where.push(`s.bitrix_id = ANY(string_to_array(${p(String(q.stage))}, ','))`);
   // Enum filters. An unreadable list matches nothing rather than silently matching everything.
   if (q.source1) {
@@ -214,7 +222,7 @@ router.get('/sources', async (req, res) => {
     const [liveStages, { rows }] = await Promise.all([
       getStages(pipe.categoryId),
       pool.query(
-        `SELECT COALESCE(NULLIF(d.source_id, ''), '${NONE}') AS source_id,
+        `SELECT COALESCE(NULLIF(${sourceKey('d.source_id', 'ls')}, ''), '${NONE}') AS source_id,
                 MAX(ls.name) AS source_name,
                 s.bitrix_id AS stage,
                 COUNT(*)::int AS n
@@ -234,7 +242,7 @@ router.get('/sources', async (req, res) => {
           source_id: r.source_id,
           // lead_sources mirrors crm.status SOURCE; an id missing there is shown raw
           // so it can still be traced back to Bitrix.
-          source_name: r.source_id === NONE ? 'Manbasiz' : (r.source_name || r.source_id),
+          source_name: srcName(r.source_id, r.source_name),
           by_stage: {},
         });
       }
@@ -363,7 +371,7 @@ router.get('/deals', async (req, res) => {
         stage_name: stageById[r.stage]?.name || r.stage,
         stage_kind: stageById[r.stage]?.kind || 'process',
         source_id: r.source_id,
-        source_name: r.source_id === NONE ? 'Manbasiz' : (r.source_name || r.source_id),
+        source_name: srcName(r.source_id, r.source_name),
         reason: pipe.reasonField && r.uf_prichina ? (labels[r.uf_prichina] || `#${r.uf_prichina}`) : null,
         report_stage: pipe.reportStage ? (r.uf_report_stage || null) : null,
         opportunity: Number(r.opportunity) || 0,

@@ -14,6 +14,7 @@ import {
   getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
   getPipelineFilterOptions,
   NONE_KEY,
+  DELETED_SOURCE_KEY,
   type PipelineKey, type PipelineFilter, type PipelineDealsFilter, type PipelineStage,
   type PipelineManagerRow, type ReasonScope,
 } from "@/lib/api/pipelineDeals";
@@ -1021,8 +1022,8 @@ export default function SdelkalarPage() {
                           </td>
                           <td style={{ ...OT_TD, whiteSpace: "nowrap" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", fontStyle: r.source_id === NONE_KEY ? "italic" : "normal" }}>{r.source_name}</span>
-                              {r.source_id !== NONE_KEY && (
+                              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", fontStyle: r.source_id === NONE_KEY || r.source_id === DELETED_SOURCE_KEY ? "italic" : "normal" }}>{r.source_name}</span>
+                              {r.source_id !== NONE_KEY && r.source_id !== DELETED_SOURCE_KEY && (
                                 <span title="Bitrix SOURCE_ID" style={{ fontSize: 10, fontFamily: "monospace", color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 4, padding: "0 5px" }}>
                                   {r.source_id}
                                 </span>

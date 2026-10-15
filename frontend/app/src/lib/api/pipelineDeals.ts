@@ -6,6 +6,9 @@ export type PipelineKey = 'uc' | 'yangi';
 /** Bucket key the backend uses for deals with no source / no reason. */
 export const NONE_KEY = '__none__';
 
+/** Bucket key for sources Bitrix no longer lists (deleted codes), shown as "O'chirilgan manba". */
+export const DELETED_SOURCE_KEY = '__deleted__';
+
 export type StageKind = 'process' | 'won' | 'lost';
 
 export type PipelineStage = {

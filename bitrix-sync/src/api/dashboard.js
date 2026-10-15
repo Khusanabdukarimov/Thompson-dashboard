@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFrom, tzTo, tzFromOpt, tzToOpt } = require('./tzDate');
+const { DELETED, DELETED_NAME, sourceKey, deletedMatch, sourceOptionsSql } = require('./sourceBucket');
 const fs = require('fs');
 const path = require('path');
 
@@ -32,8 +33,8 @@ function leadClosedCond(q, col = 'l.date_closed') {
 }
 
 function leadSrcCond(mode, pi) {
-  const col = mode === 'amocrm' ? 'l.uf_filial' : 'l.source_id';
-  return `($${pi}::text IS NULL OR ${col}::text = ANY(string_to_array($${pi}, ',')))`;
+  if (mode === 'amocrm') return `($${pi}::text IS NULL OR l.uf_filial::text = ANY(string_to_array($${pi}, ',')))`;
+  return `($${pi}::text IS NULL OR l.source_id = ANY(string_to_array($${pi}, ',')) OR ${deletedMatch('l.source_id', `$${pi}`)})`;
 }
 
 // ── Lead metric definitions ────────────────────────────────────────
@@ -218,7 +219,7 @@ function dealSrcCond(mode, pi) {
       WHERE lp.phone = ph.phone AND l.uf_filial = ANY(string_to_array($${pi}, ','))
     )`;
   } else {
-    return `d.source_id = ANY(string_to_array($${pi}, ','))`;
+    return `(d.source_id = ANY(string_to_array($${pi}, ',')) OR ${deletedMatch('d.source_id', `$${pi}`)})`;
   }
 }
 
@@ -737,10 +738,7 @@ router.get('/deal-filter-options', async (req, res) => {
         ? Promise.resolve({ rows: [] })
         // lead_sources mirrors Bitrix's SOURCE list (shared by leads and deals);
         // SOURCE_NAMES below is the old portal's map and misnames ids here.
-        : pool.query(`SELECT DISTINCT d.source_id, ls.name AS source_name FROM deals d
-                    LEFT JOIN lead_sources ls ON ls.source_id = d.source_id
-                    WHERE d.source_id IS NOT NULL AND d.source_id != ''
-                    ORDER BY d.source_id`),
+        : pool.query(sourceOptionsSql('deals')),
     ]);
 
     let sources = [];
@@ -757,7 +755,7 @@ router.get('/deal-filter-options', async (req, res) => {
     } else {
       sources = srcRes.rows.map(r => ({
         id: r.source_id,
-        name: r.source_name || SOURCE_NAMES[r.source_id] || r.source_id,
+        name: r.name || SOURCE_NAMES[r.source_id] || r.source_id,
       }));
     }
 
@@ -791,7 +789,7 @@ router.get('/deals-stats', async (req, res) => {
   let pi2 = 3;
   if (responsible_id) { extraPay.push(`AND d2.responsible_id::text = ANY(string_to_array($${pi2++}, ','))`); }
   if (stage_id)       { extraPay.push(`AND d2.stage_id::text = ANY(string_to_array($${pi2++}, ','))`); }
-  if (source && mode !== 'amocrm') { extraPay.push(`AND d2.source_id = ANY(string_to_array($${pi2++}, ','))`); }
+  if (source && mode !== 'amocrm') { const ph = `$${pi2++}`; extraPay.push(`AND (d2.source_id = ANY(string_to_array(${ph}, ',')) OR ${deletedMatch('d2.source_id', ph)})`); }
 
   const tolanganSubq = `(
     SELECT COALESCE(SUM(sub.amount), 0)
@@ -1412,11 +1410,13 @@ router.get('/lead-filter-options', async (req, res) => {
          WHERE entity = 'lead' AND sort_order > 0 AND semantics IS NOT NULL
          ORDER BY sort_order`
       ),
-      pool.query(
-        `SELECT DISTINCT l.source_id, ls.name
-         FROM leads l LEFT JOIN lead_sources ls ON ls.source_id = l.source_id
-         WHERE l.source_id IS NOT NULL AND l.source_id != '' ${srcExclude}
-         ORDER BY l.source_id LIMIT 60`
+      pool.query(mode === 'amocrm'
+        ? `SELECT DISTINCT l.source_id, ls.name
+           FROM leads l LEFT JOIN lead_sources ls ON ls.source_id = l.source_id
+           WHERE l.source_id IS NOT NULL AND l.source_id != '' ${srcExclude}
+           ORDER BY l.source_id LIMIT 60`
+        // Bitrix's own source list by name (no duplicates, no cap) + one bucket for deleted codes.
+        : sourceOptionsSql('leads', srcExclude.replace(/source_id/g, 'x.source_id'))
       ),
       pool.query(
         `SELECT form_id AS id, form_name AS name, lead_count
@@ -1806,6 +1806,8 @@ router.get('/source-leads', async (req, res) => {
   const limit  = Math.min(5000, parseInt(req.query.limit, 10) || 10);
   const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
   const unknown = !source_id || source_id === 'Nomalum';
+  const deleted = source_id === DELETED;
+  const exact = !unknown && !deleted;
 
   try {
     const { rows } = await pool.query(
@@ -1818,11 +1820,13 @@ router.get('/source-leads', async (req, res) => {
          ${leadClosedCond(req.query)}
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          AND ${leadProektCond(4, req.query)}
-         AND (${unknown ? 'l.source_id IS NULL' : 'l.source_id = $5::text'})
+         AND (${unknown ? "NULLIF(l.source_id, '') IS NULL"
+              : deleted ? "NULLIF(l.source_id, '') IS NOT NULL AND l.source_id NOT IN (SELECT source_id FROM lead_sources)"
+              : 'l.source_id = $5::text'})
          ${leadModeClause(mode)}
        ORDER BY l.date_create DESC
        LIMIT ${limit} OFFSET ${offset}`,
-      [from || null, to || null, responsible_id || null, proekt || null, ...(unknown ? [] : [source_id])]
+      [from || null, to || null, responsible_id || null, proekt || null, ...(exact ? [source_id] : [])]
     );
     res.json({ items: rows });
   } catch (err) {
@@ -1836,8 +1840,8 @@ router.get('/source-stats', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(l.source_id, 'Nomalum') AS source_id,
-         COALESCE(MAX(ls.name), COALESCE(l.source_id, 'Nomalum')) AS source_name,
+         COALESCE(NULLIF(${sourceKey('l.source_id', 'ls')}, ''), 'Nomalum') AS source_id,
+         MAX(ls.name) AS source_name,
          COUNT(*)::int AS umumiy_lidlar,
          COUNT(*) FILTER (WHERE ${IN_PROGRESS})::int AS jarayonda,
          COUNT(*) FILTER (WHERE s.bitrix_id IN (${STAGE_SIFATLI}))::int AS sifatli_lid,
@@ -1857,13 +1861,13 @@ router.get('/source-stats', async (req, res) => {
          AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
-       GROUP BY COALESCE(l.source_id, 'Nomalum')
+       GROUP BY 1
        ORDER BY umumiy_lidlar DESC`,
       [from || null, to || null, responsible_id || null, proekt || null]
     );
     res.json(rows.map(r => ({
       ...r,
-      source_name: r.source_name || SOURCE_NAMES[r.source_id] || r.source_id,
+      source_name: r.source_id === DELETED ? DELETED_NAME : (r.source_name || SOURCE_NAMES[r.source_id] || r.source_id),
     })));
   } catch (err) {
     console.error('[dashboard/source-stats]', err.message);
