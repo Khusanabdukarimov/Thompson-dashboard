@@ -15,6 +15,7 @@
  */
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { tzFrom, tzTo } = require('./tzDate');
 const { getPipeline, getStages, getEnumLabels, categoryCond, SOURCE1_FIELD, FILIAL_FIELD } = require('../services/pipelines');
 
 const router = Router();
@@ -50,8 +51,8 @@ function buildScope(q, pipe, extra = () => []) {
   const p = (v) => { params.push(v); return `$${params.length}`; };
   const dateCol = q.mode === 'amocrm' ? 'COALESCE(d.uf_amo_date, d.date_create)' : 'd.date_create';
   const where = [`s.entity = 'deal'`, categoryCond(pipe.categoryId)];
-  if (isDate(q.from)) where.push(`(${dateCol} AT TIME ZONE 'Asia/Tashkent')::date >= ${p(q.from)}::date`);
-  if (isDate(q.to))   where.push(`(${dateCol} AT TIME ZONE 'Asia/Tashkent')::date <= ${p(q.to)}::date`);
+  if (isDate(q.from)) where.push(tzFrom(dateCol, p(q.from)));
+  if (isDate(q.to))   where.push(tzTo(dateCol, p(q.to)));
   if (q.mode === 'amocrm')   where.push(`d.source_id = 'UC_1WUFJB'`);
   if (q.mode === 'bitrix24') where.push(`(d.source_id IS NULL OR d.source_id <> 'UC_1WUFJB')`);
   if (q.responsible_id) where.push(`d.responsible_id::text = ANY(string_to_array(${p(String(q.responsible_id))}, ','))`);

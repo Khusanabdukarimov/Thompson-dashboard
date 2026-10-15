@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { tzFromOpt, tzToOpt } = require('./tzDate');
 const { computeCallStatsFull } = require('../services/callStats');
 const { teamOf } = require('../config/calls');
 
@@ -147,8 +148,8 @@ router.get('/call-missed', async (req, res) => {
 // analogue and are accepted-but-ignored.
 function fullFilterWhere() {
   return `
-        ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-    AND ($3::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
+        ${tzFromOpt('c.start_stamp', '$1')}
+    AND ${tzToOpt('c.start_stamp', '$3')}
     AND c.start_stamp IS NOT NULL`;
 }
 
@@ -213,15 +214,15 @@ async function readCallInputs({ from, to, phone, source, stage }) {
             c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
             ${IS_INTERNAL} AS internal,
             (
-              ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-              AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+              ${tzFromOpt('c.start_stamp', '$1')}
+              AND ${tzToOpt('c.start_stamp', '$2')}
             ) AS in_range
      FROM pbx_calls c
      LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
      WHERE c.start_stamp IS NOT NULL
-       AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
+       AND ${tzFromOpt('c.start_stamp', '$1')}
        -- $3 = to + 1 day, the callback look-ahead
-       AND ($3::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $3::date)
+       AND ${tzToOpt('c.start_stamp', '$3')}
        AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
        AND ($6::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $6::text)
        -- Bosqich filter: keep calls whose newest same-phone lead is in $5.
@@ -246,8 +247,8 @@ async function readCallInputs({ from, to, phone, source, stage }) {
       ({ rows: bxMissed } = await pool.query(
         `SELECT m.id, m.call_start, m.phone, m.phone_norm, m.responsible_id, m.crm_entity_type, m.crm_entity_id
          FROM bx_missed_calls m
-         WHERE ($1::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-           AND ($2::date IS NULL OR (m.call_start AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+         WHERE ${tzFromOpt('m.call_start', '$1')}
+           AND ${tzToOpt('m.call_start', '$2')}
            AND ($3::text IS NULL OR m.phone_norm LIKE '%' || $3 || '%')
            -- same Bosqich rule as the call rows: the newest lead with this phone is in $4
            AND ($4::text IS NULL OR $4::text = (
@@ -450,8 +451,8 @@ router.get('/call-list', async (req, res) => {
        ) ld ON c.customer_norm IS NOT NULL
        WHERE c.start_stamp IS NOT NULL
          AND NOT ${IS_INTERNAL}
-         AND ($1::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date >= $1::date)
-         AND ($2::date IS NULL OR (c.start_stamp AT TIME ZONE 'Asia/Tashkent')::date <= $2::date)
+         AND ${tzFromOpt('c.start_stamp', '$1')}
+         AND ${tzToOpt('c.start_stamp', '$2')}
          AND ($3::int  IS NULL OR u.responsible_id = $3::int OR (c.operator_ext ~ '^[0-9]+$' AND c.operator_ext::int = $3::int))
          AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
          AND ($5::text IS NULL OR c.direction = $5::text)

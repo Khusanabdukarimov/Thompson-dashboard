@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { tzFrom, tzTo, tzFromOpt, tzToOpt } = require('./tzDate');
 const fs = require('fs');
 const path = require('path');
 
@@ -15,7 +16,7 @@ function leadModeClause(mode) {
 
 function leadDateCond(mode, p1, p2) {
   const col = mode === 'amocrm' ? 'COALESCE(l.uf_amo_date, l.date_create)' : 'l.date_create';
-  return `($${p1}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date <= $${p2}::date)`;
+  return `${tzFromOpt(col, `$${p1}`)}\n           AND ${tzToOpt(col, `$${p2}`)}`;
 }
 
 // Optional Bitrix "Дата закрытия" range. Values are validated before being
@@ -26,8 +27,8 @@ function leadClosedCond(q, col = 'l.date_closed') {
   const to = valid(q?.closed_to);
   if (!from && !to) return '';
   return `AND ${col} IS NOT NULL
-          AND (${col} AT TIME ZONE 'Asia/Tashkent')::date >= '${from || '1900-01-01'}'::date
-          AND (${col} AT TIME ZONE 'Asia/Tashkent')::date <= '${to || '2999-12-31'}'::date`;
+          AND ${tzFrom(col, `'${from || '1900-01-01'}'`)}
+          AND ${tzTo(col, `'${to || '2999-12-31'}'`)}`;
 }
 
 function leadSrcCond(mode, pi) {
@@ -88,7 +89,7 @@ const leadScopeCond = (col) =>
                WHERE field_code = '${PROEKT_FIELD}' AND value IN (${PROEKT_ALLOWED}))
    AND ${col} NOT IN (SELECT lead_id FROM lead_uf_values
                        WHERE field_code = '${PROEKT2_FIELD}' AND value IN (${PROEKT2_HIDDEN}))
-   AND ${col} NOT IN (SELECT id FROM leads WHERE COALESCE(title, '') ILIKE '%land%')`;
+   AND NOT EXISTS (SELECT 1 FROM leads lx WHERE lx.id = ${col} AND lx.title ILIKE '%land%')`;
 
 // Reason fields, resolved against lead_uf_enums (kept current by ufSync) rather
 // than a hardcoded id→label map. The maps inherited from the Mountain codebase
@@ -206,7 +207,7 @@ function dealModeClause(mode) {
 
 function dealDateCond(mode, p1, p2) {
   const col = mode === 'amocrm' ? 'COALESCE(d.uf_amo_date, d.date_create)' : 'd.date_create';
-  return `($${p1}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date >= $${p1}::date)\n           AND ($${p2}::date IS NULL OR (${col} AT TIME ZONE 'Asia/Tashkent')::date <= $${p2}::date)`;
+  return `${tzFromOpt(col, `$${p1}`)}\n           AND ${tzToOpt(col, `$${p2}`)}`;
 }
 
 function dealSrcCond(mode, pi) {
