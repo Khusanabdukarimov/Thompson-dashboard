@@ -36,7 +36,17 @@ const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
  */
 function parseIdList(v) {
   const ids = String(v).split(',').map((x) => x.trim());
-  return ids.length > 0 && ids.every((x) => /^\d+$/.test(x)) ? ids : null;
+  return ids.length > 0 && ids.every((x) => /^\d+$/.test(x) || x === NONE) ? ids : null;
+}
+
+/** Enum filter on a deal column; NONE in the list also matches deals where the field is empty. */
+function enumCond(col, ids, p) {
+  if (!ids) return 'FALSE';
+  const vals = ids.filter((x) => x !== NONE);
+  const parts = [];
+  if (vals.length) parts.push(`${col} = ANY(${p(vals)}::text[])`);
+  if (ids.includes(NONE)) parts.push(`NULLIF(${col}, '') IS NULL`);
+  return `(${parts.join(' OR ')})`;
 }
 
 /** Resolves ?pipeline= or answers 400. */
@@ -68,16 +78,13 @@ function buildScope(q, pipe, extra = () => []) {
   if (q.stage)          where.push(`s.bitrix_id = ANY(string_to_array(${p(String(q.stage))}, ','))`);
   // Enum filters. An unreadable list matches nothing rather than silently matching everything.
   if (q.source1) {
-    const ids = parseIdList(q.source1);
-    where.push(ids ? `d.uf_source1 = ANY(${p(ids)}::text[])` : 'FALSE');
+    where.push(enumCond('d.uf_source1', parseIdList(q.source1), p));
   }
   if (q.prichina && pipe.reasonField) {
-    const ids = parseIdList(q.prichina);
-    where.push(ids ? `d.uf_prichina = ANY(${p(ids)}::text[])` : 'FALSE');
+    where.push(enumCond('d.uf_prichina', parseIdList(q.prichina), p));
   }
   if (q.filial) {
-    const ids = parseIdList(q.filial);
-    where.push(ids ? `d.uf_filial = ANY(${p(ids)}::text[])` : 'FALSE');
+    where.push(enumCond('d.uf_filial', parseIdList(q.filial), p));
   }
   where.push(...extra(p));
   return { where: where.join('\n         AND '), params };
@@ -142,7 +149,8 @@ router.get('/filter-options', async (req, res) => {
     ]);
     const options = (labels) => Object.entries(labels)
       .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .concat({ id: NONE, name: "Ko'rsatilmagan" });
     res.json({ source1s: options(source1), reasons: options(reasons), filials: options(filials) });
   } catch (err) { fail(res, 'filter-options')(err); }
 });

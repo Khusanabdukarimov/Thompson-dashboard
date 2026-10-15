@@ -180,13 +180,25 @@ function ufBreakdownHandler(fieldCode, { excludeUnknown = false } = {}) {
 }
 
 /** SQL for whichever of the four enum filters the request actually set. */
+// Picker option for "this field is empty". Without it, unticking any one value
+// sends an explicit id list and silently drops every lead whose field is blank
+// (about half of all leads have no Филиал, for example).
+const UF_NONE = '__none__';
+const UF_NONE_LABEL = "Ko'rsatilmagan";
+
 function ufFilterCond(q, col = 'l.id') {
   let sql = '';
   for (const [key, field] of UF_FILTERS) {
-    const ids = String(q?.[key] ?? '').split(',').map(v => v.trim()).filter(v => /^\d+$/.test(v));
-    if (!ids.length) continue;
-    sql += `\n    AND ${col} IN (SELECT lead_id FROM lead_uf_values
-             WHERE field_code = '${field}' AND value IN (${ids.map(i => `'${i}'`).join(',')}))`;
+    const raw = String(q?.[key] ?? '').split(',').map(v => v.trim());
+    const ids = raw.filter(v => /^\d+$/.test(v));
+    const none = raw.includes(UF_NONE);
+    if (!ids.length && !none) continue;
+    const parts = [];
+    if (ids.length) parts.push(`${col} IN (SELECT lead_id FROM lead_uf_values
+             WHERE field_code = '${field}' AND value IN (${ids.map(i => `'${i}'`).join(',')}))`);
+    if (none) parts.push(`${col} NOT IN (SELECT lead_id FROM lead_uf_values
+             WHERE field_code = '${field}' AND value <> '')`);
+    sql += `\n    AND (${parts.join(' OR ')})`;
   }
   return sql;
 }
@@ -1440,7 +1452,10 @@ router.get('/lead-filter-options', async (req, res) => {
         [UF_FILTERS.map(([, f]) => f)]
       ).catch(() => ({ rows: [] })),
     ]);
-    const byField = (code) => ufRes.rows.filter(r => r.field_code === code).map(r => ({ id: r.id, name: r.name }));
+    const byField = (code) => [
+      ...ufRes.rows.filter(r => r.field_code === code).map(r => ({ id: r.id, name: r.name })),
+      { id: UF_NONE, name: UF_NONE_LABEL },
+    ];
     res.json({
       responsibles: respRes.rows,
       stages: stageRes.rows,
