@@ -9,9 +9,12 @@ types.setTypeParser(1082, val => val);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 10,
+  max: 12,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  // Webhooks share this pool with the dashboard; under a burst of dashboard
+  // queries a 5 s wait made webhooks fail ("timeout exceeded when trying to
+  // connect") and their leads were lost. Waiting longer is harmless for both.
+  connectionTimeoutMillis: 20000,
 });
 
 pool.on('error', (err) => {

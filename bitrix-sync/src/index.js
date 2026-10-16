@@ -199,6 +199,10 @@ Promise.all([
     const { syncResponsibles } = require('./services/responsibleSync');
     syncResponsibles().catch(e => console.warn('[responsibleSync] failed:', e.message));
     setInterval(() => syncResponsibles().catch(e => console.warn('[responsibleSync] failed:', e.message)), 60 * 60 * 1000);
+
+    // Failed lead webhooks are retried every 10 min and the last 48 h re-pulled
+    // nightly, so a Bitrix/DB timeout delays a lead instead of losing it.
+    require('./services/leadRecovery').startLeadRecovery();
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
 
     // Check Meta access token expiry on startup
