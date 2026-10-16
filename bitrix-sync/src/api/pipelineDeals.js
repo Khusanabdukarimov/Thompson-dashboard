@@ -149,9 +149,9 @@ router.get('/filter-options', async (req, res) => {
     ]);
     const options = (labels) => Object.entries(labels)
       .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .concat({ id: NONE, name: "Ko'rsatilmagan" });
-    res.json({ source1s: options(source1), reasons: options(reasons), filials: options(filials) });
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const withEmpty = (labels) => [{ id: NONE, name: "Ko'rsatilmagan (не выбран)" }, ...options(labels)];
+    res.json({ source1s: withEmpty(source1), reasons: withEmpty(reasons), filials: withEmpty(filials) });
   } catch (err) { fail(res, 'filter-options')(err); }
 });
 

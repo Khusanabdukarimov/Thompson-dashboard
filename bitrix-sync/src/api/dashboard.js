@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFrom, tzTo, tzFromOpt, tzToOpt } = require('./tzDate');
-const { DELETED, DELETED_NAME, sourceKey, deletedMatch, sourceOptionsSql } = require('./sourceBucket');
+const { DELETED, DELETED_NAME, sourceKey, deletedMatch, emptyMatch, sourceOptionsSql } = require('./sourceBucket');
 const { REGIONS, REGION_OTHER } = require('../config/regions');
 const fs = require('fs');
 const path = require('path');
@@ -46,7 +46,7 @@ function leadSrcCond(mode, pi) {
   if (mode === 'amocrm') return `($${pi}::text IS NULL OR l.uf_filial::text = ANY(string_to_array($${pi}, ',')))`;
   const ph = `$${pi}`;
   const stripped = `(CASE WHEN ${isExcl(ph)} THEN substr(${ph}::text, 2) ELSE ${ph}::text END)`;
-  const hit = `COALESCE(l.source_id = ANY(${listOf(ph)}) OR ${deletedMatch('l.source_id', stripped)}, false)`;
+  const hit = `COALESCE(l.source_id = ANY(${listOf(ph)}) OR ${deletedMatch('l.source_id', stripped)} OR ${emptyMatch('l.source_id', stripped)}, false)`;
   return `(${ph}::text IS NULL OR CASE WHEN ${isExcl(ph)} THEN NOT ${hit} ELSE ${hit} END)`;
 }
 
@@ -197,7 +197,7 @@ function ufBreakdownHandler(fieldCode, { excludeUnknown = false } = {}) {
 // sends an explicit id list and silently drops every lead whose field is blank
 // (about half of all leads have no Филиал, for example).
 const UF_NONE = '__none__';
-const UF_NONE_LABEL = "Ko'rsatilmagan";
+const UF_NONE_LABEL = "Ko'rsatilmagan (не выбран)";
 
 function ufFilterCond(q, col = 'l.id') {
   let sql = '';
@@ -1498,9 +1498,10 @@ router.get('/lead-filter-options', async (req, res) => {
         [UF_FILTERS.map(([, f]) => f)]
       ).catch(() => ({ rows: [] })),
     ]);
+    // Bitrix lists "не выбран" first; so do we.
     const byField = (code) => [
-      ...ufRes.rows.filter(r => r.field_code === code).map(r => ({ id: r.id, name: r.name })),
       { id: UF_NONE, name: UF_NONE_LABEL },
+      ...ufRes.rows.filter(r => r.field_code === code).map(r => ({ id: r.id, name: r.name })),
     ];
     // Bo'lim / Mas'ul tree: Bitrix departments with their (active) members.
     const deptRows = await pool.query('SELECT id, name, parent_id FROM departments').then(r => r.rows).catch(() => []);
@@ -1523,7 +1524,7 @@ router.get('/lead-filter-options', async (req, res) => {
       reasons:  byField('UF_CRM_1618300665524'),
       hududs:   byField(HUDUD_FIELD),
       proekt2s: byField(PROEKT2_FIELD),
-      regions: [...REGIONS, REGION_OTHER].map(r => ({ id: r.id, name: r.name })).concat({ id: UF_NONE, name: UF_NONE_LABEL }),
+      regions: [{ id: UF_NONE, name: UF_NONE_LABEL }, ...[...REGIONS, REGION_OTHER].map(r => ({ id: r.id, name: r.name }))],
     });
   } catch (err) {
     console.error('[dashboard/lead-filter-options]', err.message);

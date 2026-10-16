@@ -6,6 +6,9 @@
  */
 const DELETED = '__deleted__';
 const DELETED_NAME = "O'chirilgan manba";
+/** Bitrix's "не выбран": no source at all. Same key the Sdelkalar tables use for "Manbasiz". */
+const EMPTY = '__none__';
+const EMPTY_NAME = "Ko'rsatilmagan (не выбран)";
 
 /** SQL grouping key: the code itself, or DELETED. `ls` is the lead_sources join alias. */
 const sourceKey = (col, ls) =>
@@ -21,13 +24,20 @@ const hasDeleted = (tbl, extra = '') =>
   `EXISTS (SELECT 1 FROM ${tbl} x WHERE NULLIF(x.source_id, '') IS NOT NULL
            AND x.source_id NOT IN (SELECT source_id FROM lead_sources) ${extra})`;
 
-/** Filter options: every Bitrix source used in `tbl`, by name, then the deleted bucket. */
+/** SQL: the comma-separated filter in `ph` asks for EMPTY and `col` has no source. */
+const emptyMatch = (col, ph) =>
+  `(position(',${EMPTY},' in ',' || ${ph}::text || ',') > 0 AND NULLIF(${col}, '') IS NULL)`;
+
+/** Filter options: "не выбран" first (when used), every Bitrix source used in `tbl` by name, then the deleted bucket. */
 const sourceOptionsSql = (tbl, extra = '') =>
   `SELECT source_id, name FROM (
+     SELECT '${EMPTY}' AS source_id, '${EMPTY_NAME.replace(/'/g, "''")}' AS name, -1 AS o
+      WHERE EXISTS (SELECT 1 FROM ${tbl} x WHERE NULLIF(x.source_id, '') IS NULL ${extra})
+     UNION ALL
      SELECT ls.source_id, ls.name, 0 AS o FROM lead_sources ls
       WHERE EXISTS (SELECT 1 FROM ${tbl} x WHERE x.source_id = ls.source_id ${extra})
      UNION ALL
      SELECT '${DELETED}', '${DELETED_NAME.replace(/'/g, "''")}', 1 WHERE ${hasDeleted(tbl, extra)}
    ) o ORDER BY o, name`;
 
-module.exports = { DELETED, DELETED_NAME, sourceKey, deletedMatch, sourceOptionsSql };
+module.exports = { DELETED, DELETED_NAME, EMPTY, EMPTY_NAME, sourceKey, deletedMatch, emptyMatch, sourceOptionsSql };
