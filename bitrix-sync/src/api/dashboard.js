@@ -1436,9 +1436,12 @@ router.get('/lead-filter-options', async (req, res) => {
   try {
     const [respRes, stageRes, srcRes, formRes, proektRes, ufRes] = await Promise.all([
       pool.query(
+        `SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name, department_ids
+         FROM responsibles WHERE active = TRUE ORDER BY name`
+      ).catch(() => pool.query(
         `SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
          FROM responsibles WHERE active = TRUE ORDER BY name`
-      ),
+      )),
       pool.query(
         // semantics IS NOT NULL excludes retired statuses that predate
         // leadStatusSync (e.g. IN_PROCESS/PROCESSED) — they're still in this
@@ -1482,8 +1485,17 @@ router.get('/lead-filter-options', async (req, res) => {
       ...ufRes.rows.filter(r => r.field_code === code).map(r => ({ id: r.id, name: r.name })),
       { id: UF_NONE, name: UF_NONE_LABEL },
     ];
+    // Bo'lim / Mas'ul tree: Bitrix departments with their (active) members.
+    const deptRows = await pool.query('SELECT id, name, parent_id FROM departments').then(r => r.rows).catch(() => []);
+    const departments = deptRows.map(d => ({
+      id: String(d.id),
+      name: d.name,
+      parentId: d.parent_id != null ? String(d.parent_id) : null,
+      userIds: respRes.rows.filter(r => (r.department_ids || []).includes(d.id)).map(r => String(r.id)),
+    }));
     res.json({
-      responsibles: respRes.rows,
+      responsibles: respRes.rows.map(({ department_ids, ...r }) => r),
+      departments,
       stages: stageRes.rows,
       sources: srcRes.rows.map(r => ({ id: r.source_id, name: r.name || SOURCE_NAMES[r.source_id] || r.source_id })),
       forms: formRes.rows.map(r => ({ id: r.id, name: r.name, count: r.lead_count })),
@@ -1838,6 +1850,30 @@ router.get('/utm-stats', async (req, res) => {
  * Leads grouped by source with funnel breakdown.
  * Params: from, to, responsible_id, mode
  */
+/**
+ * GET /api/dashboard/lead-responsible-counts?from=&to=&proekt=&mode=
+ * Leads per responsible in the window, same scope as the KPI cards. Feeds the
+ * counts in the Bo'lim / Mas'ul picker, which hides people with none.
+ */
+router.get('/lead-responsible-counts', async (req, res) => {
+  const { from, to, proekt, mode } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(l.responsible_id::text, '') AS id, COUNT(*)::int AS n
+       FROM leads l
+       WHERE ${leadDateCond(mode, 1, 2)}
+         AND ${leadProektCond(3, {})}
+         ${leadModeClause(mode)}
+       GROUP BY 1`,
+      [from || null, to || null, proekt || null]
+    );
+    res.json({ counts: Object.fromEntries(rows.map(r => [r.id, r.n])) });
+  } catch (err) {
+    console.error('[dashboard/lead-responsible-counts]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /**
  * GET /api/dashboard/source-leads
  * The leads behind one row of Manba bo'yicha. `source_id` is the raw Bitrix

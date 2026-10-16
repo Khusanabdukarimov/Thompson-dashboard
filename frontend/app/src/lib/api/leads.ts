@@ -84,6 +84,8 @@ export type DashFilter = {
 
 export type FilterOptions = {
   responsibles: { id: number; full_name: string }[];
+  /** Bitrix company structure for the Bo'lim / Mas'ul picker (active members only). */
+  departments?: { id: string; name: string; parentId: string | null; userIds: string[] }[];
   stages: { bitrix_id: string; name: string }[];
   sources: { id: string; name: string }[];
   forms: { id: string; name: string; count: number }[];
@@ -203,6 +205,16 @@ export function getConversionStats(filter: DashFilter) {
     hudud: filter.hududs?.join(','),
     proekt2: filter.proekt2s?.join(','),
     region: filter.regions?.join(','),
+    mode: filter.mode,
+  }, API_URL_CRM);
+}
+
+/** Leads per responsible id in the window (KPI scope): counts in the Bo'lim / Mas'ul picker. */
+export function getResponsibleCounts(filter: Pick<DashFilter, "start_date" | "end_date" | "proekts" | "mode">) {
+  return apiGet<{ counts: Record<string, number> }>("/api/dashboard/lead-responsible-counts", {
+    from: filter.start_date,
+    to: filter.end_date,
+    proekt: filter.proekts?.join(','),
     mode: filter.mode,
   }, API_URL_CRM);
 }

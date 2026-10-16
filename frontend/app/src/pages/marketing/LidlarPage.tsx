@@ -8,6 +8,7 @@ import {
 import { Topbar } from "@/components/Topbar";
 import { InfoTip } from "@/components/InfoTip";
 import { MultiSelect } from "@/components/MultiSelect";
+import { DeptTree } from "@/components/DeptTree";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { ReasonsCard } from "@/components/ReasonsCard";
 import { OperatorTable } from "@/components/OperatorTable";
@@ -18,7 +19,7 @@ import {
   getResponsibleTasks, getSourceLeads, getLeadDaily,
   getTransferDirectionStats, getSourceStats, getSource1Stats, getHududStats, getPrichinaStats, getSource1Leads, getHududLeads, getPrichinaLeads, getUtmStats, getUtmCampaignStats, getUtmMediumStats, getUtmContentStats, getUtmTermStats, getUtmResponsibleStats, getResponsibleLeads,
   type DashFilter,
-  type SourceStatsRow, type UfBreakdownRow, type ResponsibleLeadRow,
+  type SourceStatsRow, type UfBreakdownRow, type ResponsibleLeadRow, getResponsibleCounts,
 } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -672,6 +673,12 @@ export default function LidlarPage() {
     staleTime: 5 * 60 * 1000,
   });
   const filterOpts = filterOptsQ.data;
+  // Lead counts per person for the Bo'lim / Mas'ul picker, following the date range and Proekt buttons.
+  const respCountsQ = useQuery({
+    queryKey: ["resp-counts", applied.start_date, applied.end_date, applied.proekts, mode],
+    queryFn: () => getResponsibleCounts({ start_date: applied.start_date, end_date: applied.end_date, proekts: applied.proekts, mode }),
+    staleTime: 60 * 1000,
+  });
 
   // One button per project, straight from the filter options. Kids used to be
   // folded into O'quv markaz; it is its own button now so any combination can
@@ -1113,10 +1120,12 @@ export default function LidlarPage() {
 
                 {/* MultiSelect filters row */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-                  <MultiSelect
-                    label="Mas'ul xodim" icon={<Users size={12} />}
-                    options={(filterOpts?.responsibles ?? []).map(r => ({ value: String(r.id), label: r.full_name }))}
-                    values={(applied.responsible_ids ?? []).map(String)}
+                  <DeptTree
+                    label="Bo'lim / Mas'ul" icon={<Users size={12} />}
+                    departments={filterOpts?.departments ?? []}
+                    users={(filterOpts?.responsibles ?? []).map(r => ({ id: String(r.id), name: r.full_name }))}
+                    counts={respCountsQ.data?.counts}
+                    value={(applied.responsible_ids ?? []).map(String)}
                     onChange={(vals) => setApplied(p => ({ ...p, responsible_ids: vals.map(Number) }))}
                     loading={filterOptsQ.isLoading}
                   />
