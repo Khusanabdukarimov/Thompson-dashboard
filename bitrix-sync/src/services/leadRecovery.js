@@ -6,21 +6,34 @@
  * processed = FALSE forever: on 2026-10-15, 27 lead webhooks failed and 3 leads
  * never reached the dashboard. Two safety nets close that gap:
  *
- *  - retryFailedLeadWebhooks (every 10 min): re-fetch every lead whose ADD/UPDATE
- *    webhook failed or got stuck in the last few days, upsert it, mark it done.
+ *  - retryFailedLeadWebhooks (hourly): re-fetch the leads whose ADD/UPDATE webhook
+ *    failed or got stuck in the last few days, upsert them, mark them done.
  *  - repullRecentLeads (nightly): list the leads Bitrix says changed in the last
  *    two days and upsert them, which also covers events Bitrix never delivered.
  *
  * Both only write our database. Distribution, phone backfill and Meta signals
  * stay in the live webhook handlers: a retry hours later must not reassign a
  * lead someone has already taken, or push anything back to Bitrix.
+ *
+ * Bitrix budget: the portal allows ~2 REST requests/s, and going over gets
+ * requests refused (QUERY_LIMIT_EXCEEDED) for every integration on the portal.
+ * The retry costs one request per run (up to 50 leads by ID in one list call);
+ * the nightly re-pull pages at 1 request/s. Both stop at the first limit error.
  */
 const pool = require('../db/pool');
-const { fetchOne, bitrixCall } = require('./bitrix');
+const { bitrixCall, bitrixPost } = require('./bitrix');
 const { upsertLead } = require('./upsertLead');
 
 const LEAD_EVENTS = ['ONCRMLEAD_ADD', 'ONCRMLEAD_UPDATE'];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/** A Bitrix error response becomes an exception; the limit error stops the whole run. */
+function checkBitrix(res) {
+  if (!res?.error) return res;
+  const err = new Error(`${res.error} ${res.error_description || ''}`.trim());
+  err.limit = res.error === 'QUERY_LIMIT_EXCEEDED' || res.error === 'OVERLOAD_LIMIT';
+  throw err;
+}
 
 /** Upsert one lead from Bitrix and record a stage change, as the update webhook does. */
 async function refreshLead(raw) {
@@ -38,8 +51,9 @@ let retrying = false;
 /**
  * Re-process lead webhooks that failed, or are still unprocessed after 10 minutes
  * (the live handler retries for ~65 s, so anything older is not in flight).
+ * One Bitrix request per run: up to 50 leads fetched by ID in a single list call.
  */
-async function retryFailedLeadWebhooks({ days = 3, limit = 300 } = {}) {
+async function retryFailedLeadWebhooks({ days = 3, limit = 50 } = {}) {
   if (retrying) return { skipped: true };
   retrying = true;
   let ok = 0, failed = 0, gone = 0;
@@ -52,9 +66,13 @@ async function retryFailedLeadWebhooks({ days = 3, limit = 300 } = {}) {
        ORDER BY entity_id LIMIT $3`,
       [LEAD_EVENTS, days, limit]
     );
-    for (const { entity_id: id } of rows) {
+    if (!rows.length) return { candidates: 0 };
+    const ids = rows.map(r => Number(r.entity_id));
+    const res = checkBitrix(await bitrixPost('crm.lead.list', { filter: { ID: ids }, select: SELECT, start: -1 }));
+    const byId = new Map((res.result || []).map(r => [Number(r.ID), r]));
+    for (const id of ids) {
+      const raw = byId.get(id);
       try {
-        const raw = await fetchOne('crm.lead.get', id);
         if (raw) { await refreshLead(raw); ok++; } else gone++;
         await pool.query(
           `UPDATE webhook_logs SET processed = TRUE, error = $3
@@ -69,10 +87,9 @@ async function retryFailedLeadWebhooks({ days = 3, limit = 300 } = {}) {
           [LEAD_EVENTS, id, `retry: ${err.message}`]
         ).catch(() => {});
       }
-      await sleep(500); // stay under the Bitrix REST rate limit
     }
-    if (rows.length) console.log(`[leadRecovery] retried ${rows.length} failed lead webhooks: ${ok} ok, ${gone} gone, ${failed} still failing`);
-    return { candidates: rows.length, ok, gone, failed };
+    console.log(`[leadRecovery] retried ${ids.length} failed lead webhooks in 1 Bitrix request: ${ok} ok, ${gone} gone, ${failed} still failing`);
+    return { candidates: ids.length, ok, gone, failed };
   } finally {
     retrying = false;
   }
@@ -99,13 +116,12 @@ async function repullRecentLeads({ hours = 48, sinceIso } = {}) {
   let lastId = 0, fetched = 0, ok = 0, failed = 0;
   try {
     for (;;) {
-      const res = await bitrixCall('crm.lead.list', {
+      const res = checkBitrix(await bitrixCall('crm.lead.list', {
         filter: { '>=DATE_MODIFY': since, '>ID': lastId },
         order: { ID: 'ASC' },
         select: SELECT,
         start: -1,
-      });
-      if (res?.error) throw new Error(`${res.error} ${res.error_description || ''}`);
+      }));
       const batch = res?.result || [];
       if (!batch.length) break;
       for (const r of batch) {
@@ -116,7 +132,7 @@ async function repullRecentLeads({ hours = 48, sinceIso } = {}) {
         }
         lastId = Math.max(lastId, parseInt(r.ID, 10));
       }
-      await sleep(600);
+      await sleep(1000); // 1 request/s, half the portal limit
     }
     console.log(`[leadRecovery] re-pulled leads changed since ${since}: ${fetched} fetched, ${ok} upserted, ${failed} failed`);
     return { since, fetched, ok, failed };
@@ -125,11 +141,11 @@ async function repullRecentLeads({ hours = 48, sinceIso } = {}) {
   }
 }
 
-/** Every 10 minutes: retry failed webhooks. Every night at 03:00 Tashkent: 48 h re-pull. */
+/** Hourly: retry failed webhooks (1 request). Nightly at 03:00 Tashkent: 48 h re-pull. */
 function startLeadRecovery() {
   const retry = () => retryFailedLeadWebhooks().catch(e => console.warn('[leadRecovery] retry failed:', e.message));
-  setTimeout(retry, 60 * 1000);
-  setInterval(retry, 10 * 60 * 1000);
+  setTimeout(retry, 5 * 60 * 1000);
+  setInterval(retry, 60 * 60 * 1000);
 
   const DAY = 24 * 3600 * 1000;
   const nightly = () => repullRecentLeads().catch(e => console.warn('[leadRecovery] re-pull failed:', e.message));
@@ -138,7 +154,7 @@ function startLeadRecovery() {
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 22, 0, 0));
   if (next <= now) next.setTime(next.getTime() + DAY);
   setTimeout(() => { nightly(); setInterval(nightly, DAY); }, next - now);
-  console.log(`[leadRecovery] retry every 10 min; nightly re-pull at ${next.toISOString()}`);
+  console.log(`[leadRecovery] retry hourly; nightly re-pull at ${next.toISOString()}`);
 }
 
 module.exports = { retryFailedLeadWebhooks, repullRecentLeads, startLeadRecovery };

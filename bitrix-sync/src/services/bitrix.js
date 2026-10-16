@@ -10,7 +10,26 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function httpGet(url, timeoutMs = 30000) {
+// Portal-wide REST budget is ~2 requests/s; going over gets requests refused
+// (QUERY_LIMIT_EXCEEDED) for every integration on the portal. Every request this
+// process sends — webhooks, syncs, recovery — waits for its slot here, so a burst
+// of webhooks (109 in one minute on 2026-10-15) queues for a few seconds instead
+// of hitting the limit. Override with BITRIX_MIN_GAP_MS.
+const MIN_GAP_MS = parseInt(process.env.BITRIX_MIN_GAP_MS || '600', 10);
+let nextSlot = 0;
+function waitForSlot() {
+  const now = Date.now();
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + MIN_GAP_MS;
+  return at > now ? sleep(at - now) : Promise.resolve();
+}
+
+async function httpGet(url, timeoutMs = 30000) {
+  await waitForSlot();
+  return rawGet(url, timeoutMs);
+}
+
+function rawGet(url, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
     const req = lib.get(url, (res) => {
@@ -137,7 +156,12 @@ async function bitrixCall(method, params = {}) {
 /**
  * POST request to Bitrix24 (for crm.lead.add, crm.lead.update, etc.)
  */
-function httpPost(url, data, timeoutMs = 30000) {
+async function httpPost(url, data, timeoutMs = 30000) {
+  await waitForSlot();
+  return rawPost(url, data, timeoutMs);
+}
+
+function rawPost(url, data, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(data);
     const urlObj = new URL(url);
