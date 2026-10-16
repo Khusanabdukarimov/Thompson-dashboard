@@ -33,9 +33,21 @@ function leadClosedCond(q, col = 'l.date_closed') {
           AND ${tzTo(col, `'${to || '2999-12-31'}'`)}`;
 }
 
+/**
+ * One list filter. "?x=a,b" keeps rows whose col is a or b; "?x=!a,b" is the
+ * picker's "Istisno" — everything except a and b, rows with no value included.
+ */
+const isExcl = (ph) => `left(${ph}::text, 1) = '!'`;
+const listOf = (ph) => `string_to_array(CASE WHEN ${isExcl(ph)} THEN substr(${ph}::text, 2) ELSE ${ph}::text END, ',')`;
+const listCond = (col, ph) =>
+  `(${ph}::text IS NULL OR CASE WHEN ${isExcl(ph)} THEN COALESCE(${col}, '') <> ALL(${listOf(ph)}) ELSE ${col} = ANY(${listOf(ph)}) END)`;
+
 function leadSrcCond(mode, pi) {
   if (mode === 'amocrm') return `($${pi}::text IS NULL OR l.uf_filial::text = ANY(string_to_array($${pi}, ',')))`;
-  return `($${pi}::text IS NULL OR l.source_id = ANY(string_to_array($${pi}, ',')) OR ${deletedMatch('l.source_id', `$${pi}`)})`;
+  const ph = `$${pi}`;
+  const stripped = `(CASE WHEN ${isExcl(ph)} THEN substr(${ph}::text, 2) ELSE ${ph}::text END)`;
+  const hit = `COALESCE(l.source_id = ANY(${listOf(ph)}) OR ${deletedMatch('l.source_id', stripped)}, false)`;
+  return `(${ph}::text IS NULL OR CASE WHEN ${isExcl(ph)} THEN NOT ${hit} ELSE ${hit} END)`;
 }
 
 // ── Lead metric definitions ────────────────────────────────────────
@@ -165,7 +177,7 @@ function ufBreakdownHandler(fieldCode, { excludeUnknown = false } = {}) {
          ${excludeUnknown ? 'JOIN' : 'LEFT JOIN'} lead_uf_enums  e ON e.field_code = v.field_code AND e.enum_id = v.value
          WHERE ${leadDateCond(mode, 1, 2)}
            ${leadClosedCond(req.query)}
-           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ${listCond('l.responsible_id::text', '$3')}
            AND ${leadProektCond(4, req.query)}
            ${leadModeClause(mode)}
          GROUP BY COALESCE(e.value, 'Noma''lum')
@@ -190,7 +202,9 @@ const UF_NONE_LABEL = "Ko'rsatilmagan";
 function ufFilterCond(q, col = 'l.id') {
   let sql = '';
   for (const [key, field] of UF_FILTERS) {
-    const raw = String(q?.[key] ?? '').split(',').map(v => v.trim());
+    const rawStr = String(q?.[key] ?? '');
+    const excl = rawStr.startsWith('!');
+    const raw = (excl ? rawStr.slice(1) : rawStr).split(',').map(v => v.trim());
     const ids = raw.filter(v => /^\d+$/.test(v));
     const none = raw.includes(UF_NONE);
     if (!ids.length && !none) continue;
@@ -199,7 +213,7 @@ function ufFilterCond(q, col = 'l.id') {
              WHERE field_code = '${field}' AND value IN (${ids.map(i => `'${i}'`).join(',')}))`);
     if (none) parts.push(`${col} NOT IN (SELECT lead_id FROM lead_uf_values
              WHERE field_code = '${field}' AND value <> '')`);
-    sql += `\n    AND (${parts.join(' OR ')})`;
+    sql += `\n    AND ${excl ? 'NOT ' : ''}(${parts.join(' OR ')})`;
   }
   return sql + regionCond(q, col);
 }
@@ -212,7 +226,9 @@ const FILIAL_FIELD_L = 'UF_CRM_1618299635672';
 const sqlStr = (s) => `'${String(s).replace(/'/g, "''")}'`;
 const ALL_REGION_FILIALS = REGIONS.flatMap(r => r.filials);
 function regionCond(q, col) {
-  const want = String(q?.region ?? '').split(',').map(v => v.trim()).filter(Boolean);
+  const rawStr = String(q?.region ?? '');
+  const excl = rawStr.startsWith('!');
+  const want = (excl ? rawStr.slice(1) : rawStr).split(',').map(v => v.trim()).filter(Boolean);
   if (!want.length) return '';
   const byName = `SELECT v.lead_id FROM lead_uf_values v
              JOIN lead_uf_enums e ON e.field_code = v.field_code AND e.enum_id = v.value
@@ -226,7 +242,8 @@ function regionCond(q, col) {
                AND (e.value IS NULL OR e.value NOT IN (${ALL_REGION_FILIALS.map(sqlStr).join(',')})))`);
   if (want.includes(UF_NONE)) parts.push(`${col} NOT IN (SELECT lead_id FROM lead_uf_values
              WHERE field_code = '${FILIAL_FIELD_L}' AND value <> '')`);
-  return `\n    AND ${parts.length ? `(${parts.join(' OR ')})` : 'FALSE'}`;
+  const cond = parts.length ? `(${parts.join(' OR ')})` : 'FALSE';
+  return `\n    AND ${excl ? `NOT ${cond}` : cond}`;
 }
 
 /** Scope plus the user's optional Proekt picker (a subset of the allow-list). */
@@ -633,7 +650,7 @@ router.get('/cancel-reasons', async (req, res) => {
        ${cancelReasonJoin}
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(re.value, rv.value, 'Noma''lum')
@@ -682,7 +699,7 @@ router.get('/reason-leads', async (req, res) => {
        ${reasonJoinSql}
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          AND (${unknown ? reasonUnknownSql : reasonMatchSql})
          ${leadModeClause(mode)}
@@ -710,7 +727,7 @@ router.get('/junk-reasons', async (req, res) => {
        ${junkReasonJoin}
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY COALESCE(re.value, rv.value, 'Noma''lum')
@@ -1129,8 +1146,8 @@ router.get('/lead-daily', async (req, res) => {
        JOIN stages s ON s.id = l.stage_id
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-         AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
+         AND ${listCond('s.bitrix_id', '$4')}
          AND ${leadSrcCond(mode, 5)}
          AND ${leadProektCond(6, req.query)}
          ${leadModeClause(mode)}
@@ -1171,15 +1188,15 @@ router.get('/lead-stats', async (req, res) => {
 
   const statsWhere = `${leadDateCond(mode, 1, 2)}
       ${leadClosedCond(req.query)}
-      AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-      AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+      AND ${listCond('l.responsible_id::text', '$3')}
+      AND ${listCond('s.bitrix_id', '$4')}
       AND ${leadSrcCond(mode, 5)}
       AND ${leadProektCond(6, req.query)}
       ${leadModeClause(mode)}`;
 
   const funnelJoin = `${leadDateCond(mode, 1, 2)}
       ${leadClosedCond(req.query)}
-      AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+      AND ${listCond('l.responsible_id::text', '$3')}
       AND ${leadSrcCond(mode, 4)}
       AND ${leadProektCond(5, req.query)}
       ${leadModeClause(mode)}`;
@@ -1248,8 +1265,8 @@ router.get('/lead-responsibles', async (req, res) => {
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
            ${leadClosedCond(req.query)}
-           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-           AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+           AND ${listCond('l.responsible_id::text', '$3')}
+           AND ${listCond('s.bitrix_id', '$4')}
            AND ${leadSrcCond(mode, 5)}
            AND ${leadProektCond(6, req.query)}
            ${leadModeClause(mode)}
@@ -1317,8 +1334,8 @@ router.get('/transfer-direction-responsibles', async (req, res) => {
            LEFT JOIN lead_uf_values v ON v.lead_id = l.id
                  AND v.field_code = '${TRANSFER_DIRECTION_FIELD}'
            WHERE ${leadDateCond(mode, 1, 2)}
-             AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-             AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+             AND ${listCond('l.responsible_id::text', '$3')}
+             AND ${listCond('s.bitrix_id', '$4')}
              AND ${leadSrcCond(mode, 5)}
              AND ${leadProektCond(6, req.query)}
              ${leadModeClause(mode)}
@@ -1391,8 +1408,8 @@ router.get('/lead-conversion', async (req, res) => {
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
            ${leadClosedCond(req.query)}
-           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
-           AND ($4::text IS NULL OR s.bitrix_id = ANY(string_to_array($4, ',')))
+           AND ${listCond('l.responsible_id::text', '$3')}
+           AND ${listCond('s.bitrix_id', '$4')}
            AND ${leadSrcCond(mode, 5)}
            AND ${leadProektCond(6, req.query)}
            ${leadModeClause(mode)}
@@ -1897,7 +1914,7 @@ router.get('/source-leads', async (req, res) => {
        JOIN stages s ON s.id = l.stage_id
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          AND (${unknown ? "NULLIF(l.source_id, '') IS NULL"
               : deleted ? "NULLIF(l.source_id, '') IS NOT NULL AND l.source_id NOT IN (SELECT source_id FROM lead_sources)"
@@ -1937,7 +1954,7 @@ router.get('/source-stats', async (req, res) => {
        -- matched the KPI card above it.
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY 1
@@ -1982,7 +1999,7 @@ function ufBreakdownLeadsHandler(fieldCode) {
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
            ${leadClosedCond(req.query)}
-           AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+           AND ${listCond('l.responsible_id::text', '$3')}
            AND ${leadProektCond(4, req.query)}
            AND (${unknown
              ? `l.id NOT IN (SELECT lead_id FROM lead_uf_values WHERE field_code = '${fieldCode}' AND value <> '')`
@@ -2035,7 +2052,7 @@ router.get('/form-stats', async (req, res) => {
        WHERE l.web_form_id IS NOT NULL AND TRIM(l.web_form_id::text) != ''
          AND ($1::date IS NULL OR l.date_create::date >= $1::date)
          AND ($2::date IS NULL OR l.date_create::date <= $2::date)
-         AND ($3::text IS NULL OR l.responsible_id::text = ANY(string_to_array($3, ',')))
+         AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadScopeCond('l.id')}
          ${leadModeClause(mode)}
        GROUP BY l.web_form_id, cf.form_name

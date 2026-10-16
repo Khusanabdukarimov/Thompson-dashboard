@@ -39,7 +39,7 @@ function buildTree(depts: Dept[], known: Set<string>, counts: Record<string, num
   return prune(roots);
 }
 
-export function DeptTree({ label, icon, departments, users, counts, value, onChange, loading }: {
+export function DeptTree({ label, icon, departments, users, counts, value, onChange, loading, exclude = false, onExcludeChange }: {
   label: string;
   icon: React.ReactNode;
   departments: Dept[];
@@ -50,6 +50,10 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
   value: string[];
   onChange: (userIds: string[]) => void;
   loading?: boolean;
+  /** Istisno: the chosen people are excluded instead of kept. */
+  exclude?: boolean;
+  /** Pass to show the Istisno toggle. */
+  onExcludeChange?: (exclude: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -79,11 +83,14 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
 
+  const ex = exclude && value.length > 0;
+  const accent = ex ? "#f59e0b" : "#2196F3";
   const ticked = useMemo(() => new Set(allMode && value.length === 0 ? allUsers : value), [allMode, value, allUsers]);
   const emit = (next: Set<string>) => {
     const all = allUsers.length > 0 && allUsers.every(u => next.has(u));
     setAllMode(all);
     onChange(all ? [] : [...next]);
+    if (all || next.size === 0) onExcludeChange?.(false);
   };
   const toggle = (ids: string[], on: boolean) => {
     const next = new Set(ticked);
@@ -127,7 +134,7 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
           <input type="checkbox" checked={on} title={on ? "Bekor qilish" : "Butun bo'limni tanlash"}
             ref={el => { if (el) el.indeterminate = some; }}
             onClick={e => e.stopPropagation()} onChange={e => toggle(all, e.target.checked)}
-            style={{ accentColor: "#2196F3", flexShrink: 0, cursor: "pointer" }} />
+            style={{ accentColor: accent, flexShrink: 0, cursor: "pointer" }} />
           <Building2 size={13} style={{ color: "var(--text3)", flexShrink: 0 }} />
           <span style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: on || some ? "#2196F3" : "var(--text)", fontWeight: on || some ? 600 : 500 }}>
             {node.name}
@@ -140,7 +147,7 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
             {people.map(uid => (
               <label key={uid} style={{ ...rowBase, paddingLeft: 6 + (depth + 1) * 14 + 18, cursor: "pointer", background: ticked.has(uid) ? "rgba(33,150,243,0.08)" : "transparent" }} {...hover(!ticked.has(uid))}>
                 <input type="checkbox" checked={ticked.has(uid)} onChange={e => toggle([uid], e.target.checked)}
-                  style={{ accentColor: "#2196F3", flexShrink: 0, cursor: "pointer" }} />
+                  style={{ accentColor: accent, flexShrink: 0, cursor: "pointer" }} />
                 <User size={12} style={{ color: "var(--text3)", flexShrink: 0 }} />
                 <span style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: ticked.has(uid) ? "#2196F3" : "var(--text2)" }}>
                   {userName.get(uid) ?? `#${uid}`}
@@ -175,6 +182,7 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
     : exactDept ? exactDept.name
     : value.length === 1 ? (userName.get(value[0]) ?? "1 ta xodim")
     : `${value.length} ta xodim`;
+  const shownSummary = ex ? `Istisno · ${summary}` : summary;
 
   const linkBtn: React.CSSProperties = { fontSize: 11, background: "none", border: "none", cursor: "pointer", padding: 0 };
 
@@ -190,14 +198,14 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
       }}
         style={{
           width: "100%", display: "flex", alignItems: "center", gap: 6, background: "var(--bg)",
-          border: `1px solid ${value.length > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`, borderRadius: 8,
-          color: value.length > 0 ? "#2196F3" : "var(--text3)", fontSize: 12, padding: "8px 10px", cursor: "pointer", boxSizing: "border-box",
+          border: `1px solid ${value.length > 0 ? (ex ? "rgba(245,158,11,0.6)" : "rgba(33,150,243,0.5)") : "var(--border)"}`, borderRadius: 8,
+          color: value.length > 0 ? accent : "var(--text3)", fontSize: 12, padding: "8px 10px", cursor: "pointer", boxSizing: "border-box",
         }}>
         {exactDept && <Building2 size={12} style={{ flexShrink: 0 }} />}
-        <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
+        <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shownSummary}</span>
         {value.length > 0 && (
           <span role="button" tabIndex={0} aria-label="Tozalash" title="Tozalash"
-            onClick={e => { e.stopPropagation(); setAllMode(false); onChange([]); }}
+            onClick={e => { e.stopPropagation(); setAllMode(false); onChange([]); onExcludeChange?.(false); }}
             onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); setAllMode(false); onChange([]); } }}
             style={{ display: "grid", placeItems: "center", color: "var(--text3)", flexShrink: 0 }}>
             <X size={12} />
@@ -217,9 +225,9 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
-            <button type="button" onClick={() => { setAllMode(true); onChange([]); }} style={{ ...linkBtn, color: "#2196F3" }}>Barchasini tanlash</button>
+            <button type="button" onClick={() => { setAllMode(true); onChange([]); onExcludeChange?.(false); }} style={{ ...linkBtn, color: "#2196F3" }}>Barchasini tanlash</button>
             {ticked.size > 0 && (
-              <button type="button" onClick={() => { setAllMode(false); onChange([]); }} style={{ ...linkBtn, color: "#9E9E9E" }}>Tozalash</button>
+              <button type="button" onClick={() => { setAllMode(false); onChange([]); onExcludeChange?.(false); }} style={{ ...linkBtn, color: "#9E9E9E" }}>Tozalash</button>
             )}
             {idleCount > 0 && (
               <button type="button" onClick={() => setShowIdle(v => !v)} title="Tanlangan davrda lidi bo'lmagan xodimlar"
@@ -228,6 +236,14 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
               </button>
             )}
             <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text3)" }}>{ticked.size}/{allUsers.length}</span>
+            {onExcludeChange && (
+              <button type="button" onClick={() => onExcludeChange(!exclude)} disabled={value.length === 0} title="Tanlanganlardan tashqari hammasi"
+                style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 7,
+                  cursor: value.length === 0 ? "default" : "pointer", opacity: value.length === 0 ? 0.45 : 1,
+                  border: `1px solid ${ex ? "#f59e0b" : "var(--border)"}`, background: ex ? "#f59e0b" : "transparent", color: ex ? "#fff" : "var(--text3)" }}>
+                Istisno
+              </button>
+            )}
           </div>
           <div style={{ maxHeight: 320, overflowY: "auto", padding: "4px 4px" }}>
             {visibleTree.length === 0

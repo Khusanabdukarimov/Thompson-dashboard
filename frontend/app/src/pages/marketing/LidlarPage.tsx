@@ -1126,6 +1126,8 @@ export default function LidlarPage() {
                     users={(filterOpts?.responsibles ?? []).map(r => ({ id: String(r.id), name: r.full_name }))}
                     counts={respCountsQ.data?.counts}
                     value={(applied.responsible_ids ?? []).map(String)}
+                    exclude={!!applied.excludes?.responsible_ids}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, responsible_ids: b } }))}
                     onChange={(vals) => setApplied(p => ({ ...p, responsible_ids: vals.map(Number) }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1133,6 +1135,8 @@ export default function LidlarPage() {
                     label="Bosqich" icon={<Filter size={12} />}
                     options={(filterOpts?.stages ?? []).map(s => ({ value: s.bitrix_id, label: s.name }))}
                     values={applied.stages ?? []}
+                    exclude={!!applied.excludes?.stages}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, stages: b } }))}
                     onChange={(vals) => setApplied(p => ({ ...p, stages: vals.length ? vals : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1142,6 +1146,8 @@ export default function LidlarPage() {
                       ? (amocrmSrcQ.data ?? []).map(s => ({ value: s, label: s }))
                       : (filterOpts?.sources ?? []).map(s => ({ value: s.id, label: s.name }))}
                     values={applied.sources ?? []}
+                    exclude={!!applied.excludes?.sources}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, sources: b } }))}
                     onChange={(vals) => setApplied(p => ({ ...p, sources: vals.length ? vals : undefined }))}
                     loading={mode === 'amocrm' ? amocrmSrcQ.isLoading : filterOptsQ.isLoading}
                   />
@@ -1155,6 +1161,8 @@ export default function LidlarPage() {
                     label="Kurslar" icon={<Filter size={12} />}
                     options={(filterOpts?.courses ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.courses ?? []}
+                    exclude={!!applied.excludes?.courses}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, courses: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, courses: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1162,6 +1170,8 @@ export default function LidlarPage() {
                     label="Manba 1" icon={<TrendingUp size={12} />}
                     options={(filterOpts?.source1s ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.source1s ?? []}
+                    exclude={!!applied.excludes?.source1s}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, source1s: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, source1s: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1169,6 +1179,8 @@ export default function LidlarPage() {
                     label="Filial" icon={<Users size={12} />}
                     options={(filterOpts?.filials ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.filials ?? []}
+                    exclude={!!applied.excludes?.filials}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, filials: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, filials: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1176,6 +1188,8 @@ export default function LidlarPage() {
                     label="Sabab" icon={<XCircle size={12} />}
                     options={(filterOpts?.reasons ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.reasons ?? []}
+                    exclude={!!applied.excludes?.reasons}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, reasons: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, reasons: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1183,6 +1197,8 @@ export default function LidlarPage() {
                     label="Hudud" icon={<Filter size={12} />}
                     options={(filterOpts?.hududs ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.hududs ?? []}
+                    exclude={!!applied.excludes?.hududs}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, hududs: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, hududs: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1190,6 +1206,8 @@ export default function LidlarPage() {
                     label="Proekt 2" icon={<Filter size={12} />}
                     options={(filterOpts?.proekt2s ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.proekt2s ?? []}
+                    exclude={!!applied.excludes?.proekt2s}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, proekt2s: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, proekt2s: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
@@ -1197,6 +1215,8 @@ export default function LidlarPage() {
                     label="Viloyat" icon={<Filter size={12} />}
                     options={(filterOpts?.regions ?? []).map(o => ({ value: o.id, label: o.name }))}
                     values={applied.regions ?? []}
+                    exclude={!!applied.excludes?.regions}
+                    onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, regions: b } }))}
                     onChange={(v) => setApplied(p => ({ ...p, regions: v.length ? v : undefined }))}
                     loading={filterOptsQ.isLoading}
                   />
