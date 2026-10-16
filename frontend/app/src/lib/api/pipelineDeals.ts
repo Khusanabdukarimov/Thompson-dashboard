@@ -22,6 +22,8 @@ export type PipelineStage = {
 /** Filters shared by every pipeline endpoint. Lists are comma-separated. */
 export type PipelineFilter = {
   pipeline: PipelineKey;
+  /** Viloyat (region ids: toshkent, navoiy, …); "!" prefix = Istisno, like every list filter. */
+  region?: string;
   from?: string;
   to?: string;
   mode?: string;
@@ -114,11 +116,17 @@ export type PipelineFilterOptions = {
   source1s: { id: string; name: string }[];
   reasons: { id: string; name: string }[];
   filials: { id: string; name: string }[];
+  regions?: { id: string; name: string }[];
 };
 
 /** Options for the "Manba 1", "Sabab" and "Filial" pickers (the whole Bitrix enum, alphabetical). */
 export function getPipelineFilterOptions(f: Pick<PipelineFilter, 'pipeline'>) {
   return apiGet<PipelineFilterOptions>('/api/dashboard/pipeline/filter-options', q(f), API_URL_CRM);
+}
+
+/** Deals per responsible id in the pipeline + date window: counts in the Bo'lim / Mas'ul picker. */
+export function getPipelineResponsibleCounts(f: Pick<PipelineFilter, 'pipeline' | 'from' | 'to'>) {
+  return apiGet<{ counts: Record<string, number> }>('/api/dashboard/pipeline/responsible-counts', q(f), API_URL_CRM);
 }
 
 export function getPipelineDeals(f: PipelineDealsFilter & { limit?: number; offset?: number }) {

@@ -33,14 +33,8 @@ function leadClosedCond(q, col = 'l.date_closed') {
           AND ${tzTo(col, `'${to || '2999-12-31'}'`)}`;
 }
 
-/**
- * One list filter. "?x=a,b" keeps rows whose col is a or b; "?x=!a,b" is the
- * picker's "Istisno" — everything except a and b, rows with no value included.
- */
-const isExcl = (ph) => `left(${ph}::text, 1) = '!'`;
-const listOf = (ph) => `string_to_array(CASE WHEN ${isExcl(ph)} THEN substr(${ph}::text, 2) ELSE ${ph}::text END, ',')`;
-const listCond = (col, ph) =>
-  `(${ph}::text IS NULL OR CASE WHEN ${isExcl(ph)} THEN COALESCE(${col}, '') <> ALL(${listOf(ph)}) ELSE ${col} = ANY(${listOf(ph)}) END)`;
+// Istisno-aware list filters ("!a,b" = everything except a and b), shared with Sdelkalar.
+const { isExcl, listOf, listCond } = require('./listFilter');
 
 function leadSrcCond(mode, pi) {
   if (mode === 'amocrm') return `($${pi}::text IS NULL OR l.uf_filial::text = ANY(string_to_array($${pi}, ',')))`;
@@ -783,7 +777,7 @@ router.get('/deal-filter-options', async (req, res) => {
   const { mode } = req.query;
   try {
     const [respRes, stageRes, srcRes] = await Promise.all([
-      pool.query(`SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name
+      pool.query(`SELECT id, TRIM(COALESCE(name,'') || ' ' || COALESCE(last_name,'')) AS full_name, department_ids
                   FROM responsibles WHERE active = true ORDER BY name`),
       pool.query(`SELECT DISTINCT s.id, s.name FROM stages s
                   INNER JOIN deals d ON d.stage_id = s.id
@@ -814,8 +808,14 @@ router.get('/deal-filter-options', async (req, res) => {
       }));
     }
 
+    const deptRows = await pool.query('SELECT id, name, parent_id FROM departments').then(r => r.rows).catch(() => []);
     res.json({
-      responsibles: respRes.rows,
+      responsibles: respRes.rows.map(({ department_ids, ...r }) => r),
+      // Bo'lim / Mas'ul tree for Sdelkalar, same shape as /lead-filter-options.
+      departments: deptRows.map(d => ({
+        id: String(d.id), name: d.name, parentId: d.parent_id != null ? String(d.parent_id) : null,
+        userIds: respRes.rows.filter(r => (r.department_ids || []).includes(d.id)).map(r => String(r.id)),
+      })),
       stages: stageRes.rows,
       sources,
     });

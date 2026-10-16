@@ -17,9 +17,35 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFrom, tzTo } = require('./tzDate');
 const { DELETED, DELETED_NAME, sourceKey, deletedMatch } = require('./sourceBucket');
+const { isExcl, listOf, stripExcl, listCond, splitSel } = require('./listFilter');
+const { REGIONS, REGION_OTHER } = require('../config/regions');
 const { getPipeline, getStages, getEnumLabels, categoryCond, SOURCE1_FIELD, FILIAL_FIELD } = require('../services/pipelines');
 
 const router = Router();
+
+/**
+ * ?region=toshkent,navoiy → the deal Филиал option ids of those regions, matched by
+ * name (config/regions.js, same grouping as Lidlar). Attached to req.query for buildScope.
+ */
+router.use(async (req, _res, next) => {
+  if (!req.query.region) return next();
+  try {
+    const labels = await getEnumLabels(FILIAL_FIELD);
+    const { exclude, values } = splitSel(req.query.region);
+    const idsOf = (names) => Object.entries(labels).filter(([, n]) => names.includes(String(n).trim())).map(([id]) => String(id));
+    const mappedNames = REGIONS.flatMap(r => r.filials);
+    req.query.__region = {
+      exclude,
+      ids: idsOf(REGIONS.filter(r => values.includes(r.id)).flatMap(r => r.filials)),
+      other: values.includes(REGION_OTHER.id),
+      mapped: idsOf(mappedNames),
+      none: values.includes(NONE),
+    };
+  } catch (err) {
+    console.warn('[pipeline] region lookup failed:', err.message);
+  }
+  next();
+});
 
 // Deals without a source / reason are grouped under this key so they can be
 // drilled into like any other bucket.
@@ -70,21 +96,35 @@ function buildScope(q, pipe, extra = () => []) {
   if (isDate(q.to))   where.push(tzTo(dateCol, p(q.to)));
   if (q.mode === 'amocrm')   where.push(`d.source_id = 'UC_1WUFJB'`);
   if (q.mode === 'bitrix24') where.push(`(d.source_id IS NULL OR d.source_id <> 'UC_1WUFJB')`);
-  if (q.responsible_id) where.push(`d.responsible_id::text = ANY(string_to_array(${p(String(q.responsible_id))}, ','))`);
+  // Every list filter accepts a leading "!" = Istisno (everything except), empty values kept.
+  if (q.responsible_id) where.push(listCond('d.responsible_id::text', p(String(q.responsible_id))));
   if (q.source) {
     const ph = p(String(q.source));
-    where.push(`(COALESCE(NULLIF(d.source_id, ''), '${NONE}') = ANY(string_to_array(${ph}, ',')) OR ${deletedMatch('d.source_id', ph)})`);
+    const hit = `COALESCE(COALESCE(NULLIF(d.source_id, ''), '${NONE}') = ANY(${listOf(ph)}) OR ${deletedMatch('d.source_id', stripExcl(ph))}, false)`;
+    where.push(`(CASE WHEN ${isExcl(ph)} THEN NOT ${hit} ELSE ${hit} END)`);
   }
-  if (q.stage)          where.push(`s.bitrix_id = ANY(string_to_array(${p(String(q.stage))}, ','))`);
+  if (q.stage)          where.push(listCond('s.bitrix_id', p(String(q.stage))));
   // Enum filters. An unreadable list matches nothing rather than silently matching everything.
-  if (q.source1) {
-    where.push(enumCond('d.uf_source1', parseIdList(q.source1), p));
-  }
-  if (q.prichina && pipe.reasonField) {
-    where.push(enumCond('d.uf_prichina', parseIdList(q.prichina), p));
-  }
-  if (q.filial) {
-    where.push(enumCond('d.uf_filial', parseIdList(q.filial), p));
+  const enumFilter = (col, raw) => {
+    const { exclude, values } = splitSel(raw);
+    const cond = enumCond(col, parseIdList(values.join(',')), p);
+    return exclude ? `NOT COALESCE(${cond}, false)` : cond;
+  };
+  if (q.source1) where.push(enumFilter('d.uf_source1', q.source1));
+  if (q.prichina && pipe.reasonField) where.push(enumFilter('d.uf_prichina', q.prichina));
+  if (q.filial) where.push(enumFilter('d.uf_filial', q.filial));
+  // Viloyat: resolved to Филиал option ids by the router middleware (needs the Bitrix labels).
+  if (q.region) {
+    const r = q.__region;
+    if (!r) where.push('FALSE');
+    else {
+      const parts = [];
+      if (r.ids.length) parts.push(`d.uf_filial = ANY(${p(r.ids)}::text[])`);
+      if (r.other) parts.push(`(NULLIF(d.uf_filial, '') IS NOT NULL AND d.uf_filial <> ALL(${p(r.mapped)}::text[]))`);
+      if (r.none) parts.push(`NULLIF(d.uf_filial, '') IS NULL`);
+      const cond = parts.length ? `(${parts.join(' OR ')})` : 'FALSE';
+      where.push(r.exclude ? `NOT COALESCE(${cond}, false)` : cond);
+    }
   }
   where.push(...extra(p));
   return { where: where.join('\n         AND '), params };
@@ -151,8 +191,24 @@ router.get('/filter-options', async (req, res) => {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
     const withEmpty = (labels) => [{ id: NONE, name: "Ko'rsatilmagan (не выбран)" }, ...options(labels)];
-    res.json({ source1s: withEmpty(source1), reasons: withEmpty(reasons), filials: withEmpty(filials) });
+    res.json({
+      source1s: withEmpty(source1), reasons: withEmpty(reasons), filials: withEmpty(filials),
+      regions: [{ id: NONE, name: "Ko'rsatilmagan (не выбран)" }, ...[...REGIONS, REGION_OTHER].map(r => ({ id: r.id, name: r.name }))],
+    });
   } catch (err) { fail(res, 'filter-options')(err); }
+});
+
+/** GET /responsible-counts — deals per responsible in the pipeline + date window (counts in the Bo'lim / Mas'ul picker). */
+router.get('/responsible-counts', async (req, res) => {
+  const pipe = pipelineOr400(req, res); if (!pipe) return;
+  try {
+    const { where, params } = buildScope({ from: req.query.from, to: req.query.to, mode: req.query.mode }, pipe);
+    const { rows } = await pool.query(
+      `SELECT COALESCE(d.responsible_id::text, '') AS id, COUNT(*)::int AS n
+       FROM deals d JOIN stages s ON s.id = d.stage_id
+       WHERE ${where} GROUP BY 1`, params);
+    res.json({ counts: Object.fromEntries(rows.map(r => [r.id, r.n])) });
+  } catch (err) { fail(res, 'responsible-counts')(err); }
 });
 
 /** GET /kpi — deal counts for the KPI cards: per stage and rolled up. */

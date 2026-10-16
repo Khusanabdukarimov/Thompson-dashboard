@@ -8,6 +8,7 @@ import {
 import { Topbar } from "@/components/Topbar";
 import { InfoTip } from "@/components/InfoTip";
 import { MultiSelect } from "@/components/MultiSelect";
+import { DeptTree } from "@/components/DeptTree";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { getDealFilterOptions } from "@/lib/api/deals";
 import {
@@ -17,6 +18,7 @@ import {
   DELETED_SOURCE_KEY,
   type PipelineKey, type PipelineFilter, type PipelineDealsFilter, type PipelineStage,
   type PipelineManagerRow, type ReasonScope,
+  getPipelineResponsibleCounts,
 } from "@/lib/api/pipelineDeals";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
@@ -343,6 +345,8 @@ type Drill = { table: string; row: string; col: string; title: string; filter: P
 type MgrRow = PipelineManagerRow & { key: string; ids: string; members?: string[] };
 
 // ── Page ─────────────────────────────────────────────────────────
+type SelKey = "responsible_ids" | "stage_ids" | "sources" | "source1s" | "reasons" | "filials" | "regions";
+
 export default function SdelkalarPage() {
   const portal = useBitrixPortal();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -374,6 +378,15 @@ export default function SdelkalarPage() {
     source1s: [] as string[],
     reasons: [] as string[],
     filials: [] as string[],
+    regions: [] as string[],
+    /** Istisno per list filter: true = everything except the chosen values. */
+    excludes: {} as Partial<Record<SelKey, boolean>>,
+  });
+  /** A list filter as a query param: "a,b", or "!a,b" with Istisno; undefined when empty. */
+  const sel = (k: SelKey) => filter[k].length ? (filter.excludes[k] ? "!" : "") + filter[k].join(",") : undefined;
+  const exProps = (k: SelKey) => ({
+    exclude: !!filter.excludes[k],
+    onExcludeChange: (b: boolean) => setFilter(f => ({ ...f, excludes: { ...f.excludes, [k]: b } })),
   });
 
   const filterQ = useQuery({
@@ -388,13 +401,15 @@ export default function SdelkalarPage() {
 
   const base: PipelineFilter = useMemo(() => ({
     pipeline, from: apiFrom, to: apiTo,
-    responsible_id: filter.responsible_ids.join(',') || undefined,
-    source: filter.sources.join(',') || undefined,
-    stage: filter.stage_ids.join(',') || undefined,
-    source1: filter.source1s.join(',') || undefined,
-    prichina: filter.reasons.join(',') || undefined,
-    filial: filter.filials.join(',') || undefined,
-  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.source1s, filter.reasons, filter.filials]);
+    responsible_id: sel("responsible_ids"),
+    source: sel("sources"),
+    stage: sel("stage_ids"),
+    source1: sel("source1s"),
+    prichina: sel("reasons"),
+    filial: sel("filials"),
+    region: sel("regions"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [pipeline, apiFrom, apiTo, filter.responsible_ids, filter.sources, filter.stage_ids, filter.source1s, filter.reasons, filter.filials, filter.regions, filter.excludes]);
 
   // Keep the last result on screen while a filter changes, but never across a
   // pipeline switch: the old pipeline's numbers would sit under the new labels.
@@ -417,7 +432,7 @@ export default function SdelkalarPage() {
   });
 
   const clearFilter = useCallback(() => {
-    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], source1s: [], reasons: [], filials: [] });
+    setFilter({ from: startOfMonthISO(), to: todayISO(), responsible_ids: [], stage_ids: [], sources: [], source1s: [], reasons: [], filials: [], regions: [], excludes: {} });
     setPresetLabel("Bu oy");
     setDrill(null);
   }, []);
@@ -427,7 +442,7 @@ export default function SdelkalarPage() {
     setPipeline(p);
     setShownReasons(REASONS_PAGE);
     // Stage ids are per pipeline; other filters carry over.
-    setFilter(s => ({ ...s, stage_ids: [] }));
+    setFilter(s => ({ ...s, stage_ids: [], excludes: { ...s.excludes, stage_ids: false } }));
     setDrill(null);
   };
 
@@ -452,6 +467,7 @@ export default function SdelkalarPage() {
     filter.source1s.length > 0,
     filter.reasons.length > 0,
     filter.filials.length > 0,
+    filter.regions.length > 0,
     filter.from !== startOfMonthISO() || filter.to !== todayISO(),
   ].filter(Boolean).length;
 
@@ -463,6 +479,14 @@ export default function SdelkalarPage() {
   const source1Options = useMemo(() => (enumOptsQ.data?.source1s ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
   const reasonOptions = useMemo(() => (enumOptsQ.data?.reasons ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
   const filialOptions = useMemo(() => (enumOptsQ.data?.filials ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
+  const regionOptions = useMemo(() => (enumOptsQ.data?.regions ?? []).map(o => ({ value: o.id, label: o.name })), [enumOptsQ.data]);
+  // Deals per person in this pipeline + date window, for the Bo'lim / Mas'ul picker.
+  const respCountsQ = useQuery({
+    queryKey: ["pipeline-resp-counts", pipeline, apiFrom, apiTo],
+    queryFn: () => getPipelineResponsibleCounts({ pipeline, from: apiFrom, to: apiTo }),
+    staleTime: 60_000,
+  });
+  const deptUsers = useMemo(() => respOptions.map(o => ({ id: o.value, name: o.label })), [respOptions]);
 
   // Same shortcuts as the Lidlar filter; "Barchasi" has no lower bound — the Bitrix kanban's scope.
   const PRESETS = [
@@ -716,24 +740,28 @@ export default function SdelkalarPage() {
               </div>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-                <MultiSelect label="Mas'ul xodim" icon={<Users size={12} />} searchable
-                  options={respOptions} values={filter.responsible_ids}
+                <DeptTree label="Bo'lim / Mas'ul" icon={<Users size={12} />}
+                  departments={filterQ.data?.departments ?? []} users={deptUsers} counts={respCountsQ.data?.counts}
+                  value={filter.responsible_ids} {...exProps("responsible_ids")}
                   onChange={v => setFilter(s => ({ ...s, responsible_ids: v }))} loading={filterQ.isLoading} />
                 <MultiSelect label="Bosqich" icon={<Filter size={12} />}
-                  options={stageOptions} values={filter.stage_ids}
+                  options={stageOptions} values={filter.stage_ids} {...exProps("stage_ids")}
                   onChange={v => setFilter(s => ({ ...s, stage_ids: v }))} loading={kpiQ.isLoading} />
                 <MultiSelect label="Manba (Источник)" icon={<TrendingUp size={12} />}
-                  options={srcOptions} values={filter.sources}
+                  options={srcOptions} values={filter.sources} {...exProps("sources")}
                   onChange={v => setFilter(s => ({ ...s, sources: v }))} loading={filterQ.isLoading} />
                 <MultiSelect label="Manba 1" icon={<TrendingUp size={12} />}
-                  options={source1Options} values={filter.source1s}
+                  options={source1Options} values={filter.source1s} {...exProps("source1s")}
                   onChange={v => setFilter(s => ({ ...s, source1s: v }))} loading={enumOptsQ.isLoading} />
                 <MultiSelect label="Sabab" icon={<XCircle size={12} />}
-                  options={reasonOptions} values={filter.reasons}
+                  options={reasonOptions} values={filter.reasons} {...exProps("reasons")}
                   onChange={v => setFilter(s => ({ ...s, reasons: v }))} loading={enumOptsQ.isLoading} />
                 <MultiSelect label="Filial" icon={<Users size={12} />}
-                  options={filialOptions} values={filter.filials}
+                  options={filialOptions} values={filter.filials} {...exProps("filials")}
                   onChange={v => setFilter(s => ({ ...s, filials: v }))} loading={enumOptsQ.isLoading} />
+                <MultiSelect label="Viloyat" icon={<Filter size={12} />}
+                  options={regionOptions} values={filter.regions} {...exProps("regions")}
+                  onChange={v => setFilter(s => ({ ...s, regions: v }))} loading={enumOptsQ.isLoading} />
               </div>
 
               {activeFilterCount > 0 && (

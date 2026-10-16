@@ -68,6 +68,8 @@ export type DealKpiStats = {
 
 export type DealFilterOptions = {
   responsibles: { id: number; full_name: string }[];
+  /** Bitrix company structure for the Bo'lim / Mas'ul picker. */
+  departments?: { id: string; name: string; parentId: string | null; userIds: string[] }[];
   stages: { id: number; name: string }[];
   sources: { id: string; name: string }[];
 };
