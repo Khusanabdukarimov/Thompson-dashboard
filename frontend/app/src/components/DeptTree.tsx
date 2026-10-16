@@ -183,7 +183,11 @@ export function DeptTree({ label, icon, departments, users, counts, value, onCha
       <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6 }}>
         {icon}{label}
       </label>
-      <button type="button" onClick={() => { setOpen(o => !o); setQuery(""); }}
+      <button type="button" onClick={() => {
+        // First open: show the top-level departments' teams (e.g. Sotuv bo'limi → O'QUV MARKAZ, MAKTAB, LAND).
+        if (!open && expanded.size === 0) setExpanded(new Set(tree.filter(t => t.children.length > 0).map(t => t.id)));
+        setOpen(o => !o); setQuery("");
+      }}
         style={{
           width: "100%", display: "flex", alignItems: "center", gap: 6, background: "var(--bg)",
           border: `1px solid ${value.length > 0 ? "rgba(33,150,243,0.5)" : "var(--border)"}`, borderRadius: 8,
