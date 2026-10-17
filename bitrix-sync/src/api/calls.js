@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const { tzFromOpt, tzToOpt } = require('./tzDate');
 const { computeCallStatsFull } = require('../services/callStats');
 const { teamOf } = require('../config/calls');
+const { describeSchedules } = require('../config/workHours');
 
 const router = Router();
 
@@ -282,9 +283,12 @@ router.get('/call-stats-full', async (req, res) => {
 });
 
 /**
- * GET /call-not-recalled — the list behind the "Ne perezvonili" card: every missed call
- * nobody talked to the customer about within 24h. Same filters as /call-stats-full and
- * the same compute, so the rows always add up to the card.
+ * The lists behind two cards of the call page, both from the card's own compute (same
+ * filters as /call-stats-full), so the rows always add up to the card:
+ *
+ *   GET /call-not-recalled  "Ne perezvonili": every missed call nobody talked to the
+ *                           customer about within 24h.
+ *   GET /call-missed-list   "Propushenniy": every missed call, called back or not.
  *
  * Paged on the server: ?limit= (default 20, max 1000) &offset=. `summary` always covers the
  * whole list; only the rows of the requested page are enriched, so a page is cheap even
@@ -296,9 +300,18 @@ router.get('/call-stats-full', async (req, res) => {
  * (±2 min). The lead (the one Bitrix linked, else the newest with that phone), its stage
  * and its responsible are looked up for the page's rows only.
  *
- * status: never   no conversation with that number since;
+ * delay_s is the real time until the callback; work_delay_s the same counted in the working
+ * hours of the team that owns the lead (what "Reaksiya vaqti" averages — config/workHours.js).
+ *
+ * status: recalled reached within the 24h (callback_at / delay_s say when) — only in the
+ *                   full list;
+ *         never   no conversation with that number since;
  *         late    reached, but after the 24h (callback_at / delay_s say when);
  *         open    the 24h are not over yet — a callback may still come.
+ *
+ * summary is always about the whole period, whichever list or page: total (this list's
+ * length), unique_numbers, recalled (within 24h), not_recalled (= the "Ne perezvonili"
+ * card; late + not_reached), late, not_reached, still_open, avg_wait_s, missed_total.
  */
 const NOT_RECALLED_DEFAULT_LIMIT = 20;
 const NOT_RECALLED_MAX_LIMIT = 1000;
@@ -324,14 +337,16 @@ function buildPbxMatcher(rows) {
   };
 }
 
-router.get('/call-not-recalled', async (req, res) => {
+async function serveMissedList(req, res, scope) {
   try {
     const limit = Math.min(NOT_RECALLED_MAX_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || NOT_RECALLED_DEFAULT_LIMIT));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
     const { rows, bxMissed, from, to, respIds } = await loadCallInputs(req.query);
     const stats = computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null, bxMissed, { detail: true });
-    const events = stats.missed_detail.not_recalled.slice().sort((a, b) => b.at - a.at);
+    const detail = stats.missed_detail;
+    const events = (scope === 'all' ? detail.recalled_events.concat(detail.not_recalled) : detail.not_recalled)
+      .slice().sort((a, b) => b.at - a.at);
 
     // PBX side, for every event (cheap: in memory) so the summary covers the whole list.
     const match = buildPbxMatcher(rows);
@@ -350,7 +365,9 @@ router.get('/call-not-recalled', async (req, res) => {
         attempts: e.num ? attempts.get(e.num) : 1,
         status: e.status,
         callback_at: e.callback_at ? new Date(e.callback_at).toISOString() : null,
-        delay_s: e.callback_at ? Math.round((e.callback_at - e.at) / 1000) : null,
+        delay_s: e.callback_at ? Math.round((e.callback_at - e.at) / 1000) : null,       // real time until the callback
+        work_delay_s: e.work_delay_s ?? null,                                          // ...counted in the team's working hours
+        team: e.team || null,
       };
     });
 
@@ -386,26 +403,31 @@ router.get('/call-not-recalled', async (req, res) => {
     });
 
     const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
-    const late = base.filter((x) => x.status === 'late');
+    const lateCount = detail.not_recalled.filter((e) => e.status === 'late').length;
     res.json({
       window_hours: 24,
+      work_hours: describeSchedules(),                              // what work_delay_s is measured against
       source: Array.isArray(bxMissed) ? 'bitrix24' : 'pbx',
-      summary: {                                                    // always the whole list, whatever the page
-        total: base.length,                                         // == the card
+      summary: {                                                    // always the whole period, whatever the page
+        total: base.length,                                         // this list's length == its card
         unique_numbers: new Set(events.map((e) => e.num || e.key)).size,
-        late: late.length,                                          // reached, but after the 24h
-        not_reached: base.length - late.length,                     // never, or the 24h is still running
-        still_open: base.filter((x) => x.status === 'open').length,
+        recalled: detail.recalled,                                  // called back within the 24h
+        not_recalled: detail.not_recalled.length,                   // == the "Ne perezvonili" card
+        late: lateCount,                                            // ...of which reached, but after the 24h
+        not_reached: detail.not_recalled.length - lateCount,        // ...never, or the 24h is still running
+        still_open: detail.not_recalled.filter((e) => e.status === 'open').length,
         avg_wait_s: avg(base.filter((x) => x.wait_s != null).map((x) => x.wait_s)),
-        missed_total: stats.missed_detail.total,                    // every missed call in the period
+        missed_total: detail.total,                                 // == the "Propushenniy" card
       },
       offset, limit,
       items,
     });
   } catch (err) {
-    fail(res, 'call-not-recalled')(err);
+    fail(res, scope === 'all' ? 'call-missed-list' : 'call-not-recalled')(err);
   }
-});
+}
+router.get('/call-not-recalled', (req, res) => serveMissedList(req, res, 'not_recalled'));
+router.get('/call-missed-list', (req, res) => serveMissedList(req, res, 'all'));
 
 /**
  * GET /call-list — the per-operator drill-down (CallListRow[]).

@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PhoneMissed, HelpCircle, X, ChevronDown } from "lucide-react";
-import { getNotRecalledCalls, type CallDashboardFilter, type NotRecalledItem } from "@/lib/api/leads";
+import { getMissedCalls, getNotRecalledCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
+import { describeWorkHours } from "@/lib/workHours";
 
 /**
- * The list behind the call page's "Ne perezvonili" card: every missed call nobody
- * talked to the customer about within 24h, with who it rang, how long the customer
- * waited, why it ended, and the lead / responsible / stage it belongs to.
- * The backend computes it with the card's own code, so JAMI always equals the card.
+ * The lists behind two cards of the call page, one dialog for both:
+ *   "not_recalled"  Ne perezvonili — the missed calls nobody talked to the customer about within 24h;
+ *   "all"           Propushenniy   — every missed call, with whether and when it was called back.
+ * Each row: who it rang, how long the customer waited, why it ended, and the lead /
+ * responsible / stage it belongs to. The backend computes them with the cards' own code,
+ * so JAMI always equals the card.
  */
+export type MissedCallsVariant = "not_recalled" | "all";
 
 /** Rows fetched per click. The server pages the list, so a page is cheap however long the list is. */
 const PAGE = 20;
@@ -54,20 +58,32 @@ function Stat({ label, value, color }: { label: string; value: React.ReactNode; 
   );
 }
 
-function RecalledCell({ it }: { it: NotRecalledItem }) {
-  if (it.status === "late" && it.callback_at) {
-    const hours = Math.floor((it.delay_s ?? 0) / 3600);
-    return <span style={pill("#4CAF50")} title={`${fmtWhen(it.callback_at)} — ${hours} soatdan keyin`}>{fmtShort(it.callback_at)} · {hours} soat</span>;
+/** 540 → "9 daq", 7500 → "2 soat 5 daq", 108005 → "30 soat". */
+const fmtDelay = (s: number): string => {
+  if (s < 3600) return `${Math.max(1, Math.round(s / 60))} daq`;
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h < 24 && m > 0 ? `${h} soat ${m} daq` : `${h} soat`;
+};
+
+function RecalledCell({ it }: { it: MissedCallItem }) {
+  if ((it.status === "recalled" || it.status === "late") && it.callback_at) {
+    // Working time (what "Reaksiya vaqti" averages); the real elapsed time is in the tooltip.
+    const after = fmtDelay(it.work_delay_s ?? it.delay_s ?? 0);
+    const real = it.delay_s != null && it.work_delay_s != null && it.delay_s !== it.work_delay_s ? `, haqiqatda ${fmtDelay(it.delay_s)}` : "";
+    return <span style={pill("#4CAF50")} title={`${fmtWhen(it.callback_at)} — ish vaqti bo'yicha ${after} o'tgach${real}`}>{fmtShort(it.callback_at)} · {after}</span>;
   }
   if (it.status === "open") return <span style={pill("#FF9800")} title="24 soat hali tugamagan: qayta qo'ng'iroq bo'lishi mumkin">Kutilmoqda</span>;
   return <span style={pill("#F44336")}>Yo'q</span>;
 }
 
-export function NotRecalledModal({ filter, portal, onClose }: {
-  filter: CallDashboardFilter; portal: string; onClose: () => void;
+export function MissedCallsModal({ variant, filter, portal, onClose }: {
+  variant: MissedCallsVariant; filter: CallDashboardFilter; portal: string; onClose: () => void;
 }) {
-  const q = useQuery({ queryKey: ["call-not-recalled", filter], queryFn: () => getNotRecalledCalls(filter, { offset: 0, limit: PAGE }) });
-  const [more, setMore] = useState<NotRecalledItem[]>([]);     // pages loaded after the first
+  const all = variant === "all";
+  const fetchPage = all ? getMissedCalls : getNotRecalledCalls;
+  const title = all ? "Propushenniy — javobsiz qo'ng'iroqlar" : "Ne perezvonili — qayta chiqilmagan";
+  const q = useQuery({ queryKey: [all ? "call-missed-list" : "call-not-recalled", filter], queryFn: () => fetchPage(filter, { offset: 0, limit: PAGE }) });
+  const [more, setMore] = useState<MissedCallItem[]>([]);     // pages loaded after the first
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
@@ -90,9 +106,9 @@ export function NotRecalledModal({ filter, portal, onClose }: {
     setLoadingMore(true); setMoreError(null);
     try {
       let have = items.length, want = Math.min(count, total - items.length);
-      const got: NotRecalledItem[] = [];
+      const got: MissedCallItem[] = [];
       while (want > 0) {
-        const r = await getNotRecalledCalls(filter, { offset: have, limit: Math.min(want, MAX_REQUEST) });
+        const r = await fetchPage(filter, { offset: have, limit: Math.min(want, MAX_REQUEST) });
         if (r.items.length === 0) break;
         got.push(...r.items); have += r.items.length; want -= r.items.length;
       }
@@ -109,17 +125,20 @@ export function NotRecalledModal({ filter, portal, onClose }: {
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Ne perezvonili — qayta chiqilmagan"
+    <div role="dialog" aria-modal="true" aria-label={title}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "3vh 2vw" }}>
       <div style={{ width: "min(1320px, 100%)", maxHeight: "94vh", display: "flex", flexDirection: "column", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         {/* header */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 22px", borderBottom: "1px solid var(--border)" }}>
-          <PhoneMissed size={20} color="#F44336" style={{ marginTop: 3, flexShrink: 0 }} />
+          <PhoneMissed size={20} color={all ? "#FF9800" : "#F44336"} style={{ marginTop: 3, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>Ne perezvonili — qayta chiqilmagan</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>{title}</div>
             <div style={{ fontSize: 12.5, color: "var(--text3)", marginTop: 3 }}>
-              Javobsiz qolgan va {hours} soat ichida qayta chiqilmagan raqamlar · {filter.start_date ?? "…"} → {filter.end_date ?? "…"}
+              {all
+                ? <>Bitrix24 bo'yicha javobsiz qolgan kiruvchi qo'ng'iroqlar</>
+                : <>Javobsiz qolgan va {hours} soat ichida qayta chiqilmagan raqamlar</>}
+              {" "}· {filter.start_date ?? "…"} → {filter.end_date ?? "…"}
             </div>
           </div>
           <button type="button" onClick={() => setHelp(h => !h)} aria-label="Qanday hisoblanadi" aria-pressed={help} title="Qanday hisoblanadi?"
@@ -135,10 +154,12 @@ export function NotRecalledModal({ filter, portal, onClose }: {
         {help && (
           <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
             Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i alohida sanaladi. O'sha raqam bilan <b>javob berilgan suhbat</b> (istalgan yo'nalish va operator,
-            PBX va Moizvonki) {hours} soat ichida bo'lsa — qayta chiqilgan, aks holda bu ro'yxatga tushadi.
-            <b> Yo'q</b> — undan keyin ham suhbat bo'lmagan; <b>vaqt</b> — {hours} soatdan keyin bog'lanilgan (qachon va necha soatdan keyin);
+            PBX va Moizvonki) {hours} soat ichida bo'lsa — qayta chiqilgan{all ? "; bo'lmasa chiqilmagan" : ", aks holda bu ro'yxatga tushadi"}.
+            {all && <> <b>Qayta chiqilgan</b> ustunida qachon va necha daqiqa/soatdan keyin bog'lanilgani yoziladi. </>}
+            <b> Yo'q</b> — undan keyin ham suhbat bo'lmagan; {all ? <><b>vaqt</b> — bog'lanilgan payt va undan oldin o'tgan vaqt</> : <><b>vaqt</b> — {hours} soatdan keyin bog'lanilgan (qachon va necha soatdan keyin)</>};
             <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>Urinish</b> — shu raqam ro'yxatda necha marta uchraydi.
             Kutgan — mijoz qo'ng'iroqda necha soniya kutgan.
+            {d?.work_hours && <> Bog'lanishgacha o'tgan vaqt <b>ish vaqti bo'yicha</b> hisoblanadi ({describeWorkHours(d.work_hours)}): kechasi yoki ish soatidan tashqarida o'tkazib yuborilgan qo'ng'iroq ish boshlanganidan sanaladi.</>}
           </div>
         )}
 
@@ -153,18 +174,23 @@ export function NotRecalledModal({ filter, portal, onClose }: {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "16px 22px" }}>
                 <Stat label="Jami" value={fmtNum(s.total)} color="#F44336" />
                 <Stat label="Unikal raqam" value={fmtNum(s.unique_numbers)} color="#2196F3" />
-                <Stat label="Qayta chiqilgan" value={fmtNum(s.late)} color="#4CAF50" />
-                <Stat label="Chiqilmagan" value={fmtNum(s.not_reached)} color="#F44336" />
+                <Stat label="Qayta chiqilgan" value={fmtNum(all ? s.recalled : s.late)} color="#4CAF50" />
+                <Stat label="Chiqilmagan" value={fmtNum(all ? s.not_recalled : s.not_reached)} color="#F44336" />
                 <Stat label="O'rt. kutish" value={fmtHMS(s.avg_wait_s)} color="#9C27B0" />
               </div>
               <div style={{ padding: "0 22px 12px", fontSize: 11.5, color: "var(--text3)" }}>
-                "Qayta chiqilgan" — {hours} soatdan keyin bog'lanilganlar.
-                {s.still_open > 0 && <> "Chiqilmagan" ichida {fmtNum(s.still_open)} ta uchun {hours} soat hali tugamagan.</>}
-                {" "}Davrdagi barcha javobsiz qo'ng'iroq: {fmtNum(s.missed_total)} ta.
+                {all ? <>
+                  "Qayta chiqilgan" — {hours} soat ichida bog'lanilganlar. "Chiqilmagan" — {hours} soat ichida bog'lanilmaganlar
+                  {(s.late > 0 || s.still_open > 0) && <> (shundan {fmtNum(s.late)} tasi keyinroq bog'lanilgan, {fmtNum(s.still_open)} tasi uchun {hours} soat hali tugamagan)</>}.
+                </> : <>
+                  "Qayta chiqilgan" — {hours} soatdan keyin bog'lanilganlar.
+                  {s.still_open > 0 && <> "Chiqilmagan" ichida {fmtNum(s.still_open)} ta uchun {hours} soat hali tugamagan.</>}
+                  {" "}Davrdagi barcha javobsiz qo'ng'iroq: {fmtNum(s.missed_total)} ta.
+                </>}
               </div>
 
               {items.length === 0 ? (
-                <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Qayta chiqilmagan qo'ng'iroq yo'q</div>
+                <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>{all ? "Javobsiz qo'ng'iroq yo'q" : "Qayta chiqilmagan qo'ng'iroq yo'q"}</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                   <thead>

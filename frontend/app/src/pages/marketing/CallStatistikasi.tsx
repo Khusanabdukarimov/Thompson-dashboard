@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MultiSelect } from "@/components/MultiSelect";
-import { NotRecalledModal } from "@/components/NotRecalledModal";
+import { MissedCallsModal, type MissedCallsVariant } from "@/components/MissedCallsModal";
+import { describeWorkHours } from "@/lib/workHours";
 import { getConfig } from "@/lib/api/config";
 import {
   getPyCallStats, getCallList, getCallFilterOptions,
@@ -132,12 +133,14 @@ function activeFilterCount(filter: CallFilterState) {
 
 
 // ── Metric Card ───────────────────────────────────────────────────
-function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint }: {
+function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint, tip }: {
   label: string; value: React.ReactNode; sub?: string;
   icon: React.ReactNode; iconBg: string;
   badge?: string; badgeColor?: string; valueColor?: string; accentColor?: string;
   /** Makes the card a button; `hint` is the small "open" caption in its corner. */
   onClick?: () => void; hint?: string;
+  /** Plain hover text (for a card that is not a button). */
+  tip?: string;
 }) {
   const accent = accentColor || "#2196F3";
   return (
@@ -146,6 +149,7 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
         role: "button", tabIndex: 0, title: hint, onClick,
         onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } },
       } : {})}
+      title={onClick ? hint : tip}
       style={{ position: "relative", minHeight: 112, background: `linear-gradient(145deg, ${accent}12 0%, var(--bg) 42%, var(--bg) 100%)`, border: `1px solid ${accent}33`, borderRadius: 14, padding: "18px 20px 18px", display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
         <span style={{ fontSize: 12.5, color: accent, fontWeight: 700, lineHeight: 1.3 }}>{label}</span>
@@ -239,7 +243,7 @@ export default function CallStatistikasi() {
   const [filters, setFilters]       = useState<CallFilterState>(() => defaultCallFilters());
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
-  const [showNotRecalled, setShowNotRecalled] = useState(false);
+  const [missedModal, setMissedModal] = useState<MissedCallsVariant | null>(null);
   const portal = useBitrixPortal();
   const pageScrollRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
@@ -429,14 +433,16 @@ export default function CallStatistikasi() {
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
           <Card label="Propushenniy" accentColor="#FF9800"
             value={<span style={{ color: "#FF9800" }}>{data?.missed_inbound ?? 0} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
-            icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)" />
+            icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)"
+            onClick={() => setMissedModal("all")} hint="Ro'yxat" />
           <Card label="Reaksiya vaqti" accentColor="#607D8B"
             value={<span style={{ fontSize: 22 }}>{fmtDur(data?.reaksiya_vaqti ?? 0)}</span>}
-            icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
+            icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
+            tip={`Javobsiz qo'ng'iroqdan birinchi suhbatgacha (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`} />
           <Card label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
-            onClick={() => setShowNotRecalled(true)} hint="Ro'yxat" />
+            onClick={() => setMissedModal("not_recalled")} hint="Ro'yxat" />
         </div>
 
         {/* ── Main stats table ── */}
@@ -540,7 +546,7 @@ export default function CallStatistikasi() {
 
 
       </div>
-      {showNotRecalled && <NotRecalledModal filter={apiFilter} portal={portal} onClose={() => setShowNotRecalled(false)} />}
+      {missedModal && <MissedCallsModal variant={missedModal} filter={apiFilter} portal={portal} onClose={() => setMissedModal(null)} />}
     </div>
   );
 }

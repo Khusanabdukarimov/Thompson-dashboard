@@ -860,8 +860,8 @@ export type PyResponsibleCallStats = {
   unique_total:      number;
 };
 
-/** One missed call nobody talked to the customer about within 24h (a row of the "Ne perezvonili" list). */
-export type NotRecalledItem = {
+/** One missed call, a row of the lists behind the "Propushenniy" and "Ne perezvonili" cards. */
+export type MissedCallItem = {
   key: string;
   phone: string | null;
   call_start: string;
@@ -873,10 +873,16 @@ export type NotRecalledItem = {
   reason: string | null;
   /** How many times this number is in the list. */
   attempts: number;
-  /** never: not reached since · late: reached, but after the 24h · open: the 24h are still running. */
-  status: "never" | "late" | "open" | "nophone";
+  /** recalled: reached within the 24h · never: not reached since · late: reached, but after the
+   *  24h · open: the 24h are still running. ("recalled" only appears in the full list.) */
+  status: "recalled" | "never" | "late" | "open" | "nophone";
   callback_at: string | null;
+  /** Real time until the callback. */
   delay_s: number | null;
+  /** The same counted in the working hours of the team that owns the lead (what "Reaksiya vaqti" averages). */
+  work_delay_s: number | null;
+  /** TLC / TIS / TL, from the owner's extension name; null if unknown. */
+  team: string | null;
   lead_id: number | null;
   stage_name: string | null;
   stage_bid: string | null;
@@ -884,17 +890,26 @@ export type NotRecalledItem = {
   responsible_id: number | null;
 };
 
-export type NotRecalledResponse = {
+export type MissedCallsResponse = {
   window_hours: number;
+  /** Working hours per team the delays were measured against, e.g. { TLC: "09:00-20:00", default: "08:00-20:00" }. */
+  work_hours: Record<string, string>;
   source: "bitrix24" | "pbx";
+  /** Always about the whole period, whichever list or page: `total` is this list's length. */
   summary: {
-    total: number; unique_numbers: number; late: number; not_reached: number; still_open: number;
-    avg_wait_s: number; missed_total: number;
+    total: number; unique_numbers: number;
+    /** Called back within the 24h. */
+    recalled: number;
+    /** Not called back = the "Ne perezvonili" card; `late` of them were reached after the 24h. */
+    not_recalled: number; late: number; not_reached: number; still_open: number;
+    avg_wait_s: number;
+    /** Every missed call = the "Propushenniy" card. */
+    missed_total: number;
   };
   /** The slice of the list this response carries; `summary` always covers the whole list. */
   offset: number;
   limit: number;
-  items: NotRecalledItem[];
+  items: MissedCallItem[];
 };
 
 export type PyCallStatsResult = {
@@ -913,13 +928,24 @@ export type PyCallStatsResult = {
   success_pct:    number;
   failed_pct:     number;
   ne_perezvonili: number;
+  /** Average wait for the callback in WORKING time (see `work_hours`), seconds. */
   reaksiya_vaqti: number;
+  work_hours?:    Record<string, string>;
   responsibles:   PyResponsibleCallStats[];
 };
 
 /** The list behind the "Ne perezvonili" card — same filters, so it always adds up to the card. */
 export function getNotRecalledCalls(filter: CallDashboardFilter, page: { offset: number; limit: number } = { offset: 0, limit: 20 }) {
-  return apiGet<NotRecalledResponse>("/api/dashboard/call-not-recalled", {
+  return apiGet<MissedCallsResponse>("/api/dashboard/call-not-recalled", {
+    ...callFilterParams(filter),
+    offset: page.offset,
+    limit: page.limit,
+  }, API_URL_CRM);
+}
+
+/** The list behind the "Propushenniy" card: every missed call, called back or not. */
+export function getMissedCalls(filter: CallDashboardFilter, page: { offset: number; limit: number } = { offset: 0, limit: 20 }) {
+  return apiGet<MissedCallsResponse>("/api/dashboard/call-missed-list", {
     ...callFilterParams(filter),
     offset: page.offset,
     limit: page.limit,
