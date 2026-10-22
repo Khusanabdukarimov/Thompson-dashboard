@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PhoneMissed, HelpCircle, X, ChevronDown } from "lucide-react";
-import { getMissedCalls, getNotRecalledCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
+import { PhoneMissed, HelpCircle, X, ChevronDown, Clock } from "lucide-react";
+import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
 
 /**
- * The lists behind two cards of the call page, one dialog for both:
+ * The lists behind three cards of the call page, one dialog for all:
  *   "not_recalled"  Ne perezvonili — the missed calls nobody talked to the customer about within 24h;
- *   "all"           Propushenniy   — every missed call, with whether and when it was called back.
+ *   "all"           Propushenniy   — every missed call, with whether and when it was called back;
+ *   "reaction"      Reaksiya vaqti — the missed calls reached within 24h: how fast, and by whom.
  * Each row: who it rang, how long the customer waited, why it ended, and the lead /
  * responsible / stage it belongs to. The backend computes them with the cards' own code,
  * so JAMI always equals the card.
  */
-export type MissedCallsVariant = "not_recalled" | "all";
+export type MissedCallsVariant = "not_recalled" | "all" | "reaction";
 
 /** Rows fetched per click. The server pages the list, so a page is cheap however long the list is. */
 const PAGE = 20;
@@ -65,6 +66,26 @@ const fmtDelay = (s: number): string => {
   return h < 24 && m > 0 ? `${h} soat ${m} daq` : `${h} soat`;
 };
 
+/** Delay bands of the Reaksiya vaqti list (ids from the API), slow ones in warmer colours. */
+const BANDS: Record<string, { label: string; color: string }> = {
+  lt5m: { label: "5 daq gacha", color: "#4CAF50" },
+  lt15m: { label: "5–15 daq", color: "#8BC34A" },
+  lt1h: { label: "15–60 daq", color: "#FFB300" },
+  lt4h: { label: "1–4 soat", color: "#FF9800" },
+  gte4h: { label: "4 soatdan ko'p", color: "#F44336" },
+};
+const bandColor = (s: number) =>
+  s < 300 ? BANDS.lt5m.color : s < 900 ? BANDS.lt15m.color : s < 3600 ? BANDS.lt1h.color : s < 4 * 3600 ? BANDS.lt4h.color : BANDS.gte4h.color;
+const pctStr = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "0%");
+
+/** Who made the contact that counted: an operator's callback, or the customer's own redial. */
+function ContactCell({ it }: { it: MissedCallItem }) {
+  const via = it.callback_source === "moizvonki" ? " · Moizvonki" : "";
+  if (it.callback_dir === "outbound") return <span title={`Operator qayta qo'ng'iroq qilgan${via}`}><span style={pill("#2196F3")}>Operator</span> <span style={{ color: "var(--text)" }}>{it.callback_by ?? "—"}</span></span>;
+  if (it.callback_dir === "inbound") return <span title={`Mijoz o'zi qayta qo'ng'iroq qilgan va javob olgan${via}`}><span style={pill("#9C27B0")}>Mijoz o'zi</span> <span style={{ color: "var(--text2)" }}>{it.callback_by ?? ""}</span></span>;
+  return <span style={{ color: "var(--text3)" }}>—</span>;
+}
+
 function RecalledCell({ it }: { it: MissedCallItem }) {
   if ((it.status === "recalled" || it.status === "late") && it.callback_at) {
     // Working time (what "Reaksiya vaqti" averages); the real elapsed time is in the tooltip.
@@ -80,10 +101,14 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
   variant: MissedCallsVariant; filter: CallDashboardFilter; portal: string; onClose: () => void;
 }) {
   const all = variant === "all";
-  const fetchPage = all ? getMissedCalls : getNotRecalledCalls;
-  const title = all ? "Propushenniy — javobsiz qo'ng'iroqlar" : "Ne perezvonili — qayta chiqilmagan";
-  const q = useQuery({ queryKey: [all ? "call-missed-list" : "call-not-recalled", filter], queryFn: () => fetchPage(filter, { offset: 0, limit: PAGE }) });
+  const reaction = variant === "reaction";
+  const [sort, setSort] = useState<"new" | "slow">("new");    // reaction list only: newest or slowest first
+  const fetchPage = (f: CallDashboardFilter, page: { offset: number; limit: number }) =>
+    reaction ? getReactionCalls(f, page, sort) : all ? getMissedCalls(f, page) : getNotRecalledCalls(f, page);
+  const title = reaction ? "Reaksiya vaqti — qayta bog'lanish tezligi" : all ? "Propushenniy — javobsiz qo'ng'iroqlar" : "Ne perezvonili — qayta chiqilmagan";
+  const q = useQuery({ queryKey: [reaction ? "call-reaction-list" : all ? "call-missed-list" : "call-not-recalled", filter, reaction ? sort : null], queryFn: () => fetchPage(filter, { offset: 0, limit: PAGE }) });
   const [more, setMore] = useState<MissedCallItem[]>([]);     // pages loaded after the first
+  useEffect(() => { setMore([]); setMoreError(null); }, [sort]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
@@ -131,11 +156,15 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
       <div style={{ width: "min(1320px, 100%)", maxHeight: "94vh", display: "flex", flexDirection: "column", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
         {/* header */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 22px", borderBottom: "1px solid var(--border)" }}>
-          <PhoneMissed size={20} color={all ? "#FF9800" : "#F44336"} style={{ marginTop: 3, flexShrink: 0 }} />
+          {reaction
+            ? <Clock size={20} color="#607D8B" style={{ marginTop: 3, flexShrink: 0 }} />
+            : <PhoneMissed size={20} color={all ? "#FF9800" : "#F44336"} style={{ marginTop: 3, flexShrink: 0 }} />}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>{title}</div>
             <div style={{ fontSize: 12.5, color: "var(--text3)", marginTop: 3 }}>
-              {all
+              {reaction
+                ? <>{hours} soat ichida bog'lanilgan javobsiz qo'ng'iroqlar: qancha vaqtda va kim bog'langan</>
+                : all
                 ? <>Bitrix24 bo'yicha javobsiz qolgan kiruvchi qo'ng'iroqlar</>
                 : <>Javobsiz qolgan va {hours} soat ichida qayta chiqilmagan raqamlar</>}
               {" "}· {filter.start_date ?? "…"} → {filter.end_date ?? "…"}
@@ -151,7 +180,18 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
           </button>
         </div>
 
-        {help && (
+        {help && reaction && (
+          <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
+            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'idan keyin o'sha raqam bilan <b>birinchi javob berilgan suhbat</b> ({hours} soat ichida) olinadi —
+            bu <b>Operator</b> qayta qo'ng'irog'i yoki <b>Mijoz o'zi</b> qayta qilib javob olgani bo'lishi mumkin. Javob berilmagan urinishlar hisobga kirmaydi.
+            <b> Reaksiya</b> — javobsiz qo'ng'iroqdan shu suhbatgacha o'tgan vaqt, <b>ish vaqti bo'yicha</b>{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>};
+            haqiqiy (soat bo'yicha) vaqt sichqonchani ustiga olib borganda ko'rinadi. <b>O'rtacha</b> — kartadagi Reaksiya vaqti;
+            <b> Mediana</b> — qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan (bir nechta juda kech qo'ng'iroq o'rtachani oshirib yuboradi).
+            {hours} soat ichida bog'lanilmaganlar bu ro'yxatda yo'q — ular "Ne perezvonili"da.
+          </div>
+        )}
+
+        {help && !reaction && (
           <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
             Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i alohida sanaladi. O'sha raqam bilan <b>javob berilgan suhbat</b> (istalgan yo'nalish va operator,
             PBX va Moizvonki) {hours} soat ichida bo'lsa — qayta chiqilgan{all ? "; bo'lmasa chiqilmagan" : ", aks holda bu ro'yxatga tushadi"}.
@@ -171,6 +211,50 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
           ) : (
             <>
               {/* summary */}
+              {reaction && s.reaction ? (() => {
+                const r = s.reaction;
+                return (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "16px 22px" }}>
+                      <Stat label="Bog'lanilgan" value={fmtNum(s.total)} color="#4CAF50" />
+                      <Stat label="O'rtacha (ish vaqti)" value={fmtHMS(r.avg_work_s)} color="#607D8B" />
+                      <Stat label="Mediana" value={fmtHMS(r.median_work_s)} color="#2196F3" />
+                      <Stat label="Operator qayta chiqqan" value={<>{fmtNum(r.by_operator)} <span style={{ fontSize: 14, fontWeight: 500 }}>{pctStr(r.by_operator, s.total)}</span></>} color="#2196F3" />
+                      <Stat label="Mijoz o'zi qayta qilgan" value={<>{fmtNum(r.by_customer)} <span style={{ fontSize: 14, fontWeight: 500 }}>{pctStr(r.by_customer, s.total)}</span></>} color="#9C27B0" />
+                    </div>
+                    {/* how the delays spread: one bar, one segment per band */}
+                    <div style={{ padding: "0 22px 6px" }}>
+                      <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", background: "var(--bg3)" }}>
+                        {r.bands.map(b => b.count > 0 && (
+                          <div key={b.id} title={`${BANDS[b.id]?.label ?? b.id}: ${fmtNum(b.count)} ta (${pctStr(b.count, s.total)})`}
+                            style={{ width: pctStr(b.count, s.total), background: BANDS[b.id]?.color ?? "#999" }} />
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 8, fontSize: 12, color: "var(--text2)" }}>
+                        {r.bands.map(b => (
+                          <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ width: 9, height: 9, borderRadius: 2, background: BANDS[b.id]?.color ?? "#999" }} />
+                            {BANDS[b.id]?.label ?? b.id}: <b style={{ color: "var(--text)" }}>{fmtNum(b.count)}</b> <span style={{ color: "var(--text3)" }}>({pctStr(b.count, s.total)})</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 22px 12px", fontSize: 11.5, color: "var(--text3)" }}>
+                      <span>
+                        Soat bo'yicha (tun ham hisobga olinsa) o'rtacha: {fmtHMS(r.avg_clock_s)}. {hours} soat ichida bog'lanilmagan {fmtNum(s.not_recalled)} ta — "Ne perezvonili"da.
+                      </span>
+                      <span style={{ marginLeft: "auto", display: "inline-flex", border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>
+                        {([["new", "Yangilari"], ["slow", "Eng sekinlari"]] as const).map(([k, label]) => (
+                          <button key={k} type="button" onClick={() => setSort(k)} aria-pressed={sort === k}
+                            style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: sort === k ? "rgba(33,150,243,0.14)" : "var(--bg2)", color: sort === k ? "#2196F3" : "var(--text2)" }}>
+                            {label}
+                          </button>
+                        ))}
+                      </span>
+                    </div>
+                  </>
+                );
+              })() : (<>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "16px 22px" }}>
                 <Stat label="Jami" value={fmtNum(s.total)} color="#F44336" />
                 <Stat label="Unikal raqam" value={fmtNum(s.unique_numbers)} color="#2196F3" />
@@ -188,14 +272,17 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
                   {" "}Davrdagi barcha javobsiz qo'ng'iroq: {fmtNum(s.missed_total)} ta.
                 </>}
               </div>
+              </>)}
 
               {items.length === 0 ? (
-                <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>{all ? "Javobsiz qo'ng'iroq yo'q" : "Qayta chiqilmagan qo'ng'iroq yo'q"}</div>
+                <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>{reaction ? "Bog'lanilgan qo'ng'iroq yo'q" : all ? "Javobsiz qo'ng'iroq yo'q" : "Qayta chiqilmagan qo'ng'iroq yo'q"}</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                   <thead>
                     <tr>
-                      {["#", "Telefon", "Sana va vaqt", "Kim / navbat", "Kutgan", "Urinish", "Qayta chiqilgan", "Sabab", "Lead", "Mas'ul", "Bosqich"].map(h => (
+                      {(reaction
+                        ? ["#", "Telefon", "Javobsiz qo'ng'iroq", "Kim / navbat", "Kutgan", "Urinish", "Bog'lanildi", "Reaksiya", "Kim bog'landi", "Lead", "Mas'ul", "Bosqich"]
+                        : ["#", "Telefon", "Sana va vaqt", "Kim / navbat", "Kutgan", "Urinish", "Qayta chiqilgan", "Sabab", "Lead", "Mas'ul", "Bosqich"]).map(h => (
                         <th key={h} style={TH}>{h}</th>
                       ))}
                     </tr>
@@ -209,8 +296,19 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
                         <td style={{ ...TD, color: "var(--text)" }}>{!it.matched ? "—" : it.operator ?? "Navbat (queue)"}</td>
                         <td style={{ ...TD, fontFamily: "monospace", fontWeight: 600, color: "#FF9800" }}>{fmtHMS(it.wait_s)}</td>
                         <td style={TD}>{it.attempts > 1 ? <span style={pill("#F44336")}>{it.attempts}×</span> : <span style={{ color: "var(--text3)" }}>1×</span>}</td>
-                        <td style={TD}><RecalledCell it={it} /></td>
-                        <td style={{ ...TD, fontSize: 11.5, color: "var(--text3)" }}>{it.reason || "—"}</td>
+                        {reaction ? <>
+                          <td style={{ ...TD, color: "var(--text2)" }}>{it.callback_at ? fmtWhen(it.callback_at) : "—"}</td>
+                          <td style={TD} title={it.delay_s != null ? `Haqiqatda (soat bo'yicha): ${fmtHMS(it.delay_s)}` : undefined}>
+                            <span style={{ fontFamily: "monospace", fontWeight: 700, color: bandColor(it.work_delay_s ?? 0) }}>{fmtHMS(it.work_delay_s)}</span>
+                            {it.delay_s != null && it.work_delay_s != null && it.delay_s - it.work_delay_s >= 60 && (
+                              <span style={{ marginLeft: 6, fontSize: 11, color: "var(--text3)" }}>({fmtDelay(it.delay_s)})</span>
+                            )}
+                          </td>
+                          <td style={TD}><ContactCell it={it} /></td>
+                        </> : <>
+                          <td style={TD}><RecalledCell it={it} /></td>
+                          <td style={{ ...TD, fontSize: 11.5, color: "var(--text3)" }}>{it.reason || "—"}</td>
+                        </>}
                         <td style={TD}>
                           {it.lead_id ? (portal
                             ? <a href={`${portal}/crm/lead/details/${it.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2196F3", textDecoration: "none", fontWeight: 600 }}>#{it.lead_id} →</a>

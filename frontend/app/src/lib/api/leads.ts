@@ -883,6 +883,11 @@ export type MissedCallItem = {
   work_delay_s: number | null;
   /** TLC / TIS / TL, from the owner's extension name; null if unknown. */
   team: string | null;
+  /** The call that counted as the contact: outbound = an operator's callback, inbound = the customer called again and got through. */
+  callback_dir?: "inbound" | "outbound" | null;
+  /** Operator who talked on that call (null when it is unknown). */
+  callback_by?: string | null;
+  callback_source?: "onlinepbx" | "moizvonki" | null;
   lead_id: number | null;
   stage_name: string | null;
   stage_bid: string | null;
@@ -905,6 +910,18 @@ export type MissedCallsResponse = {
     avg_wait_s: number;
     /** Every missed call = the "Propushenniy" card. */
     missed_total: number;
+    /** Only in the "Reaksiya vaqti" list. Seconds are working time unless named clock. */
+    reaction?: {
+      /** == the "Reaksiya vaqti" card. */
+      avg_work_s: number;
+      median_work_s: number;
+      avg_clock_s: number;
+      /** Reached by an operator's callback / by the customer's own redial. */
+      by_operator: number;
+      by_customer: number;
+      /** lt5m, lt15m, lt1h, lt4h, gte4h. */
+      bands: { id: string; count: number }[];
+    };
   };
   /** The slice of the list this response carries; `summary` always covers the whole list. */
   offset: number;
@@ -949,6 +966,16 @@ export function getMissedCalls(filter: CallDashboardFilter, page: { offset: numb
     ...callFilterParams(filter),
     offset: page.offset,
     limit: page.limit,
+  }, API_URL_CRM);
+}
+
+/** The list behind the "Reaksiya vaqti" card: the missed calls reached within 24h, with the callback. */
+export function getReactionCalls(filter: CallDashboardFilter, page: { offset: number; limit: number } = { offset: 0, limit: 20 }, sort: "new" | "slow" = "new") {
+  return apiGet<MissedCallsResponse>("/api/dashboard/call-reaction-list", {
+    ...callFilterParams(filter),
+    offset: page.offset,
+    limit: page.limit,
+    ...(sort === "slow" ? { sort } : {}),
   }, API_URL_CRM);
 }
 

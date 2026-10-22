@@ -289,6 +289,11 @@ router.get('/call-stats-full', async (req, res) => {
  *   GET /call-not-recalled  "Ne perezvonili": every missed call nobody talked to the
  *                           customer about within 24h.
  *   GET /call-missed-list   "Propushenniy": every missed call, called back or not.
+ *   GET /call-reaction-list "Reaksiya vaqti": the missed calls reached within 24h, with the
+ *                           callback (when, who, operator call or the customer's own redial)
+ *                           and `summary.reaction`: average (== the card), median, the split
+ *                           by who made the contact, and how many fall in each delay band.
+ *                           ?sort=slow lists the longest waits first (default: newest first).
  *
  * Paged on the server: ?limit= (default 20, max 1000) &offset=. `summary` always covers the
  * whole list; only the rows of the requested page are enriched, so a page is cheap even
@@ -316,6 +321,26 @@ router.get('/call-stats-full', async (req, res) => {
 const NOT_RECALLED_DEFAULT_LIMIT = 20;
 const NOT_RECALLED_MAX_LIMIT = 1000;
 const PBX_MATCH_WINDOW_MS = 120_000;
+
+/** Delay bands of the Reaksiya vaqti list, in working seconds (upper bound exclusive). */
+const REACTION_BANDS = [
+  { id: 'lt5m', max: 300 },
+  { id: 'lt15m', max: 900 },
+  { id: 'lt1h', max: 3600 },
+  { id: 'lt4h', max: 4 * 3600 },
+  { id: 'gte4h', max: Infinity },
+];
+
+/** (number, time) → the answered call that counted as the callback (exact start, as callStats found it). */
+function buildContactMatcher(rows) {
+  const byKey = new Map();
+  for (const r of rows) {
+    if (!r.answered || r.internal || !r.customer_norm) continue;
+    const t = new Date(r.start_stamp).getTime();
+    if (!Number.isNaN(t) && !byKey.has(`${r.customer_norm}|${t}`)) byKey.set(`${r.customer_norm}|${t}`, r);
+  }
+  return (num, at) => byKey.get(`${num}|${at}`) || null;
+}
 
 /** (number, time) → the PBX row of that missed call: inbound, unanswered, same number, nearest start within ±2 min. */
 function buildPbxMatcher(rows) {
@@ -345,15 +370,19 @@ async function serveMissedList(req, res, scope) {
     const { rows, bxMissed, from, to, respIds } = await loadCallInputs(req.query);
     const stats = computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null, bxMissed, { detail: true });
     const detail = stats.missed_detail;
-    const events = (scope === 'all' ? detail.recalled_events.concat(detail.not_recalled) : detail.not_recalled)
-      .slice().sort((a, b) => b.at - a.at);
+    const events = (scope === 'all' ? detail.recalled_events.concat(detail.not_recalled)
+      : scope === 'reaction' ? detail.recalled_events.slice() : detail.not_recalled.slice());
+    if (scope === 'reaction' && req.query.sort === 'slow') events.sort((a, b) => (b.work_delay_s - a.work_delay_s) || (b.at - a.at));
+    else events.sort((a, b) => b.at - a.at);
 
     // PBX side, for every event (cheap: in memory) so the summary covers the whole list.
     const match = buildPbxMatcher(rows);
+    const contactOf = buildContactMatcher(rows);
     const attempts = new Map();
     for (const e of events) if (e.num) attempts.set(e.num, (attempts.get(e.num) || 0) + 1);
     const base = events.map((e) => {
       const p = e.num ? match(e.num, e.at) : null;
+      const cb = e.num && e.callback_at ? contactOf(e.num, e.callback_at) : null;
       return {
         key: e.key,
         phone: e.phone || e.num || null,
@@ -368,6 +397,11 @@ async function serveMissedList(req, res, scope) {
         delay_s: e.callback_at ? Math.round((e.callback_at - e.at) / 1000) : null,       // real time until the callback
         work_delay_s: e.work_delay_s ?? null,                                          // ...counted in the team's working hours
         team: e.team || null,
+        // the call that counted as the contact: an operator's callback (outbound) or the customer
+        // calling again and getting through (inbound); who talked, and through which system
+        callback_dir: cb ? cb.direction : null,
+        callback_by: cb ? (cb.operator_ext ? cb.full_name || cb.operator_ext : null) : null,
+        callback_source: cb ? (String(cb.uuid).startsWith('moizvonki:') ? 'moizvonki' : 'onlinepbx') : null,
       };
     });
 
@@ -404,6 +438,22 @@ async function serveMissedList(req, res, scope) {
 
     const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
     const lateCount = detail.not_recalled.filter((e) => e.status === 'late').length;
+    let reaction;
+    if (scope === 'reaction') {
+      const works = base.map((x) => x.work_delay_s || 0);
+      const sorted = works.slice().sort((a, b) => a - b);
+      reaction = {
+        avg_work_s: avg(works),                                     // == the "Reaksiya vaqti" card
+        median_work_s: sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0,
+        avg_clock_s: avg(base.map((x) => x.delay_s || 0)),          // the same, in plain clock time
+        by_operator: base.filter((x) => x.callback_dir === 'outbound').length,
+        by_customer: base.filter((x) => x.callback_dir === 'inbound').length,
+        bands: REACTION_BANDS.map((b, i) => ({
+          id: b.id,
+          count: works.filter((w) => w >= (i ? REACTION_BANDS[i - 1].max : 0) && w < b.max).length,
+        })),
+      };
+    }
     res.json({
       window_hours: 24,
       work_hours: describeSchedules(),                              // what work_delay_s is measured against
@@ -418,16 +468,18 @@ async function serveMissedList(req, res, scope) {
         still_open: detail.not_recalled.filter((e) => e.status === 'open').length,
         avg_wait_s: avg(base.filter((x) => x.wait_s != null).map((x) => x.wait_s)),
         missed_total: detail.total,                                 // == the "Propushenniy" card
+        ...(reaction ? { reaction } : {}),
       },
       offset, limit,
       items,
     });
   } catch (err) {
-    fail(res, scope === 'all' ? 'call-missed-list' : 'call-not-recalled')(err);
+    fail(res, scope === 'all' ? 'call-missed-list' : scope === 'reaction' ? 'call-reaction-list' : 'call-not-recalled')(err);
   }
 }
 router.get('/call-not-recalled', (req, res) => serveMissedList(req, res, 'not_recalled'));
 router.get('/call-missed-list', (req, res) => serveMissedList(req, res, 'all'));
+router.get('/call-reaction-list', (req, res) => serveMissedList(req, res, 'reaction'));
 
 /**
  * GET /call-list — the per-operator drill-down (CallListRow[]).

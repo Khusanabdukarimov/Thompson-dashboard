@@ -149,7 +149,7 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
         role: "button", tabIndex: 0, title: hint, onClick,
         onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } },
       } : {})}
-      title={onClick ? hint : tip}
+      title={onClick ? (tip ? `${hint} — ${tip}` : hint) : tip}
       style={{ position: "relative", minHeight: 112, background: `linear-gradient(145deg, ${accent}12 0%, var(--bg) 42%, var(--bg) 100%)`, border: `1px solid ${accent}33`, borderRadius: 14, padding: "18px 20px 18px", display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
         <span style={{ fontSize: 12.5, color: accent, fontWeight: 700, lineHeight: 1.3 }}>{label}</span>
@@ -438,7 +438,8 @@ export default function CallStatistikasi() {
           <Card label="Reaksiya vaqti" accentColor="#607D8B"
             value={<span style={{ fontSize: 22 }}>{fmtDur(data?.reaksiya_vaqti ?? 0)}</span>}
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
-            tip={`Javobsiz qo'ng'iroqdan birinchi suhbatgacha (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`} />
+            tip={`Javobsiz qo'ng'iroqdan birinchi suhbatgacha (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`}
+            onClick={() => setMissedModal("reaction")} hint="Ro'yxat" />
           <Card label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
