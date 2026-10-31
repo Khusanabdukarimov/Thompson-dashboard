@@ -223,7 +223,9 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
         <tbody>
           {calls.map((c, i) => {
             const ct = c.call_type ? CALL_TYPE_LABEL[c.call_type] : null;
-            const ok = c.status_code === 200 || (c.duration ?? 0) >= 10;
+            // 200 = the operator talked (talk time > 0). Duration also counts ringing,
+            // so a long unanswered call is not a success.
+            const ok = c.status_code === 200;
             const stageLabel = c.stage_name || c.stage_bitrix_id ? leadStageLabel(c.stage_bitrix_id, c.stage_name) : null;
             return (
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
