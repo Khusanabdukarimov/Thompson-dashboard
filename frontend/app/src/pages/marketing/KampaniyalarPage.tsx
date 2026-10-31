@@ -4,6 +4,7 @@ import {
   RefreshCw, Search, ChevronDown, TrendingUp, Filter, X,
 } from "lucide-react";
 import { Skeleton } from "@/components/Skeleton";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import {
   getMetaInsights, getMetaCampaigns, getCampaignForms, getFormLeads,
   getPageForms, getKunlikHisobot, getCampaignCreatives, getCreativeLeads, getCreativeDeals,
@@ -615,8 +616,10 @@ export default function KampaniyalarPage() {
 
             {filterOpen && (
               <div style={{ borderTop: "1px solid var(--border)", padding: "16px 20px" }}>
-                {/* Quick presets */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                {/* Lead date range (calendar, or type it) + quick presets */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                  <DateRangePicker start={fromDate} end={toDate} width={250}
+                    onChange={(s, e) => { setFromDate(s); setToDate(e); }} />
                   {KAMP_PRESETS.map(p => {
                     const pf = p.f(), pt = p.t();
                     const active = fromDate === pf && toDate === pt;
@@ -629,35 +632,12 @@ export default function KampaniyalarPage() {
                   })}
                 </div>
 
-                {/* Date inputs — lead date range */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Dan (boshlanish)</div>
-                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={selStyle} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Gacha (tugash)</div>
-                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={selStyle} />
-                  </div>
-                </div>
-
                 {/* Sotuv date range — optional, decoupled from lead dates */}
                 <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                    Sotuv sanasi (alohida)
-                    {(sotuvFrom || sotuvTo) && (
-                      <button onClick={() => { setSotuvFrom(""); setSotuvTo(""); }}
-                        style={{ fontSize: 10, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-                        tozala
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <input type="date" value={sotuvFrom} onChange={e => setSotuvFrom(e.target.value)}
-                      placeholder="dan" style={selStyle} />
-                    <input type="date" value={sotuvTo} onChange={e => setSotuvTo(e.target.value)}
-                      placeholder="gacha" style={selStyle} />
-                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6 }}>Sotuv sanasi (alohida)</div>
+                  <DateRangePicker start={sotuvFrom || undefined} end={sotuvTo || undefined} width={250} placeholder="Barcha sotuvlar"
+                    onChange={(s, e) => { setSotuvFrom(s); setSotuvTo(e); }}
+                    onClear={() => { setSotuvFrom(""); setSotuvTo(""); }} />
                 </div>
 
                 {/* Multi-select filters row 1 */}

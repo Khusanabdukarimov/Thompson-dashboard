@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MultiSelect } from "@/components/MultiSelect";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { MissedCallsModal, type MissedCallsVariant } from "@/components/MissedCallsModal";
 import { describeWorkHours } from "@/lib/workHours";
 import { getConfig } from "@/lib/api/config";
@@ -315,8 +316,10 @@ export default function CallStatistikasi() {
 
           {filterOpen && (
             <div style={{ borderTop: "1px solid var(--border)", padding: "16px 20px" }}>
-              {/* Quick presets */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              {/* Date range (calendar, or type it) + quick presets */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                <DateRangePicker start={filters.start_date} end={filters.end_date} width={250}
+                  onChange={(s, e) => update({ start_date: s, end_date: e })} />
                 {CALL_PRESETS.map(p => {
                   const active = filters.start_date === p.f && filters.end_date === p.t;
                   return (
@@ -326,18 +329,6 @@ export default function CallStatistikasi() {
                     </button>
                   );
                 })}
-              </div>
-
-              {/* Date inputs */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Dan (boshlanish)</div>
-                  <input type="date" value={filters.start_date} onChange={e => update({ start_date: e.target.value })} style={selStyle} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>Gacha (tugash)</div>
-                  <input type="date" value={filters.end_date} onChange={e => update({ end_date: e.target.value })} style={selStyle} />
-                </div>
               </div>
 
               {/* Other filters row */}
