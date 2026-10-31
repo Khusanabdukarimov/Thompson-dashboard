@@ -66,6 +66,23 @@ const fmtDelay = (s: number): string => {
   return h < 24 && m > 0 ? `${h} soat ${m} daq` : `${h} soat`;
 };
 
+/** Why a call was missed (reason_kind from the API), in words; the PBX's raw code goes in the tooltip. */
+const REASONS: Record<string, { label: string; color: string; desc: string }> = {
+  rang: { label: "Operatorlar javob bermadi", color: "#F44336", desc: "Operatorlarning telefoni jiringladi, hech kim ko'tarmadi — mijoz kutib, qo'ng'iroqni uzdi" },
+  queue: { label: "Operatorgacha yetmay uzdi", color: "#FF9800", desc: "Mijoz menyu yoki navbatda turib, birorta operatorning telefoni jiringlamasdan qo'ng'iroqni uzdi" },
+  after_hours: { label: "Ish vaqtidan tashqari", color: "#607D8B", desc: "Ish kunidan tashqari (08:00 dan oldin yoki 20:00 dan keyin) qilingan qo'ng'iroq" },
+  no_answer: { label: "Operator ko'tarmadi", color: "#E91E63", desc: "To'g'ridan-to'g'ri bitta operatorga qilingan qo'ng'iroq javobsiz qoldi" },
+  cancel: { label: "Mijoz darhol uzdi", color: "#9E9E9E", desc: "Mijoz ulanish bilanoq qo'ng'iroqni uzdi" },
+  tech: { label: "Aloqa xatosi", color: "#795548", desc: "Telefon tarmog'i yoki yo'naltirish (marshrut) xatosi" },
+  unknown: { label: "PBX'da yozuv yo'q", color: "#9E9E9E", desc: "Bitrix24 bu qo'ng'iroqni ko'rgan, telefoniyada esa yozuvi topilmadi" },
+};
+
+function ReasonCell({ it }: { it: MissedCallItem }) {
+  const r = REASONS[it.reason_kind ?? (it.matched ? "" : "unknown")];
+  if (!r) return <span style={{ fontSize: 11.5, color: "var(--text3)" }}>{it.reason || "—"}</span>;
+  return <span style={pill(r.color)} title={`${r.desc}${it.reason ? ` · PBX kodi: ${it.reason}` : ""}`}>{r.label}</span>;
+}
+
 /** Delay bands of the Reaksiya vaqti list (ids from the API), slow ones in warmer colours. */
 const BANDS: Record<string, { label: string; color: string }> = {
   lt5m: { label: "5 daq gacha", color: "#4CAF50" },
@@ -199,6 +216,7 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
             <b> Yo'q</b> — undan keyin ham suhbat bo'lmagan; {all ? <><b>vaqt</b> — bog'lanilgan payt va undan oldin o'tgan vaqt</> : <><b>vaqt</b> — {hours} soatdan keyin bog'lanilgan (qachon va necha soatdan keyin)</>};
             <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>Urinish</b> — shu raqam ro'yxatda necha marta uchraydi.
             Kutgan — mijoz qo'ng'iroqda necha soniya kutgan.
+            <b> Sabab</b> — telefoniya yozuvidan: operatorlarning telefoni jiringladimi, mijoz qachon uzdi, ish vaqtimi (asl PBX kodi sichqoncha ustida ko'rinadi).
             {d?.work_hours && <> Bog'lanishgacha o'tgan vaqt <b>ish vaqti bo'yicha</b> hisoblanadi ({describeWorkHours(d.work_hours)}): kechasi yoki ish soatidan tashqarida o'tkazib yuborilgan qo'ng'iroq ish boshlanganidan sanaladi.</>}
           </div>
         )}
@@ -272,6 +290,19 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
                   {" "}Davrdagi barcha javobsiz qo'ng'iroq: {fmtNum(s.missed_total)} ta.
                 </>}
               </div>
+              {s.reasons && Object.keys(s.reasons).length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "0 22px 14px" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sabablar:</span>
+                  {Object.entries(s.reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
+                    const r = REASONS[k] ?? { label: k, color: "#9E9E9E", desc: "" };
+                    return (
+                      <span key={k} title={r.desc} style={{ ...pill(r.color), fontSize: 11.5, padding: "3px 10px" }}>
+                        {r.label}: {fmtNum(n)} <span style={{ fontWeight: 500, opacity: 0.8 }}>({pctStr(n, s.total)})</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               </>)}
 
               {items.length === 0 ? (
@@ -307,7 +338,7 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
                           <td style={TD}><ContactCell it={it} /></td>
                         </> : <>
                           <td style={TD}><RecalledCell it={it} /></td>
-                          <td style={{ ...TD, fontSize: 11.5, color: "var(--text3)" }}>{it.reason || "—"}</td>
+                          <td style={TD}><ReasonCell it={it} /></td>
                         </>}
                         <td style={TD}>
                           {it.lead_id ? (portal

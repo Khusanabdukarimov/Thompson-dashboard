@@ -113,6 +113,8 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     if (!ops.has(key)) {
       ops.set(key, {
         responsible_id: r.responsible_id != null ? Number(r.responsible_id) : null,
+        // the line of an operator Bitrix does not know (a Moizvonki manager, "mz:3"): their call list is asked for by it
+        operator_ext: r.responsible_id == null && r.operator_ext ? r.operator_ext : null,
         full_name: r.full_name || 'Call Centre — javobsiz', photo_url: r.photo_url || null,
         inbound_calls: 0, outbound_calls: 0, callback_calls: 0,
         success_calls: 0, failed_calls: 0, ndz_calls: 0,
@@ -221,7 +223,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
       const total = b.inbound_calls + b.outbound_calls;
       const talkTotal = b.talk_in + b.talk_out;
       const out = {
-        responsible_id: b.responsible_id, full_name: b.full_name, photo_url: b.photo_url,
+        responsible_id: b.responsible_id, operator_ext: b.operator_ext, full_name: b.full_name, photo_url: b.photo_url,
         inbound_calls: b.inbound_calls, outbound_calls: b.outbound_calls, total_calls: total,
         callback_calls: 0, success_calls: b.success_calls, failed_calls: b.failed_calls, ndz_calls: b.ndz_calls,
         missed_inbound: b.missed_inbound, missed_recalled: b.missed_recalled, missed_unrecalled: b.missed_unrecalled,

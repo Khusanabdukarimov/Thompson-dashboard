@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 const { tzFromOpt, tzToOpt } = require('./tzDate');
 const { computeCallStatsFull } = require('../services/callStats');
 const { teamOf } = require('../config/calls');
-const { describeSchedules } = require('../config/workHours');
+const { describeSchedules, DEFAULT_SCHEDULE } = require('../config/workHours');
 
 const router = Router();
 
@@ -210,6 +210,8 @@ async function readCallInputs({ from, to, phone, source, stage }) {
     `SELECT c.uuid,
             COALESCE(u.responsible_id, CASE WHEN c.operator_ext ~ '^[0-9]+$' THEN c.operator_ext::int ELSE NULL END) AS responsible_id,
             c.operator_ext, c.hangup_cause,
+            -- an operator's phone rang during the call (PBX event log), for the missed-call reason
+            (c.events @> '[{"type":"user"}]'::jsonb) AS rang_op,
             COALESCE(u.name, u.ext) AS full_name,
             c.direction, c.customer_norm, c.customer_number,
             c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
@@ -342,6 +344,34 @@ function buildContactMatcher(rows) {
   return (num, at) => byKey.get(`${num}|${at}`) || null;
 }
 
+/**
+ * Why a missed call was missed, in words — the PBX's own hangup_cause is NORMAL_CLEARING for
+ * ~93% of them (the customer hung up; for the PBX that is a normal end), so on its own it says
+ * nothing. Read with the event log (did any operator's phone ring?) and the time of day:
+ *   tech         line / routing error (EXCHANGE_ROUTING_ERROR, DESTINATION_OUT_OF_ORDER, ...)
+ *   after_hours  outside the company day (config/workHours.js DEFAULT_SCHEDULE)
+ *   cancel       the customer hung up at once (ORIGINATOR_CANCEL)
+ *   no_answer    a direct call to one operator, not picked up (NO_ANSWER)
+ *   rang         operators' phones rang, nobody picked up, the customer hung up
+ *   queue        the customer hung up in the menu / queue before any operator's phone rang
+ */
+const TECH_CAUSES = new Set([
+  'EXCHANGE_ROUTING_ERROR', 'DESTINATION_OUT_OF_ORDER', 'NETWORK_OUT_OF_ORDER', 'NORMAL_TEMPORARY_FAILURE',
+  'CHAN_NOT_IMPLEMENTED', 'PROTOCOL_ERROR', 'NORMAL_CIRCUIT_CONGESTION', 'NO_ROUTE_DESTINATION',
+  'INTERWORKING', 'RECOVERY_ON_TIMER_EXPIRE',
+]);
+function missReason(p, atMs) {
+  if (!p) return null;
+  const cause = p.hangup_cause || '';
+  if (TECH_CAUSES.has(cause)) return 'tech';
+  const [open, close] = DEFAULT_SCHEDULE;
+  const hour = new Date(atMs + 5 * 3600e3).getUTCHours(); // Asia/Tashkent
+  if (hour < open || hour >= close) return 'after_hours';
+  if (cause === 'ORIGINATOR_CANCEL') return 'cancel';
+  if (cause === 'NO_ANSWER') return 'no_answer';
+  return p.rang_op ? 'rang' : 'queue';
+}
+
 /** (number, time) → the PBX row of that missed call: inbound, unanswered, same number, nearest start within ±2 min. */
 function buildPbxMatcher(rows) {
   const byNum = new Map();
@@ -390,7 +420,8 @@ async function serveMissedList(req, res, scope) {
         matched: !!p,                                        // false = the PBX has no record of this call
         operator: p && p.operator_ext ? p.full_name : null,  // null while matched = it rang out in the queue
         wait_s: p ? Number(p.duration) || 0 : null,
-        reason: p ? p.hangup_cause || null : null,
+        reason: p ? p.hangup_cause || null : null,                 // the PBX's raw code
+        reason_kind: missReason(p, e.at),                           // ...and what it means (see missReason)
         attempts: e.num ? attempts.get(e.num) : 1,
         status: e.status,
         callback_at: e.callback_at ? new Date(e.callback_at).toISOString() : null,
@@ -468,6 +499,7 @@ async function serveMissedList(req, res, scope) {
         still_open: detail.not_recalled.filter((e) => e.status === 'open').length,
         avg_wait_s: avg(base.filter((x) => x.wait_s != null).map((x) => x.wait_s)),
         missed_total: detail.total,                                 // == the "Propushenniy" card
+        reasons: base.reduce((acc, x) => { const k = x.reason_kind || 'unknown'; acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
         ...(reaction ? { reaction } : {}),
       },
       offset, limit,
@@ -489,14 +521,43 @@ router.get('/call-list', async (req, res) => {
   const from = req.query.from || null;
   const to = req.query.to || null;
   const respId = req.query.responsible_id ? String(req.query.responsible_id) : null;
+  // A PBX/Moizvonki line not linked to a Bitrix user ("mz:3") is asked for by its extension.
+  const ext = req.query.ext ? String(req.query.ext) : null;
   const phone = req.query.phone ? String(req.query.phone).replace(/\D/g, '') : null;
   const source = req.query.source && req.query.source !== 'all' ? String(req.query.source) : null;
   const kind = req.query.call_kind || null; // inbound|outbound|callback
   const stage = req.query.stage && req.query.stage !== 'all' ? String(req.query.stage) : null;
 
   try {
+    // The operator's extensions first, so the calls are read through the (operator_ext,
+    // start_stamp) index instead of scanning every call of the period and filtering after
+    // (a month for one operator took ~3 s that way). An extension equal to the Bitrix id
+    // still counts as theirs, as before.
+    let exts = null;
+    if (ext) exts = [ext];
+    else if (respId && /^\d+$/.test(respId)) {
+      const { rows: us } = await pool.query('SELECT ext FROM pbx_users WHERE responsible_id = $1', [Number(respId)]);
+      exts = [...new Set([...us.map((u) => u.ext), respId])];
+    }
+    // The lead lookup (the slow part) runs only for the rows returned — unless the Bosqich
+    // filter needs it to choose them.
     const { rows } = await pool.query(
-      `SELECT c.uuid AS id,
+      `WITH base AS (
+         SELECT c.uuid, c.customer_number, c.customer_norm, c.direction, c.duration, c.start_stamp,
+                c.answered, c.hangup_cause
+         FROM pbx_calls c${INTERNAL_JOINS}
+         WHERE c.start_stamp IS NOT NULL
+           AND NOT ${IS_INTERNAL}
+           AND ${tzFromOpt('c.start_stamp', '$1')}
+           AND ${tzToOpt('c.start_stamp', '$2')}
+           AND ($3::text[] IS NULL OR c.operator_ext = ANY($3::text[]))
+           AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
+           AND ($5::text IS NULL OR c.direction = $5::text)
+           AND ($7::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $7::text)
+         ORDER BY c.start_stamp DESC
+         ${stage ? '' : 'LIMIT 1000'}
+       )
+       SELECT c.uuid AS id,
               c.customer_number AS phone_number,
               CASE c.direction WHEN 'outbound' THEN 1 WHEN 'inbound' THEN 2 ELSE NULL END AS call_type,
               c.duration,
@@ -508,8 +569,7 @@ router.get('/call-list', async (req, res) => {
               ld.lead_title,
               ld.stage_name,
               ld.stage_bitrix_id
-       FROM pbx_calls c
-       LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
+       FROM base c
        -- Lead match by phone, entirely in Postgres (no Bitrix round-trips):
        -- lead_phones is normalised to the same last-9-digits form as
        -- customer_norm. Newest lead wins when a number has several.
@@ -523,18 +583,10 @@ router.get('/call-list', async (req, res) => {
          ORDER BY l.date_create DESC NULLS LAST
          LIMIT 1
        ) ld ON c.customer_norm IS NOT NULL
-       WHERE c.start_stamp IS NOT NULL
-         AND NOT ${IS_INTERNAL}
-         AND ${tzFromOpt('c.start_stamp', '$1')}
-         AND ${tzToOpt('c.start_stamp', '$2')}
-         AND ($3::int  IS NULL OR u.responsible_id = $3::int OR (c.operator_ext ~ '^[0-9]+$' AND c.operator_ext::int = $3::int))
-         AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
-         AND ($5::text IS NULL OR c.direction = $5::text)
-         AND ($6::text IS NULL OR ld.stage_bitrix_id = $6::text)
-         AND ($7::text IS NULL OR (CASE WHEN c.uuid LIKE 'moizvonki:%' THEN 'moizvonki' ELSE 'onlinepbx' END) = $7::text)
+       WHERE ($6::text IS NULL OR ld.stage_bitrix_id = $6::text)
        ORDER BY c.start_stamp DESC
        LIMIT 1000`,
-      [from, to, respId, phone, kind === 'inbound' || kind === 'outbound' ? kind : null, stage, source],
+      [from, to, exts, phone, kind === 'inbound' || kind === 'outbound' ? kind : null, stage, source],
     );
     res.json(rows);
   } catch (err) {

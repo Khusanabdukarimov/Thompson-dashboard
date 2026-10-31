@@ -199,9 +199,13 @@ const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
   4: { label: "Callback",  color: "#607D8B" },
 };
 
-function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter: CallDashboardFilter }) {
+/** Operator table row identity: Bitrix user, else the PBX/Moizvonki line, else its position (the queue row). */
+const rowKey = (u: PyResponsibleCallStats, idx: number) =>
+  u.responsible_id != null ? `r:${u.responsible_id}` : u.operator_ext ? `e:${u.operator_ext}` : `i:${idx}`;
+
+function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | null; ext?: string | null; filter: CallDashboardFilter }) {
   const portal = useBitrixPortal();
-  const q = useQuery({ queryKey: ["call-list", responsibleId, filter], queryFn: () => getCallList(responsibleId, filter) });
+  const q = useQuery({ queryKey: ["call-list", responsibleId, ext, filter], queryFn: () => getCallList(responsibleId, filter, ext) });
   if (q.isLoading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda...</div>;
   const calls = q.data ?? [];
   if (!calls.length) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
@@ -243,7 +247,7 @@ function CallSubTable({ responsibleId, filter }: { responsibleId: number; filter
 export default function CallStatistikasi() {
   const [filters, setFilters]       = useState<CallFilterState>(() => defaultCallFilters());
   const [filterOpen, setFilterOpen] = useState(false);
-  const [selectedResp, setSelectedResp] = useState<{ id: number; name: string } | null>(null);
+  const [selectedResp, setSelectedResp] = useState<{ id: string; name: string } | null>(null);
   const [missedModal, setMissedModal] = useState<MissedCallsVariant | null>(null);
   const portal = useBitrixPortal();
   const pageScrollRef = useRef<HTMLDivElement>(null);
@@ -276,7 +280,7 @@ export default function CallStatistikasi() {
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
   const failedCalls = data?.failed_calls ?? 0;
   const ndzCalls = data?.ndz_calls ?? 0;
-  const selectedRow = selectedResp ? rows.find((u, idx) => (u.responsible_id ?? idx) === selectedResp.id) : null;
+  const selectedRow = selectedResp ? rows.find((u, idx) => rowKey(u, idx) === selectedResp.id) : null;
 
   useEffect(() => {
     if (!selectedResp) return;
@@ -481,7 +485,7 @@ export default function CallStatistikasi() {
                 </thead>
                 <tbody>
                   {rows.map((u, idx) => {
-                    const uid    = u.responsible_id ?? idx;
+                    const uid    = rowKey(u, idx);
                     const isSel  = selectedResp?.id === uid;
                     return (
                       <Fragment key={uid}>
@@ -518,7 +522,7 @@ export default function CallStatistikasi() {
           )}
         </div>
 
-        {selectedRow?.responsible_id != null && (
+        {selectedRow && (selectedRow.responsible_id != null || selectedRow.operator_ext) && (
           <div ref={detailRef} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", scrollMarginTop: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: "1px solid var(--border)", background: "rgba(33,150,243,0.05)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
@@ -532,7 +536,7 @@ export default function CallStatistikasi() {
                 Yopish
               </button>
             </div>
-            <CallSubTable responsibleId={selectedRow.responsible_id} filter={apiFilter} />
+            <CallSubTable responsibleId={selectedRow.responsible_id} ext={selectedRow.operator_ext} filter={apiFilter} />
           </div>
         )}
 

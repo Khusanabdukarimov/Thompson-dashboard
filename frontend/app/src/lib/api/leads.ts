@@ -697,10 +697,11 @@ export function getCallStageStats(filter: CallDashboardFilter) {
   }, API_URL_CRM);
 }
 
-export function getCallList(responsibleId: number, filter: CallDashboardFilter) {
+/** One operator's calls: by Bitrix user, or by line (`ext`, e.g. "mz:3") for one Bitrix does not know. */
+export function getCallList(responsibleId: number | null, filter: CallDashboardFilter, ext?: string | null) {
   return apiGet<CallListRow[]>("/api/dashboard/call-list", {
     ...callFilterParams(filter),
-    responsible_id: responsibleId,
+    ...(responsibleId != null ? { responsible_id: responsibleId } : { ext: ext ?? "" }),
   }, API_URL_CRM);
 }
 
@@ -836,6 +837,8 @@ export async function createLead(
 // ── DB-backed call-stats endpoint (/api/dashboard/call-stats-full) ───────────
 export type PyResponsibleCallStats = {
   responsible_id:    number | null;
+  /** Line of an operator not linked to a Bitrix user (a Moizvonki manager, "mz:3"); null otherwise. */
+  operator_ext?:     string | null;
   full_name:         string;
   photo_url:         string | null;
   total_calls:       number;
@@ -870,7 +873,10 @@ export type MissedCallItem = {
   /** Operator the call rang; null while `matched` means it rang out in the queue. */
   operator: string | null;
   wait_s: number | null;
+  /** The PBX's raw hangup code (NORMAL_CLEARING for most). */
   reason: string | null;
+  /** What it means: rang · queue · after_hours · no_answer · cancel · tech (null = no PBX record). */
+  reason_kind?: string | null;
   /** How many times this number is in the list. */
   attempts: number;
   /** recalled: reached within the 24h · never: not reached since · late: reached, but after the
@@ -910,6 +916,8 @@ export type MissedCallsResponse = {
     avg_wait_s: number;
     /** Every missed call = the "Propushenniy" card. */
     missed_total: number;
+    /** This list's calls per reason_kind ("unknown" = no PBX record). */
+    reasons?: Record<string, number>;
     /** Only in the "Reaksiya vaqti" list. Seconds are working time unless named clock. */
     reaction?: {
       /** == the "Reaksiya vaqti" card. */
