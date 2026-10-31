@@ -8,6 +8,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ChevronDown, ExternalLink, Phone, User } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
+import { InfoTip } from "@/components/InfoTip";
 import { useBitrixPortal } from "@/lib/api/config";
 import type { ConversionStatsResponse, ResponsibleLeadRow } from "@/lib/api/leads";
 
@@ -112,9 +113,9 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
   const leaders = useMemo(() => {
     const best = (pick: (r: Row) => number) => rows.reduce<Row | null>((b, r) => (!b || pick(r) > pick(b) ? r : b), null);
     return [
-      { key: "otkazildi", medal: "🥇", label: "Eng ko'p tashrif o'tkazildi", row: best(r => r.tashrif_buyurdi), pick: (r: Row) => r.tashrif_buyurdi, val: (r: Row) => fmtNum(r.tashrif_buyurdi), color: METRIC_COLORS.tashrif },
-      { key: "belgilandi", medal: "🥈", label: "Eng ko'p tashrif belgilandi", row: best(r => r.tashrif_belgilandi ?? 0), pick: (r: Row) => r.tashrif_belgilandi ?? 0, val: (r: Row) => fmtNum(r.tashrif_belgilandi ?? 0), color: METRIC_COLORS.belgilandi },
-      { key: "konversiya", medal: "🥉", label: "Eng yuqori konversiya", row: best(conversionOf), pick: conversionOf, val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
+      { key: "otkazildi", medal: "🥇", label: "Eng ko'p tashrif o'tkazildi", info: "Mijozlari eng ko‘p kelib ketgan (tashrif o‘tkazilgan) operator. Kartani bossangiz, top-5 ochiladi.", row: best(r => r.tashrif_buyurdi), pick: (r: Row) => r.tashrif_buyurdi, val: (r: Row) => fmtNum(r.tashrif_buyurdi), color: METRIC_COLORS.tashrif },
+      { key: "belgilandi", medal: "🥈", label: "Eng ko'p tashrif belgilandi", info: "Eng ko‘p tashrif (uchrashuv) belgilagan operator. Kartani bossangiz, top-5 ochiladi.", row: best(r => r.tashrif_belgilandi ?? 0), pick: (r: Row) => r.tashrif_belgilandi ?? 0, val: (r: Row) => fmtNum(r.tashrif_belgilandi ?? 0), color: METRIC_COLORS.belgilandi },
+      { key: "konversiya", medal: "🥉", label: "Eng yuqori konversiya", info: "Konversiyasi eng yuqori operator: tashrif o‘tkazildi ÷ umumiy leadlar × 100. Leadlari kam operatorda foiz tasodifan yuqori chiqishi mumkin — umumiy lidlar sonini ham qarang. Kartani bossangiz, top-5 ochiladi.", row: best(conversionOf), pick: conversionOf, val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
     ].filter(l => l.row);
   }, [rows]);
 
@@ -174,7 +175,10 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {l.row!.full_name || `User ${l.row!.responsible_id}`}
                   </div>
-                  <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 1 }}>{l.label}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--text3)", marginTop: 1 }}>
+                    {l.label}
+                    <InfoTip text={l.info} label={`${l.label} — izoh`} size={12} />
+                  </div>
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: l.color, fontVariantNumeric: "tabular-nums" }}>{l.val(l.row!)}</div>
                 <ChevronDown size={14} style={{ color: "var(--text3)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .18s ease" }} />

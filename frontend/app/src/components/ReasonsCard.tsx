@@ -4,6 +4,7 @@
 import { useRef, useState, type CSSProperties } from "react";
 import { ChevronDown } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
+import { InfoTip } from "@/components/InfoTip";
 import { useBitrixPortal } from "@/lib/api/config";
 import { getReasonLeads, type ReasonLeadRow, type DashFilter } from "@/lib/api/leads";
 
@@ -89,7 +90,16 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
     <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "16px 22px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text)" }}>{title}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text)" }}>
+            {title}
+            <span style={{ textTransform: "none", letterSpacing: 0 }}>
+              <InfoTip
+                text={kind === "cancel"
+                  ? "Hozir “Bekor bo‘ldi” bosqichida turgan leadlar, Bitrix’da yozilgan bekor qilish sababi bo‘yicha guruhlangan. “—” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."
+                  : "Hozir “Sifatsiz (NO)” bosqichida turgan leadlar, Bitrix’da yozilgan sifatsizlik sababi bo‘yicha guruhlangan. “—” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."}
+                label={`${title} — izoh`} size={14} />
+            </span>
+          </div>
           <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
             {kind === "cancel"
               ? "UC_L8G2B9 / Закрыт bosqichidagi leadlar, sabab UF maydonlaridan olinadi."

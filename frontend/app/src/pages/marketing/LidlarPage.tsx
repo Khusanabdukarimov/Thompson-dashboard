@@ -362,9 +362,11 @@ const TD: React.CSSProperties = {
 // bo'yicha, grouped by a UF enum value instead of source_id, each row
 // expandable into a LID/SANA/BOSQICH drill-down (same shape as Manba bo'yicha's).
 function UfBreakdownTable({
-  title, unit, q, selected, setSelected, shown, setShown, listRef, leadsQ, bitrixPortal,
+  title, unit, info, q, selected, setSelected, shown, setShown, listRef, leadsQ, bitrixPortal,
 }: {
   title: string; unit: string;
+  /** What the table groups by, for the "?" badge. */
+  info: string;
   q: { data?: UfBreakdownRow[]; isLoading: boolean };
   selected: string | null; setSelected: (v: string | null) => void;
   shown: number; setShown: React.Dispatch<React.SetStateAction<number>>;
@@ -387,7 +389,10 @@ function UfBreakdownTable({
   return (
     <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
       <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{title}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+          {title}
+          <InfoTip text={<>{info} Uspeshniy lid — kelib ketgan (tashrif o‘tkazilgan) leadlar. Konversiya = uspeshniy ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari ochiladi.</>} label={`${title} — izoh`} size={15} />
+        </span>
         <span style={{ fontSize: 12, color: "var(--text3)" }}>UF enum qiymati bo‘yicha guruhlanadi · jami, sifatli, tashrif, sifatsiz va bekor ko‘rsatkichlari · {rows.length} ta {unit}</span>
       </div>
       {q.isLoading ? (
@@ -1246,28 +1251,28 @@ export default function LidlarPage() {
               <GradCard gradient="linear-gradient(135deg,#0d1b4a,#1a3a7a)" lightGradient="linear-gradient(135deg,rgba(33,150,243,0.07),rgba(33,150,243,0.03))"
                         border="rgba(33,150,243,0.3)" lightBorder="rgba(33,150,243,0.25)"
                         shadow="0 4px 20px rgba(33,150,243,0.15)" icon={<Users size={20} style={{ color:"#2196F3" }} />}
-                        title="Umumiy Lidlar" description="Tanlangan sana va filtrlardagi barcha leadlar." sparkColor="#2196F3" sparkVariant={0} sparkData={daily?.total} sparkLabels={daily?.labels}>
+                        title="Umumiy Lidlar" description="Tanlangan davrda yaratilgan barcha leadlar. Faqat O‘quv markaz, Maktab va Kids loyihalari sanaladi; yuqoridagi filtrlar ham qo‘llanadi. Pastdagi grafik — kunlar bo‘yicha soni." sparkColor="#2196F3" sparkVariant={0} sparkData={daily?.total} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{fmtNum(total)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Umumiy Lid</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.03))"
                         border="rgba(0,188,212,0.3)" lightBorder="rgba(0,188,212,0.25)"
                         shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
-                        title="Sifatli Lidlar" description="Hozirgi bosqichi O‘ylab ko‘radi, Tashrif belgilandi, Kelmadi, Bekor bo‘ldi yoki Muvaffaqiyatli bo‘lgan leadlar." sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
+                        title="Sifatli Lidlar" description="Mijoz bilan gaplashilgan, haqiqiy leadlar: hozirgi bosqichi O‘ylab ko‘radi, Tashrif belgilandi, Kelmadi, Bekor bo‘ldi yoki Muvaffaqiyatli bo‘lganlar. Sifatsiz leadlar bu yerga kirmaydi." sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Sifatli Lid</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#2a1500,#6e3d00)" lightGradient="linear-gradient(135deg,rgba(255,152,0,0.07),rgba(255,152,0,0.03))"
                         border="rgba(255,152,0,0.3)" lightBorder="rgba(255,152,0,0.25)"
                         shadow="0 4px 20px rgba(255,152,0,0.15)" icon={<ArrowLeftRight size={20} style={{ color:"#FF9800" }} />}
-                        title="Jarayonda" description="Bitrix semantikasi P bo‘lgan, yakunlanmagan leadlar." sparkColor="#FF9800" sparkVariant={2} sparkData={daily?.jarayonda} sparkLabels={daily?.labels}>
+                        title="Jarayonda" description="Hali yakunlanmagan leadlar — ustida ish davom etmoqda (na muvaffaqiyatli, na yopilgan). Bitrix’dagi bosqich turi bo‘yicha aniqlanadi." sparkColor="#FF9800" sparkVariant={2} sparkData={daily?.jarayonda} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#FF9800", lineHeight:1.1, marginBottom:3 }}>{fmtNum(jarayondaCount)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Jarayondagi lidlar</div>
               </GradCard>
               <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" lightGradient="linear-gradient(135deg,rgba(76,175,80,0.07),rgba(76,175,80,0.03))"
                         border="rgba(76,175,80,0.3)" lightBorder="rgba(76,175,80,0.25)"
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
-                        title="Yakuniy Konversiya" description="Tashrif o‘tkazildi ÷ umumiy leadlar × 100." sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
+                        title="Yakuniy Konversiya" description="Kelib ketgan mijozlar ulushi: tashrif o‘tkazildi ÷ umumiy leadlar × 100. Pastdagi grafik — har kungi konversiya." sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Tashrif o'tkazildi / umumiy lid</div>
               </GradCard>
@@ -1285,23 +1290,29 @@ export default function LidlarPage() {
                     <Filter size={18} style={{ color:"#2196F3" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize:15, fontWeight:800, color:"var(--text)", lineHeight:1.2 }}>Voronka samaradorligi</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:15, fontWeight:800, color:"var(--text)", lineHeight:1.2 }}>
+                      Voronka samaradorligi
+                      <InfoTip text="Leadlar voronkadan qanchalik o‘tayotganini ko‘rsatadi. Har bir foiz ostida uning hisobi bor: masalan, 47 / 172 — 172 ta leaddan 47 tasi." label="Voronka samaradorligi — izoh" size={14} />
+                    </div>
                     <div style={{ fontSize:11.5, color:"var(--text3)", marginTop:1 }}>Har bir foiz formulasi pastdagi nisbatdan hisoblanadi.</div>
                   </div>
                 </div>
 
                 <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr auto 1fr auto 1fr auto 1fr", alignItems:"stretch", alignContent:"center" }}>
                   {[
-                    { icon:<Percent size={24} />,        val:sifatliKonvPct,  color:"#2196F3", title:"Sifatli Konversiya",     sub:"Sifatli / Umumiy",      num:sifatliLid,       den:total },
-                    { icon:<ArrowLeftRight size={24} />, val:leadToConsultPct, color:"#22C55E", title:"Lid \u2192 Tashrif",       sub:"T.Belgilandi / Umumiy", num:konsultBelgilandi, den:total },
-                    { icon:<Target size={24} />,         val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9333EA", title:"T.O'tkazildi / Belgilandi", sub:"O'tkazildi / Belgilandi", num:konsultOtkazildi, den:konsultBelgilandi },
-                    { icon:<Target size={24} />,         val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0,               color:"#4F46E5", title:"Sifatli \u2192 Uchrashuv",   sub:"O'tkazildi / Sifatli",    num:konsultOtkazildi, den:sifatliLid },
+                    { icon:<Percent size={24} />,        val:sifatliKonvPct,  color:"#2196F3", title:"Sifatli Konversiya",     sub:"Sifatli / Umumiy",      num:sifatliLid,       den:total, info:"Umumiy leadlarning qancha qismi sifatli bo‘ldi: sifatli ÷ umumiy × 100." },
+                    { icon:<ArrowLeftRight size={24} />, val:leadToConsultPct, color:"#22C55E", title:"Lid \u2192 Tashrif",       sub:"T.Belgilandi / Umumiy", num:konsultBelgilandi, den:total, info:"Nechta leadga tashrif (uchrashuv) belgilandi: tashrif belgilangan ÷ umumiy × 100." },
+                    { icon:<Target size={24} />,         val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9333EA", title:"T.O'tkazildi / Belgilandi", sub:"O'tkazildi / Belgilandi", num:konsultOtkazildi, den:konsultBelgilandi, info:"Tashrif belgilanganlardan nechtasi haqiqatda kelib ketdi: tashrif o‘tkazildi ÷ tashrif belgilandi × 100." },
+                    { icon:<Target size={24} />,         val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0,               color:"#4F46E5", title:"Sifatli \u2192 Uchrashuv",   sub:"O'tkazildi / Sifatli",    num:konsultOtkazildi, den:sifatliLid, info:"Sifatli leadlardan nechtasi kelib ketdi: tashrif o‘tkazildi ÷ sifatli × 100." },
                   ].flatMap((m, i) => [
                     <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"6px 16px", gap:12 }}>
                       <div style={{ width:56, height:56, borderRadius:"50%", background:`${m.color}1A`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                         <span style={{ color:m.color, display:"flex" }}>{m.icon}</span>
                       </div>
-                      <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", textAlign:"center", lineHeight:1.25 }}>{m.title}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:700, color:"var(--text)", textAlign:"center", lineHeight:1.25 }}>
+                        {m.title}
+                        <InfoTip text={m.info} label={`${m.title} — izoh`} size={13} />
+                      </div>
                       <div style={{ fontSize:34, fontWeight:800, color:m.color, lineHeight:1, marginTop:6 }}>{m.val.toFixed(1)}%</div>
                       {/* Track with the value marked on it — reads as a position
                           along the funnel rather than a bare number. */}
@@ -1336,7 +1347,7 @@ export default function LidlarPage() {
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
                         Tashriflar
-                        <InfoTip text="Tashrif belgilangan / buyurgan sana maydoni to‘ldirilgan leadlar soni. Hozirgi bosqichdan mustaqil hisoblanadi." label="Tashriflar — izoh" size={14} />
+                        <InfoTip text="Chap raqam — tashrif (uchrashuv) belgilangan leadlar, yashil raqam — haqiqatda kelib ketganlari. Bitrix’dagi “Tashrif belgilandiga tushgan sana” va “Tashrif buyurdiga tushgan sana” maydonlaridan olinadi, shuning uchun lead keyin boshqa bosqichga o‘tgan bo‘lsa ham sanaladi." label="Tashriflar — izoh" size={14} />
                       </div>
                       <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginTop:2 }}>
                         <span style={{ fontSize:34, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
@@ -1366,7 +1377,7 @@ export default function LidlarPage() {
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
                         Sifatsiz
-                        <InfoTip text="JUNK bosqichidagi leadlar" label="Sifatsiz — izoh" size={14} />
+                        <InfoTip text="Hozir “Sifatsiz (NO)” bosqichida turgan leadlar: noto‘g‘ri raqam, dubl, javob bermagan va h.k. Sabablari pastdagi “Sifatsiz sabablari” jadvalida." label="Sifatsiz — izoh" size={14} />
                       </div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:2 }}>{fmtNum(sifatsizBekor)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
@@ -1388,7 +1399,7 @@ export default function LidlarPage() {
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
                         Bekor bo'ldi
-                        <InfoTip text="UC_L8G2B9 / Закрыт bosqichi" label="Bekor bo'ldi — izoh" size={14} />
+                        <InfoTip text="Hozir “Bekor bo‘ldi” (Закрыт) bosqichida turgan leadlar — mijoz qiziqqan, lekin keyin rad etgan. Sabablari pastdagi “Bekor bo‘lish sabablari” jadvalida." label="Bekor bo'ldi — izoh" size={14} />
                       </div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#FFC107", lineHeight:1.1, marginTop:2 }}>{fmtNum(bekorBoldiCount)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor bo'lgan lidlar</div>
@@ -1408,7 +1419,10 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:16 }}>
           <div style={{ padding:"16px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"baseline", gap:10 }}>
-            <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid va Konversiya</span>
+            <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:18, fontWeight:700, color:"var(--text)", alignSelf:"center" }}>
+              Lid va Konversiya
+              <InfoTip text="Har bir operator (lead mas’uli) bo‘yicha: nechta lead olgan, ulardan nechtasi sifatli, jarayonda, sifatsiz yoki bekor bo‘lgan, nechtasiga tashrif belgilangan va nechtasi kelib ketgan. Konversiya = tashrif o‘tkazildi ÷ umumiy leadlar × 100. Yuqoridagi uchta karta — har bir ko‘rsatkich bo‘yicha yetakchi, bosilsa top-5 ochiladi. Operator qatorini bossangiz, uning leadlari chiqadi." label="Lid va Konversiya — izoh" size={15} />
+            </span>
             <span style={{ fontSize:11.5, color:"var(--text3)" }}>
               Operatorlar kesimida: jami, sifatli, jarayondagi, sifatsiz, bekor va tashriflar; konversiya = tashrif / jami
             </span>
@@ -1439,7 +1453,10 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
           <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
-            <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Lid mas'ullar kesimida</span>
+            <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:18, fontWeight:700, color:"var(--text)" }}>
+              Lid mas'ullar kesimida
+              <InfoTip text="Har bir xodimdagi leadlar hozir qaysi bosqichda turganini ko‘rsatadi; ustunlar — Bitrix bosqichlari. Lead hozirgi mas’uli bo‘yicha sanaladi. JAMI — barcha xodimlar yig‘indisi. Qatorni bossangiz, xodimning leadlari ochiladi." label="Lid mas'ullar kesimida — izoh" size={15} />
+            </span>
             <span style={{ fontSize:12, color:"var(--text3)" }}>Leadlar hozirgi mas’ul va bosqich bo‘yicha sanaladi. JAMI — barcha xodimlar yig‘indisi. {byUserFiltered.length} ta xodim</span>
           </div>
 
@@ -1667,7 +1684,10 @@ export default function LidlarPage() {
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Vazifalar kesimida</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+                  Vazifalar kesimida
+                  <InfoTip text="Har bir xodimga berilgan Bitrix vazifalari (tanlangan davrda yaratilganlari). Jarayondagi — hali bajarilmagan; Tugatilgan — bajarilgan; Muddati o‘tgan — muddati o‘tib ketgan, hali bajarilmagan; Muddati o‘tib bajarilgan — kechikib bajarilgan. Bajarilish = tugatilgan ÷ jami × 100. Qatorni bossangiz, vazifalar ro‘yxati ochiladi." label="Vazifalar kesimida — izoh" size={15} />
+                </span>
                 <span style={{ fontSize: 12, color: "var(--text3)" }}>Vazifa yaratilgan sana bo‘yicha filtrlanadi. Kechikish muddati bilan aniqlanadi; bajarilish = tugatilgan / jami × 100. {taskRows.length} ta xodim</span>
               </div>
 
@@ -1942,6 +1962,9 @@ export default function LidlarPage() {
                     </span>
                   </span>
                 ))}
+                <span style={{ display: "flex", marginLeft: 4 }}>
+                  <InfoTip text="Leadlar reklama belgilariga (UTM) qarab guruhlanadi: manba → medium → kampaniya → ad set → reklama → mas’ul. Qatorni bossangiz keyingi darajaga tushasiz; yuqoridagi ko‘k yozuvlarni bosib orqaga qaytasiz. Konversiya = tashrif o‘tkazildi ÷ umumiy leadlar × 100." label="UTM bo'yicha — izoh" size={14} />
+                </span>
                 <span style={{ marginLeft: "auto", fontSize: 12, color: "#555", flexShrink: 0 }}>
                   {loading ? "..." : `${rows.length} ta ${UTM_COUNT_LABELS[utmLevel]}`}
                 </span>
@@ -2048,7 +2071,8 @@ export default function LidlarPage() {
             bo'yicha, under Bekor bo'ldi / Sifatsiz sabablari.
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
-          title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ} bitrixPortal={bitrixPortal}
+          title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ}
+          info="Leadlar Bitrix’dagi “Причина” (Sabab) maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
           selected={selectedReason} setSelected={setSelectedReason}
           shown={shownReasonLeads} setShown={setShownReasonLeads}
           listRef={reasonListRef} leadsQ={reasonLeadsQ}
@@ -2088,7 +2112,10 @@ export default function LidlarPage() {
           return (
             <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Manba bo'yicha</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+                  Manba bo'yicha
+                  <InfoTip text="Leadlar Bitrix’dagi “Источник” (manba) maydoni bo‘yicha guruhlangan. Uspeshniy lid — kelib ketgan (tashrif o‘tkazilgan) leadlar. Konversiya = uspeshniy ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari ochiladi." label="Manba bo'yicha — izoh" size={15} />
+                </span>
                 <span style={{ fontSize: 12, color: "var(--text3)" }}>source_id bo‘yicha guruhlangan: jami, sifatli, jarayondagi, sifatsiz, bekor va tashriflar · {srcRows.length} ta manba</span>
               </div>
               {sourceQ.isLoading ? (
@@ -2267,7 +2294,8 @@ export default function LidlarPage() {
             bo'yicha, grouped by a UF enum field instead of source_id.
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
-          title="Manba 1 bo'yicha" unit="manba" q={source1Q} bitrixPortal={bitrixPortal}
+          title="Manba 1 bo'yicha" unit="manba" q={source1Q}
+          info="Leadlar Bitrix’dagi “Manba 1” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
           selected={selectedSource1} setSelected={setSelectedSource1}
           shown={shownSource1Leads} setShown={setShownSource1Leads}
           listRef={source1ListRef} leadsQ={source1LeadsQ}
@@ -2275,7 +2303,8 @@ export default function LidlarPage() {
         </>)}
         {tabB === "hudud" && (<>
         <UfBreakdownTable
-          title="Hudud bo'yicha" unit="hudud" q={hududQ} bitrixPortal={bitrixPortal}
+          title="Hudud bo'yicha" unit="hudud" q={hududQ}
+          info="Leadlar Bitrix’dagi “Hudud” maydoni bo‘yicha guruhlangan; hududi ko‘rsatilmagan leadlar bu jadvalga kirmaydi." bitrixPortal={bitrixPortal}
           selected={selectedHudud} setSelected={setSelectedHudud}
           shown={shownHududLeads} setShown={setShownHududLeads}
           listRef={hududListRef} leadsQ={hududLeadsQ}
@@ -2287,7 +2316,10 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <div style={{ background:"var(--bg2)", borderRadius:12, overflow:"hidden", marginBottom:24 }}>
           <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
-            <span style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Transfer direction bo'yicha</span>
+            <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:18, fontWeight:700, color:"var(--text)" }}>
+              Transfer direction bo'yicha
+              <InfoTip text="Har bir xodimning leadlari Bitrix’dagi “Transfer direction” maydoni qiymati bo‘yicha taqsimlangan. “Nomalum” — maydon to‘ldirilmagan leadlar. O‘ngda — maydon nechta leadda to‘ldirilgani." label="Transfer direction — izoh" size={15} />
+            </span>
             <span style={{ fontSize:12, color:"var(--text3)" }}>mas'ullar kesimida · {transferRows.length} ta xodim</span>
             <span style={{ fontSize:12, color:"var(--text3)", marginLeft:"auto" }}>
               To'ldirilgan: <b style={{ color:"var(--text)" }}>{fmtNum(transferFilled)}</b> / {fmtNum(transferAll)} ta lid ({fmtFillPct(transferFilled, transferAll)})
