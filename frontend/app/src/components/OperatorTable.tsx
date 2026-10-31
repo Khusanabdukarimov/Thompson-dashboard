@@ -54,9 +54,9 @@ const SUB_TD: React.CSSProperties = { padding: "7px 12px", verticalAlign: "middl
 
 // Stage badge for the expanded lead list, keyed by Bitrix STATUS_ID.
 const STAGE_BADGE: Record<string, { label: string; color: string }> = {
-  NEW: { label: "Zvonki", color: "#9E9E9E" },
+  NEW: { label: "Qo‘ng‘iroqlar", color: "#9E9E9E" },
   UC_IX1SKS: { label: "Yangi lid", color: "#03A9F4" },
-  UC_O7Y5NT: { label: "Propushenniy", color: "#78909C" },
+  UC_O7Y5NT: { label: "O‘tkazib yuborilgan", color: "#78909C" },
   "7": { label: "DPU 1", color: "#FF5722" },
   UC_S5YC0D: { label: "DPU 2", color: "#FF7043" },
   UC_X316SW: { label: "DPU 3", color: "#FF8A65" },
@@ -65,10 +65,10 @@ const STAGE_BADGE: Record<string, { label: string; color: string }> = {
   UC_N0PI5R: { label: "Tashrif belgilandi", color: "#FF9800" },
   UC_SWPARQ: { label: "Kelmadi", color: "#FF00FF" },
   CONVERTED: { label: "Muvaffaqiyatli", color: "#4CAF50" },
-  JUNK: { label: "Sifatsiz (NO)", color: "#42A5F5" },
+  JUNK: { label: "Sifatsiz", color: "#42A5F5" },
   UC_GSPVUS: { label: "Arxiv 30+", color: "#8D6E63" },
   UC_L8G2B9: { label: "Bekor bo'ldi", color: "#616161" },
-  UC_W02434: { label: "Student/Shikoyat/HR", color: "#FFC107" },
+  UC_W02434: { label: "Student | Shikoyat | HR", color: "#FFC107" },
 };
 
 const AVATAR_COLORS = ["#7C4DFF", "#2196F3", "#00BCD4", "#4CAF50", "#FF9800", "#E91E63", "#9C27B0", "#607D8B"];

@@ -16,6 +16,7 @@ import {
   type CallDashboardFilter,
   type PyCallStatsResult, type PyResponsibleCallStats,
 } from "@/lib/api/leads";
+import { leadStageLabel } from "@/lib/leadStages";
 
 // The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or the
 // links point at whichever portal the code was copied from.
@@ -223,7 +224,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
           {calls.map((c, i) => {
             const ct = c.call_type ? CALL_TYPE_LABEL[c.call_type] : null;
             const ok = c.status_code === 200 || (c.duration ?? 0) >= 10;
-            const stageLabel = c.stage_name ?? c.stage_bitrix_id ?? null;
+            const stageLabel = c.stage_name || c.stage_bitrix_id ? leadStageLabel(c.stage_bitrix_id, c.stage_name) : null;
             return (
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <td style={{ padding: "8px 14px", color: "var(--text2)" }}>{i + 1}</td>
@@ -366,7 +367,7 @@ export default function CallStatistikasi() {
                   <select value={filters.stage} onChange={e => update({ stage: e.target.value })} style={selStyle}>
                     <option value="all">Barchasi</option>
                     {(filterOptionsQ.data?.stages ?? []).map(st => (
-                      <option key={st.bitrix_id} value={st.bitrix_id}>{st.name}</option>
+                      <option key={st.bitrix_id} value={st.bitrix_id}>{leadStageLabel(st.bitrix_id, st.name)}</option>
                     ))}
                   </select>
                 </div>

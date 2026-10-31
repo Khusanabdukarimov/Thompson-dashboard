@@ -24,6 +24,7 @@ import {
 import { fmtNum } from "@/lib/utils";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { getConfig } from "@/lib/api/config";
+import { leadStageLabel } from "@/lib/leadStages";
 
 // The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or
 // links point at whichever portal the code was copied from.
@@ -84,24 +85,24 @@ const TASK_STATUS: Record<string, { label: string; color: string }> = {
 };
 
 const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
-  NEW:               { label: "Zvonki",             color: "#9E9E9E" },
+  NEW:               { label: "Qo‘ng‘iroqlar",           color: "#9E9E9E" },
   UC_N0PI5R:         { label: "Tashrif belgilandi",  color: "#FF9800" },
   "1":               { label: "O'ylab ko'radi",      color: "#607D8B" },
   UC_IX1SKS:         { label: "Yangi lid",           color: "#03A9F4" },
-  UC_O7Y5NT:         { label: "Propushenniy",        color: "#78909C" },
+  UC_O7Y5NT:         { label: "O‘tkazib yuborilgan",      color: "#78909C" },
   "7":               { label: "DPU 1",               color: "#FF5722" },
   UC_S5YC0D:         { label: "DPU 2",               color: "#FF7043" },
   UC_X316SW:         { label: "DPU 3",               color: "#FF8A65" },
   UC_63QL7L:         { label: "Qayta aloqa",         color: "#26C6DA" },
   UC_SWPARQ:         { label: "Kelmadi",             color: "#FF00FF" },
   CONVERTED:         { label: "Muvaffaqiyatli",      color: "#4CAF50" },
-  JUNK:              { label: "Sandiq (JUNK)",       color: "#42A5F5" },
+  JUNK:              { label: "Sifatsiz",            color: "#42A5F5" },
   UC_GSPVUS:         { label: "Arxiv 30+",           color: "#8D6E63" },
-  UC_L8G2B9:         { label: "Yopildi",             color: "#616161" },
-  UC_W02434:         { label: "Student/HR",          color: "#FFC107" },
+  UC_L8G2B9:         { label: "Bekor bo'ldi",        color: "#616161" },
+  UC_W02434:         { label: "Student | Shikoyat | HR",       color: "#FFC107" },
   // Legacy stage codes, superseded by the ones above but kept for old leads.
   IN_PROCESS:        { label: "Yangi lid",           color: "#2196F3" },
-  PROCESSED:         { label: "Propushenniy",        color: "#9E9E9E" },
+  PROCESSED:         { label: "O‘tkazib yuborilgan",      color: "#9E9E9E" },
   UC_1KPATX:         { label: "Javob bermadi",       color: "#FF9800" },
   NO_ANSWER:         { label: "Javob bermadi",       color: "#FF9800" },
   UC_Q2U9EL:         { label: "Qayta aloqa",         color: "#00BCD4" },
@@ -112,7 +113,7 @@ const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   CONSULTATION:      { label: "Tashrif belgilandi",  color: "#9C27B0" },
   UC_5G8244:         { label: "Kelmadi",             color: "#FF00FF" },
   NOT_TRANSFERRED:   { label: "Kelmadi",             color: "#FF00FF" },
-  ARCHIVE:           { label: "Sandiq",              color: "#42A5F5" },
+  ARCHIVE:           { label: "Arxiv",               color: "#42A5F5" },
   UC_F8K4GI:         { label: "Sifatsiz",            color: "#F44336" },
   UC_NAZK5J:         { label: "Bekor bo'ldi",        color: "#FFC107" },
   RECYCLED:          { label: "Bekor bo'ldi",        color: "#FFC107" },
@@ -198,8 +199,8 @@ const UTM_COLS_DEF = [
   { key: "umumiy_lidlar"            as const, label: "UMUMIY LIDLAR",             color: "#2196F3" },
   { key: "jarayonda"                as const, label: "JARAYONDA",                 color: "#FF9800" },
   { key: "sifatli_lid"              as const, label: "SIFATLI LID",               color: "#9C27B0" },
-  { key: "konsultatsiya_belgilandi" as const, label: "KONSULTATSIYA BELGILANDI",  color: "#2196F3" },
-  { key: "konsultatsiya_otkazildi"  as const, label: "KONSULTATSIYA O'TKAZILDI",  color: "#4CAF50" },
+  { key: "konsultatsiya_belgilandi" as const, label: "TASHRIF BELGILANDI",        color: "#2196F3" },
+  { key: "konsultatsiya_otkazildi"  as const, label: "TASHRIF O'TKAZILDI",        color: "#4CAF50" },
   { key: "sifatsiz"                 as const, label: "SIFATSIZ",                  color: "#F44336" },
   { key: "bekor_boldi"              as const, label: "BEKOR BO'LDI",              color: "#FFC107" },
 ] as const;
@@ -391,9 +392,9 @@ function UfBreakdownTable({
       <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
         <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
           {title}
-          <InfoTip text={<>{info} Uspeshniy lid — kelib ketgan (tashrif o‘tkazilgan) leadlar. Konversiya = uspeshniy ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari ochiladi.</>} label={`${title} — izoh`} size={15} />
+          <InfoTip text={<>{info} Tashrif o‘tkazildi — kelib ketgan mijozlar. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari ochiladi.</>} label={`${title} — izoh`} size={15} />
         </span>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>UF enum qiymati bo‘yicha guruhlanadi · jami, sifatli, tashrif, sifatsiz va bekor ko‘rsatkichlari · {rows.length} ta {unit}</span>
+        <span style={{ fontSize: 12, color: "var(--text3)" }}>Bitrix maydoni qiymati bo‘yicha: jami, sifatli, tashrif, sifatsiz va bekor · {rows.length} ta {unit}</span>
       </div>
       {q.isLoading ? (
         <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -408,7 +409,7 @@ function UfBreakdownTable({
                 <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
                 <th style={TH("#00BCD4")}>SIFATLI LID</th>
                 <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
-                <th style={TH("#4CAF50")}>USPESHNIY LID</th>
+                <th style={TH("#4CAF50")}>TASHRIF O'TKAZILDI</th>
                 <th style={TH("#F44336")}>SIFATSIZ</th>
                 <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
                 <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
@@ -881,7 +882,7 @@ export default function LidlarPage() {
   const stageCols = useMemo(
     () => (filterOpts?.stages ?? []).map((s) => ({
       key: s.bitrix_id,
-      label: s.name,
+      label: leadStageLabel(s.bitrix_id, s.name),
       color: stageColor(s.bitrix_id),
     })),
     [filterOpts]
@@ -891,7 +892,7 @@ export default function LidlarPage() {
   // the static map, then to the raw id only if the stage is unknown to both.
   const stageName = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of filterOpts?.stages ?? []) m.set(s.bitrix_id, s.name);
+    for (const s of filterOpts?.stages ?? []) m.set(s.bitrix_id, leadStageLabel(s.bitrix_id, s.name));
     return m;
   }, [filterOpts]);
 
@@ -1046,7 +1047,7 @@ export default function LidlarPage() {
                 {/* Yaratilgan sana — range picker and the quick presets share one row,
                     so the applied range is always visible next to the shortcut that set it. */}
                 <div style={{ marginBottom: 14 }}>
-                  <label title="Дата создания" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  <label title="Lead yaratilgan sana" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
                     <Calendar size={12} />{mode === 'amocrm' ? "Yaratilgan sana (amoCRM)" : "Yaratilgan sana"}
                   </label>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1112,7 +1113,7 @@ export default function LidlarPage() {
                 </div>
 
                 <div style={{ marginBottom: 14 }}>
-                  <label title="Дата закрытия" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  <label title="Lead yopilgan sana" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
                     <Calendar size={12} />Yopilgan sana
                   </label>
                   <DateRangePicker
@@ -1138,7 +1139,7 @@ export default function LidlarPage() {
                   />
                   <MultiSelect
                     label="Bosqich" icon={<Filter size={12} />}
-                    options={(filterOpts?.stages ?? []).map(s => ({ value: s.bitrix_id, label: s.name }))}
+                    options={(filterOpts?.stages ?? []).map(s => ({ value: s.bitrix_id, label: leadStageLabel(s.bitrix_id, s.name) }))}
                     values={applied.stages ?? []}
                     exclude={!!applied.excludes?.stages}
                     onExcludeChange={(b) => setApplied(p => ({ ...p, excludes: { ...p.excludes, stages: b } }))}
@@ -1377,7 +1378,7 @@ export default function LidlarPage() {
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
                         Sifatsiz
-                        <InfoTip text="Hozir “Sifatsiz (NO)” bosqichida turgan leadlar: noto‘g‘ri raqam, dubl, javob bermagan va h.k. Sabablari pastdagi “Sifatsiz sabablari” jadvalida." label="Sifatsiz — izoh" size={14} />
+                        <InfoTip text="Hozir “Sifatsiz” bosqichida turgan leadlar: noto‘g‘ri raqam, dubl, javob bermagan va h.k. Sabablari pastdagi “Sifatsiz sabablari” jadvalida." label="Sifatsiz — izoh" size={14} />
                       </div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#F44336", lineHeight:1.1, marginTop:2 }}>{fmtNum(sifatsizBekor)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Sifatsiz lidlar</div>
@@ -1399,7 +1400,7 @@ export default function LidlarPage() {
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
                         Bekor bo'ldi
-                        <InfoTip text="Hozir “Bekor bo‘ldi” (Закрыт) bosqichida turgan leadlar — mijoz qiziqqan, lekin keyin rad etgan. Sabablari pastdagi “Bekor bo‘lish sabablari” jadvalida." label="Bekor bo'ldi — izoh" size={14} />
+                        <InfoTip text="Hozir “Bekor bo‘ldi” bosqichida turgan leadlar — mijoz qiziqqan, lekin keyin rad etgan. Sabablari pastdagi “Bekor bo‘lish sabablari” jadvalida." label="Bekor bo'ldi — izoh" size={14} />
                       </div>
                       <div style={{ fontSize:34, fontWeight:800, color:"#FFC107", lineHeight:1.1, marginTop:2 }}>{fmtNum(bekorBoldiCount)}</div>
                       <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)", marginTop:2 }}>Bekor bo'lgan lidlar</div>
@@ -2072,7 +2073,7 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
           title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ}
-          info="Leadlar Bitrix’dagi “Причина” (Sabab) maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
+          info="Leadlar Bitrix’dagi “Sabab” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
           selected={selectedReason} setSelected={setSelectedReason}
           shown={shownReasonLeads} setShown={setShownReasonLeads}
           listRef={reasonListRef} leadsQ={reasonLeadsQ}
@@ -2114,9 +2115,9 @@ export default function LidlarPage() {
               <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
                   Manba bo'yicha
-                  <InfoTip text="Leadlar Bitrix’dagi “Источник” (manba) maydoni bo‘yicha guruhlangan. Uspeshniy lid — kelib ketgan (tashrif o‘tkazilgan) leadlar. Konversiya = uspeshniy ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari ochiladi." label="Manba bo'yicha — izoh" size={15} />
+                  <InfoTip text="Leadlar Bitrix’dagi “Manba” maydoni bo‘yicha guruhlangan. Tashrif o‘tkazildi — kelib ketgan mijozlar. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari ochiladi." label="Manba bo'yicha — izoh" size={15} />
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>source_id bo‘yicha guruhlangan: jami, sifatli, jarayondagi, sifatsiz, bekor va tashriflar · {srcRows.length} ta manba</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>Lead manbasi bo‘yicha: jami, sifatli, tashrif, sifatsiz va bekor · {srcRows.length} ta manba</span>
               </div>
               {sourceQ.isLoading ? (
                 <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
@@ -2131,7 +2132,7 @@ export default function LidlarPage() {
                         <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
                         <th style={TH("#00BCD4")}>SIFATLI LID</th>
                         <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
-                        <th style={TH("#4CAF50")}>USPESHNIY LID</th>
+                        <th style={TH("#4CAF50")}>TASHRIF O'TKAZILDI</th>
                         <th style={TH("#F44336")}>SIFATSIZ</th>
                         <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
                         <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>

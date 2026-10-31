@@ -96,14 +96,14 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
               <InfoTip
                 text={kind === "cancel"
                   ? "Hozir “Bekor bo‘ldi” bosqichida turgan leadlar, Bitrix’da yozilgan bekor qilish sababi bo‘yicha guruhlangan. “—” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."
-                  : "Hozir “Sifatsiz (NO)” bosqichida turgan leadlar, Bitrix’da yozilgan sifatsizlik sababi bo‘yicha guruhlangan. “—” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."}
+                  : "Hozir “Sifatsiz” bosqichida turgan leadlar, Bitrix’da yozilgan sifatsizlik sababi bo‘yicha guruhlangan. “—” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."}
                 label={`${title} — izoh`} size={14} />
             </span>
           </div>
           <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
             {kind === "cancel"
-              ? "UC_L8G2B9 / Закрыт bosqichidagi leadlar, sabab UF maydonlaridan olinadi."
-              : "JUNK / Sifatsiz bosqichidagi leadlar, sabab UF maydonlaridan olinadi."}
+              ? "“Bekor bo‘ldi” bosqichidagi leadlar, Bitrix’da yozilgan sabab bo‘yicha."
+              : "“Sifatsiz” bosqichidagi leadlar, Bitrix’da yozilgan sabab bo‘yicha."}
           </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>

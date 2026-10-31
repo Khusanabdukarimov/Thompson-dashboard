@@ -13,6 +13,7 @@ import {
 import type { MonthKey, PageForm } from "@/lib/api/meta";
 import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
+import { leadStageLabel } from "@/lib/leadStages";
 
 
 
@@ -121,7 +122,7 @@ function CreativeLeadsPanel({ adsetName, month, year, from, to }: { adsetName: s
                     {hasDeal
                       ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: "#22c55e", background: "#22c55e22" }}>{l.deal_stage_name || "Sdelka"}</span>
                       : l.stage_name
-                        ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>{l.stage_name}</span>
+                        ? <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>{leadStageLabel(null, l.stage_name)}</span>
                         : <div className="flex flex-col gap-0.5"><span className="text-[10.5px] text-text3 italic">Bitrix24 da yo'q</span>{reason !== "Bitrix24 da yo'q" && <span className="text-[10px] font-semibold px-1 py-0.5 rounded w-fit" style={{ color: reasonColor, background: reasonColor + "22" }}>{reason}</span>}</div>
                     }
                   </td>
@@ -215,7 +216,7 @@ function LeadsSubTable({ formId, campaignId, from, to }: { formId: string; campa
                   <td className="px-4 py-2">
                     {l.stage_name ? (
                       <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ color: stageColor, background: stageColor + "22" }}>
-                        {l.stage_name}
+                        {leadStageLabel(null, l.stage_name)}
                       </span>
                     ) : (
                       <span className="text-text3 italic text-[10.5px]">Bitrix24 da yo'q</span>

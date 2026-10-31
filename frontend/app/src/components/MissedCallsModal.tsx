@@ -4,6 +4,7 @@ import { PhoneMissed, HelpCircle, X, ChevronDown, Clock } from "lucide-react";
 import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
+import { leadStageLabel } from "@/lib/leadStages";
 
 /**
  * The lists behind three cards of the call page, one dialog for all:
@@ -347,7 +348,7 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
                             : <i style={{ color: "var(--text3)" }}>Bitrix24 da yo'q</i>}
                         </td>
                         <td style={{ ...TD, color: "var(--text)" }}>{it.responsible || "—"}</td>
-                        <td style={TD}>{it.stage_name ? <span style={pill("#9C27B0")}>{it.stage_name}</span> : "—"}</td>
+                        <td style={TD}>{it.stage_name ? <span style={pill("#9C27B0")}>{leadStageLabel(null, it.stage_name)}</span> : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
