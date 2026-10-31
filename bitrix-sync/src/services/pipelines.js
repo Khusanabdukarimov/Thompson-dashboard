@@ -157,4 +157,16 @@ function categoryCond(categoryId, alias = 's') {
     : `${alias}.bitrix_id LIKE 'C${Number(categoryId)}:%'`;
 }
 
-module.exports = { PIPELINES, SOURCE1_FIELD, FILIAL_FIELD, getPipeline, getStages, getEnumLabels, categoryCond };
+/** Fill the stage / field caches at startup, so no page request waits on Bitrix for them. */
+function warmPipelineCaches() {
+  const fields = new Set([SOURCE1_FIELD, FILIAL_FIELD]);
+  const jobs = [];
+  for (const p of Object.values(PIPELINES)) {
+    jobs.push(getStages(p.categoryId));
+    if (p.reasonField) fields.add(p.reasonField);
+  }
+  for (const f of fields) jobs.push(getEnumLabels(f));
+  return Promise.allSettled(jobs);
+}
+
+module.exports = { PIPELINES, SOURCE1_FIELD, FILIAL_FIELD, getPipeline, getStages, getEnumLabels, categoryCond, warmPipelineCaches };

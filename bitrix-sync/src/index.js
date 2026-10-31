@@ -203,6 +203,7 @@ Promise.all([
     // Failed lead webhooks are retried hourly and the last 48 h re-pulled
     // nightly, so a Bitrix/DB timeout delays a lead instead of losing it.
     require('./services/leadRecovery').startLeadRecovery();
+    require('./services/pipelines').warmPipelineCaches();
     console.log(`[bitrix-sync] Server running on port ${PORT}`);
 
     // Check Meta access token expiry on startup
