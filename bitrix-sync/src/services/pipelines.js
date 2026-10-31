@@ -72,6 +72,37 @@ const PRICHINA_SNAPSHOT = {
 
 const STAGE_TTL_MS = 10 * 60_000;
 const ENUM_TTL_MS = 60 * 60_000;
+// When Bitrix does not answer, the fallback is kept this long before Bitrix is asked again,
+// and these lookups give up sooner than the default 30 s. Before, every page request waited
+// out a fresh 30 s timeout per stage list and per field (2026-10-31: the portal stopped
+// answering this server and Sdelkalar hung on "Yuklanmoqda…").
+const RETRY_AFTER_FAIL_MS = 2 * 60_000;
+const META_TIMEOUT_MS = 10_000;
+
+/**
+ * Cached read with a fallback: one Bitrix request at a time per key (concurrent callers share
+ * it), the result kept for `ttl`; on failure the stale value (or `fallback()`) is served and
+ * kept for RETRY_AFTER_FAIL_MS.
+ */
+function cachedLookup(cache, key, ttl, load, fallback, label) {
+  const hit = cache.get(key);
+  if (hit && Date.now() < hit.until) return Promise.resolve(hit.value);
+  if (hit?.pending) return hit.pending;
+  const pending = load()
+    .then((value) => {
+      cache.set(key, { value, until: Date.now() + ttl });
+      return value;
+    })
+    .catch((err) => {
+      console.warn(`[pipelines] ${label} failed, using ${hit ? 'last good copy' : 'snapshot'}:`, err.message);
+      // Serve a stale cache before the snapshot — it reflects Bitrix more recently.
+      const value = hit ? hit.value : fallback();
+      cache.set(key, { value, until: Date.now() + RETRY_AFTER_FAIL_MS });
+      return value;
+    });
+  cache.set(key, { ...(hit || { value: undefined, until: 0 }), pending });
+  return pending;
+}
 
 /**
  * Bitrix kanban semantics: the WON stage is the success column, every stage
@@ -87,48 +118,31 @@ function classify(rawStages) {
   }));
 }
 
-const stageCache = new Map(); // categoryId -> { at, stages }
+const stageCache = new Map(); // categoryId -> { value, until, pending? }
 
-async function getStages(categoryId) {
-  const hit = stageCache.get(categoryId);
-  if (hit && Date.now() - hit.at < STAGE_TTL_MS) return hit.stages;
-  let stages;
-  try {
-    const res = await bitrixCall('crm.dealcategory.stage.list', { id: categoryId });
+function getStages(categoryId) {
+  return cachedLookup(stageCache, categoryId, STAGE_TTL_MS, async () => {
+    const res = await bitrixCall('crm.dealcategory.stage.list', { id: categoryId }, META_TIMEOUT_MS);
     const list = res.result || [];
     if (!list.length) throw new Error('empty stage list');
-    stages = classify(list.map(s => ({
+    return classify(list.map(s => ({
       id: s.STATUS_ID, name: s.NAME || s.STATUS_ID, sort: parseInt(s.SORT, 10) || 0,
       color: s.COLOR || s.EXTRA?.COLOR || null,
     })));
-  } catch (err) {
-    console.warn(`[pipelines] stage list for category ${categoryId} failed, using snapshot:`, err.message);
-    // Serve a stale cache before the snapshot — it reflects Bitrix more recently.
-    if (hit) return hit.stages;
-    stages = classify((STAGE_SNAPSHOT[categoryId] || []).map(([id, name, sort]) => ({ id, name, sort, color: null })));
-  }
-  stageCache.set(categoryId, { at: Date.now(), stages });
-  return stages;
+  }, () => classify((STAGE_SNAPSHOT[categoryId] || []).map(([id, name, sort]) => ({ id, name, sort, color: null }))),
+  `stage list for category ${categoryId}`);
 }
 
-const enumCache = new Map(); // fieldCode -> { at, labels }
+const enumCache = new Map(); // fieldCode -> { value, until, pending? }
 
-async function getEnumLabels(fieldCode) {
-  const hit = enumCache.get(fieldCode);
-  if (hit && Date.now() - hit.at < ENUM_TTL_MS) return hit.labels;
-  let labels;
-  try {
-    const res = await bitrixCall('crm.deal.fields', {});
+function getEnumLabels(fieldCode) {
+  return cachedLookup(enumCache, fieldCode, ENUM_TTL_MS, async () => {
+    const res = await bitrixCall('crm.deal.fields', {}, META_TIMEOUT_MS);
     const items = res.result?.[fieldCode]?.items || [];
     if (!items.length) throw new Error(`no enum items for ${fieldCode}`);
-    labels = Object.fromEntries(items.map(i => [String(i.ID), i.VALUE]));
-  } catch (err) {
-    console.warn(`[pipelines] enum labels for ${fieldCode} failed, using snapshot:`, err.message);
-    if (hit) return hit.labels;
-    labels = fieldCode === PIPELINES.uc.reasonField ? { ...PRICHINA_SNAPSHOT } : {};
-  }
-  enumCache.set(fieldCode, { at: Date.now(), labels });
-  return labels;
+    return Object.fromEntries(items.map(i => [String(i.ID), i.VALUE]));
+  }, () => (fieldCode === PIPELINES.uc.reasonField ? { ...PRICHINA_SNAPSHOT } : {}),
+  `enum labels for ${fieldCode}`);
 }
 
 function getPipeline(key) {

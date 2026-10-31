@@ -148,9 +148,9 @@ async function fetchOne(method, id) {
 /**
  * Call a single Bitrix24 method with arbitrary params (GET-style).
  */
-async function bitrixCall(method, params = {}) {
+async function bitrixCall(method, params = {}, timeoutMs = undefined) {
   const url = buildUrl(method, params);
-  return httpGet(url);
+  return httpGet(url, timeoutMs);
 }
 
 /**
