@@ -82,12 +82,13 @@ const META_TIMEOUT_MS = 10_000;
 /**
  * Cached read with a fallback: one Bitrix request at a time per key (concurrent callers share
  * it), the result kept for `ttl`; on failure the stale value (or `fallback()`) is served and
- * kept for RETRY_AFTER_FAIL_MS.
+ * kept for RETRY_AFTER_FAIL_MS. Once a value exists, an expired one is served at once and
+ * refreshed in the background, so only the very first read after a restart waits on Bitrix.
  */
 function cachedLookup(cache, key, ttl, load, fallback, label) {
   const hit = cache.get(key);
   if (hit && Date.now() < hit.until) return Promise.resolve(hit.value);
-  if (hit?.pending) return hit.pending;
+  if (hit?.pending) return hit.value !== undefined ? Promise.resolve(hit.value) : hit.pending;
   const pending = load()
     .then((value) => {
       cache.set(key, { value, until: Date.now() + ttl });
@@ -101,7 +102,7 @@ function cachedLookup(cache, key, ttl, load, fallback, label) {
       return value;
     });
   cache.set(key, { ...(hit || { value: undefined, until: 0 }), pending });
-  return pending;
+  return hit && hit.value !== undefined ? Promise.resolve(hit.value) : pending;
 }
 
 /**
