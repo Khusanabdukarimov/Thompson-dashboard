@@ -315,7 +315,10 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                     {stageLabel ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 11.5, fontWeight: 600, color: tone, background: `${tone}14`, border: `1px solid ${tone}33`, borderRadius: 6, padding: "2px 8px", whiteSpace: "nowrap" }}>{stageLabel}</span>
-                        {c.stage_reason && <span style={{ fontSize: 12, color: "var(--text2)" }} title="Bitrix'da yozilgan sabab">{c.stage_reason}</span>}
+                        {c.stage_reason
+                          ? <span style={{ fontSize: 12, color: "var(--text2)" }} title="Bitrix'da yozilgan sabab">{c.stage_reason}</span>
+                          : (c.stage_bitrix_id === "JUNK" || c.stage_bitrix_id === "UC_L8G2B9") &&
+                            <span style={{ fontSize: 11.5, color: "var(--text3)", fontStyle: "italic" }} title="Bitrix'da sabab maydonlari to'ldirilmagan">sabab yozilmagan</span>}
                       </span>
                     ) : <span style={{ color: "var(--text3)" }}>—</span>}
                   </td>

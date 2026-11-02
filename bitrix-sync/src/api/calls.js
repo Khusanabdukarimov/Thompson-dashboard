@@ -7,12 +7,7 @@ const { describeSchedules, DEFAULT_SCHEDULE } = require('../config/workHours');
 
 const router = Router();
 
-// Lead fields holding why a lead is Bekor bo'ldi / Sifatsiz (enum + Maktab's text field), as in
-// api/dashboard.js cancel-reasons / junk-reasons.
-const REASON_FIELDS = {
-  bekor:    ['UF_CRM_1770976355232', 'UF_CRM_BEKOR_BO_LDI_603C521DDE90'],
-  sifatsiz: ['UF_CRM_1770282341169', 'UF_CRM_SIFATSIZ_LID_0A5800E2C439'],
-};
+const { REASON_FIELDS } = require('../config/leadReasons');
 
 const fail = (res, tag) => (err) => {
   console.error(`[calls/${tag}] ${err.message}`);
@@ -598,10 +593,10 @@ router.get('/call-list', async (req, res) => {
          SELECT COALESCE(re.value, rv.value) AS reason
          FROM lead_uf_values rv
          LEFT JOIN lead_uf_enums re ON re.field_code = rv.field_code AND re.enum_id = rv.value
-         WHERE rv.lead_id = ld.lead_id AND rv.value <> ''
-           AND rv.field_code = ANY(CASE ld.stage_bitrix_id WHEN 'UC_L8G2B9' THEN $8::text[] ELSE $9::text[] END)
-           AND TRIM(COALESCE(re.value, rv.value)) NOT IN ('—', '-', '')   -- a dash option is "not given"
-         ORDER BY rv.field_code
+         CROSS JOIN LATERAL (SELECT CASE ld.stage_bitrix_id WHEN 'UC_L8G2B9' THEN $8::text[] ELSE $9::text[] END AS fields) f
+         WHERE rv.lead_id = ld.lead_id AND rv.field_code = ANY(f.fields)
+           AND TRIM(COALESCE(re.value, rv.value)) NOT IN ('', '—', '-', 'false')   -- a dash option is "not given"
+         ORDER BY array_position(f.fields, rv.field_code)   -- first filled field wins (config/leadReasons.js)
          LIMIT 1
        ) rs ON ld.stage_bitrix_id IN ('UC_L8G2B9', 'JUNK')
        WHERE ($6::text IS NULL OR ld.stage_bitrix_id = $6::text)

@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFrom, tzTo, tzFromOpt, tzToOpt } = require('./tzDate');
+const { REASON_FIELDS, reasonPickJoin } = require('../config/leadReasons');
 const { DELETED, DELETED_NAME, sourceKey, deletedMatch, emptyMatch, sourceOptionsSql } = require('./sourceBucket');
 const { REGIONS, REGION_OTHER } = require('../config/regions');
 const fs = require('fs');
@@ -103,29 +104,9 @@ const leadScopeCond = (col) =>
 // carried that portal's enum ids, so nothing matched here and leads.uf_*_reason
 // ended up 0% filled — every reason rendered as "Noma'lum" despite 11,002
 // values sitting in lead_uf_values.
-const REASON_BEKOR    = 'UF_CRM_1770976355232'; // O'quv markaz cancellation reason
-const REASON_BEKOR_TEXT = 'UF_CRM_BEKOR_BO_LDI_603C521DDE90'; // Maktab text reason
-const REASON_SIFATSIZ = 'UF_CRM_1770282341169'; // Sifatsizlik sababini belgilang (LC)
-const REASON_SIFATSIZ_TEXT = 'UF_CRM_SIFATSIZ_LID_0A5800E2C439'; // Maktab text reason
-
-/** Reason label for a lead, joined off the enum dictionary. */
-const reasonJoin = (field) => `
-  LEFT JOIN lead_uf_values rv ON rv.lead_id = l.id
-        AND rv.field_code = '${field}' AND rv.value <> ''
-  LEFT JOIN lead_uf_enums  re ON re.field_code = rv.field_code
-        AND re.enum_id = rv.value`;
-
-const cancelReasonJoin = `
-  LEFT JOIN lead_uf_values rv ON rv.lead_id = l.id
-        AND rv.field_code IN ('${REASON_BEKOR}', '${REASON_BEKOR_TEXT}') AND rv.value <> ''
-  LEFT JOIN lead_uf_enums re ON re.field_code = rv.field_code
-        AND re.enum_id = rv.value`;
-
-const junkReasonJoin = `
-  LEFT JOIN lead_uf_values rv ON rv.lead_id = l.id
-        AND rv.field_code IN ('${REASON_SIFATSIZ}', '${REASON_SIFATSIZ_TEXT}') AND rv.value <> ''
-  LEFT JOIN lead_uf_enums re ON re.field_code = rv.field_code
-        AND re.enum_id = rv.value`;
+// One reason per lead (rr.reason) across every project's reason field — see config/leadReasons.js.
+const cancelReasonJoin = reasonPickJoin(REASON_FIELDS.bekor);
+const junkReasonJoin   = reasonPickJoin(REASON_FIELDS.sifatsiz);
 
 // Optional enum filters, each an AND over lead_uf_values. Enum ids are numeric,
 // so they are validated as digits and inlined — parameterising four
@@ -637,7 +618,7 @@ router.get('/cancel-reasons', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(re.value, rv.value, 'Noma''lum') AS reason,
+         COALESCE(rr.reason, 'Noma''lum') AS reason,
          COUNT(*)::int AS total
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'UC_L8G2B9'
@@ -647,7 +628,7 @@ router.get('/cancel-reasons', async (req, res) => {
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
-       GROUP BY COALESCE(re.value, rv.value, 'Noma''lum')
+       GROUP BY COALESCE(rr.reason, 'Noma''lum')
        ORDER BY total DESC`,
       params
     );
@@ -677,8 +658,8 @@ router.get('/reason-leads', async (req, res) => {
   const isJunk = kind === 'junk';
   const stage  = isJunk ? 'JUNK' : 'UC_L8G2B9';
   const reasonJoinSql = isJunk ? junkReasonJoin : cancelReasonJoin;
-  const reasonMatchSql = '(re.value = $5::text OR rv.value = $5::text)';
-  const reasonUnknownSql = '(re.value IS NULL AND rv.value IS NULL)';
+  const reasonMatchSql = 'rr.reason = $5::text';
+  const reasonUnknownSql = 'rr.reason IS NULL';
   // Barchasi asks for a whole reason at once; 5000 is well above the
   // largest bucket and still bounds a malformed request.
   const limit  = Math.min(5000, parseInt(req.query.limit, 10) || 8);
@@ -714,7 +695,7 @@ router.get('/junk-reasons', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
-         COALESCE(re.value, rv.value, 'Noma''lum') AS reason,
+         COALESCE(rr.reason, 'Noma''lum') AS reason,
          COUNT(*)::int AS total
        FROM leads l
        JOIN stages s ON s.id = l.stage_id AND s.bitrix_id = 'JUNK'
@@ -724,7 +705,7 @@ router.get('/junk-reasons', async (req, res) => {
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
-       GROUP BY COALESCE(re.value, rv.value, 'Noma''lum')
+       GROUP BY COALESCE(rr.reason, 'Noma''lum')
        ORDER BY total DESC`,
       params
     );
