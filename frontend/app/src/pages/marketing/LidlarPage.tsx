@@ -13,6 +13,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { ReasonsCard } from "@/components/ReasonsCard";
 import { OperatorTable } from "@/components/OperatorTable";
 import { RevivedLeadsCard } from "@/components/RevivedLeadsCard";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
@@ -364,9 +365,9 @@ const TD: React.CSSProperties = {
 // bo'yicha, grouped by a UF enum value instead of source_id, each row
 // expandable into a LID/SANA/BOSQICH drill-down (same shape as Manba bo'yicha's).
 function UfBreakdownTable({
-  title, unit, info, q, selected, setSelected, shown, setShown, listRef, leadsQ, bitrixPortal,
+  title, info, q, selected, setSelected, shown, setShown, listRef, leadsQ, bitrixPortal,
 }: {
-  title: string; unit: string;
+  title: string;
   /** What the table groups by, for the "?" badge. */
   info: string;
   q: { data?: UfBreakdownRow[]; isLoading: boolean };
@@ -395,10 +396,9 @@ function UfBreakdownTable({
           {title}
           <InfoTip text={<>{info} Tashrif o‘tkazildi — kelib ketgan mijozlar. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari ochiladi.</>} label={`${title} — izoh`} size={15} />
         </span>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>Bitrix maydoni qiymati bo‘yicha: jami, sifatli, tashrif, sifatsiz va bekor · {rows.length} ta {unit}</span>
       </div>
       {q.isLoading ? (
-        <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+        <LoadingRows />
       ) : rows.length === 0 ? (
         <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
       ) : (
@@ -468,7 +468,7 @@ function UfBreakdownTable({
                       <td colSpan={9} style={{ padding: "0 12px 12px" }}>
                         <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                           {leadsQ.isLoading ? (
-                            <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                            <LoadingRows rows={3} />
                           ) : !leads.length ? (
                             <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                           ) : (
@@ -663,6 +663,7 @@ export default function LidlarPage() {
   const bitrixPortal = useBitrixPortal();
 
   const [applied, setApplied] = useLocalStorage<DashFilter>("lidlar.filter.v4", getDefaultFilter());
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -1296,7 +1297,6 @@ export default function LidlarPage() {
                       Voronka samaradorligi
                       <InfoTip text="Leadlar voronkadan qanchalik o‘tayotganini ko‘rsatadi. Har bir foiz ostida uning hisobi bor: masalan, 47 / 172 — 172 ta leaddan 47 tasi." label="Voronka samaradorligi — izoh" size={14} />
                     </div>
-                    <div style={{ fontSize:11.5, color:"var(--text3)", marginTop:1 }}>Har bir foiz formulasi pastdagi nisbatdan hisoblanadi.</div>
                   </div>
                 </div>
 
@@ -1425,9 +1425,6 @@ export default function LidlarPage() {
               Lid va Konversiya
               <InfoTip text="Har bir operator (lead mas’uli) bo‘yicha: nechta lead olgan, ulardan nechtasi sifatli, jarayonda, sifatsiz yoki bekor bo‘lgan, nechtasiga tashrif belgilangan va nechtasi kelib ketgan. Konversiya = tashrif o‘tkazildi ÷ umumiy leadlar × 100. Yuqoridagi uchta karta — har bir ko‘rsatkich bo‘yicha yetakchi, bosilsa top-5 ochiladi. Operator qatorini bossangiz, uning leadlari chiqadi." label="Lid va Konversiya — izoh" size={15} />
             </span>
-            <span style={{ fontSize:11.5, color:"var(--text3)" }}>
-              Operatorlar kesimida: jami, sifatli, jarayondagi, sifatsiz, bekor va tashriflar; konversiya = tashrif / jami
-            </span>
           </div>
           <div style={{ paddingTop:16 }}>
             <OperatorTable
@@ -1462,11 +1459,10 @@ export default function LidlarPage() {
               Lid mas'ullar kesimida
               <InfoTip text="Har bir xodimdagi leadlar hozir qaysi bosqichda turganini ko‘rsatadi; ustunlar — Bitrix bosqichlari. Lead hozirgi mas’uli bo‘yicha sanaladi. JAMI — barcha xodimlar yig‘indisi. Qatorni bossangiz, xodimning leadlari ochiladi." label="Lid mas'ullar kesimida — izoh" size={15} />
             </span>
-            <span style={{ fontSize:12, color:"var(--text3)" }}>Leadlar hozirgi mas’ul va bosqich bo‘yicha sanaladi. JAMI — barcha xodimlar yig‘indisi. {byUserFiltered.length} ta xodim</span>
           </div>
 
           {respQ.isLoading && !responsibles.length ? (
-            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
+            <LoadingRows />
           ) : (
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
@@ -1524,7 +1520,7 @@ export default function LidlarPage() {
                             <td colSpan={colCount} style={{ padding: "0 12px 12px" }}>
                               <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                               {respLeadsMasulQ.isLoading ? (
-                                <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                                <LoadingRows rows={3} />
                               ) : subLeads.length === 0 ? (
                                 <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                               ) : (
@@ -1693,11 +1689,10 @@ export default function LidlarPage() {
                   Vazifalar kesimida
                   <InfoTip text="Har bir xodimga berilgan Bitrix vazifalari (tanlangan davrda yaratilganlari). Jarayondagi — hali bajarilmagan; Tugatilgan — bajarilgan; Muddati o‘tgan — muddati o‘tib ketgan, hali bajarilmagan; Muddati o‘tib bajarilgan — kechikib bajarilgan. Bajarilish = tugatilgan ÷ jami × 100. Qatorni bossangiz, vazifalar ro‘yxati ochiladi." label="Vazifalar kesimida — izoh" size={15} />
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>Vazifa yaratilgan sana bo‘yicha filtrlanadi. Kechikish muddati bilan aniqlanadi; bajarilish = tugatilgan / jami × 100. {taskRows.length} ta xodim</span>
               </div>
 
               {tasksQ.isLoading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                <LoadingRows />
               ) : taskRows.length === 0 ? (
                 <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Vazifalar topilmadi</div>
               ) : (
@@ -1792,7 +1787,7 @@ export default function LidlarPage() {
                               <td colSpan={8} style={{ padding: "0 12px 12px" }}>
                                 <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                                   {respTasksQ.isLoading ? (
-                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                                    <LoadingRows rows={3} />
                                   ) : !tasks.length ? (
                                     <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma’lumot yo’q</div>
                                   ) : (
@@ -1975,10 +1970,9 @@ export default function LidlarPage() {
                 </span>
               </div>
 
-              <div style={{ padding: "8px 20px", fontSize: 12, color: "var(--text3)" }}>Leadlar reklama manbasi → medium → kampaniya → ad set → reklama → mas’ul bo‘yicha guruhlanadi. Qatorni bosib keyingi darajani oching.</div>
               {/* Table */}
               {loading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                <LoadingRows />
               ) : rows.length === 0 ? (
                 <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
               ) : (
@@ -2076,7 +2070,7 @@ export default function LidlarPage() {
             bo'yicha, under Bekor bo'ldi / Sifatsiz sabablari.
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
-          title="Sabab bo'yicha" unit="sabab" q={reasonStatsQ}
+          title="Sabab bo'yicha" q={reasonStatsQ}
           info="Leadlar Bitrix’dagi “Sabab” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
           selected={selectedReason} setSelected={setSelectedReason}
           shown={shownReasonLeads} setShown={setShownReasonLeads}
@@ -2121,10 +2115,9 @@ export default function LidlarPage() {
                   Manba bo'yicha
                   <InfoTip text="Leadlar Bitrix’dagi “Manba” maydoni bo‘yicha guruhlangan. Tashrif o‘tkazildi — kelib ketgan mijozlar. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari ochiladi." label="Manba bo'yicha — izoh" size={15} />
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>Lead manbasi bo‘yicha: jami, sifatli, tashrif, sifatsiz va bekor · {srcRows.length} ta manba</span>
               </div>
               {sourceQ.isLoading ? (
-                <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>
+                <LoadingRows />
               ) : srcRows.length === 0 ? (
                 <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
               ) : (
@@ -2199,7 +2192,7 @@ export default function LidlarPage() {
                               <td colSpan={9} style={{ padding: "0 12px 12px" }}>
                                 <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                                   {srcLeadsQ.isLoading ? (
-                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                                    <LoadingRows rows={3} />
                                   ) : !srcLeads.length ? (
                                     <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                                   ) : (
@@ -2299,7 +2292,7 @@ export default function LidlarPage() {
             bo'yicha, grouped by a UF enum field instead of source_id.
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
-          title="Manba 1 bo'yicha" unit="manba" q={source1Q}
+          title="Manba 1 bo'yicha" q={source1Q}
           info="Leadlar Bitrix’dagi “Manba 1” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
           selected={selectedSource1} setSelected={setSelectedSource1}
           shown={shownSource1Leads} setShown={setShownSource1Leads}
@@ -2308,7 +2301,7 @@ export default function LidlarPage() {
         </>)}
         {tabB === "hudud" && (<>
         <UfBreakdownTable
-          title="Hudud bo'yicha" unit="hudud" q={hududQ}
+          title="Hudud bo'yicha" q={hududQ}
           info="Leadlar Bitrix’dagi “Hudud” maydoni bo‘yicha guruhlangan; hududi ko‘rsatilmagan leadlar bu jadvalga kirmaydi." bitrixPortal={bitrixPortal}
           selected={selectedHudud} setSelected={setSelectedHudud}
           shown={shownHududLeads} setShown={setShownHududLeads}
@@ -2323,20 +2316,27 @@ export default function LidlarPage() {
           <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:12 }}>
             <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:18, fontWeight:700, color:"var(--text)" }}>
               Transfer direction bo'yicha
-              <InfoTip text="Har bir xodimning leadlari Bitrix’dagi “Transfer direction” maydoni qiymati bo‘yicha taqsimlangan. “Nomalum” — maydon to‘ldirilmagan leadlar. O‘ngda — maydon nechta leadda to‘ldirilgani." label="Transfer direction — izoh" size={15} />
+              <InfoTip text="Har bir xodimning leadlari Bitrix’dagi “Proekt o‘tkazish” maydoni (lead bir loyihadan boshqasiga o‘tkazilganda to‘ldiriladi) qiymati bo‘yicha taqsimlangan. “Nomalum” — maydon to‘ldirilmagan leadlar. O‘ngda — maydon nechta leadda to‘ldirilgani. Maydon deyarli ishlatilmasa, jadval yig‘ilib turadi." label="Transfer direction — izoh" size={15} />
             </span>
-            <span style={{ fontSize:12, color:"var(--text3)" }}>mas'ullar kesimida · {transferRows.length} ta xodim</span>
             <span style={{ fontSize:12, color:"var(--text3)", marginLeft:"auto" }}>
               To'ldirilgan: <b style={{ color:"var(--text)" }}>{fmtNum(transferFilled)}</b> / {fmtNum(transferAll)} ta lid ({fmtFillPct(transferFilled, transferAll)})
             </span>
           </div>
 
           {transferQ.isLoading ? (
-            <div style={{ padding:24, color:"#666", fontSize:13 }}>Yuklanmoqda…</div>
+            <LoadingRows />
           ) : transferQ.isError ? (
-            <div style={{ padding:24, color:"#F44336", fontSize:13 }}>Ma'lumotni yuklab bo'lmadi</div>
+            <ErrorState onRetry={() => transferQ.refetch()} />
           ) : transferRows.length === 0 ? (
-            <div style={{ padding:24, color:"#555", fontSize:13 }}>Ma'lumot yo'q</div>
+            <EmptyState title="Bu davrda lid yo'q" />
+          ) : !transferOpen && transferFilled < transferAll * 0.05 ? (
+            // The field is barely used yet: a one-line note instead of a table of dashes.
+            <div style={{ padding:"14px 20px", display:"flex", alignItems:"center", gap:12, fontSize:13, color:"var(--text2)" }}>
+              <span>“Proekt o‘tkazish” maydoni bu davrda faqat <b style={{ color:"var(--text)" }}>{fmtNum(transferFilled)}</b> ta lidda to‘ldirilgan — jadval yig‘ilgan.</span>
+              <button onClick={() => setTransferOpen(true)} style={{ marginLeft:"auto", fontSize:12, fontWeight:600, padding:"6px 12px", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)", cursor:"pointer" }}>
+                Jadvalni ochish
+              </button>
+            </div>
           ) : (
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>

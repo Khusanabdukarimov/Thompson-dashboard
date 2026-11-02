@@ -17,6 +17,7 @@ import {
   type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
 import { leadStageLabel } from "@/lib/leadStages";
+import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 
 // The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or the
 // links point at whichever portal the code was copied from.
@@ -135,8 +136,10 @@ function activeFilterCount(filter: CallFilterState) {
 
 
 // ── Metric Card ───────────────────────────────────────────────────
-function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint, tip }: {
+function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint, tip, loading }: {
   label: string; value: React.ReactNode; sub?: string;
+  /** Numbers still on their way: a shimmer instead of a 0. */
+  loading?: boolean;
   icon: React.ReactNode; iconBg: string;
   badge?: string; badgeColor?: string; valueColor?: string; accentColor?: string;
   /** Makes the card a button; `hint` is the small "open" caption in its corner. */
@@ -158,8 +161,8 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
         <div style={{ width: 38, height: 38, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, alignSelf: "flex-start" }}>
-        <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, color: valueColor || "var(--text)" }}>{value}</div>
-        {badge && (
+        <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, color: valueColor || "var(--text)" }}>{loading ? <LoadingValue width={84} height={28} /> : value}</div>
+        {badge && !loading && (
           <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: `${badgeColor}18`, border: `1.5px solid ${badgeColor}35`, borderRadius: 6, padding: "2px 8px", lineHeight: 1.7, marginBottom: 2 }}>{badge}</span>
         )}
       </div>
@@ -232,9 +235,9 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
     (!needle || (c.phone_number ?? "").replace(/\D/g, "").includes(needle.replace(/\D/g, "") || "\u0000") ||
       (c.lead_title ?? "").toLowerCase().includes(needle) || String(c.lead_id ?? "").includes(needle)));
 
-  if (q.isLoading) return <div style={{ padding: 28, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda…</div>;
-  if (q.isError) return <div style={{ padding: 28, textAlign: "center", color: "#F44336", fontSize: 13 }}>Ro'yxatni yuklab bo'lmadi — qayta urinib ko'ring</div>;
-  if (!calls.length) return <div style={{ padding: 28, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
+  if (q.isLoading) return <LoadingRows rows={6} />;
+  if (q.isError) return <ErrorState onRetry={() => q.refetch()} />;
+  if (!calls.length) return <EmptyState title="Bu davrda qo'ng'iroq yo'q" />;
 
   const chip = (active: boolean, color: string): React.CSSProperties => ({
     display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, cursor: "pointer",
@@ -493,23 +496,23 @@ export default function CallStatistikasi() {
 
         {/* ── Row 1 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-          <Card label="Qo'ng'iroq jami" accentColor="#2196F3"
+          <Card loading={statsQ.isLoading && !data} label="Qo'ng'iroq jami" accentColor="#2196F3"
             value={<>{data?.total_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             sub={fmtDur(data?.total_duration ?? 0)}
             icon={<Phone size={19} color="#2196F3" />} iconBg="rgba(33,150,243,0.12)" />
-          <Card label="Chiquvchi qo'ng'iroq" accentColor="#2196F3"
+          <Card loading={statsQ.isLoading && !data} label="Chiquvchi qo'ng'iroq" accentColor="#2196F3"
             value={<>{data?.outbound_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             sub={fmtDur(rows.reduce((s, r) => s + r.outbound_duration, 0))}
             icon={<PhoneOutgoing size={19} color="#2196F3" />} iconBg="rgba(33,150,243,0.12)" />
-          <Card label="Kiruvchi qo'ng'iroq" accentColor="#4CAF50"
+          <Card loading={statsQ.isLoading && !data} label="Kiruvchi qo'ng'iroq" accentColor="#4CAF50"
             value={<>{data?.inbound_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             sub={fmtDur(rows.reduce((s, r) => s + r.inbound_duration, 0))}
             icon={<PhoneIncoming size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)" />
-          <Card label="Muvaffaqiyatli" accentColor="#4CAF50"
+          <Card loading={statsQ.isLoading && !data} label="Muvaffaqiyatli" accentColor="#4CAF50"
             value={<span style={{ color: "#4CAF50" }}>{data?.success_calls ?? 0}</span>}
             icon={<CheckCircle size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)"
             badge={`${Math.round(data?.success_pct ?? 0)}%`} badgeColor="#4CAF50" />
-          <Card label="Muvaffaqiyatsiz" accentColor="#F44336"
+          <Card loading={statsQ.isLoading && !data} label="Muvaffaqiyatsiz" accentColor="#F44336"
             value={<span style={{ color: "#F44336" }}>{failedCalls}</span>}
             icon={<XCircle size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
             badge={failedCalls > 0 ? fmtPct(data?.failed_pct ?? 0) : undefined} badgeColor="#F44336" />
@@ -517,22 +520,22 @@ export default function CallStatistikasi() {
 
         {/* ── Row 2 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-          <Card label="O'rtacha davomiyligi" accentColor="#9C27B0"
+          <Card loading={statsQ.isLoading && !data} label="O'rtacha davomiyligi" accentColor="#9C27B0"
             value={fmtAvgDur(data?.avg_duration ?? 0)}
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)" />
-          <Card label="NDZ (javob berilmagan)" accentColor="#607D8B"
+          <Card loading={statsQ.isLoading && !data} label="NDZ (javob berilmagan)" accentColor="#607D8B"
             value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
-          <Card label="Propushenniy" accentColor="#FF9800"
+          <Card loading={statsQ.isLoading && !data} label="Propushenniy" accentColor="#FF9800"
             value={<span style={{ color: "#FF9800" }}>{data?.missed_inbound ?? 0} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
             icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)"
             onClick={() => setMissedModal("all")} hint="Ro'yxat" />
-          <Card label="Reaksiya vaqti" accentColor="#607D8B"
+          <Card loading={statsQ.isLoading && !data} label="Reaksiya vaqti" accentColor="#607D8B"
             value={<span style={{ fontSize: 22 }}>{fmtDur(data?.reaksiya_vaqti ?? 0)}</span>}
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
             tip={`Javobsiz qo'ng'iroqdan birinchi bog'lanishgacha — operator qo'ng'irog'i yoki mijozning javob olgan qo'ng'irog'i (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`}
             onClick={() => setMissedModal("reaction")} hint="Ro'yxat" />
-          <Card label="Ne perezvonili" accentColor="#F44336"
+          <Card loading={statsQ.isLoading && !data} label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
             tip="Javobsiz kirish qo'ng'iroqlari: 24 soat ichida operator o'sha raqamga qo'ng'iroq qilmagan (ko'tarilmagan qo'ng'iroq ham hisobga olinadi) va mijoz ham qayta qilib javob olmagan"
@@ -549,11 +552,11 @@ export default function CallStatistikasi() {
           </div>
 
           {statsQ.isLoading ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Yuklanmoqda...</div>
+            <LoadingRows rows={6} />
           ) : statsQ.isError ? (
-            <div style={{ padding: 48, textAlign: "center", color: "#F44336", fontSize: 13 }}>Xatolik: {String((statsQ.error as Error)?.message ?? "noma'lum xato")}</div>
+            <ErrorState onRetry={() => statsQ.refetch()} />
           ) : rows.length === 0 ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Ma'lumot topilmadi</div>
+            <EmptyState title="Bu davrda qo'ng'iroq yo'q" hint="Sana oralig'ini kengaytiring yoki filtrlarni tozalang." />
           ) : (
             <div style={{ overflowX: "auto", maxHeight: "min(64vh, 640px)", overflowY: "auto", overscrollBehavior: "contain" }}>
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>

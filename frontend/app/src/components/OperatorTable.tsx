@@ -7,6 +7,7 @@
 // period of equal length.
 import { useMemo, useRef, useState } from "react";
 import { ChevronDown, ExternalLink, Phone, User } from "lucide-react";
+import { LoadingRows } from "@/components/DataState";
 import { fmtNum } from "@/lib/utils";
 import { InfoTip } from "@/components/InfoTip";
 import { useBitrixPortal } from "@/lib/api/config";
@@ -132,7 +133,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
     tashrif:    a.tashrif    + r.tashrif_buyurdi,
   }), { total: 0, sifatli: 0, jarayonda: 0, sifatsiz: 0, bekor: 0, belgilandi: 0, tashrif: 0 }), [rows]);
 
-  if (loading) return <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>;
+  if (loading) return <LoadingRows rows={5} />;
   if (!rows.length) return <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>;
 
   const TH: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 12px 10px", whiteSpace: "nowrap" };
@@ -285,7 +286,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, leads, leadsL
                           above rather than as a loose list spanning the page. */}
                       <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
                         {leadsLoading ? (
-                          <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+                          <LoadingRows rows={3} />
                         ) : !leads?.length ? (
                           <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
                         ) : (

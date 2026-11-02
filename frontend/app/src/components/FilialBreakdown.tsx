@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from "react";
 import { MapPin } from "lucide-react";
+import { EmptyState, LoadingRows } from "@/components/DataState";
 import { fmtNum } from "@/lib/utils";
 import { InfoTip } from "@/components/InfoTip";
 import { NONE_KEY, type PipelineFilialRow } from "@/lib/api/pipelineDeals";
@@ -76,9 +77,9 @@ export function FilialBreakdown({ rows, loading, selectedFilials, selectedRegion
       </div>
 
       {loading && !rows.length ? (
-        <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+        <LoadingRows />
       ) : !bars.length ? (
-        <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
+        <EmptyState title="Bu davrda sdelka yo'q" />
       ) : (
         <div style={{ padding: "14px 20px 16px", display: "flex", flexDirection: "column", gap: 4 }}>
           {shown.map((b) => {

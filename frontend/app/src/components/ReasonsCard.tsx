@@ -3,6 +3,7 @@
 // it, paged 8 at a time, with a link straight into the CRM.
 import { useRef, useState, type CSSProperties } from "react";
 import { ChevronDown } from "lucide-react";
+import { LoadingRows } from "@/components/DataState";
 import { fmtNum } from "@/lib/utils";
 import { InfoTip } from "@/components/InfoTip";
 import { useBitrixPortal } from "@/lib/api/config";
@@ -100,11 +101,6 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
                 label={`${title} — izoh`} size={14} />
             </span>
           </div>
-          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
-            {kind === "cancel"
-              ? "“Bekor bo‘ldi” bosqichidagi leadlar, Bitrix’da yozilgan sabab bo‘yicha."
-              : "“Sifatsiz” bosqichidagi leadlar, Bitrix’da yozilgan sabab bo‘yicha."}
-          </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: barColor, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{fmtNum(grandTotal)}</div>
@@ -113,7 +109,7 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
       </div>
 
       {loading ? (
-        <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+        <LoadingRows />
       ) : items.length === 0 ? (
         <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
       ) : (

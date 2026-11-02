@@ -8,6 +8,7 @@ import {
 import { Topbar } from "@/components/Topbar";
 import { InfoTip } from "@/components/InfoTip";
 import { FilialBreakdown } from "@/components/FilialBreakdown";
+import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 import { MultiSelect } from "@/components/MultiSelect";
 import { DeptTree } from "@/components/DeptTree";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -78,8 +79,10 @@ const RESP_EXCL_LC = ["data365", "data365 support", "abror", "sardor jumayev", "
 const isRespExcluded = (name: string) => RESP_EXCL_LC.some(ex => (name ?? "").trim().toLowerCase().includes(ex));
 
 // ── KPI card ─────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onClick, info }: {
+function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onClick, info, loading }: {
   label: string; value: string; sub?: string;
+  /** Numbers still on their way: a shimmer instead of a 0. */
+  loading?: boolean;
   gradient: string; lightGradient: string; icon: React.ReactNode;
   active?: boolean; onClick?: () => void;
   /** What the number counts — shown behind a "?" badge. */
@@ -101,8 +104,8 @@ function KpiCard({ label, value, sub, gradient, lightGradient, icon, active, onC
         </span>
         <span style={{ opacity: .6, color: isDark ? "#fff" : "var(--text2)", flexShrink: 0 }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#fff" : "var(--text)", lineHeight: 1.2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.55)" : "var(--text3)" }}>{sub}</div>}
+      <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#fff" : "var(--text)", lineHeight: 1.2 }}>{loading ? <LoadingValue width={64} height={26} /> : value}</div>
+      {sub && !loading && <div style={{ fontSize: 11, color: isDark ? "rgba(255,255,255,.55)" : "var(--text3)" }}>{sub}</div>}
     </div>
   );
 }
@@ -176,7 +179,7 @@ const PAGE_CSS = `
   .sd-op:hover .sd-actions { opacity: 1; }
 `;
 
-const Loading = () => <div style={{ padding: 24, color: "#666", fontSize: 13 }}>Yuklanmoqda…</div>;
+const Loading = () => <LoadingRows />;
 const Empty = () => <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>;
 
 const KIND_GROUPS: { kind: PipelineStage["kind"]; label: string; color: string }[] = [
@@ -681,6 +684,8 @@ export default function SdelkalarPage() {
   ];
 
   const anyError = kpiQ.error ?? managersQ.error ?? sourcesQ.error ?? reasonsQ.error;
+  // The period has no deals in this pipeline at all: one message instead of five empty tables.
+  const noDeals = !kpiQ.isLoading && !kpiQ.isError && !!kpi && kpi.total === 0;
 
   return (
     <>
@@ -790,7 +795,7 @@ export default function SdelkalarPage() {
         {/* ── KPI Cards (click → deals) ── */}
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`, gap: 12, marginBottom: 12 }}>
           {cards.map(c => (
-            <KpiCard key={c.id} label={c.label} value={fmtNum(c.value)} sub={c.sub} info={c.info}
+            <KpiCard key={c.id} label={c.label} value={fmtNum(c.value)} sub={c.sub} info={c.info} loading={kpiQ.isLoading && !kpi}
               gradient={c.gradient} lightGradient={c.lightGradient} icon={c.icon}
               active={isOpen("kpi", "cards", c.id)}
               // Only with deals behind it: the card's stage replaces the Bosqich filter in the
@@ -804,6 +809,27 @@ export default function SdelkalarPage() {
           </div>
         )}
         <div style={{ marginBottom: 16 }} />
+
+        {kpiQ.isError && !kpi && (
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 16 }}>
+            <ErrorState onRetry={() => { kpiQ.refetch(); managersQ.refetch(); sourcesQ.refetch(); reasonsQ.refetch(); filialsQ.refetch(); }} />
+          </div>
+        )}
+
+        {noDeals ? (
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, marginBottom: 16 }}>
+            <EmptyState
+              title={`Bu davrda «${pipelineLabel}» voronkasida sdelka yaratilmagan`}
+              hint={<>{periodLabel} oralig'ida bu voronkada yangi sdelka yo'q{[filter.responsible_ids, filter.stage_ids, filter.sources, filter.source1s, filter.reasons, filter.filials, filter.regions].some(v => v.length > 0) ? " (yoki tanlangan filtrlarga mos keladigani yo'q)" : ""}. Sana oralig'ini kengaytiring yoki boshqa voronkani tanlang.</>}
+              action={
+                <button onClick={() => setFilter(s => ({ ...s, from: daysAgoISO(30), to: todayISO() }))}
+                  style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 8, border: 0, background: "#6366f1", color: "#fff", cursor: "pointer" }}>
+                  Oxirgi 30 kunni ko'rsatish
+                </button>
+              }
+            />
+          </div>
+        ) : (<>
 
         {/* ── Filiallar / viloyatlar bo'yicha (click → filter) ── */}
         <FilialBreakdown
@@ -1103,8 +1129,9 @@ export default function SdelkalarPage() {
             </div>
           )}
         </Section>
+        </>)}
 
-        {anyError && (
+        {anyError && kpi && (
           <div style={{
             marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12,
             background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)", color: "#ef4444"

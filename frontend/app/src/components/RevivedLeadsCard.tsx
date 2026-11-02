@@ -6,6 +6,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ExternalLink, RotateCcw } from "lucide-react";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 import { fmtNum } from "@/lib/utils";
 import { InfoTip } from "@/components/InfoTip";
 import { useBitrixPortal } from "@/lib/api/config";
@@ -71,11 +72,11 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
       </div>
 
       {q.isLoading ? (
-        <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Yuklanmoqda…</div>
+        <LoadingRows />
       ) : q.isError ? (
-        <div style={{ padding: 24, color: "#F44336", fontSize: 13 }}>Ma'lumotni yuklab bo'lmadi</div>
+        <ErrorState onRetry={() => q.refetch()} />
       ) : !ops.length ? (
-        <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Bu davrda qayta tiklangan lid yo'q</div>
+        <EmptyState title="Bu davrda qayta tiklangan lid yo'q" />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
