@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PhoneMissed, HelpCircle, X, ChevronDown, Clock } from "lucide-react";
+import { PhoneMissed, ChevronDown, Clock } from "lucide-react";
 import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
 import { leadStageLabel } from "@/lib/leadStages";
+import { SidePanel, PanelStats } from "@/components/SidePanel";
+import { InfoTip } from "@/components/InfoTip";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 
 /**
  * The lists behind three cards of the call page, one dialog for all:
@@ -22,11 +25,23 @@ const PAGE = 20;
 /** The server caps one request at this many rows. */
 const MAX_REQUEST = 1000;
 
-/** 3725 → "01:02:05" (hours may exceed 24: "56:23:11"). */
-const fmtHMS = (secs: number | null | undefined): string => {
+/** Seconds in words: 24 → "24 s", 474 → "7 daq 54 s", 2400 → "40 daq", 7600 → "2 soat 6 daq". */
+const fmtSecs = (secs: number | null | undefined): string => {
   if (secs == null) return "—";
-  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
-  return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
+  const v = Math.round(secs);
+  if (v < 60) return `${v} s`;
+  if (v < 600) return `${Math.floor(v / 60)} daq${v % 60 ? ` ${v % 60} s` : ""}`;
+  if (v < 3600) return `${Math.round(v / 60)} daq`;
+  const h = Math.floor(v / 3600), m = Math.round((v % 3600) / 60);
+  return m ? `${h} soat ${m} daq` : `${h} soat`;
+};
+
+/** "998901234567" / "901234567" → "90 123 45 67", the way people read numbers here. */
+const fmtPhone = (p?: string | null) => {
+  const d = (p ?? "").replace(/\D/g, "");
+  if (d.length < 9) return p || "—";
+  const n = d.slice(-9);
+  return `${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5, 7)} ${n.slice(7)}`;
 };
 
 const TZ = "Asia/Tashkent";
@@ -35,30 +50,13 @@ const fmtWhen = (iso: string) => new Date(iso).toLocaleString("ru-RU", {
   timeZone: TZ, day: "2-digit", month: "2-digit", year: "2-digit",
   hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
 });
-const fmtShort = (iso: string) => new Date(iso).toLocaleString("ru-RU", {
-  timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
-});
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { timeZone: TZ, day: "2-digit", month: "2-digit" });
 
 const pill = (color: string): React.CSSProperties => ({
   display: "inline-block", padding: "2px 9px", borderRadius: 6, fontSize: 11, fontWeight: 700,
   color, background: `${color}1f`, border: `1px solid ${color}44`, whiteSpace: "nowrap",
 });
-
-const TH: React.CSSProperties = {
-  position: "sticky", top: 0, zIndex: 2, padding: "11px 14px", textAlign: "left", fontSize: 11, fontWeight: 700,
-  color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap",
-  background: "var(--bg2)", borderBottom: "1px solid var(--border)",
-};
-const TD: React.CSSProperties = { padding: "10px 14px", fontSize: 12.5, borderBottom: "1px solid var(--border)", verticalAlign: "middle", whiteSpace: "nowrap" };
-
-function Stat({ label, value, color }: { label: string; value: React.ReactNode; color: string }) {
-  return (
-    <div style={{ flex: "1 1 150px", minWidth: 130, padding: "12px 16px", borderRadius: 10, border: `1px solid ${color}44`, background: `${color}12` }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color, fontFamily: typeof value === "string" && value.includes(":") ? "monospace" : undefined }}>{value}</div>
-    </div>
-  );
-}
 
 /** 540 → "9 daq", 7500 → "2 soat 5 daq", 108005 → "30 soat". */
 const fmtDelay = (s: number): string => {
@@ -102,13 +100,18 @@ function ContactCell({ it }: { it: MissedCallItem }) {
   if (it.callback_dir === "outbound") {
     const noPick = it.callback_answered === false;
     return (
-      <span title={noPick ? `Operator qayta qo'ng'iroq qilgan, mijoz ko'tarmagan${via}` : `Operator qayta qo'ng'iroq qilgan${via}`}>
-        <span style={pill("#2196F3")}>Operator</span> <span style={{ color: "var(--text)" }}>{it.callback_by ?? "—"}</span>
-        {noPick && <span style={{ color: "var(--text3)", fontSize: 11.5 }}> · mijoz ko'tarmadi</span>}
-      </span>
+      <div title={noPick ? `Operator qayta qo'ng'iroq qilgan, mijoz ko'tarmagan${via}` : `Operator qayta qo'ng'iroq qilgan${via}`}>
+        <div style={{ color: "var(--text)", fontWeight: 600 }}>{it.callback_by ?? "Operator"}</div>
+        <div style={{ fontSize: 11.5, marginTop: 3, color: noPick ? "#B45309" : "var(--text3)" }}>{noPick ? "qo'ng'iroq qildi · mijoz ko'tarmadi" : "operator qo'ng'iroq qildi"}</div>
+      </div>
     );
   }
-  if (it.callback_dir === "inbound") return <span title={`Mijoz o'zi qayta qo'ng'iroq qilgan va javob olgan${via}`}><span style={pill("#9C27B0")}>Mijoz o'zi</span> <span style={{ color: "var(--text2)" }}>{it.callback_by ?? ""}</span></span>;
+  if (it.callback_dir === "inbound") return (
+    <div title={`Mijoz o'zi qayta qo'ng'iroq qilgan va javob olgan${via}`}>
+      <div style={{ color: "#9333EA", fontWeight: 600 }}>Mijoz o'zi</div>
+      {it.callback_by && <div style={{ fontSize: 11.5, marginTop: 3, color: "var(--text3)" }}>javob berdi: {it.callback_by}</div>}
+    </div>
+  );
   return <span style={{ color: "var(--text3)" }}>—</span>;
 }
 
@@ -117,7 +120,12 @@ function RecalledCell({ it }: { it: MissedCallItem }) {
     // Working time (what "Reaksiya vaqti" averages); the real elapsed time is in the tooltip.
     const after = fmtDelay(it.work_delay_s ?? it.delay_s ?? 0);
     const real = it.delay_s != null && it.work_delay_s != null && it.delay_s !== it.work_delay_s ? `, haqiqatda ${fmtDelay(it.delay_s)}` : "";
-    return <span style={pill("#4CAF50")} title={`${fmtWhen(it.callback_at)} — ish vaqti bo'yicha ${after} o'tgach${real}`}>{fmtShort(it.callback_at)} · {after}</span>;
+    return (
+      <div title={`${fmtWhen(it.callback_at)} — ish vaqti bo'yicha ${after} o'tgach${real}`}>
+        <div style={{ color: "#16A34A", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtTime(it.callback_at)} <span style={{ fontWeight: 400, color: "var(--text3)" }}>{fmtDay(it.callback_at)}</span></div>
+        <div style={{ fontSize: 11.5, marginTop: 3, color: "var(--text3)" }}>{after} dan keyin</div>
+      </div>
+    );
   }
   if (it.status === "open") return <span style={pill("#FF9800")} title="24 soat hali tugamagan: qayta qo'ng'iroq bo'lishi mumkin">Kutilmoqda</span>;
   return <span style={pill("#F44336")}>Yo'q</span>;
@@ -137,13 +145,6 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
   useEffect(() => { setMore([]); setMoreError(null); }, [sort]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
-  const [help, setHelp] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const d = q.data;
   const s = d?.summary;
@@ -175,218 +176,172 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
     }
   };
 
+  const r = reaction ? s?.reaction : undefined;
+  const helpText = reaction ? (
+    <>Har bir javobsiz kirish qo'ng'irog'idan keyin o'sha raqam bilan <b>birinchi bog'lanish</b> ({hours} soat ichida): operatorning qayta qo'ng'irog'i (mijoz ko'tarmagan bo'lsa ham) yoki mijozning o'zi qayta qilib javob olgani.
+      <b> Reaksiya</b> — shu bog'lanishgacha o'tgan vaqt, ish vaqti bo'yicha{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>}; haqiqiy vaqt sichqoncha ustida.
+      <b> Mediana</b> — qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan. {hours} soat ichida bog'lanilmaganlar "Ne perezvonili"da.</>
+  ) : (
+    <>Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i. {hours} soat ichida operator o'sha raqamga qo'ng'iroq qilgan bo'lsa (mijoz ko'tarmagan bo'lsa ham) yoki mijoz o'zi qayta qilib javob olgan bo'lsa — qayta chiqilgan.
+      <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>4×</b> — shu raqam ro'yxatda necha marta uchraydi. <b>Sabab</b> — telefoniya yozuvidan (asl PBX kodi sichqoncha ustida).</>
+  );
+
+  const stats = !s ? null : reaction && r ? [
+    { label: "Bog'lanilgan", value: fmtNum(s.total), color: "#16A34A" },
+    { label: "O'rtacha (ish vaqti)", value: fmtSecs(r.avg_work_s) },
+    { label: "Mediana", value: fmtSecs(r.median_work_s), color: "#2563EB" },
+    { label: "Operator qayta chiqqan", value: <>{fmtNum(r.by_operator)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pctStr(r.by_operator, s.total)}</small></>, color: "#2563EB" },
+    { label: "Mijoz o'zi qilgan", value: <>{fmtNum(r.by_customer)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pctStr(r.by_customer, s.total)}</small></>, color: "#9333EA" },
+  ] : [
+    { label: "Jami", value: fmtNum(s.total), color: "#DC2626" },
+    { label: "Unikal raqam", value: fmtNum(s.unique_numbers) },
+    { label: "Qayta chiqilgan", value: fmtNum(all ? s.recalled : s.late), color: "#16A34A" },
+    { label: "Chiqilmagan", value: fmtNum(all ? s.not_recalled : s.not_reached), color: "#DC2626" },
+    { label: "O'rt. kutish", value: fmtSecs(s.avg_wait_s) },
+  ];
+
+  const TH2: React.CSSProperties = { position: "sticky", top: 0, zIndex: 2, padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
+  const TD2: React.CSSProperties = { padding: "10px 16px", borderBottom: "1px solid var(--border)", verticalAlign: "top", fontSize: 13 };
+  const sub: React.CSSProperties = { fontSize: 11.5, color: "var(--text3)", marginTop: 3, whiteSpace: "nowrap" };
+
   return (
-    <div role="dialog" aria-modal="true" aria-label={title}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "3vh 2vw" }}>
-      <div style={{ width: "min(1320px, 100%)", maxHeight: "94vh", display: "flex", flexDirection: "column", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
-        {/* header */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 22px", borderBottom: "1px solid var(--border)" }}>
-          {reaction
-            ? <Clock size={20} color="#607D8B" style={{ marginTop: 3, flexShrink: 0 }} />
-            : <PhoneMissed size={20} color={all ? "#FF9800" : "#F44336"} style={{ marginTop: 3, flexShrink: 0 }} />}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>{title}</div>
-            <div style={{ fontSize: 12.5, color: "var(--text3)", marginTop: 3 }}>
-              {reaction
-                ? <>{hours} soat ichida bog'lanilgan javobsiz qo'ng'iroqlar: qancha vaqtda va kim bog'langan</>
-                : all
-                ? <>Bitrix24 bo'yicha javobsiz qolgan kiruvchi qo'ng'iroqlar</>
-                : <>Javobsiz qolgan va {hours} soat ichida qayta chiqilmagan raqamlar</>}
-              {" "}· {filter.start_date ?? "…"} → {filter.end_date ?? "…"}
-            </div>
-          </div>
-          <button type="button" onClick={() => setHelp(h => !h)} aria-label="Qanday hisoblanadi" aria-pressed={help} title="Qanday hisoblanadi?"
-            style={{ width: 30, height: 30, borderRadius: "50%", border: "1px solid var(--border)", background: help ? "rgba(33,150,243,0.12)" : "var(--bg2)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <HelpCircle size={16} />
-          </button>
-          <button type="button" onClick={onClose}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", fontSize: 13, cursor: "pointer" }}>
-            <X size={14} /> Yopish
-          </button>
-        </div>
-
-        {help && reaction && (
-          <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
-            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'idan keyin o'sha raqam bilan <b>birinchi bog'lanish</b> ({hours} soat ichida) olinadi —
-            bu <b>Operator</b> qayta qo'ng'irog'i (mijoz ko'tarmagan bo'lsa ham) yoki <b>Mijoz o'zi</b> qayta qilib javob olgani bo'lishi mumkin.
-            <b> Reaksiya</b> — javobsiz qo'ng'iroqdan shu bog'lanishgacha o'tgan vaqt, <b>ish vaqti bo'yicha</b>{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>};
-            haqiqiy (soat bo'yicha) vaqt sichqonchani ustiga olib borganda ko'rinadi. <b>O'rtacha</b> — kartadagi Reaksiya vaqti;
-            <b> Mediana</b> — qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan (bir nechta juda kech qo'ng'iroq o'rtachani oshirib yuboradi).
-            {hours} soat ichida bog'lanilmaganlar bu ro'yxatda yo'q — ular "Ne perezvonili"da.
-          </div>
-        )}
-
-        {help && !reaction && (
-          <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
-            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i alohida sanaladi. {hours} soat ichida operator o'sha raqamga <b>qo'ng'iroq qilgan bo'lsa</b> (mijoz ko'tarmagan bo'lsa ham)
-            yoki mijoz o'zi qayta qo'ng'iroq qilib javob olgan bo'lsa (PBX va Moizvonki) — qayta chiqilgan{all ? "; bo'lmasa chiqilmagan" : ", aks holda bu ro'yxatga tushadi"}.
-            {all && <> <b>Qayta chiqilgan</b> ustunida qachon va necha daqiqa/soatdan keyin bog'lanilgani yoziladi. </>}
-            <b> Yo'q</b> — undan keyin ham hech kim bog'lanmagan; {all ? <><b>vaqt</b> — bog'lanilgan payt va undan oldin o'tgan vaqt</> : <><b>vaqt</b> — {hours} soatdan keyin bog'lanilgan (qachon va necha soatdan keyin)</>};
-            <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>Urinish</b> — shu raqam ro'yxatda necha marta uchraydi.
-            Kutgan — mijoz qo'ng'iroqda necha soniya kutgan.
-            <b> Sabab</b> — telefoniya yozuvidan: operatorlarning telefoni jiringladimi, mijoz qachon uzdi, ish vaqtimi (asl PBX kodi sichqoncha ustida ko'rinadi).
-            {d?.work_hours && <> Bog'lanishgacha o'tgan vaqt <b>ish vaqti bo'yicha</b> hisoblanadi ({describeWorkHours(d.work_hours)}): kechasi yoki ish soatidan tashqarida o'tkazib yuborilgan qo'ng'iroq ish boshlanganidan sanaladi.</>}
-          </div>
-        )}
-
-        <div style={{ overflow: "auto", flex: 1, minHeight: 0 }}>
-          {q.isLoading ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>Yuklanmoqda…</div>
-          ) : q.isError || !d || !s ? (
-            <div style={{ padding: 48, textAlign: "center", color: "#F44336", fontSize: 13 }}>Xatolik: {String((q.error as Error)?.message ?? "noma'lum xato")}</div>
-          ) : (
-            <>
-              {/* summary */}
-              {reaction && s.reaction ? (() => {
-                const r = s.reaction;
-                return (
-                  <>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "16px 22px" }}>
-                      <Stat label="Bog'lanilgan" value={fmtNum(s.total)} color="#4CAF50" />
-                      <Stat label="O'rtacha (ish vaqti)" value={fmtHMS(r.avg_work_s)} color="#607D8B" />
-                      <Stat label="Mediana" value={fmtHMS(r.median_work_s)} color="#2196F3" />
-                      <Stat label="Operator qayta chiqqan" value={<>{fmtNum(r.by_operator)} <span style={{ fontSize: 14, fontWeight: 500 }}>{pctStr(r.by_operator, s.total)}</span></>} color="#2196F3" />
-                      <Stat label="Mijoz o'zi qayta qilgan" value={<>{fmtNum(r.by_customer)} <span style={{ fontSize: 14, fontWeight: 500 }}>{pctStr(r.by_customer, s.total)}</span></>} color="#9C27B0" />
-                    </div>
-                    {/* how the delays spread: one bar, one segment per band */}
-                    <div style={{ padding: "0 22px 6px" }}>
-                      <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", background: "var(--bg3)" }}>
-                        {r.bands.map(b => b.count > 0 && (
-                          <div key={b.id} title={`${BANDS[b.id]?.label ?? b.id}: ${fmtNum(b.count)} ta (${pctStr(b.count, s.total)})`}
-                            style={{ width: pctStr(b.count, s.total), background: BANDS[b.id]?.color ?? "#999" }} />
-                        ))}
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 8, fontSize: 12, color: "var(--text2)" }}>
-                        {r.bands.map(b => (
-                          <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ width: 9, height: 9, borderRadius: 2, background: BANDS[b.id]?.color ?? "#999" }} />
-                            {BANDS[b.id]?.label ?? b.id}: <b style={{ color: "var(--text)" }}>{fmtNum(b.count)}</b> <span style={{ color: "var(--text3)" }}>({pctStr(b.count, s.total)})</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 22px 12px", fontSize: 11.5, color: "var(--text3)" }}>
-                      <span>
-                        Soat bo'yicha (tun ham hisobga olinsa) o'rtacha: {fmtHMS(r.avg_clock_s)}. {hours} soat ichida bog'lanilmagan {fmtNum(s.not_recalled)} ta — "Ne perezvonili"da.
-                      </span>
-                      <span style={{ marginLeft: "auto", display: "inline-flex", border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>
-                        {([["new", "Yangilari"], ["slow", "Eng sekinlari"]] as const).map(([k, label]) => (
-                          <button key={k} type="button" onClick={() => setSort(k)} aria-pressed={sort === k}
-                            style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: sort === k ? "rgba(33,150,243,0.14)" : "var(--bg2)", color: sort === k ? "#2196F3" : "var(--text2)" }}>
-                            {label}
-                          </button>
-                        ))}
-                      </span>
-                    </div>
-                  </>
-                );
-              })() : (<>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "16px 22px" }}>
-                <Stat label="Jami" value={fmtNum(s.total)} color="#F44336" />
-                <Stat label="Unikal raqam" value={fmtNum(s.unique_numbers)} color="#2196F3" />
-                <Stat label="Qayta chiqilgan" value={fmtNum(all ? s.recalled : s.late)} color="#4CAF50" />
-                <Stat label="Chiqilmagan" value={fmtNum(all ? s.not_recalled : s.not_reached)} color="#F44336" />
-                <Stat label="O'rt. kutish" value={fmtHMS(s.avg_wait_s)} color="#9C27B0" />
+    <SidePanel
+      open
+      onClose={onClose}
+      width={1080}
+      title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        {reaction ? <Clock size={18} color="#607D8B" /> : <PhoneMissed size={18} color={all ? "#E8890C" : "#DC2626"} />}
+        {title}
+        <InfoTip text={helpText} label="Qanday hisoblanadi" size={15} />
+      </span>}
+      subtitle={`${filter.start_date ?? "…"} → ${filter.end_date ?? "…"}`}
+      headerExtra={stats && (
+        <>
+          <PanelStats items={stats} />
+          {reaction && r && r.bands.some((b) => b.count > 0) && (
+            <div style={{ marginTop: 14 }}>
+              {/* how the delays spread: one bar, one segment per band */}
+              <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--bg3)" }}>
+                {r.bands.map((b) => b.count > 0 && (
+                  <div key={b.id} title={`${BANDS[b.id]?.label ?? b.id}: ${fmtNum(b.count)} ta (${pctStr(b.count, s!.total)})`}
+                    style={{ width: pctStr(b.count, s!.total), background: BANDS[b.id]?.color ?? "#999" }} />
+                ))}
               </div>
-              <div style={{ padding: "0 22px 12px", fontSize: 11.5, color: "var(--text3)" }}>
-                {all ? <>
-                  "Qayta chiqilgan" — {hours} soat ichida bog'lanilganlar. "Chiqilmagan" — {hours} soat ichida bog'lanilmaganlar
-                  {(s.late > 0 || s.still_open > 0) && <> (shundan {fmtNum(s.late)} tasi keyinroq bog'lanilgan, {fmtNum(s.still_open)} tasi uchun {hours} soat hali tugamagan)</>}.
-                </> : <>
-                  "Qayta chiqilgan" — {hours} soatdan keyin bog'lanilganlar.
-                  {s.still_open > 0 && <> "Chiqilmagan" ichida {fmtNum(s.still_open)} ta uchun {hours} soat hali tugamagan.</>}
-                  {" "}Davrdagi barcha javobsiz qo'ng'iroq: {fmtNum(s.missed_total)} ta.
-                </>}
-              </div>
-              {s.reasons && Object.keys(s.reasons).length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "0 22px 14px" }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sabablar:</span>
-                  {Object.entries(s.reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
-                    const r = REASONS[k] ?? { label: k, color: "#9E9E9E", desc: "" };
-                    return (
-                      <span key={k} title={r.desc} style={{ ...pill(r.color), fontSize: 11.5, padding: "3px 10px" }}>
-                        {r.label}: {fmtNum(n)} <span style={{ fontWeight: 500, opacity: 0.8 }}>({pctStr(n, s.total)})</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              </>)}
-
-              {items.length === 0 ? (
-                <div style={{ padding: 48, textAlign: "center", color: "var(--text2)" }}>{reaction ? "Bog'lanilgan qo'ng'iroq yo'q" : all ? "Javobsiz qo'ng'iroq yo'q" : "Qayta chiqilmagan qo'ng'iroq yo'q"}</div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      {(reaction
-                        ? ["#", "Telefon", "Javobsiz qo'ng'iroq", "Kim / navbat", "Kutgan", "Urinish", "Bog'lanildi", "Reaksiya", "Kim bog'landi", "Lead", "Mas'ul", "Bosqich"]
-                        : ["#", "Telefon", "Sana va vaqt", "Kim / navbat", "Kutgan", "Urinish", "Qayta chiqilgan", "Sabab", "Lead", "Mas'ul", "Bosqich"]).map(h => (
-                        <th key={h} style={TH}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((it, i) => (
-                      <tr key={it.key} style={{ background: i % 2 ? "var(--bg2)" : "transparent" }}>
-                        <td style={{ ...TD, color: "var(--text3)" }}>{i + 1}</td>
-                        <td style={{ ...TD, fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "var(--text)" }}>{it.phone || "—"}</td>
-                        <td style={{ ...TD, color: "var(--text2)" }}>{fmtWhen(it.call_start)}</td>
-                        <td style={{ ...TD, color: "var(--text)" }}>{!it.matched ? "—" : it.operator ?? "Navbat (queue)"}</td>
-                        <td style={{ ...TD, fontFamily: "monospace", fontWeight: 600, color: "#FF9800" }}>{fmtHMS(it.wait_s)}</td>
-                        <td style={TD}>{it.attempts > 1 ? <span style={pill("#F44336")}>{it.attempts}×</span> : <span style={{ color: "var(--text3)" }}>1×</span>}</td>
-                        {reaction ? <>
-                          <td style={{ ...TD, color: "var(--text2)" }}>{it.callback_at ? fmtWhen(it.callback_at) : "—"}</td>
-                          <td style={TD} title={it.delay_s != null ? `Haqiqatda (soat bo'yicha): ${fmtHMS(it.delay_s)}` : undefined}>
-                            <span style={{ fontFamily: "monospace", fontWeight: 700, color: bandColor(it.work_delay_s ?? 0) }}>{fmtHMS(it.work_delay_s)}</span>
-                            {it.delay_s != null && it.work_delay_s != null && it.delay_s - it.work_delay_s >= 60 && (
-                              <span style={{ marginLeft: 6, fontSize: 11, color: "var(--text3)" }}>({fmtDelay(it.delay_s)})</span>
-                            )}
-                          </td>
-                          <td style={TD}><ContactCell it={it} /></td>
-                        </> : <>
-                          <td style={TD}><RecalledCell it={it} /></td>
-                          <td style={TD}><ReasonCell it={it} /></td>
-                        </>}
-                        <td style={TD}>
-                          {it.lead_id ? (portal
-                            ? <a href={`${portal}/crm/lead/details/${it.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2196F3", textDecoration: "none", fontWeight: 600 }}>#{it.lead_id} →</a>
-                            : <span style={{ color: "#2196F3", fontWeight: 600 }}>#{it.lead_id}</span>)
-                            : <i style={{ color: "var(--text3)" }}>Bitrix24 da yo'q</i>}
-                        </td>
-                        <td style={{ ...TD, color: "var(--text)" }}>{it.responsible || "—"}</td>
-                        <td style={TD}>{it.stage_name ? <span style={pill("#9C27B0")}>{leadStageLabel(null, it.stage_name)}</span> : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              {items.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px" }}>
-                  {items.length < total && (
-                    <>
-                      <button type="button" disabled={loadingMore} onClick={() => loadMore(PAGE)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 12, fontWeight: 600, padding: "6px 14px", cursor: loadingMore ? "default" : "pointer", opacity: loadingMore ? 0.6 : 1 }}>
-                        {loadingMore ? "Yuklanmoqda…" : <>Yana {Math.min(PAGE, total - items.length)} ta <ChevronDown size={12} /></>}
-                      </button>
-                      <button type="button" disabled={loadingMore} onClick={() => loadMore(total - items.length)}
-                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 12, fontWeight: 600, padding: "6px 14px", cursor: loadingMore ? "default" : "pointer", opacity: loadingMore ? 0.6 : 1 }}>
-                        Barchasi ({fmtNum(total)})
-                      </button>
-                    </>
-                  )}
-                  {moreError && <span style={{ fontSize: 12, color: "#F44336" }}>Xatolik: {moreError}</span>}
-                  <span style={{ fontSize: 11.5, color: "var(--text3)", marginLeft: "auto" }}>
-                    {fmtNum(items.length)} / {fmtNum(total)} ta
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 7, fontSize: 12, color: "var(--text2)" }}>
+                {r.bands.map((b) => (
+                  <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: BANDS[b.id]?.color ?? "#999" }} />
+                    {BANDS[b.id]?.label ?? b.id} <b style={{ color: "var(--text)" }}>{fmtNum(b.count)}</b>
                   </span>
-                </div>
-              )}
-            </>
+                ))}
+              </div>
+            </div>
           )}
-        </div>
-      </div>
-    </div>
+          {!reaction && s?.reasons && Object.keys(s.reasons).length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+              {Object.entries(s.reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
+                const rs = REASONS[k] ?? { label: k, color: "#9E9E9E", desc: "" };
+                return (
+                  <span key={k} title={rs.desc} style={{ ...pill(rs.color), fontSize: 11.5, padding: "3px 10px", fontWeight: 600 }}>
+                    {rs.label} {fmtNum(n)}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}>
+      {q.isLoading ? (
+        <LoadingRows rows={8} />
+      ) : q.isError || !d || !s ? (
+        <ErrorState onRetry={() => q.refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState title={reaction ? "Bog'lanilgan qo'ng'iroq yo'q" : all ? "Javobsiz qo'ng'iroq yo'q" : "Qayta chiqilmagan qo'ng'iroq yo'q"} />
+      ) : (
+        <>
+          {reaction && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--border)", fontSize: 12, color: "var(--text3)" }}>
+              <span>Soat bo'yicha (tun bilan) o'rtacha {r ? fmtSecs(r.avg_clock_s) : "—"} · bog'lanilmagan {fmtNum(s.not_recalled)} ta "Ne perezvonili"da</span>
+              <span style={{ marginLeft: "auto", display: "inline-flex", gap: 2, padding: 3, borderRadius: 8, background: "var(--bg3)" }}>
+                {([["new", "Yangilari"], ["slow", "Eng sekinlari"]] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setSort(k)} aria-pressed={sort === k}
+                    style={{ padding: "4px 12px", fontSize: 12, fontWeight: 600, border: 0, borderRadius: 6, cursor: "pointer", background: sort === k ? "var(--bg)" : "transparent", color: sort === k ? "var(--text)" : "var(--text3)", boxShadow: sort === k ? "0 1px 3px rgba(0,0,0,.12)" : "none" }}>
+                    {label}
+                  </button>
+                ))}
+              </span>
+            </div>
+          )}
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+            <thead>
+              <tr>
+                {(reaction
+                  ? ["Mijoz", "Javobsiz qo'ng'iroq", "Bog'lanildi", "Kim bog'landi", "Mas'ul"]
+                  : ["Mijoz", "Javobsiz qo'ng'iroq", "Qayta chiqilgan", "Sabab", "Mas'ul"]).map((h) => <th key={h} style={TH2}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.key}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                  {/* Mijoz: the number, then its lead and stage */}
+                  <td style={TD2}>
+                    <div style={{ fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>{fmtPhone(it.phone)}</div>
+                    <div style={sub}>
+                      {it.lead_id ? (portal
+                        ? <a href={`${portal}/crm/lead/details/${it.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2563EB", textDecoration: "none" }}>Lid #{it.lead_id} ↗</a>
+                        : <>Lid #{it.lead_id}</>)
+                        : <i>Bitrix24 da yo'q</i>}
+                      {it.stage_name && <> · {leadStageLabel(null, it.stage_name)}</>}
+                    </div>
+                  </td>
+                  {/* the missed call: when, how long they waited, how many times */}
+                  <td style={TD2}>
+                    <div style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                      <b>{fmtTime(it.call_start)}</b> <span style={{ color: "var(--text3)" }}>{fmtDay(it.call_start)}</span>
+                    </div>
+                    <div style={sub}>
+                      {it.wait_s != null && <>kutdi {fmtSecs(it.wait_s)}</>}
+                      {it.attempts > 1 && <> · <b style={{ color: "#DC2626" }}>{it.attempts} marta</b></>}
+                      {it.matched && it.operator && <> · {it.operator}</>}
+                    </div>
+                  </td>
+                  {reaction ? <>
+                    <td style={TD2} title={it.delay_s != null ? `Haqiqatda (soat bo'yicha): ${fmtSecs(it.delay_s)}` : undefined}>
+                      {it.callback_at ? <>
+                        <div style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}><b>{fmtTime(it.callback_at)}</b></div>
+                        <div style={{ ...sub, fontWeight: 700, color: bandColor(it.work_delay_s ?? 0) }}>{fmtSecs(it.work_delay_s)} dan keyin</div>
+                      </> : "—"}
+                    </td>
+                    <td style={TD2}><ContactCell it={it} /></td>
+                  </> : <>
+                    <td style={TD2}><RecalledCell it={it} /></td>
+                    <td style={TD2}><ReasonCell it={it} /></td>
+                  </>}
+                  <td style={{ ...TD2, color: "var(--text)" }}>{it.responsible || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px" }}>
+            {items.length < total && (
+              <>
+                <button type="button" disabled={loadingMore} onClick={() => loadMore(PAGE)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 12, fontWeight: 600, padding: "6px 14px", cursor: loadingMore ? "default" : "pointer", opacity: loadingMore ? 0.6 : 1 }}>
+                  {loadingMore ? "Yuklanmoqda…" : <>Yana {Math.min(PAGE, total - items.length)} ta <ChevronDown size={12} /></>}
+                </button>
+                <button type="button" disabled={loadingMore} onClick={() => loadMore(total - items.length)}
+                  style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 12, fontWeight: 600, padding: "6px 14px", cursor: loadingMore ? "default" : "pointer", opacity: loadingMore ? 0.6 : 1 }}>
+                  Barchasi ({fmtNum(total)})
+                </button>
+              </>
+            )}
+            {moreError && <span style={{ fontSize: 12, color: "#DC2626" }}>Xatolik: {moreError}</span>}
+            <span style={{ fontSize: 11.5, color: "var(--text3)", marginLeft: "auto" }}>{fmtNum(items.length)} / {fmtNum(total)} ta</span>
+          </div>
+        </>
+      )}
+    </SidePanel>
   );
 }
