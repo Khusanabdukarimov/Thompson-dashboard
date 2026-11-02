@@ -9,6 +9,7 @@ import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
 import { leadStageColor, leadStageLabel } from "@/lib/leadStages";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
+import { Dot, openLead } from "@/components/StatusMark";
 
 export type PanelLead = { id: number; title?: string | null; name?: string | null; last_name?: string | null; stage_bid?: string | null; date_create?: string | null };
 
@@ -50,6 +51,13 @@ export function LeadListPanel({ leads, loading, error, onRetry }: {
 
   return (
     <div>
+      <style>{`
+        .ll-row { cursor: pointer; }
+        .ll-row td { transition: background .12s; }
+        .ll-row:hover td { background: var(--bg3); }
+        .ll-go { flex-shrink: 0; color: var(--text3); opacity: 0; transition: opacity .12s; }
+        .ll-row:hover .ll-go { opacity: 1; }
+      `}</style>
       <div style={{ position: "sticky", top: 0, zIndex: 3, height: 56, boxSizing: "border-box", display: "flex", alignItems: "center", gap: 8, padding: "0 16px", borderBottom: "1px solid var(--border)", background: "var(--bg2)" }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", flex: 1, minWidth: 0, scrollbarWidth: "none" }}>
           <button style={chip(!stage, "#64748B")} onClick={() => setStage(null)}>Hammasi <b style={{ opacity: 0.75 }}>{fmtNum(all.length)}</b></button>
@@ -81,24 +89,18 @@ export function LeadListPanel({ leads, loading, error, onRetry }: {
             const color = leadStageColor(l.stage_bid);
             const title = l.title || [l.name, l.last_name].filter(Boolean).join(" ") || `Lid #${l.id}`;
             return (
-              <tr key={l.id}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+              // The whole row opens the lead in Bitrix.
+              <tr key={l.id} className="ll-row" title="Bosing — lidni Bitrix'da ochish" onClick={() => openLead(portal, l.id)}>
                 <td style={{ ...TD, textAlign: "center", color: "var(--text3)", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
                 <td style={{ ...TD, maxWidth: 420 }}>
-                  <a href={portal ? `${portal}/crm/lead/details/${l.id}/` : undefined} target="_blank" rel="noreferrer" title={title}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", color: "#2563EB", textDecoration: "none" }}>
+                  <span title={title} style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", color: "var(--text)", fontWeight: 500 }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-                    <ExternalLink size={12} style={{ flexShrink: 0, opacity: 0.6 }} />
-                  </a>
+                    <ExternalLink size={12} className="ll-go" />
+                  </span>
                 </td>
                 <td style={{ ...TD, color: "var(--text2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtDay(l.date_create)}</td>
                 <td style={TD}>
-                  {l.stage_bid ? (
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color, background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 6, padding: "2px 8px", whiteSpace: "nowrap" }}>
-                      {leadStageLabel(l.stage_bid)}
-                    </span>
-                  ) : "—"}
+                  {l.stage_bid ? <Dot color={color}><span style={{ color: "var(--text)" }}>{leadStageLabel(l.stage_bid)}</span></Dot> : "—"}
                 </td>
               </tr>
             );

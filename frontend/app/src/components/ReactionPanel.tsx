@@ -6,7 +6,8 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, ExternalLink } from "lucide-react";
+import { Clock, ExternalLink, Timer, XCircle, Headset } from "lucide-react";
+import { StatusMark, TONE, speedTone, openLead } from "@/components/StatusMark";
 import { fmtNum } from "@/lib/utils";
 import { fmtSecs } from "@/lib/duration";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
@@ -18,15 +19,13 @@ import { getAnswerSpeed, getLeadFirstCall, type CallDashboardFilter, type SpeedB
 export type ReactionTab = "answer" | "callback" | "lead";
 
 const ANSWER_BANDS: Record<string, { label: string; color: string }> = {
-  lt10s: { label: "10 s gacha", color: "#16A34A" }, lt20s: { label: "10–20 s", color: "#65A30D" },
-  lt40s: { label: "20–40 s", color: "#F59E0B" }, lt60s: { label: "40–60 s", color: "#EA580C" }, gte60s: { label: "1 daq dan ko'p", color: "#DC2626" },
+  lt10s: { label: "10 s gacha", color: TONE.good }, lt20s: { label: "10–20 s", color: "#7cc46e" },
+  lt40s: { label: "20–40 s", color: TONE.warning }, lt60s: { label: "40–60 s", color: TONE.serious }, gte60s: { label: "1 daq dan ko'p", color: TONE.critical },
 };
 const LEAD_BANDS: Record<string, { label: string; color: string }> = {
-  lt5m: { label: "5 daq gacha", color: "#16A34A" }, lt15m: { label: "5–15 daq", color: "#65A30D" },
-  lt1h: { label: "15–60 daq", color: "#F59E0B" }, lt4h: { label: "1–4 soat", color: "#EA580C" }, gte4h: { label: "4 soatdan ko'p", color: "#DC2626" },
+  lt5m: { label: "5 daq gacha", color: TONE.good }, lt15m: { label: "5–15 daq", color: "#7cc46e" },
+  lt1h: { label: "15–60 daq", color: TONE.warning }, lt4h: { label: "1–4 soat", color: TONE.serious }, gte4h: { label: "4 soatdan ko'p", color: TONE.critical },
 };
-const tone = (s: number | null | undefined, slow: number[]) =>
-  s == null ? "var(--text3)" : s < slow[0] ? "#16A34A" : s < slow[1] ? "#F59E0B" : "#DC2626";
 const pct = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "0%");
 const TZ = "Asia/Tashkent";
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
@@ -59,9 +58,16 @@ function BandBar({ bands, defs }: { bands: SpeedBand[]; defs: Record<string, { l
 const TH: React.CSSProperties = { position: "sticky", top: 0, zIndex: 1, padding: "9px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { padding: "9px 16px", borderBottom: "1px solid var(--border)", fontSize: 13, verticalAlign: "top" };
 const sub: React.CSSProperties = { fontSize: 11.5, color: "var(--text3)", marginTop: 3 };
+const ROW_CSS = `
+  .rp-row { cursor: pointer; }
+  .rp-row td { transition: background .12s; }
+  .rp-row:hover td { background: var(--bg3); }
+  .rp-go { color: var(--text3); opacity: 0; transition: opacity .12s; }
+  .rp-row:hover .rp-go { opacity: 1; }
+`;
 
 /** A small "who / how many / how fast" table (per operator, per source). */
-function SpeedTable({ title, rows, slow }: { title: string; rows: { name: string; count: number; extra?: React.ReactNode; avg_s: number | null; median_s: number | null }[]; slow: number[] }) {
+function SpeedTable({ title, rows, slow }: { title: string; rows: { name: string; count: number; extra?: React.ReactNode; avg_s: number | null; median_s: number | null }[]; slow: [number, number] }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div style={{ flex: "1 1 380px", minWidth: 0, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
@@ -74,11 +80,11 @@ function SpeedTable({ title, rows, slow }: { title: string; rows: { name: string
               <td style={{ ...TD, maxWidth: 200 }}>
                 <div style={{ fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
                 <div style={{ height: 3, borderRadius: 2, background: "var(--bg4)", marginTop: 5, maxWidth: 140 }}>
-                  <div style={{ height: "100%", width: `${(r.count / max) * 100}%`, background: "#2563EB", borderRadius: 2 }} />
+                  <div style={{ height: "100%", width: `${(r.count / max) * 100}%`, background: "#94A3B8", borderRadius: 2 }} />
                 </div>
               </td>
               <td style={{ ...TD, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum(r.count)}{r.extra}</td>
-              <td style={{ ...TD, textAlign: "right", fontWeight: 700, color: tone(r.median_s, slow) }}>{fmtSecs(r.median_s)}</td>
+              <td style={{ ...TD, textAlign: "right" }}><StatusMark tone={speedTone(r.median_s, slow)}><b>{fmtSecs(r.median_s)}</b></StatusMark></td>
               <td style={{ ...TD, textAlign: "right", color: "var(--text2)" }}>{fmtSecs(r.avg_s)}</td>
             </tr>
           ))}
@@ -98,9 +104,9 @@ function AnswerTab({ filter }: { filter: CallDashboardFilter }) {
     <div style={{ padding: "16px 20px" }}>
       <PanelStats items={[
         { label: "Javob berilgan", value: fmtNum(s.count) },
-        { label: "O'rtacha kutish", value: fmtSecs(s.avg_s), color: tone(s.avg_s, [20, 40]) },
-        { label: "Mediana", value: fmtSecs(s.median_s), color: tone(s.median_s, [20, 40]) },
-        { label: "20 s ichida", value: pct(s.within_20s, s.count), color: "#16A34A" },
+        { label: "O'rtacha kutish", value: fmtSecs(s.avg_s), color: TONE[speedTone(s.avg_s, [20, 40])] },
+        { label: "Mediana", value: fmtSecs(s.median_s), color: TONE[speedTone(s.median_s, [20, 40])] },
+        { label: "20 s ichida", value: pct(s.within_20s, s.count), color: TONE.good },
       ]} />
       <BandBar bands={s.bands} defs={ANSWER_BANDS} />
       <div style={{ marginTop: 18 }}>
@@ -137,10 +143,10 @@ function LeadTab({ filter, portal }: { filter: CallDashboardFilter; portal: stri
       <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
         <PanelStats items={[
           { label: "Yangi lidlar", value: fmtNum(s.total) },
-          { label: "Qo'ng'iroq qilingan", value: <>{fmtNum(s.called)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pct(s.called, s.total)}</small></>, color: "#16A34A" },
-          { label: "Qo'ng'iroq qilinmagan", value: fmtNum(s.not_called), color: s.not_called ? "#DC2626" : undefined },
-          { label: "Mediana (ish vaqti)", value: fmtSecs(s.median_work_s), color: tone(s.median_work_s, [900, 3600]) },
-          { label: "O'rtacha (ish vaqti)", value: fmtSecs(s.avg_work_s), color: tone(s.avg_work_s, [900, 3600]) },
+          { label: "Qo'ng'iroq qilingan", value: <>{fmtNum(s.called)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pct(s.called, s.total)}</small></>, color: TONE.good },
+          { label: "Qo'ng'iroq qilinmagan", value: fmtNum(s.not_called), color: s.not_called ? TONE.critical : undefined },
+          { label: "Mediana (ish vaqti)", value: fmtSecs(s.median_work_s), color: TONE[speedTone(s.median_work_s, [900, 3600])] },
+          { label: "O'rtacha (ish vaqti)", value: fmtSecs(s.avg_work_s), color: TONE[speedTone(s.avg_work_s, [900, 3600])] },
         ]} />
         <BandBar bands={s.bands} defs={LEAD_BANDS} />
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 18 }}>
@@ -156,39 +162,40 @@ function LeadTab({ filter, portal }: { filter: CallDashboardFilter; portal: stri
         <button style={chip(view === "not_called", "#DC2626")} onClick={() => { setView("not_called"); setShown(100); }}>Qo'ng'iroq qilinmagan {fmtNum(s.not_called)}</button>
         <button style={chip(view === "slow", "#EA580C")} onClick={() => { setView("slow"); setShown(100); }}>1 soatdan sekin {fmtNum(slowCount)}</button>
       </div>
+      <style>{ROW_CSS}</style>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr>{["Lid", "Yaratildi", "Birinchi qo'ng'iroq", "Kim qildi", "Mas'ul"].map((h) => <th key={h} style={{ ...TH, top: 53 }}>{h}</th>)}</tr></thead>
+        <thead><tr>{["Lid (manba)", "Yaratildi", "Qancha vaqtda", "Kim qo'ng'iroq qildi", "Mas'ul"].map((h) => <th key={h} style={{ ...TH, top: 53 }}>{h}</th>)}</tr></thead>
         <tbody>
-          {items.slice(0, shown).map((i) => (
-            <tr key={i.lead_id}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-              <td style={{ ...TD, maxWidth: 280 }}>
-                <a href={portal ? `${portal}/crm/lead/details/${i.lead_id}/` : undefined} target="_blank" rel="noreferrer"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: "100%", color: "#2563EB", textDecoration: "none", fontWeight: 600 }}>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.title || `Lid #${i.lead_id}`}</span>
-                  <ExternalLink size={11} style={{ flexShrink: 0, opacity: 0.6 }} />
-                </a>
-                <div style={sub}>{i.source}</div>
-              </td>
-              <td style={{ ...TD, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                <b>{fmtTime(i.created_at)}</b> <span style={{ color: "var(--text3)" }}>{fmtDay(i.created_at)}</span>
-              </td>
-              <td style={{ ...TD, whiteSpace: "nowrap" }} title={i.delay_s != null ? `Haqiqatda (soat bo'yicha): ${fmtSecs(i.delay_s)}` : undefined}>
-                {i.first_call_at ? <>
-                  <div style={{ fontVariantNumeric: "tabular-nums" }}><b>{fmtTime(i.first_call_at)}</b> <span style={{ color: "var(--text3)" }}>{fmtDay(i.first_call_at)}</span></div>
-                  <div style={{ ...sub, fontWeight: 700, color: tone(i.work_delay_s, [900, 3600]) }}>{fmtSecs(i.work_delay_s)} dan keyin</div>
-                </> : <span style={{ color: "#DC2626", fontWeight: 600 }}>Qo'ng'iroq qilinmagan</span>}
-              </td>
-              <td style={TD}>
-                {i.caller ? <>
-                  <div style={{ color: "var(--text)" }}>{i.caller}</div>
-                  {i.answered === false && <div style={{ ...sub, color: "#B45309" }}>mijoz ko'tarmadi</div>}
-                </> : <span style={{ color: "var(--text3)" }}>—</span>}
-              </td>
-              <td style={{ ...TD, color: "var(--text)" }}>{i.responsible || "—"}</td>
-            </tr>
-          ))}
+          {items.slice(0, shown).map((i) => {
+            const generic = !i.title || /^Лид #\d+$/.test(i.title);
+            return (
+              // The whole row opens the lead in Bitrix.
+              <tr key={i.lead_id} className="rp-row" title="Bosing — lidni Bitrix'da ochish" onClick={() => openLead(portal, i.lead_id)}>
+                <td style={{ ...TD, maxWidth: 280 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--text)" }}>
+                    {i.source}<ExternalLink size={12} className="rp-go" />
+                  </div>
+                  {!generic && <div style={{ ...sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.title}</div>}
+                </td>
+                <td style={{ ...TD, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                  <b>{fmtTime(i.created_at)}</b> <span style={{ color: "var(--text3)" }}>{fmtDay(i.created_at)}</span>
+                </td>
+                <td style={{ ...TD, whiteSpace: "nowrap" }} title={i.delay_s != null ? `Haqiqatda (soat bo'yicha): ${fmtSecs(i.delay_s)}` : undefined}>
+                  {i.first_call_at ? <>
+                    <StatusMark tone={speedTone(i.work_delay_s, [900, 3600])} icon={Timer}><b>{fmtSecs(i.work_delay_s)}</b></StatusMark>
+                    <div style={{ ...sub, paddingLeft: 20 }}>{fmtTime(i.first_call_at)} da · {fmtDay(i.first_call_at)}</div>
+                  </> : <StatusMark tone="critical" icon={XCircle}>Qo'ng'iroq qilinmagan</StatusMark>}
+                </td>
+                <td style={TD}>
+                  {i.caller ? <>
+                    <StatusMark tone="info" icon={Headset}>{i.caller}</StatusMark>
+                    <div style={{ ...sub, paddingLeft: 20 }}>{i.answered === false ? "mijoz ko'tarmadi" : "gaplashdi"}</div>
+                  </> : <span style={{ color: "var(--text3)" }}>—</span>}
+                </td>
+                <td style={{ ...TD, color: "var(--text)" }}>{i.responsible || "—"}</td>
+              </tr>
+            );
+          })}
           {!items.length && <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>Bu filtr bo'yicha lid yo'q</td></tr>}
         </tbody>
       </table>

@@ -3,6 +3,7 @@
  * instead of unfolding further down where it has to be scrolled to. Esc, the X or a click
  * outside closes it; the page underneath keeps its scroll position.
  */
+import { useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
@@ -24,14 +25,20 @@ export function SidePanel({ open, onClose, title, subtitle, width = 960, headerE
   headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const contentRef = useRef<HTMLDivElement>(null);
   return (
     <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <Dialog.Portal>
         <style>{CSS}</style>
         <Dialog.Overlay className="sp-overlay" style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(12,14,20,0.32)" }} />
         <Dialog.Content
+          ref={contentRef}
+          tabIndex={-1}
           className="sp-content"
           aria-describedby={undefined}
+          // Focus the panel itself on open. Radix focuses the first button otherwise — the
+          // "?" next to the title — and focusing it opens its explanation every time.
+          onOpenAutoFocus={(e) => { e.preventDefault(); contentRef.current?.focus(); }}
           style={{
             position: "fixed", top: 12, right: 12, bottom: 12, zIndex: 901,
             width: `min(${width}px, calc(100vw - 24px))`,
@@ -63,9 +70,13 @@ export function PanelStats({ items }: { items: { label: string; value: React.Rea
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {items.map((it) => (
+        // The number stays in ink; a colour, when given, is a small dot that tags the label.
         <div key={it.label} style={{ padding: "8px 14px", borderRadius: 12, background: "var(--bg2)", border: "1px solid var(--border)", minWidth: 96 }}>
-          <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{it.label}</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: it.color ?? "var(--text)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{it.value}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text3)", fontWeight: 500, whiteSpace: "nowrap" }}>
+            {it.color && <span style={{ width: 7, height: 7, borderRadius: "50%", background: it.color, flexShrink: 0 }} />}
+            {it.label}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", marginTop: 2, whiteSpace: "nowrap" }}>{it.value}</div>
         </div>
       ))}
     </div>

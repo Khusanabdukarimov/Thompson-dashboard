@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PhoneMissed, ChevronDown, Clock } from "lucide-react";
+import {
+  PhoneMissed, ChevronDown, Clock, PhoneOff, Hourglass, Moon, AlertTriangle, HelpCircle, Headset, UserRound,
+  CheckCircle2, XCircle, Timer, ExternalLink, type LucideIcon,
+} from "lucide-react";
+import { StatusMark, Dot, TONE, speedTone, openLead, type Tone } from "@/components/StatusMark";
 import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
-import { leadStageLabel } from "@/lib/leadStages";
+import { leadStageColor, leadStageLabel, leadStageId } from "@/lib/leadStages";
 import { fmtSecs } from "@/lib/duration";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
 import { InfoTip } from "@/components/InfoTip";
@@ -43,10 +47,6 @@ const fmtWhen = (iso: string) => new Date(iso).toLocaleString("ru-RU", {
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { timeZone: TZ, day: "2-digit", month: "2-digit" });
 
-const pill = (color: string): React.CSSProperties => ({
-  display: "inline-block", padding: "2px 9px", borderRadius: 6, fontSize: 11, fontWeight: 700,
-  color, background: `${color}1f`, border: `1px solid ${color}44`, whiteSpace: "nowrap",
-});
 
 /** 540 → "9 daq", 7500 → "2 soat 5 daq", 108005 → "30 soat". */
 const fmtDelay = (s: number): string => {
@@ -56,32 +56,30 @@ const fmtDelay = (s: number): string => {
 };
 
 /** Why a call was missed (reason_kind from the API), in words; the PBX's raw code goes in the tooltip. */
-const REASONS: Record<string, { label: string; color: string; desc: string }> = {
-  rang: { label: "Operatorlar javob bermadi", color: "#F44336", desc: "Operatorlarning telefoni jiringladi, hech kim ko'tarmadi — mijoz kutib, qo'ng'iroqni uzdi" },
-  queue: { label: "Operatorgacha yetmay uzdi", color: "#FF9800", desc: "Mijoz menyu yoki navbatda turib, birorta operatorning telefoni jiringlamasdan qo'ng'iroqni uzdi" },
-  after_hours: { label: "Ish vaqtidan tashqari", color: "#607D8B", desc: "Ish kunidan tashqari (08:00 dan oldin yoki 20:00 dan keyin) qilingan qo'ng'iroq" },
-  no_answer: { label: "Operator ko'tarmadi", color: "#E91E63", desc: "To'g'ridan-to'g'ri bitta operatorga qilingan qo'ng'iroq javobsiz qoldi" },
-  cancel: { label: "Mijoz darhol uzdi", color: "#9E9E9E", desc: "Mijoz ulanish bilanoq qo'ng'iroqni uzdi" },
-  tech: { label: "Aloqa xatosi", color: "#795548", desc: "Telefon tarmog'i yoki yo'naltirish (marshrut) xatosi" },
-  unknown: { label: "PBX'da yozuv yo'q", color: "#9E9E9E", desc: "Bitrix24 bu qo'ng'iroqni ko'rgan, telefoniyada esa yozuvi topilmadi" },
+const REASONS: Record<string, { label: string; color: string; tone: Tone; icon: LucideIcon; desc: string }> = {
+  rang: { label: "Operatorlar javob bermadi", color: TONE.critical, tone: "critical", icon: PhoneOff, desc: "Operatorlarning telefoni jiringladi, hech kim ko'tarmadi — mijoz kutib, qo'ng'iroqni uzdi" },
+  queue: { label: "Operatorgacha yetmay uzdi", color: TONE.serious, tone: "serious", icon: Hourglass, desc: "Mijoz menyu yoki navbatda turib, birorta operatorning telefoni jiringlamasdan qo'ng'iroqni uzdi" },
+  after_hours: { label: "Ish vaqtidan tashqari", color: TONE.neutral, tone: "neutral", icon: Moon, desc: "Ish kunidan tashqari (08:00 dan oldin yoki 20:00 dan keyin) qilingan qo'ng'iroq" },
+  no_answer: { label: "Operator ko'tarmadi", color: TONE.critical, tone: "critical", icon: PhoneOff, desc: "To'g'ridan-to'g'ri bitta operatorga qilingan qo'ng'iroq javobsiz qoldi" },
+  cancel: { label: "Mijoz darhol uzdi", color: TONE.neutral, tone: "neutral", icon: PhoneMissed, desc: "Mijoz ulanish bilanoq qo'ng'iroqni uzdi" },
+  tech: { label: "Aloqa xatosi", color: TONE.warning, tone: "warning", icon: AlertTriangle, desc: "Telefon tarmog'i yoki yo'naltirish (marshrut) xatosi" },
+  unknown: { label: "PBX'da yozuv yo'q", color: TONE.neutral, tone: "neutral", icon: HelpCircle, desc: "Bitrix24 bu qo'ng'iroqni ko'rgan, telefoniyada esa yozuvi topilmadi" },
 };
 
 function ReasonCell({ it }: { it: MissedCallItem }) {
   const r = REASONS[it.reason_kind ?? (it.matched ? "" : "unknown")];
-  if (!r) return <span style={{ fontSize: 11.5, color: "var(--text3)" }}>{it.reason || "—"}</span>;
-  return <span style={pill(r.color)} title={`${r.desc}${it.reason ? ` · PBX kodi: ${it.reason}` : ""}`}>{r.label}</span>;
+  if (!r) return <span style={{ fontSize: 12, color: "var(--text3)" }}>{it.reason || "—"}</span>;
+  return <StatusMark tone={r.tone} icon={r.icon} title={`${r.desc}${it.reason ? ` · PBX kodi: ${it.reason}` : ""}`}>{r.label}</StatusMark>;
 }
 
 /** Delay bands of the Reaksiya vaqti list (ids from the API), slow ones in warmer colours. */
 const BANDS: Record<string, { label: string; color: string }> = {
-  lt5m: { label: "5 daq gacha", color: "#4CAF50" },
-  lt15m: { label: "5–15 daq", color: "#8BC34A" },
-  lt1h: { label: "15–60 daq", color: "#FFB300" },
-  lt4h: { label: "1–4 soat", color: "#FF9800" },
-  gte4h: { label: "4 soatdan ko'p", color: "#F44336" },
+  lt5m: { label: "5 daq gacha", color: TONE.good },
+  lt15m: { label: "5–15 daq", color: "#7cc46e" },
+  lt1h: { label: "15–60 daq", color: TONE.warning },
+  lt4h: { label: "1–4 soat", color: TONE.serious },
+  gte4h: { label: "4 soatdan ko'p", color: TONE.critical },
 };
-const bandColor = (s: number) =>
-  s < 300 ? BANDS.lt5m.color : s < 900 ? BANDS.lt15m.color : s < 3600 ? BANDS.lt1h.color : s < 4 * 3600 ? BANDS.lt4h.color : BANDS.gte4h.color;
 const pctStr = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "0%");
 
 /** Who made the contact that counted: an operator's callback, or the customer's own redial. */
@@ -91,15 +89,15 @@ function ContactCell({ it }: { it: MissedCallItem }) {
     const noPick = it.callback_answered === false;
     return (
       <div title={noPick ? `Operator qayta qo'ng'iroq qilgan, mijoz ko'tarmagan${via}` : `Operator qayta qo'ng'iroq qilgan${via}`}>
-        <div style={{ color: "var(--text)", fontWeight: 600 }}>{it.callback_by ?? "Operator"}</div>
-        <div style={{ fontSize: 11.5, marginTop: 3, color: noPick ? "#B45309" : "var(--text3)" }}>{noPick ? "qo'ng'iroq qildi · mijoz ko'tarmadi" : "operator qo'ng'iroq qildi"}</div>
+        <StatusMark tone="info" icon={Headset}><b style={{ fontWeight: 600 }}>{it.callback_by ?? "Operator"}</b></StatusMark>
+        <div style={{ fontSize: 11.5, marginTop: 4, color: "var(--text3)", paddingLeft: 20 }}>{noPick ? "qo'ng'iroq qildi · mijoz ko'tarmadi" : "qo'ng'iroq qildi · gaplashdi"}</div>
       </div>
     );
   }
   if (it.callback_dir === "inbound") return (
     <div title={`Mijoz o'zi qayta qo'ng'iroq qilgan va javob olgan${via}`}>
-      <div style={{ color: "#9333EA", fontWeight: 600 }}>Mijoz o'zi</div>
-      {it.callback_by && <div style={{ fontSize: 11.5, marginTop: 3, color: "var(--text3)" }}>javob berdi: {it.callback_by}</div>}
+      <StatusMark tone="neutral" icon={UserRound}><b style={{ fontWeight: 600 }}>Mijoz o'zi</b></StatusMark>
+      {it.callback_by && <div style={{ fontSize: 11.5, marginTop: 4, color: "var(--text3)", paddingLeft: 20 }}>javob berdi: {it.callback_by}</div>}
     </div>
   );
   return <span style={{ color: "var(--text3)" }}>—</span>;
@@ -112,13 +110,15 @@ function RecalledCell({ it }: { it: MissedCallItem }) {
     const real = it.delay_s != null && it.work_delay_s != null && it.delay_s !== it.work_delay_s ? `, haqiqatda ${fmtDelay(it.delay_s)}` : "";
     return (
       <div title={`${fmtWhen(it.callback_at)} — ish vaqti bo'yicha ${after} o'tgach${real}`}>
-        <div style={{ color: "#16A34A", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtTime(it.callback_at)} <span style={{ fontWeight: 400, color: "var(--text3)" }}>{fmtDay(it.callback_at)}</span></div>
-        <div style={{ fontSize: 11.5, marginTop: 3, color: "var(--text3)" }}>{after} dan keyin</div>
+        <StatusMark tone={it.status === "late" ? "warning" : "good"} icon={CheckCircle2}>
+          <b style={{ fontVariantNumeric: "tabular-nums" }}>{fmtTime(it.callback_at)}</b> <span style={{ color: "var(--text3)" }}>{fmtDay(it.callback_at)}</span>
+        </StatusMark>
+        <div style={{ fontSize: 11.5, marginTop: 4, color: "var(--text3)", paddingLeft: 20 }}>{after} dan keyin</div>
       </div>
     );
   }
-  if (it.status === "open") return <span style={pill("#FF9800")} title="24 soat hali tugamagan: qayta qo'ng'iroq bo'lishi mumkin">Kutilmoqda</span>;
-  return <span style={pill("#F44336")}>Yo'q</span>;
+  if (it.status === "open") return <StatusMark tone="warning" icon={Hourglass} muted title="24 soat hali tugamagan: qayta qo'ng'iroq bo'lishi mumkin">Kutilmoqda</StatusMark>;
+  return <StatusMark tone="critical" icon={XCircle}>Qayta chiqilmagan</StatusMark>;
 }
 
 export function MissedCallsModal({ variant, filter, portal, onClose, embedded = false }: {
@@ -221,10 +221,10 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
           {!reaction && s?.reasons && Object.keys(s.reasons).length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
               {Object.entries(s.reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => {
-                const rs = REASONS[k] ?? { label: k, color: "#9E9E9E", desc: "" };
+                const rs = REASONS[k] ?? { label: k, tone: "neutral" as Tone, icon: HelpCircle, desc: "" };
                 return (
-                  <span key={k} title={rs.desc} style={{ ...pill(rs.color), fontSize: 11.5, padding: "3px 10px", fontWeight: 600 }}>
-                    {rs.label} {fmtNum(n)}
+                  <span key={k} title={rs.desc} style={{ fontSize: 12, padding: "5px 11px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--bg)" }}>
+                    <StatusMark tone={rs.tone} icon={rs.icon}>{rs.label} <b>{fmtNum(n)}</b> <span style={{ color: "var(--text3)" }}>{pctStr(n, s!.total)}</span></StatusMark>
                   </span>
                 );
               })}
@@ -256,28 +256,37 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
               </span>
             </div>
           )}
+          <style>{`
+            .mc-row td { transition: background .12s; }
+            .mc-row:hover td { background: var(--bg3); }
+            .mc-link { cursor: pointer; }
+            .mc-go { color: var(--text3); opacity: 0; transition: opacity .12s; }
+            .mc-row:hover .mc-go { opacity: 1; }
+          `}</style>
           <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
             <thead>
               <tr>
                 {(reaction
-                  ? ["Mijoz", "Javobsiz qo'ng'iroq", "Bog'lanildi", "Kim bog'landi", "Mas'ul"]
+                  ? ["Mijoz", "Javobsiz qo'ng'iroq", "Qancha vaqtda", "Kim bog'landi", "Mas'ul"]
                   : ["Mijoz", "Javobsiz qo'ng'iroq", "Qayta chiqilgan", "Sabab", "Mas'ul"]).map((h) => <th key={h} style={TH2}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {items.map((it) => (
-                <tr key={it.key}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                  {/* Mijoz: the number, then its lead and stage */}
+                // The whole row opens the lead in Bitrix.
+                <tr key={it.key} className={it.lead_id ? "mc-row mc-link" : "mc-row"}
+                  title={it.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Bitrix24'da lid topilmadi"}
+                  onClick={() => openLead(portal, it.lead_id)}>
+                  {/* Mijoz: the number and where its lead stands */}
                   <td style={TD2}>
-                    <div style={{ fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>{fmtPhone(it.phone)}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>
+                      {fmtPhone(it.phone)}
+                      {it.lead_id && <ExternalLink size={12} className="mc-go" />}
+                    </div>
                     <div style={sub}>
-                      {it.lead_id ? (portal
-                        ? <a href={`${portal}/crm/lead/details/${it.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2563EB", textDecoration: "none" }}>Lid #{it.lead_id} ↗</a>
-                        : <>Lid #{it.lead_id}</>)
-                        : <i>Bitrix24 da yo'q</i>}
-                      {it.stage_name && <> · {leadStageLabel(null, it.stage_name)}</>}
+                      {it.lead_id
+                        ? (it.stage_name ? <Dot color={leadStageColor(leadStageId(it.stage_name))}>{leadStageLabel(null, it.stage_name)}</Dot> : "Lid")
+                        : <i>Bitrix24'da lid yo'q</i>}
                     </div>
                   </td>
                   {/* the missed call: when, how long they waited, how many times */}
@@ -287,15 +296,17 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
                     </div>
                     <div style={sub}>
                       {it.wait_s != null && <>kutdi {fmtSecs(it.wait_s)}</>}
-                      {it.attempts > 1 && <> · <b style={{ color: "#DC2626" }}>{it.attempts} marta</b></>}
+                      {it.attempts > 1 && <> · <span title="Shu raqamdan javobsiz qo'ng'iroqlar soni" style={{ color: "var(--text2)", fontWeight: 600 }}>{it.attempts} marta qo'ng'iroq qilgan</span></>}
                       {it.matched && it.operator && <> · {it.operator}</>}
                     </div>
                   </td>
                   {reaction ? <>
                     <td style={TD2} title={it.delay_s != null ? `Haqiqatda (soat bo'yicha): ${fmtSecs(it.delay_s)}` : undefined}>
                       {it.callback_at ? <>
-                        <div style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}><b>{fmtTime(it.callback_at)}</b></div>
-                        <div style={{ ...sub, fontWeight: 700, color: bandColor(it.work_delay_s ?? 0) }}>{fmtSecs(it.work_delay_s)} dan keyin</div>
+                        <StatusMark tone={speedTone(it.work_delay_s, [900, 3600])} icon={Timer}>
+                          <b>{fmtSecs(it.work_delay_s)}</b>
+                        </StatusMark>
+                        <div style={{ ...sub, paddingLeft: 20 }}>{fmtTime(it.callback_at)} da bog'lanildi</div>
                       </> : "—"}
                     </td>
                     <td style={TD2}><ContactCell it={it} /></td>

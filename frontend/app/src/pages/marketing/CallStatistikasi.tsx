@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
   Clock, PhoneMissed, Timer, ChevronDown,
-  Download, PhoneOff, Search, Users, ChevronRight,
+  Download, PhoneOff, Search, Users, ChevronRight, ExternalLink,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -16,7 +16,8 @@ import {
   type CallDashboardFilter,
   type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
-import { leadStageLabel } from "@/lib/leadStages";
+import { leadStageColor, leadStageLabel } from "@/lib/leadStages";
+import { StatusMark, Dot, openLead } from "@/components/StatusMark";
 import { fmtNum } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
@@ -56,6 +57,11 @@ const TABLE_CSS = `
   th.cs-sticky { z-index: 4; }
   .cs-go { color: var(--text3); opacity: 0; transition: opacity .12s; flex-shrink: 0; }
   .cs-row:hover .cs-go { opacity: 1; }
+  .cl-row td { transition: background .12s; }
+  .cl-row:hover td { background: var(--bg3); }
+  .cl-link { cursor: pointer; }
+  .cl-go { color: var(--text3); opacity: 0; transition: opacity .12s; }
+  .cl-row:hover .cl-go { opacity: 1; }
 `;
 
 /** Table time: 1:28:32, 28:53, 0:41 — no padded zero hours, "—" for nothing. */
@@ -232,9 +238,13 @@ const CALL_PRESETS = [
 const rowKey = (u: PyResponsibleCallStats, idx: number) =>
   u.responsible_id != null ? `r:${u.responsible_id}` : u.operator_ext ? `e:${u.operator_ext}` : `i:${idx}`;
 
-/** Stage pill colour: won green, Sifatsiz red, Bekor amber, the rest neutral purple. */
-const stageTone = (bid: string | null) =>
-  bid === "CONVERTED" ? "#16A34A" : bid === "JUNK" ? "#DC2626" : bid === "UC_L8G2B9" ? "#D97706" : "#7C3AED";
+/** "998901234567" / "901234567" → "90 123 45 67". */
+const fmtPhone = (p?: string | null) => {
+  const d = (p ?? "").replace(/\D/g, "");
+  if (d.length < 9) return p || "—";
+  const n = d.slice(-9);
+  return `${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5, 7)} ${n.slice(7)}`;
+};
 
 /** m:ss / h:mm:ss — short enough for a table cell. */
 const fmtShortDur = (secs: number) => {
@@ -307,7 +317,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
         <table style={{ width: "100%", minWidth: 860, borderCollapse: "collapse", fontSize: 12.5 }}>
           <thead>
             <tr>
-              {["Vaqt", "Telefon", "Yo'nalish", "Natija", "Lid", "Bosqich va sabab"].map((h) => <th key={h} style={TH}>{h}</th>)}
+              {["Vaqt", "Mijoz", "Yo'nalish", "Natija", "Lid holati"].map((h) => <th key={h} style={TH}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -318,57 +328,54 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
               const ok = c.status_code === 200;
               const when = c.call_start ? new Date(c.call_start) : null;
               const stageLabel = c.stage_name || c.stage_bitrix_id ? leadStageLabel(c.stage_bitrix_id, c.stage_name) : null;
-              const tone = stageTone(c.stage_bitrix_id);
+              const dead = c.stage_bitrix_id === "JUNK" || c.stage_bitrix_id === "UC_L8G2B9";
               return (
-                <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                // The whole row opens the lead in Bitrix (no lead column with the long title).
+                <tr key={c.id} className={c.lead_id ? "cl-row cl-link" : "cl-row"}
+                  title={c.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Bu raqam bo'yicha lid topilmadi"}
+                  onClick={() => openLead(portal, c.lead_id)}>
                   <td style={{ ...TD, whiteSpace: "nowrap" }}>
                     {when ? <>
                       <span style={{ fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{when.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
                       <span style={{ color: "var(--text3)", marginLeft: 6 }}>{when.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</span>
                     </> : "—"}
                   </td>
-                  <td style={{ ...TD, fontFamily: "monospace", fontSize: 13, color: "var(--text)", whiteSpace: "nowrap" }}>{c.phone_number || "—"}</td>
                   <td style={{ ...TD, whiteSpace: "nowrap" }}>
-                    {c.call_type ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: inbound ? "#16A34A" : "#2563EB", fontWeight: 600, fontSize: 12 }}>
-                        {inbound ? <PhoneIncoming size={14} /> : <PhoneOutgoing size={14} />}{inbound ? "Kiruvchi" : "Chiquvchi"}
-                      </span>
-                    ) : "—"}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>
+                      {fmtPhone(c.phone_number)}
+                      {c.lead_id && <ExternalLink size={12} className="cl-go" />}
+                    </span>
+                  </td>
+                  <td style={{ ...TD, whiteSpace: "nowrap" }}>
+                    {c.call_type
+                      ? <StatusMark tone="neutral" icon={inbound ? PhoneIncoming : PhoneOutgoing} muted>{inbound ? "Kiruvchi" : "Chiquvchi"}</StatusMark>
+                      : "—"}
                   </td>
                   <td style={{ ...TD, whiteSpace: "nowrap" }}
                     title={ok ? `Suhbat ${fmtShortDur(c.talk_time ?? 0)} · jami ${fmtShortDur(c.duration ?? 0)}` : `Javob berilmadi · ${fmtShortDur(c.duration ?? 0)} jiringladi`}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: ok ? "#16A34A" : "#DC2626", flexShrink: 0 }} />
-                      <span style={{ fontWeight: 600, color: ok ? "#16A34A" : "#DC2626" }}>{ok ? "Gaplashildi" : "Javobsiz"}</span>
+                    <StatusMark tone={ok ? "good" : "critical"} icon={ok ? CheckCircle : PhoneOff}>
+                      {ok ? "Gaplashildi" : "Javobsiz"}
                       <span style={{ color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{fmtShortDur(ok ? (c.talk_time ?? c.duration ?? 0) : (c.duration ?? 0))}</span>
-                    </span>
-                  </td>
-                  <td style={{ ...TD, maxWidth: 300 }}>
-                    {c.lead_id ? (
-                      <a href={portal ? `${portal}/crm/lead/details/${c.lead_id}/` : undefined} target="_blank" rel="noreferrer" title={c.lead_title ?? undefined}
-                        style={{ display: "block", color: "#2563EB", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {c.lead_title || `Lid #${c.lead_id}`}
-                      </a>
-                    ) : <span style={{ color: "var(--text3)" }}>Lid topilmadi</span>}
+                    </StatusMark>
                   </td>
                   <td style={TD}>
                     {stageLabel ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 600, color: tone, background: `${tone}14`, border: `1px solid ${tone}33`, borderRadius: 6, padding: "2px 8px", whiteSpace: "nowrap" }}>{stageLabel}</span>
-                        {c.stage_reason
-                          ? <span style={{ fontSize: 12, color: "var(--text2)" }} title="Bitrix'da yozilgan sabab">{c.stage_reason}</span>
-                          : (c.stage_bitrix_id === "JUNK" || c.stage_bitrix_id === "UC_L8G2B9") &&
-                            <span style={{ fontSize: 11.5, color: "var(--text3)", fontStyle: "italic" }} title="Bitrix'da sabab maydonlari to'ldirilmagan">sabab yozilmagan</span>}
-                      </span>
-                    ) : <span style={{ color: "var(--text3)" }}>—</span>}
+                      <div>
+                        <Dot color={leadStageColor(c.stage_bitrix_id)}><span style={{ color: "var(--text)" }}>{stageLabel}</span></Dot>
+                        {dead && (
+                          <div style={{ fontSize: 11.5, marginTop: 3, paddingLeft: 13, color: c.stage_reason ? "var(--text2)" : "var(--text3)", fontStyle: c.stage_reason ? "normal" : "italic" }}
+                            title="Bitrix'da yozilgan sabab">
+                            {c.stage_reason ?? "sabab yozilmagan"}
+                          </div>
+                        )}
+                      </div>
+                    ) : <span style={{ color: "var(--text3)" }}>{c.lead_id ? "—" : "Lid topilmadi"}</span>}
                   </td>
                 </tr>
               );
             })}
             {!shown.length && (
-              <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>Bu filtr bo'yicha qo'ng'iroq yo'q</td></tr>
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>Bu filtr bo'yicha qo'ng'iroq yo'q</td></tr>
             )}
           </tbody>
         </table>

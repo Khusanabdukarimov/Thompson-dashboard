@@ -40,6 +40,14 @@ const BY_RU: Record<string, string> = {
   "Студент | Жалоба | HR": BY_ID.UC_W02434,
 };
 
+/** Bitrix STATUS_ID from a stage's Russian name (for endpoints that send only the name). */
+export function leadStageId(name?: string | null): string | null {
+  const n = name?.replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  const uz = BY_RU[n];
+  return uz ? Object.keys(BY_ID).find((id) => BY_ID[id] === uz) ?? null : null;
+}
+
 export function leadStageLabel(id?: string | null, name?: string | null): string {
   if (id && BY_ID[id]) return BY_ID[id];
   const n = name?.replace(/\s+/g, " ").trim();
