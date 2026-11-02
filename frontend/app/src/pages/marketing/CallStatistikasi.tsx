@@ -17,7 +17,8 @@ import {
   type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
 import { leadStageColor, leadStageLabel } from "@/lib/leadStages";
-import { StatusMark, Dot, openLead } from "@/components/StatusMark";
+import { StatusMark, Dot } from "@/components/StatusMark";
+import { openLead, openByPhone } from "@/lib/status";
 import { fmtNum } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
@@ -331,9 +332,9 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
               const dead = c.stage_bitrix_id === "JUNK" || c.stage_bitrix_id === "UC_L8G2B9";
               return (
                 // The whole row opens the lead in Bitrix (no lead column with the long title).
-                <tr key={c.id} className={c.lead_id ? "cl-row cl-link" : "cl-row"}
-                  title={c.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Bu raqam bo'yicha lid topilmadi"}
-                  onClick={() => openLead(portal, c.lead_id)}>
+                <tr key={c.id} className="cl-row cl-link"
+                  title={c.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Lid yo'q — bosing, raqam Bitrix'da kimga tegishli ekani ochiladi (odatda kontakt)"}
+                  onClick={() => (c.lead_id ? openLead(portal, c.lead_id) : openByPhone(portal, c.phone_number))}>
                   <td style={{ ...TD, whiteSpace: "nowrap" }}>
                     {when ? <>
                       <span style={{ fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{when.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
@@ -343,7 +344,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                   <td style={{ ...TD, whiteSpace: "nowrap" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>
                       {fmtPhone(c.phone_number)}
-                      {c.lead_id && <ExternalLink size={12} className="cl-go" />}
+                      <ExternalLink size={12} className="cl-go" />
                     </span>
                   </td>
                   <td style={{ ...TD, whiteSpace: "nowrap" }}>
@@ -369,7 +370,11 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                           </div>
                         )}
                       </div>
-                    ) : <span style={{ color: "var(--text3)" }}>{c.lead_id ? "—" : "Lid topilmadi"}</span>}
+                    ) : c.lead_id ? <span style={{ color: "var(--text3)" }}>—</span> : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text2)" }}>
+                        <Search size={13} style={{ color: "var(--text3)" }} />Lid yo'q · Bitrix'da topish
+                      </span>
+                    )}
                   </td>
                 </tr>
               );

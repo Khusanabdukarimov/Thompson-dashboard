@@ -7,7 +7,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, ExternalLink, Timer, XCircle, Headset } from "lucide-react";
-import { StatusMark, TONE, speedTone, openLead } from "@/components/StatusMark";
+import { StatusMark } from "@/components/StatusMark";
+import { TONE, speedTone, openLead } from "@/lib/status";
 import { fmtNum } from "@/lib/utils";
 import { fmtSecs } from "@/lib/duration";
 import { SidePanel, PanelStats } from "@/components/SidePanel";

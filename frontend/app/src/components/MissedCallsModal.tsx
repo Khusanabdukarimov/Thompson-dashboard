@@ -4,7 +4,8 @@ import {
   PhoneMissed, ChevronDown, Clock, PhoneOff, Hourglass, Moon, AlertTriangle, HelpCircle, Headset, UserRound,
   CheckCircle2, XCircle, Timer, ExternalLink, type LucideIcon,
 } from "lucide-react";
-import { StatusMark, Dot, TONE, speedTone, openLead, type Tone } from "@/components/StatusMark";
+import { StatusMark, Dot } from "@/components/StatusMark";
+import { TONE, speedTone, openLead, openByPhone, type Tone } from "@/lib/status";
 import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
@@ -281,19 +282,19 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
             <tbody>
               {items.map((it) => (
                 // The whole row opens the lead in Bitrix.
-                <tr key={it.key} className={it.lead_id ? "mc-row mc-link" : "mc-row"}
-                  title={it.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Bitrix24'da lid topilmadi"}
-                  onClick={() => openLead(portal, it.lead_id)}>
+                <tr key={it.key} className="mc-row mc-link"
+                  title={it.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Lid yo'q — bosing, raqam Bitrix'da kimga tegishli ekani ochiladi (odatda kontakt)"}
+                  onClick={() => (it.lead_id ? openLead(portal, it.lead_id) : openByPhone(portal, it.phone))}>
                   {/* Mijoz: the number and where its lead stands */}
                   <td style={TD2}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>
                       {fmtPhone(it.phone)}
-                      {it.lead_id && <ExternalLink size={12} className="mc-go" />}
+                      <ExternalLink size={12} className="mc-go" />
                     </div>
                     <div style={sub}>
                       {it.lead_id
                         ? (it.stage_name ? <Dot color={leadStageColor(leadStageId(it.stage_name))}>{leadStageLabel(null, it.stage_name)}</Dot> : "Lid")
-                        : <i>Bitrix24'da lid yo'q</i>}
+                        : <>Lid yo'q · Bitrix'da topish</>}
                     </div>
                   </td>
                   {/* the missed call: when, how long they waited, how many times */}

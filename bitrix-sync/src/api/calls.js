@@ -8,6 +8,7 @@ const { describeSchedules, DEFAULT_SCHEDULE, workSeconds } = require('../config/
 const router = Router();
 
 const { REASON_FIELDS } = require('../config/leadReasons');
+const { bitrixPost } = require('../services/bitrix');
 
 const fail = (res, tag) => (err) => {
   console.error(`[calls/${tag}] ${err.message}`);
@@ -831,6 +832,34 @@ router.get('/call-lead-first-call', async (req, res) => {
     });
   } catch (err) {
     fail(res, 'call-lead-first-call')(err);
+  }
+});
+
+// ── Who owns a number in Bitrix ─────────────────────────────────
+// A call row with no matching lead is usually an existing client: a Bitrix CONTACT (with
+// deals), whose phones we do not store. On click, ask Bitrix once (crm.duplicate.findbycomm)
+// and open what it returns. Cached, so a number is looked up at most once an hour.
+const ownerCache = new Map();
+const OWNER_TTL_MS = 60 * 60 * 1000;
+
+/** GET /bitrix-owner?phone=901234567 → { type: 'lead' | 'contact' | 'company' | null, id } */
+router.get('/bitrix-owner', async (req, res) => {
+  const norm = String(req.query.phone || '').replace(/\D/g, '').slice(-9);
+  if (norm.length !== 9) return res.status(400).json({ error: 'phone required' });
+  const hit = ownerCache.get(norm);
+  if (hit && Date.now() - hit.at < OWNER_TTL_MS) return res.json(hit.owner);
+  try {
+    const values = [norm, `998${norm}`, `+998${norm}`];
+    let owner = { type: null, id: null };
+    for (const t of ['LEAD', 'CONTACT', 'COMPANY']) {
+      const r = await bitrixPost('crm.duplicate.findbycomm', { type: 'PHONE', values, entity_type: t });
+      const ids = r?.result?.[t];
+      if (Array.isArray(ids) && ids.length) { owner = { type: t.toLowerCase(), id: Math.max(...ids.map(Number)) }; break; }
+    }
+    ownerCache.set(norm, { at: Date.now(), owner });
+    res.json(owner);
+  } catch (err) {
+    fail(res, 'bitrix-owner')(err);
   }
 });
 

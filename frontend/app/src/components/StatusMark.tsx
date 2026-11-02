@@ -4,21 +4,7 @@
  * readable ink, so a row never turns into a wall of coloured pills.
  */
 import type { LucideIcon } from "lucide-react";
-
-export type Tone = "good" | "warning" | "serious" | "critical" | "neutral" | "info";
-
-export const TONE: Record<Tone, string> = {
-  good: "#0ca30c",
-  warning: "#e0a000",
-  serious: "#ec835a",
-  critical: "#d03b3b",
-  neutral: "#898781",
-  info: "#3b82f6",
-};
-
-/** Seconds → tone, against two limits (fine below the first, bad from the second). */
-export const speedTone = (s: number | null | undefined, [ok, slow]: [number, number]): Tone =>
-  s == null ? "neutral" : s < ok ? "good" : s < slow ? "warning" : "critical";
+import { TONE, type Tone } from "@/lib/status";
 
 export function StatusMark({ tone, icon: Icon, children, muted = false, title }: {
   tone: Tone; icon?: LucideIcon; children: React.ReactNode; muted?: boolean; title?: string;
@@ -42,8 +28,3 @@ export function Dot({ color, children }: { color: string; children: React.ReactN
     </span>
   );
 }
-
-/** Opens a lead in Bitrix — rows of lead lists are links as a whole. */
-export const openLead = (portal: string, leadId?: number | null) => {
-  if (portal && leadId) window.open(`${portal}/crm/lead/details/${leadId}/`, "_blank", "noopener");
-};

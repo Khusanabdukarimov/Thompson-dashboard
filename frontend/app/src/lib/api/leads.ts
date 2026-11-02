@@ -1231,3 +1231,8 @@ export type LeadFirstCall = {
 export function getLeadFirstCall(filter: CallDashboardFilter) {
   return apiGet<LeadFirstCall>("/api/dashboard/call-lead-first-call", { from: filter.start_date, to: filter.end_date }, API_URL_CRM);
 }
+
+/** Who a phone number belongs to in Bitrix (lead, else contact, else company) — asked on click. */
+export function getBitrixOwner(phone: string) {
+  return apiGet<{ type: "lead" | "contact" | "company" | null; id: number | null }>("/api/dashboard/bitrix-owner", { phone }, API_URL_CRM);
+}

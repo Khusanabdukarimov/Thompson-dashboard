@@ -9,7 +9,8 @@ import { fmtNum } from "@/lib/utils";
 import { useBitrixPortal } from "@/lib/api/config";
 import { leadStageColor, leadStageLabel } from "@/lib/leadStages";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
-import { Dot, openLead } from "@/components/StatusMark";
+import { Dot } from "@/components/StatusMark";
+import { openLead } from "@/lib/status";
 
 export type PanelLead = { id: number; title?: string | null; name?: string | null; last_name?: string | null; stage_bid?: string | null; date_create?: string | null };
 
