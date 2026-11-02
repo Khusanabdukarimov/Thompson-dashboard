@@ -172,7 +172,7 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
   const helpText = reaction ? (
     <>Har bir javobsiz kirish qo'ng'irog'idan keyin o'sha raqam bilan <b>birinchi bog'lanish</b> ({hours} soat ichida): operatorning qayta qo'ng'irog'i (mijoz ko'tarmagan bo'lsa ham) yoki mijozning o'zi qayta qilib javob olgani.
       <b> Reaksiya</b> — shu bog'lanishgacha o'tgan vaqt, ish vaqti bo'yicha{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>}; haqiqiy vaqt sichqoncha ustida.
-      <b> Mediana</b> — qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan. {hours} soat ichida bog'lanilmaganlar "Ne perezvonili"da.</>
+      <b> O'rtacha vaqt</b> — mediana: qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan (bir nechta juda kech qo'ng'iroq oddiy o'rtachani oshirib yubormasligi uchun). {hours} soat ichida bog'lanilmaganlar "Ne perezvonili"da.</>
   ) : (
     <>Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i. {hours} soat ichida operator o'sha raqamga qo'ng'iroq qilgan bo'lsa (mijoz ko'tarmagan bo'lsa ham) yoki mijoz o'zi qayta qilib javob olgan bo'lsa — qayta chiqilgan.
       <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>4×</b> — shu raqam ro'yxatda necha marta uchraydi. <b>Sabab</b> — telefoniya yozuvidan (asl PBX kodi sichqoncha ustida).</>
@@ -180,8 +180,8 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
 
   const stats = !s ? null : reaction && r ? [
     { label: "Bog'lanilgan", value: fmtNum(s.total), color: "#16A34A" },
-    { label: "O'rtacha (ish vaqti)", value: fmtSecs(r.avg_work_s) },
-    { label: "Mediana", value: fmtSecs(r.median_work_s), color: "#2563EB" },
+    // "O'rtacha vaqt" is the median: a few very late callbacks would pull a plain average far up.
+    { label: "O'rtacha vaqt", value: fmtSecs(r.median_work_s), color: TONE[speedTone(r.median_work_s, [900, 3600])] },
     { label: "Operator qayta chiqqan", value: <>{fmtNum(r.by_operator)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pctStr(r.by_operator, s.total)}</small></>, color: "#2563EB" },
     { label: "Mijoz o'zi qilgan", value: <>{fmtNum(r.by_customer)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pctStr(r.by_customer, s.total)}</small></>, color: "#9333EA" },
   ] : [

@@ -67,13 +67,13 @@ const ROW_CSS = `
 `;
 
 /** A small "who / how many / how fast" table (per operator, per source). */
-function SpeedTable({ title, rows, slow }: { title: string; rows: { name: string; count: number; extra?: React.ReactNode; avg_s: number | null; median_s: number | null }[]; slow: [number, number] }) {
+function SpeedTable({ title, rows, slow }: { title: string; rows: { name: string; count: number; extra?: React.ReactNode; median_s: number | null }[]; slow: [number, number] }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div style={{ flex: "1 1 380px", minWidth: 0, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", fontSize: 13, fontWeight: 700, color: "var(--text)", background: "var(--bg2)", borderBottom: "1px solid var(--border)" }}>{title}</div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr>{["", "Soni", "Mediana", "O'rtacha"].map((h, i) => <th key={i} style={{ ...TH, position: "static", textAlign: i ? "right" : "left" }}>{h}</th>)}</tr></thead>
+        <thead><tr>{["", "Soni", "O'rtacha vaqt"].map((h, i) => <th key={i} style={{ ...TH, position: "static", textAlign: i ? "right" : "left" }}>{h}</th>)}</tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.name}>
@@ -85,7 +85,6 @@ function SpeedTable({ title, rows, slow }: { title: string; rows: { name: string
               </td>
               <td style={{ ...TD, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum(r.count)}{r.extra}</td>
               <td style={{ ...TD, textAlign: "right" }}><StatusMark tone={speedTone(r.median_s, slow)}><b>{fmtSecs(r.median_s)}</b></StatusMark></td>
-              <td style={{ ...TD, textAlign: "right", color: "var(--text2)" }}>{fmtSecs(r.avg_s)}</td>
             </tr>
           ))}
         </tbody>
@@ -104,14 +103,13 @@ function AnswerTab({ filter }: { filter: CallDashboardFilter }) {
     <div style={{ padding: "16px 20px" }}>
       <PanelStats items={[
         { label: "Javob berilgan", value: fmtNum(s.count) },
-        { label: "O'rtacha kutish", value: fmtSecs(s.avg_s), color: TONE[speedTone(s.avg_s, [20, 40])] },
-        { label: "Mediana", value: fmtSecs(s.median_s), color: TONE[speedTone(s.median_s, [20, 40])] },
+        { label: "O'rtacha vaqt", value: fmtSecs(s.median_s), color: TONE[speedTone(s.median_s, [20, 40])] },
         { label: "20 s ichida", value: pct(s.within_20s, s.count), color: TONE.good },
       ]} />
       <BandBar bands={s.bands} defs={ANSWER_BANDS} />
       <div style={{ marginTop: 18 }}>
         <SpeedTable title="Operatorlar bo'yicha" slow={[20, 40]}
-          rows={by_operator.map((o) => ({ name: o.name, count: o.count, avg_s: o.avg_s, median_s: o.median_s }))} />
+          rows={by_operator.map((o) => ({ name: o.name, count: o.count, median_s: o.median_s }))} />
       </div>
     </div>
   );
@@ -145,15 +143,14 @@ function LeadTab({ filter, portal }: { filter: CallDashboardFilter; portal: stri
           { label: "Yangi lidlar", value: fmtNum(s.total) },
           { label: "Qo'ng'iroq qilingan", value: <>{fmtNum(s.called)} <small style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>{pct(s.called, s.total)}</small></>, color: TONE.good },
           { label: "Qo'ng'iroq qilinmagan", value: fmtNum(s.not_called), color: s.not_called ? TONE.critical : undefined },
-          { label: "Mediana (ish vaqti)", value: fmtSecs(s.median_work_s), color: TONE[speedTone(s.median_work_s, [900, 3600])] },
-          { label: "O'rtacha (ish vaqti)", value: fmtSecs(s.avg_work_s), color: TONE[speedTone(s.avg_work_s, [900, 3600])] },
+          { label: "O'rtacha vaqt", value: fmtSecs(s.median_work_s), color: TONE[speedTone(s.median_work_s, [900, 3600])] },
         ]} />
         <BandBar bands={s.bands} defs={LEAD_BANDS} />
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 18 }}>
           <SpeedTable title="Manba bo'yicha" slow={[900, 3600]}
-            rows={by_source.map((g) => ({ name: g.name, count: g.total, extra: g.total > g.called ? <span style={{ color: "#DC2626", fontSize: 11.5 }}> · {g.total - g.called} qilinmagan</span> : null, avg_s: g.avg_s, median_s: g.median_s }))} />
+            rows={by_source.map((g) => ({ name: g.name, count: g.total, extra: g.total > g.called ? <span style={{ color: "#DC2626", fontSize: 11.5 }}> · {g.total - g.called} qilinmagan</span> : null, median_s: g.median_s }))} />
           <SpeedTable title="Kim birinchi qo'ng'iroq qildi" slow={[900, 3600]}
-            rows={by_operator.slice(0, 12).map((g) => ({ name: g.name, count: g.called, avg_s: g.avg_s, median_s: g.median_s }))} />
+            rows={by_operator.slice(0, 12).map((g) => ({ name: g.name, count: g.called, median_s: g.median_s }))} />
         </div>
       </div>
 
@@ -224,6 +221,7 @@ export function ReactionPanel({ filter, portal, onClose, initialTab = "callback"
     <>
       <b>Javob berish</b> — javob berilgan kiruvchi qo'ng'iroqda mijoz operator ko'targunicha kutgan vaqt (salomlashish va menyu ham kiradi).
       <br /><b>Propushenniy'ga qayta qo'ng'iroq</b> — javobsiz qo'ng'iroqdan keyin o'sha raqam bilan birinchi bog'lanishgacha, ish vaqti bo'yicha.
+      <br /><b>O'rtacha vaqt</b> — hamma joyda mediana: holatlarning yarmi shundan tezroq (bir nechta juda kech holat oddiy o'rtachani oshirib yubormasligi uchun).
       <br /><b>Yangi lidga qo'ng'iroq</b> — qo'ng'iroqdan emas (Instagram, Kids, sayt, Telegram...) kelgan lid yaratilganidan operatorning birinchi qo'ng'irog'igacha (ko'tarilmagan bo'lsa ham), ish vaqti bo'yicha, 7 kun ichida.
       Qo'ng'iroq orqali yaratilgan lidlar (manba "Call" yoki nomi "Входящий / Пропущенный / Клиент не ответил / Исходящий") bu yerga kirmaydi.
     </>
