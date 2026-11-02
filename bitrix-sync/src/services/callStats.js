@@ -259,6 +259,8 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     ne_perezvonili: nePerezvonili,
     work_hours: describeSchedules(),            // what reaksiya_vaqti was measured against
     reaksiya_vaqti: reactions.length ? Math.round(reactions.reduce((s, n) => s + n, 0) / reactions.length) : 0,
+    // the card's headline: the middle callback (a few very late ones pull the average far up)
+    reaksiya_median: reactions.length ? (() => { const a = [...reactions].sort((x, y) => x - y), m = a.length >> 1; return Math.round(a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2); })() : 0,
     responsibles,
   };
   if (opts.detail) result.missed_detail = { total: missedEvents.length, recalled: recalledCount, not_recalled: notRecalled, recalled_events: recalledEvents };

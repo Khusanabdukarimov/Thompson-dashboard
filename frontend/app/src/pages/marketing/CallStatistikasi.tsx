@@ -12,7 +12,7 @@ import { MissedCallsModal, type MissedCallsVariant } from "@/components/MissedCa
 import { describeWorkHours } from "@/lib/workHours";
 import { getConfig } from "@/lib/api/config";
 import {
-  getPyCallStats, getCallList, getCallFilterOptions, getAnswerSpeed, getLeadFirstCall,
+  getPyCallStats, getCallList, getCallFilterOptions,
   type CallDashboardFilter,
   type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
@@ -424,9 +424,6 @@ export default function CallStatistikasi() {
   }, [filterOptionsQ.data]);
 
   const data: PyCallStatsResult | undefined = statsQ.data;
-  // The Reaksiya vaqti card's other two speeds (same queries the panel uses, so it opens filled).
-  const answerQ = useQuery({ queryKey: ["call-answer-speed", apiFilter], queryFn: () => getAnswerSpeed(apiFilter), staleTime: 5 * 60_000 });
-  const leadQ = useQuery({ queryKey: ["call-lead-first-call", apiFilter], queryFn: () => getLeadFirstCall(apiFilter), staleTime: 5 * 60_000 });
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
   const failedCalls = data?.failed_calls ?? 0;
   const ndzCalls = data?.ndz_calls ?? 0;
@@ -572,23 +569,9 @@ export default function CallStatistikasi() {
             icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)"
             onClick={() => setMissedModal("all")} hint="Ro'yxat" />
           <Card loading={statsQ.isLoading && !data} label="Reaksiya vaqti" accentColor="#607D8B"
-            value={
-              // Three speeds, each a line: pick-up, missed-call callback, first call to a new lead.
-              <div style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: 10, rowGap: 3, fontSize: 13, lineHeight: 1.25, alignItems: "baseline" }}>
-                {([
-                  ["Javob", answerQ.data?.summary.avg_s],
-                  ["Qayta", data?.reaksiya_vaqti ?? null],
-                  ["Lid", leadQ.data?.summary.median_work_s],
-                ] as const).map(([k, v]) => (
-                  <Fragment key={k}>
-                    <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--text3)" }}>{k}</span>
-                    <span style={{ fontWeight: 700, color: "var(--text)" }}>{v == null ? "…" : fmtSecs(v)}</span>
-                  </Fragment>
-                ))}
-              </div>
-            }
+            value={<span style={{ fontSize: 24 }}>{fmtSecs(data?.reaksiya_median ?? data?.reaksiya_vaqti ?? 0)}</span>}
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
-            tip={`Javob — kiruvchi qo'ng'iroqqa o'rtacha javob berish; Qayta — javobsiz qo'ng'iroqqa qayta bog'lanish (o'rtacha, ish vaqti: ${describeWorkHours(data?.work_hours)}); Lid — reklama/formadan kelgan lidga birinchi qo'ng'iroq (mediana, ish vaqti)`}
+            tip={`Propushenniy'ga qayta qo'ng'iroq — mediana, ish vaqti bo'yicha (${describeWorkHours(data?.work_hours)}). Bosing: javob berish tezligi, qayta qo'ng'iroq va yangi lidga qo'ng'iroq batafsil`}
             onClick={() => setReactionOpen(true)} hint="Batafsil" />
           <Card loading={statsQ.isLoading && !data} label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}

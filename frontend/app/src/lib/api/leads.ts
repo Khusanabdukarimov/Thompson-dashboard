@@ -616,6 +616,8 @@ export type CallStatsRow = {
 export type CallGlobalStats = {
   ne_perezvonili: number;
   reaksiya_vaqti: number;
+  /** Median callback wait (working time) — the Reaksiya card shows this. */
+  reaksiya_median?: number;
 };
 
 export type CallReactionRow = {
@@ -1007,6 +1009,8 @@ export type PyCallStatsResult = {
   ne_perezvonili: number;
   /** Average wait for the callback in WORKING time (see `work_hours`), seconds. */
   reaksiya_vaqti: number;
+  /** Median callback wait (working time) — the Reaksiya card shows this. */
+  reaksiya_median?: number;
   work_hours?:    Record<string, string>;
   responsibles:   PyResponsibleCallStats[];
 };
