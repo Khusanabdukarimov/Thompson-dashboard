@@ -5,7 +5,8 @@
  */
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ExternalLink, RotateCcw } from "lucide-react";
+import { ChevronRight, ExternalLink, RotateCcw } from "lucide-react";
+import { SidePanel, PanelStats } from "@/components/SidePanel";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 import { fmtNum } from "@/lib/utils";
 import { InfoTip } from "@/components/InfoTip";
@@ -45,6 +46,7 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
     return { ops: [...m.values()].sort((a, b) => b.total - a.total), totals, all: items.length };
   }, [q.data]);
   const max = Math.max(1, ...ops.map((o) => o.total));
+  const openOp = open ? ops.find((o) => o.key === open) ?? null : null;
 
   const TH: React.CSSProperties = { padding: "9px 16px", fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text3)", textAlign: "left", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
   const TD: React.CSSProperties = { padding: "11px 16px", borderBottom: "1px solid var(--border)", verticalAlign: "middle" };
@@ -93,14 +95,14 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
                 const isOpen = open === o.key;
                 return (
                   <Fragment key={o.key}>
-                    <tr onClick={() => setOpen(isOpen ? null : o.key)} style={{ cursor: "pointer", background: isOpen ? `${WON}0D` : "transparent" }}
+                    <tr onClick={() => setOpen(o.key)} style={{ cursor: "pointer", background: isOpen ? `${WON}0D` : "transparent" }}
                       onMouseEnter={(e) => { if (!isOpen) e.currentTarget.style.background = "var(--bg3)"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = isOpen ? `${WON}0D` : "transparent"; }}>
                       <td style={{ ...TD, textAlign: "center", color: "var(--text3)", fontWeight: 600 }}>{i + 1}</td>
                       <td style={{ ...TD, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                           {o.name}
-                          <ChevronDown size={14} style={{ color: "var(--text3)", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+                          <ChevronRight size={14} style={{ color: "var(--text3)" }} />
                         </span>
                       </td>
                       {FROM_STAGES.map((s) => (
@@ -120,11 +122,23 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
                         </div>
                       </td>
                     </tr>
-                    {isOpen && (
-                      <tr>
-                        <td colSpan={6} style={{ padding: 0, borderBottom: "1px solid var(--border)", background: "var(--bg)" }}>
-                          <div style={{ maxHeight: 360, overflowY: "auto" }}>
-                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <SidePanel open={!!openOp} onClose={() => setOpen(null)} width={860}
+        title={openOp?.name ?? ""} subtitle="Qayta tiklangan lidlar"
+        headerExtra={openOp && (
+          <PanelStats items={[
+            { label: "Jami", value: fmtNum(openOp.total), color: WON },
+            ...FROM_STAGES.map((st) => ({ label: st.label, value: fmtNum(openOp.byStage[st.bid] ?? 0), color: st.color })),
+          ]} />
+        )}>
+        {openOp && (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                               <thead>
                                 <tr>
                                   {["Lid", "Qayerdan", "O'sha bosqichga tushgan", "Muvaffaqiyatli bo'lgan", "Oraliq"].map((h) => (
@@ -133,7 +147,7 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
                                 </tr>
                               </thead>
                               <tbody>
-                                {o.leads.map((l) => {
+                                {openOp.leads.map((l) => {
                                   const st = FROM_STAGES.find((s) => s.bid === l.dead_stage);
                                   return (
                                     <tr key={l.lead_id}>
@@ -155,17 +169,8 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
                                 })}
                               </tbody>
                             </table>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+        )}
+      </SidePanel>
     </div>
   );
 }

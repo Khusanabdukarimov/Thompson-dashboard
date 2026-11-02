@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import {
   Calendar, Users, Star, TrendingUp, Filter,
@@ -13,6 +13,8 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { ReasonsCard } from "@/components/ReasonsCard";
 import { OperatorTable } from "@/components/OperatorTable";
 import { RevivedLeadsCard } from "@/components/RevivedLeadsCard";
+import { SidePanel, PanelStats } from "@/components/SidePanel";
+import { LeadListPanel } from "@/components/LeadListPanel";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
@@ -365,20 +367,18 @@ const TD: React.CSSProperties = {
 // bo'yicha, grouped by a UF enum value instead of source_id, each row
 // expandable into a LID/SANA/BOSQICH drill-down (same shape as Manba bo'yicha's).
 function UfBreakdownTable({
-  title, info, q, selected, setSelected, shown, setShown, listRef, leadsQ, bitrixPortal,
+  title, info, q, selected, setSelected, leadsQ,
 }: {
   title: string;
   /** What the table groups by, for the "?" badge. */
   info: string;
   q: { data?: UfBreakdownRow[]; isLoading: boolean };
   selected: string | null; setSelected: (v: string | null) => void;
-  shown: number; setShown: React.Dispatch<React.SetStateAction<number>>;
-  listRef: React.RefObject<HTMLDivElement | null>;
-  leadsQ: { data?: { items: ResponsibleLeadRow[] }; isLoading: boolean };
-  bitrixPortal: string;
+  leadsQ: { data?: { items: ResponsibleLeadRow[] }; isLoading: boolean; isError?: boolean; refetch?: () => void };
 }) {
   const rows: UfBreakdownRow[] = q.data ?? [];
   const rowKey = (r: UfBreakdownRow) => r.enum_id ?? 'Nomalum';
+  const selectedRow = selected ? rows.find((r) => rowKey(r) === selected) ?? null : null;
   const ROW_PAGE = 12;
   const [shownRows, setShownRows] = useState(ROW_PAGE);
   const maxes = {
@@ -423,10 +423,9 @@ function UfBreakdownTable({
                 const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
                 const key = rowKey(r);
                 const isOpen = selected === key;
-                const leads: ResponsibleLeadRow[] = isOpen ? (leadsQ.data?.items ?? []) : [];
                 return [
                   <tr key={key}
-                      onClick={() => { setShown(10); setSelected(isOpen ? null : key); }}
+                      onClick={() => setSelected(key)}
                       style={{ background: isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
                       onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = "var(--bg3)"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
@@ -463,45 +462,8 @@ function UfBreakdownTable({
                     <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
                     <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={sifatliKonv} size={38} /></td>
                   </tr>,
-                  isOpen ? (
-                    <tr key={`${key}-leads`}>
-                      <td colSpan={9} style={{ padding: "0 12px 12px" }}>
-                        <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
-                          {leadsQ.isLoading ? (
-                            <LoadingRows rows={3} />
-                          ) : !leads.length ? (
-                            <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
-                          ) : (
-                            <>
-                              <div ref={listRef} style={{ maxHeight: 340, overflowY: "auto" }}>
-                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                  <thead>
-                                    <tr style={{ background: "rgba(33,150,243,0.06)" }}>
-                                      <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
-                                      <th style={SUBTH}>LID</th>
-                                      <th style={{ ...SUBTH, width: 110 }}>SANA</th>
-                                      <th style={{ ...SUBTH, width: 210 }}>BOSQICH</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {leads.slice(0, shown).map((lead, li) => {
-                                      const st = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
-                                      return (
-                                        <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
-                                          <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
-                                          <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                            <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`} target="_blank" rel="noreferrer"
-                                               onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title || `Lid #${lead.id}`}
-                                            </a>
-                                          </td>
-                                          <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
-                                            {lead.date_create ? String(lead.date_create).slice(0, 10) : "—"}
-                                          </td>
-                                          <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
-                                        </tr>
-                                      );
-                                    })}
+                ];
+              })}
               {shownRows < rows.length && (
                 <tr>
                   <td colSpan={9} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
@@ -521,46 +483,24 @@ function UfBreakdownTable({
                   </td>
                 </tr>
               )}
-                                  </tbody>
-                                </table>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
-                                {shown < leads.length && (
-                                  <>
-                                    <button onClick={e => {
-                                              e.stopPropagation();
-                                              setShown((n: number) => n + 10);
-                                              requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current!.scrollHeight, behavior: "smooth" }));
-                                            }}
-                                      style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                      Yana 10 ta <ChevronDown size={12} />
-                                    </button>
-                                    <button onClick={e => {
-                                              e.stopPropagation();
-                                              setShown(leads.length);
-                                              requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
-                                            }}
-                                      style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                      Barchasi ({leads.length})
-                                    </button>
-                                  </>
-                                )}
-                                <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
-                                  {Math.min(shown, leads.length)} / {leads.length} ta lid
-                                </span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null,
-                ];
-              })}
             </tbody>
           </table>
         </div>
       )}
+      <SidePanel open={!!selectedRow} onClose={() => setSelected(null)}
+        title={selectedRow?.name ?? ""} subtitle={title}
+        headerExtra={selectedRow && (
+          <PanelStats items={[
+            { label: "Umumiy", value: fmtNum(selectedRow.umumiy_lidlar) },
+            { label: "Sifatli", value: fmtNum(selectedRow.sifatli_lid), color: "#0891B2" },
+            { label: "Tashrif belgilandi", value: fmtNum(selectedRow.konsultatsiya_belgilandi), color: "#7C3AED" },
+            { label: "Tashrif o'tkazildi", value: fmtNum(selectedRow.konsultatsiya_otkazildi), color: "#16A34A" },
+            { label: "Sifatsiz", value: fmtNum(selectedRow.sifatsiz), color: "#DC2626" },
+            { label: "Bekor bo'ldi", value: fmtNum(selectedRow.bekor_boldi), color: "#D97706" },
+          ]} />
+        )}>
+        <LeadListPanel leads={leadsQ.data?.items} loading={leadsQ.isLoading} error={leadsQ.isError} onRetry={leadsQ.refetch} />
+      </SidePanel>
     </div>
   );
 }
@@ -742,32 +682,24 @@ export default function LidlarPage() {
   });
   const daily = dailyQ.data;
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [shownSrcLeads, setShownSrcLeads] = useState(10);
-  const srcListRef = useRef<HTMLDivElement>(null);
   const srcLeadsQ = useQuery({
     queryKey: ["stats/source-leads", selectedSource, appliedWithMode],
     queryFn: () => getSourceLeads(selectedSource!, appliedWithMode, { limit: 1000 }),
     enabled: selectedSource !== null,
   });
   const [selectedSource1, setSelectedSource1] = useState<string | null>(null);
-  const [shownSource1Leads, setShownSource1Leads] = useState(10);
-  const source1ListRef = useRef<HTMLDivElement>(null);
   const source1LeadsQ = useQuery({
     queryKey: ["stats/source1-leads", selectedSource1, appliedWithMode],
     queryFn: () => getSource1Leads(selectedSource1!, appliedWithMode, { limit: 1000 }),
     enabled: selectedSource1 !== null,
   });
   const [selectedHudud, setSelectedHudud] = useState<string | null>(null);
-  const [shownHududLeads, setShownHududLeads] = useState(10);
-  const hududListRef = useRef<HTMLDivElement>(null);
   const hududLeadsQ = useQuery({
     queryKey: ["stats/hudud-leads", selectedHudud, appliedWithMode],
     queryFn: () => getHududLeads(selectedHudud!, appliedWithMode, { limit: 1000 }),
     enabled: selectedHudud !== null,
   });
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
-  const [shownReasonLeads, setShownReasonLeads] = useState(10);
-  const reasonListRef = useRef<HTMLDivElement>(null);
   const reasonLeadsQ = useQuery({
     queryKey: ["stats/reason-leads", selectedReason, appliedWithMode],
     queryFn: () => getPrichinaLeads(selectedReason!, appliedWithMode, { limit: 1000 }),
@@ -776,8 +708,6 @@ export default function LidlarPage() {
   const MASUL_PAGE = 12;
   const [shownMasulRows, setShownMasulRows] = useState(MASUL_PAGE);
   const [shownTransferRows, setShownTransferRows] = useState(MASUL_PAGE);
-  const [shownMasulLeads, setShownMasulLeads] = useState(10);
-  const masulListRef = useRef<HTMLDivElement>(null);
   const [selectedTaskResp, setSelectedTaskResp] = useState<number | null>(null);
   const respTasksQ = useQuery({
     queryKey: ["stats/responsible-tasks", selectedTaskResp, appliedWithMode],
@@ -787,15 +717,20 @@ export default function LidlarPage() {
   const [tabA, setTabA] = useState<string>("masul");
   const [tabB, setTabB] = useState<string>("manba");
   const [selectedRespConv, setSelectedRespConv] = useState<{ id: number; name: string } | null>(null);
+  const qc = useQueryClient();
+  // One operator's leads — shared by the panel and the hover prefetch.
+  const respLeadsQuery = (tag: string, id: number) => ({
+    queryKey: [`stats/responsible-leads-${tag}`, id, appliedWithMode] as const,
+    queryFn: () => getResponsibleLeads(id, appliedWithMode),
+    staleTime: 60_000,
+  });
   const respLeadsConvQ = useQuery({
-    queryKey: ["stats/responsible-leads-conv", selectedRespConv?.id, appliedWithMode],
-    queryFn: () => getResponsibleLeads(selectedRespConv!.id, appliedWithMode),
+    ...respLeadsQuery("conv", selectedRespConv?.id ?? 0),
     enabled: selectedRespConv !== null,
   });
   const [selectedRespMasul, setSelectedRespMasul] = useState<{ id: number; name: string } | null>(null);
   const respLeadsMasulQ = useQuery({
-    queryKey: ["stats/responsible-leads-masul", selectedRespMasul?.id, appliedWithMode],
-    queryFn: () => getResponsibleLeads(selectedRespMasul!.id, appliedWithMode),
+    ...respLeadsQuery("conv", selectedRespMasul?.id ?? 0),
     enabled: selectedRespMasul !== null,
   });
   type UtmPath = {
@@ -877,6 +812,7 @@ export default function LidlarPage() {
     if (s) rows = rows.filter((u) => u.full_name.toLowerCase().includes(s));
     return rows;
   }, [enrichedResponsibles, search, applied]);
+  const selectedMasulRow = selectedRespMasul ? byUserFiltered.find((u) => u.responsible_id === selectedRespMasul.id) ?? null : null;
 
   // Columns = the portal's current lead stages, in Bitrix sort order, with the
   // Bitrix name as the header. Nothing here is hardcoded, so the table can not
@@ -889,19 +825,6 @@ export default function LidlarPage() {
     })),
     [filterOpts]
   );
-
-  // bitrix_id → human name, for the drill-down "BOSQICH" badge. Falls back to
-  // the static map, then to the raw id only if the stage is unknown to both.
-  const stageName = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of filterOpts?.stages ?? []) m.set(s.bitrix_id, leadStageLabel(s.bitrix_id, s.name));
-    return m;
-  }, [filterOpts]);
-
-  const stageBadge = (bid: string) => ({
-    label: stageName.get(bid) ?? STAGE_BADGE_MAP[bid]?.label ?? bid,
-    color: STAGE_COLORS[bid] ?? STAGE_BADGE_MAP[bid]?.color ?? "#9E9E9E",
-  });
 
   const colMaxes = useMemo(() => {
     const m: Record<string, number> = {};
@@ -971,6 +894,7 @@ export default function LidlarPage() {
     if (hasFilter) rows = rows.filter((r) => r.total > 0);
     return [...rows].sort((a, b) => b.total - a.total);
   }, [conversionQ.data, applied]);
+  const selectedConvRow = selectedRespConv ? convRows.find((r) => r.responsible_id === selectedRespConv.id) ?? null : null;
 
 
 
@@ -1432,11 +1356,30 @@ export default function LidlarPage() {
               loading={conversionQ.isLoading}
               selected={selectedRespConv}
               onSelect={setSelectedRespConv}
-              leads={respLeadsConvQ.data}
-              leadsLoading={respLeadsConvQ.isLoading}
+              onHover={(id) => qc.prefetchQuery(respLeadsQuery("conv", id))}
             />
           </div>
         </div>
+
+        {/* Operator's leads (Lid va Konversiya): right-side panel */}
+        <SidePanel
+          open={!!selectedRespConv}
+          onClose={() => setSelectedRespConv(null)}
+          title={selectedRespConv?.name ?? ""}
+          subtitle={`Lidlar · ${applied.start_date ?? "boshidan"} → ${applied.end_date ?? "bugungacha"}`}
+          headerExtra={selectedConvRow && (
+            <PanelStats items={[
+              { label: "Umumiy", value: fmtNum(selectedConvRow.total) },
+              { label: "Sifatli", value: fmtNum(selectedConvRow.sifatli_lid ?? 0), color: "#0891B2" },
+              { label: "Jarayonda", value: fmtNum(selectedConvRow.jarayonda), color: "#E8890C" },
+              { label: "Sifatsiz", value: fmtNum(selectedConvRow.sifatsiz_lid), color: "#DC2626" },
+              { label: "Tashrif belgilandi", value: fmtNum(selectedConvRow.tashrif_belgilandi ?? 0), color: "#7C3AED" },
+              { label: "Tashrif o'tkazildi", value: fmtNum(selectedConvRow.tashrif_buyurdi), color: "#16A34A" },
+              { label: "Konversiya", value: `${(selectedConvRow.total ? (selectedConvRow.tashrif_buyurdi / selectedConvRow.total) * 100 : 0).toFixed(1)}%`, color: "#9333EA" },
+            ]} />
+          )}>
+          <LeadListPanel leads={respLeadsConvQ.data} loading={respLeadsConvQ.isLoading} error={respLeadsConvQ.isError} onRetry={() => respLeadsConvQ.refetch()} />
+        </SidePanel>
 
         {/* Leads won back from Bekor / Sifatsiz / Arxiv, per operator */}
         <RevivedLeadsCard filter={applied} />
@@ -1478,13 +1421,11 @@ export default function LidlarPage() {
                 <tbody>
                   {byUserFiltered.slice(0, shownMasulRows).map((u, i) => {
                     const isSel = selectedRespMasul?.id === u.responsible_id;
-                    const subLeads: ResponsibleLeadRow[] = isSel ? (respLeadsMasulQ.data ?? []) : [];
-                    const colCount = 2 + stageCols.length;
                     return (
                       <>
                         <tr key={u.responsible_id}
                             style={{ background: isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                            onClick={() => { setShownMasulLeads(10); setSelectedRespMasul(isSel ? null : { id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` }); }}
+                            onClick={() => setSelectedRespMasul({ id: u.responsible_id, name: u.full_name || `User ${u.responsible_id}` })}
                             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
                             onMouseLeave={(e) => (e.currentTarget.style.background = isSel ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)")}>
                           <td style={{ ...TD, color:"#555", fontSize:13, fontWeight:600, width:44, position:"sticky", left:0, background:"var(--bg2)" }}>
@@ -1515,100 +1456,6 @@ export default function LidlarPage() {
                             );
                           })}
                         </tr>
-                        {isSel && (
-                          <tr key={`sub-masul-${u.responsible_id}`}>
-                            <td colSpan={colCount} style={{ padding: "0 12px 12px" }}>
-                              <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
-                              {respLeadsMasulQ.isLoading ? (
-                                <LoadingRows rows={3} />
-                              ) : subLeads.length === 0 ? (
-                                <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
-                              ) : (
-                                <div ref={masulListRef} style={{ maxHeight: 340, overflowY: "auto" }}>
-                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                  <thead>
-                                    <tr style={{ background: "rgba(33,150,243,0.06)" }}>
-                                      <th style={{ ...TH("#555", 40), paddingLeft: 32 }}>#</th>
-                                      <th style={TH("#9E9E9E", 260)}>LID</th>
-                                      <th style={TH("#2196F3", 90)}>SANA</th>
-                                      <th style={TH("#9C27B0", 130)}>TASHRIF SANASI</th>
-                                      <th style={TH("#FF9800", 190)}>BOSQICH</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {subLeads.slice(0, shownMasulLeads).map((lead, li) => {
-                                      const stage = stageBadge(lead.stage_bid);
-                                      return (
-                                        <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
-                                          <td style={{ ...TD, color: "#555", fontSize: 12, paddingLeft: 32 }}>
-                                            {String(li + 1).padStart(2, "0")}
-                                          </td>
-                                          <td style={{ ...TD, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                            <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`}
-                                               target="_blank" rel="noopener noreferrer"
-                                               style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                              {lead.title || `Lid #${lead.id}`}
-                                            </a>
-                                          </td>
-                                          <td style={{ ...TD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
-                                            {lead.date_create ? new Date(lead.date_create).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
-                                          </td>
-                                          <td style={{ ...TD, fontSize: 12, color: lead.tashrif_sanasi ? "#9C27B0" : "#333", whiteSpace: "nowrap" }}>
-                                            {lead.tashrif_sanasi ? new Date(lead.tashrif_sanasi).toLocaleDateString("uz-UZ", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}
-                                          </td>
-                                          <td style={TD}>
-                                            <span style={{
-                                              display: "inline-block", padding: "3px 10px", borderRadius: 20,
-                                              fontSize: 11, fontWeight: 600,
-                                              background: `${stage.color}22`, border: `1px solid ${stage.color}55`, color: stage.color,
-                                              whiteSpace: "nowrap",
-                                            }}>
-                                              {stage.label}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                    <tr style={{ background: "rgba(33,150,243,0.06)", borderTop: "1px solid var(--border2)" }}>
-                                      <td style={{ ...TD, paddingLeft: 32, color: "#666" }} />
-                                      <td style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>JAMI</td>
-                                      <td colSpan={3} style={{ ...TD, fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{subLeads.length} ta lid</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                                </div>
-                              )}
-                              {subLeads.length > 0 && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
-                                  {shownMasulLeads < subLeads.length && (
-                                    <>
-                                      <button onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShownMasulLeads((n) => n + 10);
-                                                requestAnimationFrame(() => masulListRef.current?.scrollTo({ top: masulListRef.current.scrollHeight, behavior: "smooth" }));
-                                              }}
-                                        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                        Yana 10 ta <ChevronDown size={12} />
-                                      </button>
-                                      <button onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShownMasulLeads(subLeads.length);
-                                                requestAnimationFrame(() => masulListRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
-                                              }}
-                                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                        Barchasi ({subLeads.length})
-                                      </button>
-                                    </>
-                                  )}
-                                  <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
-                                    {Math.min(shownMasulLeads, subLeads.length)} / {subLeads.length} ta lid
-                                  </span>
-                                </div>
-                              )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
                       </>
                     );
                   })}
@@ -1651,6 +1498,12 @@ export default function LidlarPage() {
           )}
 
         </div>
+        {/* Employee's leads (Lid mas'ullar kesimida): right-side panel */}
+        <SidePanel open={!!selectedRespMasul} onClose={() => setSelectedRespMasul(null)}
+          title={selectedRespMasul?.name ?? ""} subtitle="Lid mas'ullar kesimida"
+          headerExtra={selectedMasulRow && <PanelStats items={[{ label: "Umumiy", value: fmtNum(selectedMasulRow.total) }]} />}>
+          <LeadListPanel leads={respLeadsMasulQ.data} loading={respLeadsMasulQ.isLoading} error={respLeadsMasulQ.isError} onRetry={() => respLeadsMasulQ.refetch()} />
+        </SidePanel>
         </>)}
         {tabA === "vazifalar" && (<>
         {/* ══════════════════════════════════════════════════════════
@@ -2071,10 +1924,9 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
           title="Sabab bo'yicha" q={reasonStatsQ}
-          info="Leadlar Bitrix’dagi “Sabab” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
+          info="Leadlar Bitrix’dagi “Sabab” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar."
           selected={selectedReason} setSelected={setSelectedReason}
-          shown={shownReasonLeads} setShown={setShownReasonLeads}
-          listRef={reasonListRef} leadsQ={reasonLeadsQ}
+          leadsQ={reasonLeadsQ}
         />
 
 
@@ -2089,6 +1941,7 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         {(() => {
           const srcRows: SourceStatsRow[] = sourceQ.data ?? [];
+          const selSrc = selectedSource ? srcRows.find((r) => r.source_id === selectedSource) ?? null : null;
           const srcMaxes = {
             umumiy:   Math.max(1, ...srcRows.map(r => r.umumiy_lidlar)),
             sifatli:  Math.max(1, ...srcRows.map(r => r.sifatli_lid)),
@@ -2141,10 +1994,9 @@ export default function LidlarPage() {
                         const konv      = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
                         const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
                         const isSrcOpen = selectedSource === r.source_id;
-                        const srcLeads = isSrcOpen ? (srcLeadsQ.data?.items ?? []) : [];
                         return [
                           <tr key={r.source_id}
-                              onClick={() => { setShownSrcLeads(10); setSelectedSource(isSrcOpen ? null : r.source_id); }}
+                              onClick={() => setSelectedSource(r.source_id)}
                               style={{ background: isSrcOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
                               onMouseEnter={e => { if (!isSrcOpen) e.currentTarget.style.background = "var(--bg3)"; }}
                               onMouseLeave={e => { e.currentTarget.style.background = isSrcOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
@@ -2187,79 +2039,6 @@ export default function LidlarPage() {
                               <ConversionDonut pct={sifatliKonv} size={38} />
                             </td>
                           </tr>,
-                          isSrcOpen ? (
-                            <tr key={`${r.source_id}-leads`}>
-                              <td colSpan={9} style={{ padding: "0 12px 12px" }}>
-                                <div style={{ border: "1px solid #2196F3", borderTop: "none", borderRadius: "0 0 12px 12px", background: "rgba(33,150,243,0.04)", overflow: "hidden" }}>
-                                  {srcLeadsQ.isLoading ? (
-                                    <LoadingRows rows={3} />
-                                  ) : !srcLeads.length ? (
-                                    <div style={{ padding: "14px 20px", color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>
-                                  ) : (
-                                    <>
-                                      <div ref={srcListRef} style={{ maxHeight: 340, overflowY: "auto" }}>
-                                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                          <thead>
-                                            <tr style={{ background: "rgba(33,150,243,0.06)" }}>
-                                              <th style={{ ...SUBTH, width: 44, paddingLeft: 20 }}>#</th>
-                                              <th style={SUBTH}>LID</th>
-                                              <th style={{ ...SUBTH, width: 110 }}>SANA</th>
-                                              <th style={{ ...SUBTH, width: 210 }}>BOSQICH</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {srcLeads.slice(0, shownSrcLeads).map((lead, li) => {
-                                              const st = STAGE_BADGE_MAP[lead.stage_bid] ?? { label: lead.stage_bid, color: "#9E9E9E" };
-                                              return (
-                                                <tr key={lead.id} style={{ background: li % 2 === 0 ? "transparent" : "rgba(0,0,0,0.15)" }}>
-                                                  <td style={{ ...SUBTD, color: "var(--text3)", fontSize: 12, paddingLeft: 20 }}>{String(li + 1).padStart(2, "0")}</td>
-                                                  <td style={{ ...SUBTD, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                    <a href={`${bitrixPortal}/crm/lead/details/${lead.id}/`} target="_blank" rel="noreferrer"
-                                                       onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: "#2196F3", textDecoration: "underline" }}>
-                                                      {lead.title || `Lid #${lead.id}`}
-                                                    </a>
-                                                  </td>
-                                                  <td style={{ ...SUBTD, fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
-                                                    {lead.date_create ? String(lead.date_create).slice(0, 10) : "—"}
-                                                  </td>
-                                                  <td style={SUBTD}><span style={pill(st.color)}>{st.label}</span></td>
-                                                </tr>
-                                              );
-                                            })}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 20px", background: "rgba(33,150,243,0.06)" }}>
-                                        {shownSrcLeads < srcLeads.length && (
-                                          <>
-                                            <button onClick={e => {
-                                                      e.stopPropagation();
-                                                      setShownSrcLeads(n => n + 10);
-                                                      requestAnimationFrame(() => srcListRef.current?.scrollTo({ top: srcListRef.current.scrollHeight, behavior: "smooth" }));
-                                                    }}
-                                              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                              Yana 10 ta <ChevronDown size={12} />
-                                            </button>
-                                            <button onClick={e => {
-                                                      e.stopPropagation();
-                                                      setShownSrcLeads(srcLeads.length);
-                                                      requestAnimationFrame(() => srcListRef.current?.scrollTo({ top: 0, behavior: "smooth" }));
-                                                    }}
-                                              style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                                              Barchasi ({srcLeads.length})
-                                            </button>
-                                          </>
-                                        )}
-                                        <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
-                                          {Math.min(shownSrcLeads, srcLeads.length)} / {srcLeads.length} ta lid
-                                        </span>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ) : null,
                         ];
                       })}
                       {/* JAMI row */}
@@ -2282,6 +2061,20 @@ export default function LidlarPage() {
                   </table>
                 </div>
               )}
+              <SidePanel open={!!selSrc} onClose={() => setSelectedSource(null)}
+                title={selSrc?.source_name ?? ""} subtitle="Manba bo'yicha"
+                headerExtra={selSrc && (
+                  <PanelStats items={[
+                    { label: "Umumiy", value: fmtNum(selSrc.umumiy_lidlar) },
+                    { label: "Sifatli", value: fmtNum(selSrc.sifatli_lid), color: "#0891B2" },
+                    { label: "Tashrif belgilandi", value: fmtNum(selSrc.konsultatsiya_belgilandi), color: "#7C3AED" },
+                    { label: "Tashrif o'tkazildi", value: fmtNum(selSrc.konsultatsiya_otkazildi), color: "#16A34A" },
+                    { label: "Sifatsiz", value: fmtNum(selSrc.sifatsiz), color: "#DC2626" },
+                    { label: "Bekor bo'ldi", value: fmtNum(selSrc.bekor_boldi), color: "#D97706" },
+                  ]} />
+                )}>
+                <LeadListPanel leads={srcLeadsQ.data?.items} loading={srcLeadsQ.isLoading} error={srcLeadsQ.isError} onRetry={() => srcLeadsQ.refetch()} />
+              </SidePanel>
             </div>
           );
         })()}
@@ -2293,19 +2086,17 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <UfBreakdownTable
           title="Manba 1 bo'yicha" q={source1Q}
-          info="Leadlar Bitrix’dagi “Manba 1” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar." bitrixPortal={bitrixPortal}
+          info="Leadlar Bitrix’dagi “Manba 1” maydoni bo‘yicha guruhlangan; “Noma’lum” — maydon to‘ldirilmagan leadlar."
           selected={selectedSource1} setSelected={setSelectedSource1}
-          shown={shownSource1Leads} setShown={setShownSource1Leads}
-          listRef={source1ListRef} leadsQ={source1LeadsQ}
+          leadsQ={source1LeadsQ}
         />
         </>)}
         {tabB === "hudud" && (<>
         <UfBreakdownTable
           title="Hudud bo'yicha" q={hududQ}
-          info="Leadlar Bitrix’dagi “Hudud” maydoni bo‘yicha guruhlangan; hududi ko‘rsatilmagan leadlar bu jadvalga kirmaydi." bitrixPortal={bitrixPortal}
+          info="Leadlar Bitrix’dagi “Hudud” maydoni bo‘yicha guruhlangan; hududi ko‘rsatilmagan leadlar bu jadvalga kirmaydi."
           selected={selectedHudud} setSelected={setSelectedHudud}
-          shown={shownHududLeads} setShown={setShownHududLeads}
-          listRef={hududListRef} leadsQ={hududLeadsQ}
+          leadsQ={hududLeadsQ}
         />
         </>)}
 

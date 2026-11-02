@@ -46,3 +46,12 @@ export function leadStageLabel(id?: string | null, name?: string | null): string
   if (n && BY_RU[n]) return BY_RU[n];
   return n || id || "—";
 }
+
+/** Badge colour per lead stage (same hues the Lidlar tables use). */
+const COLOR: Record<string, string> = {
+  NEW: "#9E9E9E", UC_IX1SKS: "#03A9F4", UC_O7Y5NT: "#78909C", "7": "#FF5722", UC_S5YC0D: "#FF7043",
+  UC_X316SW: "#FF8A65", UC_63QL7L: "#26C6DA", "1": "#607D8B", UC_N0PI5R: "#FF9800", UC_SWPARQ: "#E040FB",
+  UC_QJUDCL: "#7E57C2", CONVERTED: "#16A34A", JUNK: "#DC2626", UC_GSPVUS: "#8D6E63", UC_L8G2B9: "#D97706",
+  UC_W02434: "#FFC107",
+};
+export const leadStageColor = (id?: string | null) => (id && COLOR[id]) || "#9E9E9E";
