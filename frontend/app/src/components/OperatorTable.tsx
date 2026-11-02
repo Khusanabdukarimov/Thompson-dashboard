@@ -45,7 +45,7 @@ const RANK_MEDAL = ["🥇", "🥈", "🥉"];
 function Avatar({ name, color }: { name: string; color: string }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
   return (
-    <div style={{ width: 30, height: 30, borderRadius: "50%", background: color, color: "#fff", fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+    <div style={{ width: 26, height: 26, borderRadius: "50%", background: color, color: "#fff", fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       {initials}
     </div>
   );
@@ -115,7 +115,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, onHover }: {
   if (!rows.length) return <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>Ma'lumot yo'q</div>;
 
   const TH: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 12px 10px", whiteSpace: "nowrap" };
-  const TD: React.CSSProperties = { padding: "11px 12px", verticalAlign: "middle" };
+  const TD: React.CSSProperties = { padding: "8px 12px", verticalAlign: "middle" };
 
   const cell = (value: number, max: number, color: string) => (
     <td style={TD}>

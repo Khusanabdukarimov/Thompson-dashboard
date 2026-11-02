@@ -15,6 +15,7 @@ import { OperatorTable } from "@/components/OperatorTable";
 import { RevivedLeadsCard } from "@/components/RevivedLeadsCard";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
 import { LeadListPanel } from "@/components/LeadListPanel";
+import { FunnelTable } from "@/components/FunnelTable";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
@@ -379,114 +380,17 @@ function UfBreakdownTable({
   const rows: UfBreakdownRow[] = q.data ?? [];
   const rowKey = (r: UfBreakdownRow) => r.enum_id ?? 'Nomalum';
   const selectedRow = selected ? rows.find((r) => rowKey(r) === selected) ?? null : null;
-  const ROW_PAGE = 12;
-  const [shownRows, setShownRows] = useState(ROW_PAGE);
-  const maxes = {
-    umumiy:   Math.max(1, ...rows.map(r => r.umumiy_lidlar)),
-    sifatli:  Math.max(1, ...rows.map(r => r.sifatli_lid)),
-    konsB:    Math.max(1, ...rows.map(r => r.konsultatsiya_belgilandi)),
-    konsO:    Math.max(1, ...rows.map(r => r.konsultatsiya_otkazildi)),
-    sifatsiz: Math.max(1, ...rows.map(r => r.sifatsiz)),
-    bekor:    Math.max(1, ...rows.map(r => r.bekor_boldi)),
-  };
   return (
-    <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-      <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
-          {title}
-          <InfoTip text={<>{info} Tashrif o‘tkazildi — kelib ketgan mijozlar. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari ochiladi.</>} label={`${title} — izoh`} size={15} />
-        </span>
-      </div>
-      {q.isLoading ? (
-        <LoadingRows />
-      ) : rows.length === 0 ? (
-        <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-            <thead>
-              <tr>
-                <th style={TH("#9E9E9E", 180)}>{title.split(" bo'yicha")[0].toUpperCase()}</th>
-                <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
-                <th style={TH("#00BCD4")}>SIFATLI LID</th>
-                <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
-                <th style={TH("#4CAF50")}>TASHRIF O'TKAZILDI</th>
-                <th style={TH("#F44336")}>SIFATSIZ</th>
-                <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
-                <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
-                <th style={{ ...TH("#00BCD4", 80), textAlign: "center" }}>SIFATLI KON.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, shownRows).flatMap((r, i) => {
-                const konv        = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
-                const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
-                const key = rowKey(r);
-                const isOpen = selected === key;
-                return [
-                  <tr key={key}
-                      onClick={() => setSelected(key)}
-                      style={{ background: isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                      onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = "var(--bg3)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = isOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
-                    <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>{r.name}</td>
-                    <td style={TD}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
-                      <MiniBar value={r.umumiy_lidlar} max={maxes.umumiy} color="#2196F3" />
-                    </td>
-                    <td style={TD}>
-                      {r.sifatli_lid > 0 ? (
-                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={maxes.sifatli} color="#00BCD4" /></>
-                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                    </td>
-                    <td style={TD}>
-                      {r.konsultatsiya_belgilandi > 0 ? (
-                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={maxes.konsB} color="#9C27B0" /></>
-                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                    </td>
-                    <td style={TD}>
-                      {r.konsultatsiya_otkazildi > 0 ? (
-                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={maxes.konsO} color="#4CAF50" /></>
-                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                    </td>
-                    <td style={TD}>
-                      {r.sifatsiz > 0 ? (
-                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={maxes.sifatsiz} color="#F44336" /></>
-                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                    </td>
-                    <td style={TD}>
-                      {r.bekor_boldi > 0 ? (
-                        <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={maxes.bekor} color="#FFC107" /></>
-                      ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                    </td>
-                    <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={konv} size={38} /></td>
-                    <td style={{ ...TD, textAlign: "center" }}><ConversionDonut pct={sifatliKonv} size={38} /></td>
-                  </tr>,
-                ];
-              })}
-              {shownRows < rows.length && (
-                <tr>
-                  <td colSpan={9} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <button onClick={() => setShownRows(n => n + ROW_PAGE)}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                        Yana {Math.min(ROW_PAGE, rows.length - shownRows)} ta <ChevronDown size={12} />
-                      </button>
-                      <button onClick={() => setShownRows(rows.length)}
-                        style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
-                        Barchasi ({rows.length})
-                      </button>
-                      <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>
-                        {Math.min(shownRows, rows.length)} / {rows.length}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <>
+      <FunnelTable
+        title={title}
+        nameLabel={title.split(" bo'yicha")[0]}
+        info={<>{info} Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli % = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari o‘ng tomonda ochiladi.</>}
+        rows={rows.map((r) => ({ key: rowKey(r), name: r.name, umumiy: r.umumiy_lidlar, sifatli: r.sifatli_lid, konsB: r.konsultatsiya_belgilandi, konsO: r.konsultatsiya_otkazildi, sifatsiz: r.sifatsiz, bekor: r.bekor_boldi }))}
+        loading={q.isLoading}
+        selectedKey={selected}
+        onSelect={setSelected}
+      />
       <SidePanel open={!!selectedRow} onClose={() => setSelected(null)}
         title={selectedRow?.name ?? ""} subtitle={title}
         headerExtra={selectedRow && (
@@ -501,7 +405,7 @@ function UfBreakdownTable({
         )}>
         <LeadListPanel leads={leadsQ.data?.items} loading={leadsQ.isLoading} error={leadsQ.isError} onRetry={leadsQ.refetch} />
       </SidePanel>
-    </div>
+    </>
   );
 }
 
@@ -784,6 +688,8 @@ export default function LidlarPage() {
   const responsibles = (respQ.data?.responsibles ?? []);
 
   const enrichedResponsibles = responsibles;
+  // Stages nobody has a lead in this period only add a column of dashes: hidden unless asked for.
+  const [showEmptyStages, setShowEmptyStages] = useState(false);
 
   const total             = header?.total_leads                    ?? 0;
   const jarayondaCount    = header?.in_process                     ?? 0;
@@ -825,6 +731,12 @@ export default function LidlarPage() {
     })),
     [filterOpts]
   );
+
+  const masulCols = useMemo(
+    () => showEmptyStages ? stageCols : stageCols.filter((col) => enrichedResponsibles.some((u) => (u.by_stage?.[col.key] ?? 0) > 0)),
+    [stageCols, enrichedResponsibles, showEmptyStages]
+  );
+  const hiddenStageCount = stageCols.length - masulCols.length;
 
   const colMaxes = useMemo(() => {
     const m: Record<string, number> = {};
@@ -1402,6 +1314,12 @@ export default function LidlarPage() {
               Lid mas'ullar kesimida
               <InfoTip text="Har bir xodimdagi leadlar hozir qaysi bosqichda turganini ko‘rsatadi; ustunlar — Bitrix bosqichlari. Lead hozirgi mas’uli bo‘yicha sanaladi. JAMI — barcha xodimlar yig‘indisi. Qatorni bossangiz, xodimning leadlari ochiladi." label="Lid mas'ullar kesimida — izoh" size={15} />
             </span>
+            {hiddenStageCount > 0 || showEmptyStages ? (
+              <label style={{ marginLeft:"auto", display:"inline-flex", alignItems:"center", gap:6, fontSize:12, color:"var(--text2)", cursor:"pointer" }}>
+                <input type="checkbox" checked={showEmptyStages} onChange={(e) => setShowEmptyStages(e.target.checked)} />
+                Bo'sh bosqichlarni ko'rsatish{hiddenStageCount > 0 ? ` (${hiddenStageCount})` : ""}
+              </label>
+            ) : null}
           </div>
 
           {respQ.isLoading && !responsibles.length ? (
@@ -1413,8 +1331,8 @@ export default function LidlarPage() {
                   <tr>
                     <th style={{ ...TH("#555", 44), position:"sticky", left:0, zIndex:6 }}>#</th>
                     <th style={{ ...TH("#9E9E9E", 180), position:"sticky", left:44, zIndex:6 }}>Mas'ul</th>
-                    {stageCols.map((col) => (
-                      <th key={col.key} style={TH(col.color)}>{col.label}</th>
+                    {masulCols.map((col) => (
+                      <th key={col.key} title={col.label} style={{ ...TH(col.color, 76), fontSize: 10.5, whiteSpace: "normal", lineHeight: 1.25, verticalAlign: "bottom", padding: "10px 10px" }}>{col.label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1439,11 +1357,11 @@ export default function LidlarPage() {
                               </span>
                             </div>
                           </td>
-                          {stageCols.map((col) => {
+                          {masulCols.map((col) => {
                             const cnt = u.by_stage?.[col.key] ?? 0;
                             const max = colMaxes[col.key] ?? 1;
                             return (
-                              <td key={col.key} style={{ ...TD, minWidth:90 }}>
+                              <td key={col.key} style={{ ...TD, padding: "8px 10px", minWidth: 64 }}>
                                 {cnt > 0 ? (
                                   <>
                                     <span style={{ fontSize:13, color:"var(--text)" }}>{fmtNum(cnt)}</span>
@@ -1462,7 +1380,7 @@ export default function LidlarPage() {
 
                   {shownMasulRows < byUserFiltered.length && (
                     <tr>
-                      <td colSpan={2 + stageCols.length} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
+                      <td colSpan={2 + masulCols.length} style={{ padding: "10px 12px", borderTop: "1px solid var(--border)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <button onClick={() => setShownMasulRows(n => n + MASUL_PAGE)}
                             style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text2)", fontSize: 11.5, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
@@ -1485,7 +1403,7 @@ export default function LidlarPage() {
                     <td style={{ ...TD, fontSize:13, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", left:44, background:"var(--bg3)", zIndex:2 }}>
                       JAMI
                     </td>
-                    {stageCols.map((col) => (
+                    {masulCols.map((col) => (
                       <td key={col.key} style={TD}>
                         <span style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{fmtNum(totalsRow[col.key] ?? 0)}</span>
                         <MiniBar value={1} max={1} color={col.color} height={3} />
@@ -1942,125 +1860,19 @@ export default function LidlarPage() {
         {(() => {
           const srcRows: SourceStatsRow[] = sourceQ.data ?? [];
           const selSrc = selectedSource ? srcRows.find((r) => r.source_id === selectedSource) ?? null : null;
-          const srcMaxes = {
-            umumiy:   Math.max(1, ...srcRows.map(r => r.umumiy_lidlar)),
-            sifatli:  Math.max(1, ...srcRows.map(r => r.sifatli_lid)),
-            konsB:    Math.max(1, ...srcRows.map(r => r.konsultatsiya_belgilandi)),
-            konsO:    Math.max(1, ...srcRows.map(r => r.konsultatsiya_otkazildi)),
-            sifatsiz: Math.max(1, ...srcRows.map(r => r.sifatsiz)),
-            bekor:    Math.max(1, ...srcRows.map(r => r.bekor_boldi)),
-          };
-          const srcTotals = srcRows.reduce(
-            (acc, r) => ({
-              umumiy:   acc.umumiy   + r.umumiy_lidlar,
-              sifatli:  acc.sifatli  + r.sifatli_lid,
-              konsB:    acc.konsB    + r.konsultatsiya_belgilandi,
-              konsO:    acc.konsO    + r.konsultatsiya_otkazildi,
-              sifatsiz: acc.sifatsiz + r.sifatsiz,
-              bekor:    acc.bekor    + r.bekor_boldi,
-            }),
-            { umumiy: 0, sifatli: 0, konsB: 0, konsO: 0, sifatsiz: 0, bekor: 0 }
-          );
           return (
-            <div style={{ background: "var(--bg2)", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-              <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
-                  Manba bo'yicha
-                  <InfoTip text="Leadlar Bitrix’dagi “Manba” maydoni bo‘yicha guruhlangan. Tashrif o‘tkazildi — kelib ketgan mijozlar. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli kon. = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari ochiladi." label="Manba bo'yicha — izoh" size={15} />
-                </span>
-              </div>
-              {sourceQ.isLoading ? (
-                <LoadingRows />
-              ) : srcRows.length === 0 ? (
-                <div style={{ padding: 24, color: "#555", fontSize: 13 }}>Ma'lumot yo'q</div>
-              ) : (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                    <thead>
-                      <tr>
-                        <th style={TH("#9E9E9E", 180)}>MANBA</th>
-                        <th style={TH("#2196F3")}>UMUMIY LIDLAR</th>
-                        <th style={TH("#00BCD4")}>SIFATLI LID</th>
-                        <th style={TH("#9C27B0")}>TASHRIF BELGILANDI</th>
-                        <th style={TH("#4CAF50")}>TASHRIF O'TKAZILDI</th>
-                        <th style={TH("#F44336")}>SIFATSIZ</th>
-                        <th style={TH("#FFC107")}>BEKOR BO'LDI</th>
-                        <th style={{ ...TH("#4CAF50", 80), textAlign: "center" }}>KONVERSIYA</th>
-                        <th style={{ ...TH("#00BCD4", 80), textAlign: "center" }}>SIFATLI KON.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {srcRows.flatMap((r, i) => {
-                        const konv      = r.umumiy_lidlar > 0 ? (r.konsultatsiya_otkazildi / r.umumiy_lidlar) * 100 : 0;
-                        const sifatliKonv = r.umumiy_lidlar > 0 ? (r.sifatli_lid / r.umumiy_lidlar) * 100 : 0;
-                        const isSrcOpen = selectedSource === r.source_id;
-                        return [
-                          <tr key={r.source_id}
-                              onClick={() => setSelectedSource(r.source_id)}
-                              style={{ background: isSrcOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)", cursor: "pointer" }}
-                              onMouseEnter={e => { if (!isSrcOpen) e.currentTarget.style.background = "var(--bg3)"; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = isSrcOpen ? "rgba(33,150,243,0.08)" : i % 2 === 0 ? "transparent" : "var(--bg)"; }}>
-                            <td style={{ ...TD, fontWeight: 600, color: "var(--text)", fontSize: 13, whiteSpace: "nowrap" }}>
-                              {r.source_name}
-                            </td>
-                            <td style={TD}>
-                              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.umumiy_lidlar)}</span>
-                              <MiniBar value={r.umumiy_lidlar} max={srcMaxes.umumiy} color="#2196F3" />
-                            </td>
-                            <td style={TD}>
-                              {r.sifatli_lid > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatli_lid)}</span><MiniBar value={r.sifatli_lid} max={srcMaxes.sifatli} color="#00BCD4" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.konsultatsiya_belgilandi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_belgilandi)}</span><MiniBar value={r.konsultatsiya_belgilandi} max={srcMaxes.konsB} color="#9C27B0" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.konsultatsiya_otkazildi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.konsultatsiya_otkazildi)}</span><MiniBar value={r.konsultatsiya_otkazildi} max={srcMaxes.konsO} color="#4CAF50" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.sifatsiz > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.sifatsiz)}</span><MiniBar value={r.sifatsiz} max={srcMaxes.sifatsiz} color="#F44336" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={TD}>
-                              {r.bekor_boldi > 0 ? (
-                                <><span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{fmtNum(r.bekor_boldi)}</span><MiniBar value={r.bekor_boldi} max={srcMaxes.bekor} color="#FFC107" /></>
-                              ) : <span style={{ fontSize: 13, color: "var(--text3)" }}>—</span>}
-                            </td>
-                            <td style={{ ...TD, textAlign: "center" }}>
-                              <ConversionDonut pct={konv} size={38} />
-                            </td>
-                            <td style={{ ...TD, textAlign: "center" }}>
-                              <ConversionDonut pct={sifatliKonv} size={38} />
-                            </td>
-                          </tr>,
-                        ];
-                      })}
-                      {/* JAMI row */}
-                      <tr style={{ background: "var(--bg3)", borderTop: "1px solid var(--border2)" }}>
-                        <td style={{ ...TD, fontSize: 13, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>JAMI</td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.umumiy)}</span><MiniBar value={1} max={1} color="#2196F3" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.sifatli)}</span><MiniBar value={1} max={1} color="#00BCD4" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.konsB)}</span><MiniBar value={1} max={1} color="#9C27B0" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.konsO)}</span><MiniBar value={1} max={1} color="#4CAF50" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.sifatsiz)}</span><MiniBar value={1} max={1} color="#F44336" /></td>
-                        <td style={TD}><span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{fmtNum(srcTotals.bekor)}</span><MiniBar value={1} max={1} color="#FFC107" /></td>
-                        <td style={{ ...TD, textAlign: "center" }}>
-                          <ConversionDonut pct={srcTotals.umumiy > 0 ? (srcTotals.konsO / srcTotals.umumiy) * 100 : 0} size={38} />
-                        </td>
-                        <td style={{ ...TD, textAlign: "center" }}>
-                          <ConversionDonut pct={srcTotals.umumiy > 0 ? (srcTotals.sifatli / srcTotals.umumiy) * 100 : 0} size={38} />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            <>
+              <FunnelTable
+                title="Manba bo'yicha"
+                nameLabel="Manba"
+                info="Leadlar Bitrix’dagi “Manba” maydoni bo‘yicha guruhlangan. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli % = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari o‘ng tomonda ochiladi."
+                rows={srcRows.map((r) => ({ key: r.source_id, name: r.source_name, umumiy: r.umumiy_lidlar, sifatli: r.sifatli_lid, konsB: r.konsultatsiya_belgilandi, konsO: r.konsultatsiya_otkazildi, sifatsiz: r.sifatsiz, bekor: r.bekor_boldi }))}
+                loading={sourceQ.isLoading}
+                error={sourceQ.isError}
+                onRetry={() => sourceQ.refetch()}
+                selectedKey={selectedSource}
+                onSelect={setSelectedSource}
+              />
               <SidePanel open={!!selSrc} onClose={() => setSelectedSource(null)}
                 title={selSrc?.source_name ?? ""} subtitle="Manba bo'yicha"
                 headerExtra={selSrc && (
@@ -2075,7 +1887,7 @@ export default function LidlarPage() {
                 )}>
                 <LeadListPanel leads={srcLeadsQ.data?.items} loading={srcLeadsQ.isLoading} error={srcLeadsQ.isError} onRetry={() => srcLeadsQ.refetch()} />
               </SidePanel>
-            </div>
+            </>
           );
         })()}
         </>)}
