@@ -222,6 +222,35 @@ export function getConversionStats(filter: DashFilter) {
   }, API_URL_CRM);
 }
 
+/** A lead that reached Muvaffaqiyatli after Bekor bo'ldi / Sifatsiz / Arxiv 30+. */
+export type RevivedLead = {
+  lead_id: number;
+  title: string | null;
+  responsible_id: number | null;
+  full_name: string;
+  /** UC_L8G2B9 (Bekor bo'ldi), JUNK (Sifatsiz) or UC_GSPVUS (Arxiv 30+). */
+  dead_stage: string;
+  dead_at: string;
+  converted_at: string;
+};
+
+/** Leads won back in the window — by the date they became Muvaffaqiyatli, not their creation date. */
+export function getRevivedLeads(filter: DashFilter) {
+  return apiGet<{ items: RevivedLead[] }>("/api/dashboard/revived-leads", {
+    from: filter.start_date,
+    to: filter.end_date,
+    responsible_id: sel(filter, 'responsible_ids'),
+    proekt: filter.proekts?.join(','),
+    course: sel(filter, 'courses'),
+    source1: sel(filter, 'source1s'),
+    filial: sel(filter, 'filials'),
+    reason: sel(filter, 'reasons'),
+    hudud: sel(filter, 'hududs'),
+    proekt2: sel(filter, 'proekt2s'),
+    region: sel(filter, 'regions'),
+  }, API_URL_CRM);
+}
+
 /** Leads per responsible id in the window (KPI scope): counts in the Bo'lim / Mas'ul picker. */
 export function getResponsibleCounts(filter: Pick<DashFilter, "start_date" | "end_date" | "proekts" | "mode">) {
   return apiGet<{ counts: Record<string, number> }>("/api/dashboard/lead-responsible-counts", {
@@ -611,6 +640,10 @@ export type CallListRow = {
   lead_title: string | null;
   stage_name: string | null;
   stage_bitrix_id: string | null;
+  /** Talk time in seconds (0 when nobody picked up). */
+  talk_time?: number | null;
+  /** Why the lead is Bekor bo'ldi / Sifatsiz, from its reason fields. */
+  stage_reason?: string | null;
 };
 
 export type CallDashboardFilter = {
@@ -710,6 +743,23 @@ export async function syncCalls(from?: string, to?: string): Promise<{ ok: boole
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ from, to }),
+  }, API_URL_CRM);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+/** A Moizvonki account: calls arrive by login email, the shown name is set in Sozlamalar. */
+export type MoizvonkiUser = { ext: string; email: string | null; name: string | null; custom_name: string | null; calls_30d: number };
+
+export function getMoizvonkiUsers() {
+  return apiGet<MoizvonkiUser[]>("/api/dashboard/moizvonki-users", {}, API_URL_CRM);
+}
+
+export async function setMoizvonkiName(ext: string, name: string): Promise<MoizvonkiUser> {
+  const res = await authedFetch(`/api/dashboard/moizvonki-users/${encodeURIComponent(ext)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
   }, API_URL_CRM);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
@@ -894,6 +944,8 @@ export type MissedCallItem = {
   /** Operator who talked on that call (null when it is unknown). */
   callback_by?: string | null;
   callback_source?: "onlinepbx" | "moizvonki" | null;
+  /** false = the operator called back but the customer did not pick up. */
+  callback_answered?: boolean | null;
   lead_id: number | null;
   stage_name: string | null;
   stage_bid: string | null;

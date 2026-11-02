@@ -99,7 +99,15 @@ const pctStr = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%`
 /** Who made the contact that counted: an operator's callback, or the customer's own redial. */
 function ContactCell({ it }: { it: MissedCallItem }) {
   const via = it.callback_source === "moizvonki" ? " · Moizvonki" : "";
-  if (it.callback_dir === "outbound") return <span title={`Operator qayta qo'ng'iroq qilgan${via}`}><span style={pill("#2196F3")}>Operator</span> <span style={{ color: "var(--text)" }}>{it.callback_by ?? "—"}</span></span>;
+  if (it.callback_dir === "outbound") {
+    const noPick = it.callback_answered === false;
+    return (
+      <span title={noPick ? `Operator qayta qo'ng'iroq qilgan, mijoz ko'tarmagan${via}` : `Operator qayta qo'ng'iroq qilgan${via}`}>
+        <span style={pill("#2196F3")}>Operator</span> <span style={{ color: "var(--text)" }}>{it.callback_by ?? "—"}</span>
+        {noPick && <span style={{ color: "var(--text3)", fontSize: 11.5 }}> · mijoz ko'tarmadi</span>}
+      </span>
+    );
+  }
   if (it.callback_dir === "inbound") return <span title={`Mijoz o'zi qayta qo'ng'iroq qilgan va javob olgan${via}`}><span style={pill("#9C27B0")}>Mijoz o'zi</span> <span style={{ color: "var(--text2)" }}>{it.callback_by ?? ""}</span></span>;
   return <span style={{ color: "var(--text3)" }}>—</span>;
 }
@@ -200,9 +208,9 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
 
         {help && reaction && (
           <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
-            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'idan keyin o'sha raqam bilan <b>birinchi javob berilgan suhbat</b> ({hours} soat ichida) olinadi —
-            bu <b>Operator</b> qayta qo'ng'irog'i yoki <b>Mijoz o'zi</b> qayta qilib javob olgani bo'lishi mumkin. Javob berilmagan urinishlar hisobga kirmaydi.
-            <b> Reaksiya</b> — javobsiz qo'ng'iroqdan shu suhbatgacha o'tgan vaqt, <b>ish vaqti bo'yicha</b>{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>};
+            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'idan keyin o'sha raqam bilan <b>birinchi bog'lanish</b> ({hours} soat ichida) olinadi —
+            bu <b>Operator</b> qayta qo'ng'irog'i (mijoz ko'tarmagan bo'lsa ham) yoki <b>Mijoz o'zi</b> qayta qilib javob olgani bo'lishi mumkin.
+            <b> Reaksiya</b> — javobsiz qo'ng'iroqdan shu bog'lanishgacha o'tgan vaqt, <b>ish vaqti bo'yicha</b>{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>};
             haqiqiy (soat bo'yicha) vaqt sichqonchani ustiga olib borganda ko'rinadi. <b>O'rtacha</b> — kartadagi Reaksiya vaqti;
             <b> Mediana</b> — qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan (bir nechta juda kech qo'ng'iroq o'rtachani oshirib yuboradi).
             {hours} soat ichida bog'lanilmaganlar bu ro'yxatda yo'q — ular "Ne perezvonili"da.
@@ -211,10 +219,10 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
 
         {help && !reaction && (
           <div style={{ padding: "12px 22px", fontSize: 12.5, lineHeight: 1.6, color: "var(--text2)", background: "rgba(33,150,243,0.06)", borderBottom: "1px solid var(--border)" }}>
-            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i alohida sanaladi. O'sha raqam bilan <b>javob berilgan suhbat</b> (istalgan yo'nalish va operator,
-            PBX va Moizvonki) {hours} soat ichida bo'lsa — qayta chiqilgan{all ? "; bo'lmasa chiqilmagan" : ", aks holda bu ro'yxatga tushadi"}.
+            Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i alohida sanaladi. {hours} soat ichida operator o'sha raqamga <b>qo'ng'iroq qilgan bo'lsa</b> (mijoz ko'tarmagan bo'lsa ham)
+            yoki mijoz o'zi qayta qo'ng'iroq qilib javob olgan bo'lsa (PBX va Moizvonki) — qayta chiqilgan{all ? "; bo'lmasa chiqilmagan" : ", aks holda bu ro'yxatga tushadi"}.
             {all && <> <b>Qayta chiqilgan</b> ustunida qachon va necha daqiqa/soatdan keyin bog'lanilgani yoziladi. </>}
-            <b> Yo'q</b> — undan keyin ham suhbat bo'lmagan; {all ? <><b>vaqt</b> — bog'lanilgan payt va undan oldin o'tgan vaqt</> : <><b>vaqt</b> — {hours} soatdan keyin bog'lanilgan (qachon va necha soatdan keyin)</>};
+            <b> Yo'q</b> — undan keyin ham hech kim bog'lanmagan; {all ? <><b>vaqt</b> — bog'lanilgan payt va undan oldin o'tgan vaqt</> : <><b>vaqt</b> — {hours} soatdan keyin bog'lanilgan (qachon va necha soatdan keyin)</>};
             <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>Urinish</b> — shu raqam ro'yxatda necha marta uchraydi.
             Kutgan — mijoz qo'ng'iroqda necha soniya kutgan.
             <b> Sabab</b> — telefoniya yozuvidan: operatorlarning telefoni jiringladimi, mijoz qachon uzdi, ish vaqtimi (asl PBX kodi sichqoncha ustida ko'rinadi).

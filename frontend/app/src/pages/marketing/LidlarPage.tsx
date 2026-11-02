@@ -12,6 +12,7 @@ import { DeptTree } from "@/components/DeptTree";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { ReasonsCard } from "@/components/ReasonsCard";
 import { OperatorTable } from "@/components/OperatorTable";
+import { RevivedLeadsCard } from "@/components/RevivedLeadsCard";
 import {
   getDashboardStats, getResponsiblesStats, getConversionStats,
   getFilterOptions, getTasksSummary, getCancelReasons, getJunkReasons,
@@ -1439,6 +1440,9 @@ export default function LidlarPage() {
             />
           </div>
         </div>
+
+        {/* Leads won back from Bekor / Sifatsiz / Arxiv, per operator */}
+        <RevivedLeadsCard filter={applied} />
 
         {/* Mas'ul / Vazifalar / UTM share one slot — three views of the same
             period that were previously three full-height tables stacked on top

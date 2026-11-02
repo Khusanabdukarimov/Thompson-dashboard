@@ -14,7 +14,7 @@ import { getConfig } from "@/lib/api/config";
 import {
   getPyCallStats, getCallList, getCallFilterOptions,
   type CallDashboardFilter,
-  type PyCallStatsResult, type PyResponsibleCallStats,
+  type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
 import { leadStageLabel } from "@/lib/leadStages";
 
@@ -193,55 +193,146 @@ const CALL_PRESETS = [
 // ── Delta badge ───────────────────────────────────────────────────
 
 // ── Call list sub-table ───────────────────────────────────────────
-const CALL_TYPE_LABEL: Record<number, { label: string; color: string }> = {
-  1: { label: "Chiquvchi", color: "#2196F3" },
-  2: { label: "Kiruvchi",  color: "#4CAF50" },
-  3: { label: "Kiruvchi",  color: "#4CAF50" },
-  4: { label: "Callback",  color: "#607D8B" },
-};
-
 /** Operator table row identity: Bitrix user, else the PBX/Moizvonki line, else its position (the queue row). */
 const rowKey = (u: PyResponsibleCallStats, idx: number) =>
   u.responsible_id != null ? `r:${u.responsible_id}` : u.operator_ext ? `e:${u.operator_ext}` : `i:${idx}`;
 
+/** Stage pill colour: won green, Sifatsiz red, Bekor amber, the rest neutral purple. */
+const stageTone = (bid: string | null) =>
+  bid === "CONVERTED" ? "#16A34A" : bid === "JUNK" ? "#DC2626" : bid === "UC_L8G2B9" ? "#D97706" : "#7C3AED";
+
+/** m:ss / h:mm:ss — short enough for a table cell. */
+const fmtShortDur = (secs: number) => {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+};
+
+type DirFilter = "all" | "in" | "out";
+type ResFilter = "all" | "ok" | "no";
+
 function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | null; ext?: string | null; filter: CallDashboardFilter }) {
   const portal = useBitrixPortal();
   const q = useQuery({ queryKey: ["call-list", responsibleId, ext, filter], queryFn: () => getCallList(responsibleId, filter, ext) });
-  if (q.isLoading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda...</div>;
+  const [dir, setDir] = useState<DirFilter>("all");
+  const [res, setRes] = useState<ResFilter>("all");
+  const [search, setSearch] = useState("");
+
   const calls = q.data ?? [];
-  if (!calls.length) return <div style={{ padding: 24, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
+  const isIn = (c: CallListRow) => c.call_type === 2 || c.call_type === 3;
+  const counts = useMemo(() => ({
+    all: calls.length,
+    in: calls.filter(isIn).length,
+    out: calls.filter((c) => c.call_type === 1).length,
+    ok: calls.filter((c) => c.status_code === 200).length,
+  }), [calls]);
+  const needle = search.replace(/\s+/g, "").toLowerCase();
+  const shown = calls.filter((c) =>
+    (dir === "all" || (dir === "in" ? isIn(c) : c.call_type === 1)) &&
+    (res === "all" || (res === "ok" ? c.status_code === 200 : c.status_code !== 200)) &&
+    (!needle || (c.phone_number ?? "").replace(/\D/g, "").includes(needle.replace(/\D/g, "") || "\u0000") ||
+      (c.lead_title ?? "").toLowerCase().includes(needle) || String(c.lead_id ?? "").includes(needle)));
+
+  if (q.isLoading) return <div style={{ padding: 28, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Yuklanmoqda…</div>;
+  if (q.isError) return <div style={{ padding: 28, textAlign: "center", color: "#F44336", fontSize: 13 }}>Ro'yxatni yuklab bo'lmadi — qayta urinib ko'ring</div>;
+  if (!calls.length) return <div style={{ padding: 28, textAlign: "center", color: "var(--text2)", fontSize: 13 }}>Qo'ng'iroqlar topilmadi</div>;
+
+  const chip = (active: boolean, color: string): React.CSSProperties => ({
+    display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 999, cursor: "pointer",
+    border: `1px solid ${active ? color : "var(--border)"}`, background: active ? `${color}14` : "var(--bg2)", color: active ? color : "var(--text2)",
+  });
+  const count = (n: number) => <span style={{ fontWeight: 700, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>{n}</span>;
+  const TH: React.CSSProperties = { position: "sticky", top: 0, zIndex: 1, padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
+  const TD: React.CSSProperties = { padding: "10px 14px", verticalAlign: "middle" };
+
   return (
-    <div style={{ maxHeight: "min(64vh, 640px)", overflow: "auto", overscrollBehavior: "contain", borderTop: "1px solid var(--border)" }}>
-      <table style={{ width: "100%", minWidth: 1180, borderCollapse: "collapse", fontSize: 12.5 }}>
-        <thead>
-          <tr style={{ background: "rgba(33,150,243,0.05)" }}>
-            {["#","Telefon","Turi","Davomiylik","Sana va vaqt","Status","Lead","Bosqich"].map((h) => (
-              <th key={h} style={{ position: "sticky", top: 0, zIndex: 1, padding: "8px 14px", textAlign: "left", fontWeight: 600, color: "var(--text2)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {calls.map((c, i) => {
-            const ct = c.call_type ? CALL_TYPE_LABEL[c.call_type] : null;
-            // 200 = the operator talked (talk time > 0). Duration also counts ringing,
-            // so a long unanswered call is not a success.
-            const ok = c.status_code === 200;
-            const stageLabel = c.stage_name || c.stage_bitrix_id ? leadStageLabel(c.stage_bitrix_id, c.stage_name) : null;
-            return (
-              <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={{ padding: "8px 14px", color: "var(--text2)" }}>{i + 1}</td>
-                <td style={{ padding: "8px 14px", fontFamily: "monospace" }}>{c.phone_number || "—"}</td>
-                <td style={{ padding: "8px 14px" }}>{ct ? <span style={{ fontSize: 11, fontWeight: 600, color: ct.color, background: `${ct.color}15`, border: `1px solid ${ct.color}30`, borderRadius: 5, padding: "2px 8px" }}>{ct.label}</span> : "—"}</td>
-                <td style={{ padding: "8px 14px", fontFamily: "monospace" }}>{fmtDur(c.duration ?? 0)}</td>
-                <td style={{ padding: "8px 14px", color: "var(--text2)", whiteSpace: "nowrap" }}>{c.call_start ? new Date(c.call_start).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                <td style={{ padding: "8px 14px" }}><span style={{ fontSize: 11, fontWeight: 600, color: ok ? "#4CAF50" : "#F44336", background: ok ? "#4CAF5015" : "#F4433615", border: `1px solid ${ok ? "#4CAF5030" : "#F4433630"}`, borderRadius: 5, padding: "2px 8px" }}>{ok ? "Muvaffaqiyatli" : "Muvaffaqiyatsiz"}</span></td>
-                <td style={{ padding: "8px 14px" }}>{c.lead_id && portal ? <a href={`${portal}/crm/lead/details/${c.lead_id}/`} target="_blank" rel="noreferrer" style={{ color: "#2196F3", textDecoration: "none", fontSize: 12 }}>{c.lead_title || `#${c.lead_id}`}</a> : c.lead_id ? (c.lead_title || `#${c.lead_id}`) : "—"}</td>
-                <td style={{ padding: "8px 14px" }}>{stageLabel ? <span style={{ fontSize: 11, fontWeight: 600, color: "#9C27B0", background: "rgba(156,39,176,0.10)", border: "1px solid rgba(156,39,176,0.25)", borderRadius: 5, padding: "2px 8px", whiteSpace: "nowrap" }}>{stageLabel}</span> : "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{ borderTop: "1px solid var(--border)" }}>
+      {/* Quick filters — narrow 1 000 calls to the ones you are looking for */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--bg2)" }}>
+        <button style={chip(dir === "all", "#64748B")} onClick={() => setDir("all")}>Hammasi {count(counts.all)}</button>
+        <button style={chip(dir === "in", "#16A34A")} onClick={() => setDir(dir === "in" ? "all" : "in")}><PhoneIncoming size={13} /> Kiruvchi {count(counts.in)}</button>
+        <button style={chip(dir === "out", "#2563EB")} onClick={() => setDir(dir === "out" ? "all" : "out")}><PhoneOutgoing size={13} /> Chiquvchi {count(counts.out)}</button>
+        <span style={{ width: 1, height: 20, background: "var(--border)", margin: "0 4px" }} />
+        <button style={chip(res === "ok", "#16A34A")} onClick={() => setRes(res === "ok" ? "all" : "ok")}><CheckCircle size={13} /> Gaplashildi {count(counts.ok)}</button>
+        <button style={chip(res === "no", "#DC2626")} onClick={() => setRes(res === "no" ? "all" : "no")}><XCircle size={13} /> Javobsiz {count(counts.all - counts.ok)}</button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--border)", borderRadius: 8, padding: "4px 10px", background: "var(--bg)" }}>
+          <Search size={13} style={{ color: "var(--text3)" }} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Telefon yoki lid"
+            style={{ border: 0, outline: "none", background: "transparent", color: "var(--text)", fontSize: 12.5, width: 160 }} />
+        </div>
+      </div>
+
+      <div style={{ maxHeight: "min(64vh, 640px)", overflow: "auto", overscrollBehavior: "contain" }}>
+        <table style={{ width: "100%", minWidth: 960, borderCollapse: "collapse", fontSize: 12.5 }}>
+          <thead>
+            <tr>
+              {["Vaqt", "Telefon", "Yo'nalish", "Natija", "Lid", "Bosqich va sabab"].map((h) => <th key={h} style={TH}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((c) => {
+              const inbound = isIn(c);
+              // 200 = the operator talked (talk time > 0). Duration also counts ringing,
+              // so a long unanswered call is not a success.
+              const ok = c.status_code === 200;
+              const when = c.call_start ? new Date(c.call_start) : null;
+              const stageLabel = c.stage_name || c.stage_bitrix_id ? leadStageLabel(c.stage_bitrix_id, c.stage_name) : null;
+              const tone = stageTone(c.stage_bitrix_id);
+              return (
+                <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg3)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                  <td style={{ ...TD, whiteSpace: "nowrap" }}>
+                    {when ? <>
+                      <span style={{ fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{when.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span style={{ color: "var(--text3)", marginLeft: 6 }}>{when.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</span>
+                    </> : "—"}
+                  </td>
+                  <td style={{ ...TD, fontFamily: "monospace", fontSize: 13, color: "var(--text)", whiteSpace: "nowrap" }}>{c.phone_number || "—"}</td>
+                  <td style={{ ...TD, whiteSpace: "nowrap" }}>
+                    {c.call_type ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: inbound ? "#16A34A" : "#2563EB", fontWeight: 600, fontSize: 12 }}>
+                        {inbound ? <PhoneIncoming size={14} /> : <PhoneOutgoing size={14} />}{inbound ? "Kiruvchi" : "Chiquvchi"}
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td style={{ ...TD, whiteSpace: "nowrap" }}
+                    title={ok ? `Suhbat ${fmtShortDur(c.talk_time ?? 0)} · jami ${fmtShortDur(c.duration ?? 0)}` : `Javob berilmadi · ${fmtShortDur(c.duration ?? 0)} jiringladi`}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: ok ? "#16A34A" : "#DC2626", flexShrink: 0 }} />
+                      <span style={{ fontWeight: 600, color: ok ? "#16A34A" : "#DC2626" }}>{ok ? "Gaplashildi" : "Javobsiz"}</span>
+                      <span style={{ color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{fmtShortDur(ok ? (c.talk_time ?? c.duration ?? 0) : (c.duration ?? 0))}</span>
+                    </span>
+                  </td>
+                  <td style={{ ...TD, maxWidth: 300 }}>
+                    {c.lead_id ? (
+                      <a href={portal ? `${portal}/crm/lead/details/${c.lead_id}/` : undefined} target="_blank" rel="noreferrer" title={c.lead_title ?? undefined}
+                        style={{ display: "block", color: "#2563EB", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.lead_title || `Lid #${c.lead_id}`}
+                      </a>
+                    ) : <span style={{ color: "var(--text3)" }}>Lid topilmadi</span>}
+                  </td>
+                  <td style={TD}>
+                    {stageLabel ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 600, color: tone, background: `${tone}14`, border: `1px solid ${tone}33`, borderRadius: 6, padding: "2px 8px", whiteSpace: "nowrap" }}>{stageLabel}</span>
+                        {c.stage_reason && <span style={{ fontSize: 12, color: "var(--text2)" }} title="Bitrix'da yozilgan sabab">{c.stage_reason}</span>}
+                      </span>
+                    ) : <span style={{ color: "var(--text3)" }}>—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+            {!shown.length && (
+              <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>Bu filtr bo'yicha qo'ng'iroq yo'q</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {calls.length >= 1000 && (
+        <div style={{ padding: "8px 16px", fontSize: 11.5, color: "var(--text3)", borderTop: "1px solid var(--border)" }}>
+          Oxirgi 1 000 ta qo'ng'iroq ko'rsatilmoqda — eskilarini ko'rish uchun sana oralig'ini qisqartiring.
+        </div>
+      )}
     </div>
   );
 }
@@ -436,11 +527,12 @@ export default function CallStatistikasi() {
           <Card label="Reaksiya vaqti" accentColor="#607D8B"
             value={<span style={{ fontSize: 22 }}>{fmtDur(data?.reaksiya_vaqti ?? 0)}</span>}
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
-            tip={`Javobsiz qo'ng'iroqdan birinchi suhbatgacha (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`}
+            tip={`Javobsiz qo'ng'iroqdan birinchi bog'lanishgacha — operator qo'ng'irog'i yoki mijozning javob olgan qo'ng'irog'i (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`}
             onClick={() => setMissedModal("reaction")} hint="Ro'yxat" />
           <Card label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
+            tip="Javobsiz kirish qo'ng'iroqlari: 24 soat ichida operator o'sha raqamga qo'ng'iroq qilmagan (ko'tarilmagan qo'ng'iroq ham hisobga olinadi) va mijoz ham qayta qilib javob olmagan"
             onClick={() => setMissedModal("not_recalled")} hint="Ro'yxat" />
         </div>
 

@@ -20,10 +20,11 @@
  *                    answered/unanswered split), so the two missed counts can differ by
  *                    the few calls the PBX and Bitrix disagree on.
  *   НДЗ              outbound not answered
- *   Не перезвонили   a missed inbound with NO answered contact (either
- *                    direction) to that number within 24h — NOT just an outbound
- *                    callback; a customer who calls again and gets through counts
- *   Reaksiya vaqti   average wait for the callback among the misses called back within 24h,
+ *   Не перезвонили   a missed inbound with NO contact with that number within 24h.
+ *                    A contact is any operator call to the number, picked up or not
+ *                    (the operator did call back), or the customer calling again and
+ *                    getting through. An unanswered redial by the customer is not one.
+ *   Reaksiya vaqti   average wait for the first contact among the misses called back within 24h,
  *                    counted in WORKING time of the team that owns the lead (config/workHours.js:
  *                    TLC 09-20, TIS 09-19, TL 08-18, unknown 08-20): a miss at 22:00 called back
  *                    at 09:05 waited 5 minutes. The 24h window itself is still plain clock time.
@@ -43,6 +44,11 @@ const { teamOf } = require('../config/calls');
 const { scheduleOf, workSeconds, describeSchedules } = require('../config/workHours');
 
 const RECALL_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** A call that ends "waiting for a callback": the operator called the number (answered or
+ *  not — they did call), or the customer called again and got through. */
+const isContact = (r) =>
+  !!r.customer_norm && !r.internal && r.direction !== 'local' && (r.answered || r.direction === 'outbound');
 const pctOf = (part, whole) => (whole ? Math.round((part / whole) * 1000) / 10 : 0);
 const ms = (v) => {
   if (v == null) return null;
@@ -75,10 +81,10 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
   const useBx = Array.isArray(bxMissed);
   const only = filterOpId == null ? null : [].concat(filterOpId).map(Number);
   const keep = (r) => !only || only.length === 0 || only.includes(Number(r.responsible_id));
-  // Answered-contact times per number (any direction), for callback detection.
+  // Contact times per number (see isContact), for callback detection.
   const contact = new Map();
   for (const r of rows) {
-    if (!r.answered || !r.customer_norm || r.internal) continue;
+    if (!isContact(r)) continue;
     const t = ms(r.start_stamp);
     if (t == null) continue;
     if (!contact.has(r.customer_norm)) contact.set(r.customer_norm, []);
@@ -259,4 +265,4 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
   return result;
 }
 
-module.exports = { computeCallStatsFull };
+module.exports = { computeCallStatsFull, isContact };

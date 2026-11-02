@@ -112,6 +112,18 @@ export function getPipelineReasons(f: PipelineFilter & { scope: ReasonScope }) {
   return apiGet<PipelineReasons>('/api/dashboard/pipeline/reasons', q(f), API_URL_CRM);
 }
 
+/** Deals of one Филиал (or NONE_KEY: no filial set), with the region it belongs to. */
+export type PipelineFilialRow = Rollup & {
+  filial_id: string;
+  name: string;
+  region_id: string | null;
+  region_name: string | null;
+};
+
+export function getPipelineFilials(f: PipelineFilter) {
+  return apiGet<{ filials: PipelineFilialRow[] }>('/api/dashboard/pipeline/filials', q(f), API_URL_CRM);
+}
+
 export type PipelineFilterOptions = {
   source1s: { id: string; name: string }[];
   reasons: { id: string; name: string }[];

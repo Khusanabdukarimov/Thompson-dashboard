@@ -10,7 +10,8 @@ import {
   unassignCampaign,
   type CampaignAssignment,
 } from '@/lib/api/meta';
-import { X, Plus, AlertCircle } from 'lucide-react';
+import { getMoizvonkiUsers, setMoizvonkiName, type MoizvonkiUser } from '@/lib/api/leads';
+import { X, Plus, AlertCircle, Check } from 'lucide-react';
 
 const TARGETOLOG_LABELS: Record<string, { label: string; color: string }> = {
   dilmurod:   { label: 'Dilmurod',   color: '#2196F3' },
@@ -45,6 +46,9 @@ export default function SettingsPage() {
 
         {/* ── Kampaniyalar targetolog sozlamalari ─────────────── */}
         <CampaignAssignmentsSection />
+
+        {/* ── Moizvonki akkauntlari ───────────────────────────── */}
+        <MoizvonkiNamesSection />
 
       </div>
     </>
@@ -260,6 +264,72 @@ function CampaignRow({
         </button>
       )}
     </div>
+  );
+}
+
+function MoizvonkiNamesSection() {
+  const { data, isLoading } = useQuery({ queryKey: ['moizvonki-users'], queryFn: getMoizvonkiUsers, staleTime: 60_000 });
+  return (
+    <Section
+      title="Moizvonki akkauntlari"
+      subtitle="Moizvonki qo'ng'iroqlarni pochta (thompson.menejer…@gmail.com) bilan yuboradi. Har bir akkauntga xodim ismini yozing — Call statistikasida shu ism chiqadi."
+    >
+      {isLoading ? (
+        <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded" />)}</div>
+      ) : !data?.length ? (
+        <div className="text-[12px] text-text3 text-center py-6">Moizvonki akkauntlari topilmadi</div>
+      ) : (
+        <div className="space-y-1.5">
+          {data.map(u => <MoizvonkiNameRow key={u.ext} u={u} />)}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function MoizvonkiNameRow({ u }: { u: MoizvonkiUser }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [value, setValue] = useState(u.custom_name ?? '');
+  const dirty = value.trim() !== (u.custom_name ?? '');
+  const save = useMutation({
+    mutationFn: () => setMoizvonkiName(u.ext, value),
+    onSuccess: (r) => {
+      setValue(r.custom_name ?? '');
+      qc.invalidateQueries({ queryKey: ['moizvonki-users'] });
+      qc.invalidateQueries({ queryKey: ['py-call-stats'] });
+      toast.success('Saqlandi', `${u.email ?? u.ext} → ${r.name}`);
+    },
+    onError: (e: Error) => toast.error('Xato', e.message),
+  });
+  return (
+    <form
+      onSubmit={e => { e.preventDefault(); if (dirty) save.mutate(); }}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px' }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email ?? u.ext}</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>30 kunda {u.calls_30d} ta qo'ng'iroq</div>
+      </div>
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder={u.name ?? 'Ism'}
+        maxLength={80}
+        style={{ width: 220, fontSize: 12, padding: '5px 9px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)' }}
+      />
+      <button
+        type="submit"
+        disabled={!dirty || save.isPending}
+        title="Saqlash"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '5px 10px', borderRadius: 6, border: 0,
+          background: dirty ? 'var(--primary)' : 'var(--bg4)', color: dirty ? '#fff' : 'var(--text3)', cursor: dirty ? 'pointer' : 'default',
+        }}
+      >
+        <Check size={12} /> Saqlash
+      </button>
+    </form>
   );
 }
 

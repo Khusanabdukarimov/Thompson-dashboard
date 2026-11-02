@@ -15,6 +15,9 @@ async function ensureSchema() {
       synced_at  TIMESTAMPTZ DEFAULT NOW()
     );
     ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS responsible_id INTEGER;
+    -- Moizvonki accounts: the login email, and a name typed in Sozlamalar that the sync keeps.
+    ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS custom_name TEXT;
 
     CREATE TABLE IF NOT EXISTS pbx_calls (
       uuid              TEXT PRIMARY KEY,
@@ -113,8 +116,8 @@ async function upsertUser(ext, name, enabled = true, db = pool, responsibleId = 
     `INSERT INTO pbx_users (ext, name, enabled, responsible_id, synced_at)
      VALUES ($1,$2,$3,$4,NOW())
      ON CONFLICT (ext) DO UPDATE SET
-       -- keep a real name if we have one; never overwrite it with a stub NULL
-       name    = COALESCE(EXCLUDED.name, pbx_users.name),
+       -- a name set by hand wins; keep a real name if we have one, never overwrite it with NULL
+       name    = COALESCE(pbx_users.custom_name, EXCLUDED.name, pbx_users.name),
        enabled = EXCLUDED.enabled,
        responsible_id = COALESCE(EXCLUDED.responsible_id, pbx_users.responsible_id),
        synced_at = NOW()`,

@@ -7,13 +7,14 @@ import {
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { InfoTip } from "@/components/InfoTip";
+import { FilialBreakdown } from "@/components/FilialBreakdown";
 import { MultiSelect } from "@/components/MultiSelect";
 import { DeptTree } from "@/components/DeptTree";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { getDealFilterOptions } from "@/lib/api/deals";
 import {
   getPipelineKpi, getPipelineManagers, getPipelineSources, getPipelineReasons, getPipelineDeals,
-  getPipelineFilterOptions,
+  getPipelineFilterOptions, getPipelineFilials,
   NONE_KEY,
   DELETED_SOURCE_KEY,
   type PipelineKey, type PipelineFilter, type PipelineDealsFilter, type PipelineStage,
@@ -424,6 +425,16 @@ export default function SdelkalarPage() {
     placeholderData: (p, q) => (q?.queryKey[2] === reasonScope ? samePipeline(p, q?.queryKey) : undefined),
   });
 
+  // Every other filter applies, but not Filial / Viloyat themselves: the chart keeps all bars and
+  // highlights the picked ones, so picking a filial never makes the others vanish.
+  const filialBase = useMemo(() => ({ ...base, filial: undefined, region: undefined }), [base]);
+  const filialsQ = useQuery({ queryKey: ["pipeline-filials", filialBase], queryFn: () => getPipelineFilials(filialBase), placeholderData: (p, q) => samePipeline(p, q?.queryKey) });
+  // A bar click on "Filiallar bo'yicha" picks that filial / viloyat in the filter (and leaves Istisno mode).
+  const toggleIn = (key: "filials" | "regions", id: string) => setFilter(s => {
+    const cur = s.excludes[key] ? [] : s[key];
+    return { ...s, [key]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id], excludes: { ...s.excludes, [key]: false } };
+  });
+
   // Whole Bitrix enums for Manba 1 / Sabab / Filial, so options stay stable while other filters change.
   const enumOptsQ = useQuery({
     queryKey: ["pipeline-filter-options", pipeline],
@@ -793,6 +804,16 @@ export default function SdelkalarPage() {
           </div>
         )}
         <div style={{ marginBottom: 16 }} />
+
+        {/* ── Filiallar / viloyatlar bo'yicha (click → filter) ── */}
+        <FilialBreakdown
+          rows={filialsQ.data?.filials ?? []}
+          loading={filialsQ.isLoading}
+          selectedFilials={filter.excludes.filials ? [] : filter.filials}
+          selectedRegions={filter.excludes.regions ? [] : filter.regions}
+          onFilial={id => toggleIn("filials", id)}
+          onRegion={id => toggleIn("regions", id)}
+        />
 
         {/* ══════════════════════════════════════════════════════════
             Menejerlar × bosqichlar (live Bitrix stages)

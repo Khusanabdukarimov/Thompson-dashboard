@@ -320,6 +320,45 @@ router.get('/sources', async (req, res) => {
 });
 
 /**
+ * GET /filials — deals per Филиал (UF deal field), rolled up into in process / won / lost,
+ * each with its region (config/regions.js, matched by name). Deals with no filial come
+ * back under NONE so the bars add up to the KPI total.
+ */
+router.get('/filials', async (req, res) => {
+  const pipe = pipelineOr400(req, res); if (!pipe) return;
+  try {
+    const { where, params } = buildScope(req.query, pipe);
+    const [liveStages, labels, { rows }] = await Promise.all([
+      getStages(pipe.categoryId),
+      getEnumLabels(FILIAL_FIELD),
+      pool.query(
+        `SELECT COALESCE(NULLIF(d.uf_filial, ''), '${NONE}') AS filial_id,
+                s.bitrix_id AS stage,
+                COUNT(*)::int AS n
+         FROM deals d
+         JOIN stages s ON s.id = d.stage_id
+         WHERE ${where}
+         GROUP BY 1, s.bitrix_id`,
+        params
+      ),
+    ]);
+    const stages = withOrphans(liveStages, new Set(rows.map(r => r.stage)));
+    const regionOf = (name) => (REGIONS.find(r => r.filials.includes(String(name).trim())) || REGION_OTHER);
+    const byFilial = new Map();
+    for (const r of rows) {
+      if (!byFilial.has(r.filial_id)) byFilial.set(r.filial_id, { filial_id: r.filial_id, by_stage: {} });
+      byFilial.get(r.filial_id).by_stage[r.stage] = r.n;
+    }
+    const filials = [...byFilial.values()].map((f) => {
+      const name = f.filial_id === NONE ? "Filial ko'rsatilmagan" : (labels[f.filial_id] || `O'chirilgan filial (#${f.filial_id})`);
+      const region = f.filial_id === NONE ? null : regionOf(labels[f.filial_id] || '');
+      return { filial_id: f.filial_id, name, region_id: region?.id ?? null, region_name: region?.name ?? null, ...rollup(f.by_stage, stages) };
+    }).sort((a, b) => b.total - a.total);
+    res.json({ filials });
+  } catch (err) { fail(res, 'filials')(err); }
+});
+
+/**
  * GET /reasons?scope=lost|all — deals grouped by the pipeline's reason field.
  * Причина is filled on most deals at intake, not only on lost ones, so the
  * default scope is the failure stages ("Bekor bo'lish sabablari"); scope=all

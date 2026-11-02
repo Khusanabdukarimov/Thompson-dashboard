@@ -50,6 +50,12 @@ async function collectRange(fromUnix, toUnix) {
   return [...records.values()];
 }
 
+/** "thompson.menejer3@gmail.com" → "Menejer 3": readable until a name is set in Sozlamalar. */
+function defaultMzName(user) {
+  const m = /menejer\D*(\d+)/i.exec(user.email || '');
+  return m ? `Menejer ${Number(m[1])}` : (user.email || user.ext);
+}
+
 async function syncMoizUsers(records) {
   const users = new Map();
   for (const rec of records) {
@@ -60,8 +66,9 @@ async function syncMoizUsers(records) {
     const responsible = user.email
       ? (await pool.query(`SELECT id, name, last_name FROM responsibles WHERE LOWER(email) = LOWER($1) LIMIT 1`, [user.email])).rows[0]
       : null;
-    const name = responsible ? [responsible.name, responsible.last_name].filter(Boolean).join(' ') : (user.email || user.ext);
+    const name = responsible ? [responsible.name, responsible.last_name].filter(Boolean).join(' ') : defaultMzName(user);
     await upsertUser(user.ext, name, true, pool, responsible?.id || null);
+    if (user.email) await pool.query('UPDATE pbx_users SET email = $2 WHERE ext = $1', [user.ext, user.email]);
   }
   return users.size;
 }

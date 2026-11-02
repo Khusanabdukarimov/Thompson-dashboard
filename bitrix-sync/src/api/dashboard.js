@@ -1440,6 +1440,50 @@ router.get('/lead-conversion', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/revived-leads
+ * "Qayta tiklangan lidlar": leads that reached Успешный лид (CONVERTED) in [from, to] after
+ * having been in Закрыт / Горячие звонки (NO) / Архив 30+ — work the operator won back.
+ * Read from lead_stage_history (complete from July 2026), so the period is the date of the
+ * move to CONVERTED, not the lead's creation date. `dead_stage` is the last of those three
+ * stages the lead was in before the move; the lead counts for its current responsible.
+ */
+const REVIVED_FROM = ['UC_L8G2B9', 'JUNK', 'UC_GSPVUS'];
+router.get('/revived-leads', async (req, res) => {
+  const { from, to, responsible_id, proekt } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `WITH conv AS (
+         SELECT DISTINCT ON (h.lead_id) h.lead_id, h.changed_at
+         FROM lead_stage_history h
+         JOIN stages s ON s.id = h.stage_id AND s.bitrix_id = 'CONVERTED'
+         WHERE ${tzFromOpt('h.changed_at', '$1')} AND ${tzToOpt('h.changed_at', '$2')}
+         ORDER BY h.lead_id, h.changed_at
+       )
+       SELECT l.id AS lead_id, l.title, l.responsible_id,
+              TRIM(COALESCE(r.name,'') || ' ' || COALESCE(r.last_name,'')) AS full_name,
+              d.bitrix_id AS dead_stage, d.changed_at AS dead_at, c.changed_at AS converted_at
+       FROM conv c
+       JOIN LATERAL (
+         SELECT s.bitrix_id, p.changed_at
+         FROM lead_stage_history p JOIN stages s ON s.id = p.stage_id
+         WHERE p.lead_id = c.lead_id AND p.changed_at < c.changed_at AND s.bitrix_id = ANY($5::text[])
+         ORDER BY p.changed_at DESC LIMIT 1
+       ) d ON true
+       JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN responsibles r ON r.id = l.responsible_id
+       WHERE ${listCond('l.responsible_id::text', '$3')}
+         AND ${leadProektCond(4, req.query)}
+       ORDER BY c.changed_at DESC`,
+      [from || null, to || null, responsible_id || null, proekt || null, REVIVED_FROM]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[dashboard/revived-leads]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/dashboard/lead-filter-options
  * Responsibles, lead stages, and sources.  Replaces Python /api/filter-options.
  */

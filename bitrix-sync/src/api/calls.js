@@ -1,11 +1,18 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFromOpt, tzToOpt } = require('./tzDate');
-const { computeCallStatsFull } = require('../services/callStats');
+const { computeCallStatsFull, isContact } = require('../services/callStats');
 const { teamOf } = require('../config/calls');
 const { describeSchedules, DEFAULT_SCHEDULE } = require('../config/workHours');
 
 const router = Router();
+
+// Lead fields holding why a lead is Bekor bo'ldi / Sifatsiz (enum + Maktab's text field), as in
+// api/dashboard.js cancel-reasons / junk-reasons.
+const REASON_FIELDS = {
+  bekor:    ['UF_CRM_1770976355232', 'UF_CRM_BEKOR_BO_LDI_603C521DDE90'],
+  sifatsiz: ['UF_CRM_1770282341169', 'UF_CRM_SIFATSIZ_LID_0A5800E2C439'],
+};
 
 const fail = (res, tag) => (err) => {
   console.error(`[calls/${tag}] ${err.message}`);
@@ -337,7 +344,7 @@ const REACTION_BANDS = [
 function buildContactMatcher(rows) {
   const byKey = new Map();
   for (const r of rows) {
-    if (!r.answered || r.internal || !r.customer_norm) continue;
+    if (!isContact(r)) continue;
     const t = new Date(r.start_stamp).getTime();
     if (!Number.isNaN(t) && !byKey.has(`${r.customer_norm}|${t}`)) byKey.set(`${r.customer_norm}|${t}`, r);
   }
@@ -433,6 +440,7 @@ async function serveMissedList(req, res, scope) {
         callback_dir: cb ? cb.direction : null,
         callback_by: cb ? (cb.operator_ext ? cb.full_name || cb.operator_ext : null) : null,
         callback_source: cb ? (String(cb.uuid).startsWith('moizvonki:') ? 'moizvonki' : 'onlinepbx') : null,
+        callback_answered: cb ? !!cb.answered : null,  // false = the operator called, the customer did not pick up
       };
     });
 
@@ -543,7 +551,7 @@ router.get('/call-list', async (req, res) => {
     // filter needs it to choose them.
     const { rows } = await pool.query(
       `WITH base AS (
-         SELECT c.uuid, c.customer_number, c.customer_norm, c.direction, c.duration, c.start_stamp,
+         SELECT c.uuid, c.customer_number, c.customer_norm, c.direction, c.duration, c.talk_time, c.start_stamp,
                 c.answered, c.hangup_cause
          FROM pbx_calls c${INTERNAL_JOINS}
          WHERE c.start_stamp IS NOT NULL
@@ -561,6 +569,7 @@ router.get('/call-list', async (req, res) => {
               c.customer_number AS phone_number,
               CASE c.direction WHEN 'outbound' THEN 1 WHEN 'inbound' THEN 2 ELSE NULL END AS call_type,
               c.duration,
+              c.talk_time,
               c.start_stamp AS call_start,
               CASE WHEN c.answered THEN 200 ELSE NULL END AS status_code,
               c.hangup_cause AS status_name,
@@ -568,7 +577,8 @@ router.get('/call-list', async (req, res) => {
               CASE WHEN ld.lead_id IS NOT NULL THEN 'lead' END AS crm_entity_type,
               ld.lead_title,
               ld.stage_name,
-              ld.stage_bitrix_id
+              ld.stage_bitrix_id,
+              rs.reason AS stage_reason
        FROM base c
        -- Lead match by phone, entirely in Postgres (no Bitrix round-trips):
        -- lead_phones is normalised to the same last-9-digits form as
@@ -583,10 +593,21 @@ router.get('/call-list', async (req, res) => {
          ORDER BY l.date_create DESC NULLS LAST
          LIMIT 1
        ) ld ON c.customer_norm IS NOT NULL
+       -- Why the lead is Bekor bo'ldi / Sifatsiz: the same reason fields the Lidlar page reads.
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(re.value, rv.value) AS reason
+         FROM lead_uf_values rv
+         LEFT JOIN lead_uf_enums re ON re.field_code = rv.field_code AND re.enum_id = rv.value
+         WHERE rv.lead_id = ld.lead_id AND rv.value <> ''
+           AND rv.field_code = ANY(CASE ld.stage_bitrix_id WHEN 'UC_L8G2B9' THEN $8::text[] ELSE $9::text[] END)
+           AND TRIM(COALESCE(re.value, rv.value)) NOT IN ('—', '-', '')   -- a dash option is "not given"
+         ORDER BY rv.field_code
+         LIMIT 1
+       ) rs ON ld.stage_bitrix_id IN ('UC_L8G2B9', 'JUNK')
        WHERE ($6::text IS NULL OR ld.stage_bitrix_id = $6::text)
        ORDER BY c.start_stamp DESC
        LIMIT 1000`,
-      [from, to, exts, phone, kind === 'inbound' || kind === 'outbound' ? kind : null, stage, source],
+      [from, to, exts, phone, kind === 'inbound' || kind === 'outbound' ? kind : null, stage, source, REASON_FIELDS.bekor, REASON_FIELDS.sifatsiz],
     );
     res.json(rows);
   } catch (err) {
@@ -648,6 +669,49 @@ router.get('/call-filter-options', async (_req, res) => {
     });
   } catch (err) {
     fail(res, 'call-filter-options')(err);
+  }
+});
+
+// ── Moizvonki accounts (Sozlamalar) ─────────────────────────────
+// Moizvonki reports a call by the manager's login email (thompson.menejer3@gmail.com), which
+// matches no Bitrix user, so the name shown for that account is typed in by hand.
+
+/** GET /moizvonki-users — every Moizvonki account, with its 30-day call count. */
+router.get('/moizvonki-users', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.ext, u.email, u.name, u.custom_name,
+              (SELECT count(*)::int FROM pbx_calls c
+               WHERE c.operator_ext = u.ext AND c.start_stamp > now() - interval '30 days') AS calls_30d
+       FROM pbx_users u
+       WHERE u.ext LIKE 'mz:%'
+       ORDER BY length(u.ext), u.ext`);
+    res.json(rows);
+  } catch (err) {
+    fail(res, 'moizvonki-users')(err);
+  }
+});
+
+/** PUT /moizvonki-users/:ext { name } — set the shown name; an empty name goes back to the default. */
+router.put('/moizvonki-users/:ext', async (req, res) => {
+  const ext = String(req.params.ext || '');
+  const name = String(req.body?.name ?? '').trim().slice(0, 80);
+  if (!/^mz:\d+$/.test(ext)) return res.status(400).json({ error: 'not a Moizvonki account' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE pbx_users
+       SET custom_name = NULLIF($2, ''),
+           name = COALESCE(NULLIF($2, ''),
+                           CASE WHEN email ~* 'menejer\\D*\\d+'
+                                THEN 'Menejer ' || (substring(email from '(?i)menejer\\D*(\\d+)'))::int
+                                ELSE COALESCE(email, ext) END)
+       WHERE ext = $1
+       RETURNING ext, email, name, custom_name`,
+      [ext, name]);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    fail(res, 'moizvonki-users/put')(err);
   }
 });
 
