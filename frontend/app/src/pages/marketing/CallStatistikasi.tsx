@@ -1,9 +1,9 @@
-import { Fragment, useState, useRef, useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Fragment, useState, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
-  Clock, PhoneMissed, Timer, ChevronDown, ChevronUp,
-  Download, PhoneOff, Search, Users,
+  Clock, PhoneMissed, Timer, ChevronDown,
+  Download, PhoneOff, Search, Users, ChevronRight,
 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -17,7 +17,9 @@ import {
   type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
 import { leadStageLabel } from "@/lib/leadStages";
+import { fmtNum } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
+import { SidePanel, PanelStats } from "@/components/SidePanel";
 
 // The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or the
 // links point at whichever portal the code was copied from.
@@ -32,6 +34,34 @@ const localISO = (d: Date) =>
 const todayISO  = () => localISO(new Date());
 const daysAgoISO = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
 const startOfMonthISO = () => { const d = new Date(); d.setDate(1); return localISO(d); };
+
+/** A number cell of the operator table: a faint "—" for zero, so the real figures stand out. */
+function Num({ v, time, color, style }: { v: number; time?: boolean; color?: string; style: React.CSSProperties }) {
+  const zero = !v;
+  return (
+    <td style={{ ...style, fontVariantNumeric: "tabular-nums", color: zero ? "var(--text3)" : (color ?? "var(--text)"), fontWeight: zero ? 400 : style.fontWeight }}>
+      {zero ? "—" : time ? fmtClock(v) : fmtNum(v)}
+    </td>
+  );
+}
+
+/** Row hover / selection and the frozen name column of the operator table. */
+const TABLE_CSS = `
+  .cs-row td { background: var(--bg); transition: background .12s; }
+  .cs-row:hover td { background: var(--bg3); }
+  .cs-row[data-sel] td { background: rgba(37,99,235,.07); }
+  .cs-row td.cs-sticky, th.cs-sticky { position: sticky; left: 0; z-index: 2; box-shadow: 1px 0 0 var(--border); }
+  th.cs-sticky { z-index: 4; }
+  .cs-go { color: var(--text3); opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+  .cs-row:hover .cs-go { opacity: 1; }
+`;
+
+/** Table time: 1:28:32, 28:53, 0:41 — no padded zero hours, "—" for nothing. */
+function fmtClock(secs: number): string {
+  if (!secs) return "—";
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
 
 function fmtDur(secs: number): string {
   if (!secs) return "00:00:00";
@@ -213,9 +243,16 @@ const fmtShortDur = (secs: number) => {
 type DirFilter = "all" | "in" | "out";
 type ResFilter = "all" | "ok" | "no";
 
+/** Query of one operator's call list — shared by the panel and the hover prefetch. */
+const callListQuery = (responsibleId: number | null, ext: string | null | undefined, filter: CallDashboardFilter) => ({
+  queryKey: ["call-list", responsibleId, ext ?? null, filter] as const,
+  queryFn: () => getCallList(responsibleId, filter, ext),
+  staleTime: 60_000,
+});
+
 function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | null; ext?: string | null; filter: CallDashboardFilter }) {
   const portal = useBitrixPortal();
-  const q = useQuery({ queryKey: ["call-list", responsibleId, ext, filter], queryFn: () => getCallList(responsibleId, filter, ext) });
+  const q = useQuery(callListQuery(responsibleId, ext, filter));
   const [dir, setDir] = useState<DirFilter>("all");
   const [res, setRes] = useState<ResFilter>("all");
   const [search, setSearch] = useState("");
@@ -244,13 +281,13 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
     border: `1px solid ${active ? color : "var(--border)"}`, background: active ? `${color}14` : "var(--bg2)", color: active ? color : "var(--text2)",
   });
   const count = (n: number) => <span style={{ fontWeight: 700, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>{n}</span>;
-  const TH: React.CSSProperties = { position: "sticky", top: 0, zIndex: 1, padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
+  const TH: React.CSSProperties = { position: "sticky", top: 56, zIndex: 1, padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
   const TD: React.CSSProperties = { padding: "10px 14px", verticalAlign: "middle" };
 
   return (
-    <div style={{ borderTop: "1px solid var(--border)" }}>
+    <div>
       {/* Quick filters — narrow 1 000 calls to the ones you are looking for */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--bg2)" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 3, height: 56, boxSizing: "border-box", display: "flex", alignItems: "center", gap: 8, padding: "0 16px", borderBottom: "1px solid var(--border)", background: "var(--bg2)", overflowX: "auto" }}>
         <button style={chip(dir === "all", "#64748B")} onClick={() => setDir("all")}>Hammasi {count(counts.all)}</button>
         <button style={chip(dir === "in", "#16A34A")} onClick={() => setDir(dir === "in" ? "all" : "in")}><PhoneIncoming size={13} /> Kiruvchi {count(counts.in)}</button>
         <button style={chip(dir === "out", "#2563EB")} onClick={() => setDir(dir === "out" ? "all" : "out")}><PhoneOutgoing size={13} /> Chiquvchi {count(counts.out)}</button>
@@ -264,8 +301,8 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
         </div>
       </div>
 
-      <div style={{ maxHeight: "min(64vh, 640px)", overflow: "auto", overscrollBehavior: "contain" }}>
-        <table style={{ width: "100%", minWidth: 960, borderCollapse: "collapse", fontSize: 12.5 }}>
+      <div>
+        <table style={{ width: "100%", minWidth: 860, borderCollapse: "collapse", fontSize: 12.5 }}>
           <thead>
             <tr>
               {["Vaqt", "Telefon", "Yo'nalish", "Natija", "Lid", "Bosqich va sabab"].map((h) => <th key={h} style={TH}>{h}</th>)}
@@ -351,7 +388,7 @@ export default function CallStatistikasi() {
   const [missedModal, setMissedModal] = useState<MissedCallsVariant | null>(null);
   const portal = useBitrixPortal();
   const pageScrollRef = useRef<HTMLDivElement>(null);
-  const detailRef = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
   const apiFilter = toApiFilter(filters);
   const activeFilters = activeFilterCount(filters);
 
@@ -382,16 +419,6 @@ export default function CallStatistikasi() {
   const ndzCalls = data?.ndz_calls ?? 0;
   const selectedRow = selectedResp ? rows.find((u, idx) => rowKey(u, idx) === selectedResp.id) : null;
 
-  useEffect(() => {
-    if (!selectedResp) return;
-    const t = window.setTimeout(() => {
-      const scroller = pageScrollRef.current;
-      const detail = detailRef.current;
-      if (!scroller || !detail) return;
-      scroller.scrollTo({ top: Math.max(0, detail.offsetTop - 16), behavior: "smooth" });
-    }, 80);
-    return () => window.clearTimeout(t);
-  }, [selectedResp?.id]);
 
   const TH  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--bg2)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", ...extra });
   const TD  = (extra?: React.CSSProperties): React.CSSProperties => ({ padding: "11px 14px", verticalAlign: "middle", borderBottom: "1px solid var(--border)", textAlign: "center", ...extra });
@@ -401,11 +428,12 @@ export default function CallStatistikasi() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "var(--bg2)" }}>
       <Topbar title="Call statistikasi" />
+      <style>{TABLE_CSS}</style>
 
       <div ref={pageScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "18px 24px 96px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ── Inline filter panel ── */}
-        <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
+        <div style={{ flexShrink: 0, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
           <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
             onClick={() => setFilterOpen(o => !o)}>
             <Search size={14} style={{ color: "var(--text3)" }} />
@@ -543,7 +571,7 @@ export default function CallStatistikasi() {
         </div>
 
         {/* ── Main stats table ── */}
-        <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", flex: 1 }}>
+        <div style={{ flexShrink: 0, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Xodimlar bo'yicha hisobot</div>
@@ -562,7 +590,7 @@ export default function CallStatistikasi() {
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
                   <tr>
-                    <th style={TH({ textAlign: "left", minWidth: 200 })} rowSpan={2}>OPERATORLAR</th>
+                    <th className="cs-sticky" style={TH({ textAlign: "left", minWidth: 200 })} rowSpan={2}>OPERATORLAR</th>
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
                     <th style={TH({ color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.2)" })} colSpan={3}>UNIKAL QO'NG'IROQLAR</th>
                     <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={4}>DAVOMIYLIK</th>
@@ -590,29 +618,29 @@ export default function CallStatistikasi() {
                     const isSel  = selectedResp?.id === uid;
                     return (
                       <Fragment key={uid}>
-                        <tr key={uid} style={{ background: isSel ? "rgba(33,150,243,0.06)" : "var(--bg)", cursor: "pointer" }}
-                          onClick={() => setSelectedResp(isSel ? null : { id: uid, name: u.full_name })}>
-                          <td style={TD({ textAlign: "left" })}>
+                        <tr key={uid} className="cs-row" data-sel={isSel || undefined} style={{ cursor: (u.responsible_id != null || u.operator_ext) ? "pointer" : "default" }}
+                          // Start loading the call list on hover, so the panel opens with it already there.
+                          onMouseEnter={() => { if (u.responsible_id != null || u.operator_ext) qc.prefetchQuery(callListQuery(u.responsible_id, u.operator_ext, apiFilter)); }}
+                          onClick={() => { if (u.responsible_id != null || u.operator_ext) setSelectedResp({ id: uid, name: u.full_name }); }}>
+                          <td className="cs-sticky" style={TD({ textAlign: "left" })}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{u.full_name}</div>
-                              </div>
-                              {isSel ? <ChevronUp size={14} color="#2196F3" /> : <ChevronDown size={14} color="var(--text2)" />}
+                              <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.full_name}</div>
+                              {(u.responsible_id != null || u.operator_ext) && <ChevronRight size={15} className="cs-go" />}
                             </div>
                           </td>
-                          <td style={TD({ borderLeft: "2px solid rgba(33,150,243,0.10)" })}>{u.inbound_calls}</td>
-                          <td style={TD()}>{u.outbound_calls}</td>
-                          <td style={TD({ fontWeight: 700 })}>{u.total_calls}</td>
-                          <td style={TD({ borderLeft: "2px solid rgba(76,175,80,0.10)" })}>{u.unique_inbound}</td>
-                          <td style={TD()}>{u.unique_outbound}</td>
-                          <td style={TD({ fontWeight: 700 })}>{u.unique_total}</td>
-                          <td style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)", fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.inbound_duration)}</td>
-                          <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.outbound_duration)}</td>
-                          <td style={TD({ fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.total_duration)}</td>
-                          <td style={TD({ fontWeight: 700, fontFamily: "monospace", fontSize: 12 })}>{fmtDur(u.call_dur_total)}</td>
-                          <td style={TD({ borderLeft: "2px solid rgba(255,152,0,0.12)", color: "#FF9800", fontWeight: 700 })}>{u.missed_inbound}</td>
-                          <td style={TD({ color: "#4CAF50", fontWeight: 700 })}>{u.missed_recalled}</td>
-                          <td style={TD({ color: "#F44336", fontWeight: 700 })}>{u.missed_unrecalled}</td>
+                          <Num v={u.inbound_calls} style={TD({ borderLeft: "2px solid rgba(33,150,243,0.10)" })} />
+                          <Num v={u.outbound_calls} style={TD()} />
+                          <Num v={u.total_calls} style={TD({ fontWeight: 700 })} />
+                          <Num v={u.unique_inbound} style={TD({ borderLeft: "2px solid rgba(76,175,80,0.10)" })} />
+                          <Num v={u.unique_outbound} style={TD()} />
+                          <Num v={u.unique_total} style={TD({ fontWeight: 700 })} />
+                          <Num v={u.inbound_duration} time style={TD({ borderLeft: "2px solid rgba(156,39,176,0.10)" })} />
+                          <Num v={u.outbound_duration} time style={TD()} />
+                          <Num v={u.total_duration} time style={TD()} />
+                          <Num v={u.call_dur_total} time style={TD({ fontWeight: 700 })} />
+                          <Num v={u.missed_inbound} color="#E8890C" style={TD({ borderLeft: "2px solid rgba(255,152,0,0.12)", fontWeight: 700 })} />
+                          <Num v={u.missed_recalled} color="#2E9D4F" style={TD({ fontWeight: 700 })} />
+                          <Num v={u.missed_unrecalled} color="#E5484D" style={TD({ fontWeight: 700 })} />
                         </tr>
                       </Fragment>
                     );
@@ -623,25 +651,24 @@ export default function CallStatistikasi() {
           )}
         </div>
 
-        {selectedRow && (selectedRow.responsible_id != null || selectedRow.operator_ext) && (
-          <div ref={detailRef} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", scrollMarginTop: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px", borderBottom: "1px solid var(--border)", background: "rgba(33,150,243,0.05)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {selectedRow.full_name} — qo'ng'iroqlar ro'yxati
-                  </div>
-                </div>
-              </div>
-              <button onClick={() => setSelectedResp(null)} style={{ border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", borderRadius: 8, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>
-                Yopish
-              </button>
-            </div>
-            <CallSubTable responsibleId={selectedRow.responsible_id} ext={selectedRow.operator_ext} filter={apiFilter} />
-          </div>
-        )}
-
-
+        {/* ── Operator's calls: right-side panel ── */}
+        <SidePanel
+          open={!!selectedRow && (selectedRow.responsible_id != null || !!selectedRow.operator_ext)}
+          onClose={() => setSelectedResp(null)}
+          title={selectedRow?.full_name ?? ""}
+          subtitle={`Qo'ng'iroqlar · ${filters.start_date} → ${filters.end_date}`}
+          headerExtra={selectedRow && (
+            <PanelStats items={[
+              { label: "Jami", value: fmtNum(selectedRow.total_calls) },
+              { label: "Kiruvchi", value: fmtNum(selectedRow.inbound_calls), color: "#16A34A" },
+              { label: "Chiquvchi", value: fmtNum(selectedRow.outbound_calls), color: "#2563EB" },
+              { label: "Suhbat vaqti", value: fmtClock(selectedRow.total_duration) },
+              { label: "Propushenniy", value: fmtNum(selectedRow.missed_inbound), color: "#E8890C" },
+              { label: "Chiqilmagan", value: fmtNum(selectedRow.missed_unrecalled), color: "#E5484D" },
+            ]} />
+          )}>
+          {selectedRow && <CallSubTable responsibleId={selectedRow.responsible_id} ext={selectedRow.operator_ext} filter={apiFilter} />}
+        </SidePanel>
       </div>
       {missedModal && <MissedCallsModal variant={missedModal} filter={apiFilter} portal={portal} onClose={() => setMissedModal(null)} />}
     </div>
