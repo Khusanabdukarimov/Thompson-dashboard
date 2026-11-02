@@ -12,7 +12,7 @@ import { MissedCallsModal, type MissedCallsVariant } from "@/components/MissedCa
 import { describeWorkHours } from "@/lib/workHours";
 import { getConfig } from "@/lib/api/config";
 import {
-  getPyCallStats, getCallList, getCallFilterOptions,
+  getPyCallStats, getCallList, getCallFilterOptions, getAnswerSpeed, getLeadFirstCall,
   type CallDashboardFilter,
   type PyCallStatsResult, type PyResponsibleCallStats, type CallListRow,
 } from "@/lib/api/leads";
@@ -20,6 +20,8 @@ import { leadStageLabel } from "@/lib/leadStages";
 import { fmtNum } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
+import { ReactionPanel } from "@/components/ReactionPanel";
+import { fmtSecs } from "@/lib/duration";
 
 // The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or the
 // links point at whichever portal the code was copied from.
@@ -386,6 +388,7 @@ export default function CallStatistikasi() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedResp, setSelectedResp] = useState<{ id: string; name: string } | null>(null);
   const [missedModal, setMissedModal] = useState<MissedCallsVariant | null>(null);
+  const [reactionOpen, setReactionOpen] = useState(false);
   const portal = useBitrixPortal();
   const pageScrollRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -414,6 +417,9 @@ export default function CallStatistikasi() {
   }, [filterOptionsQ.data]);
 
   const data: PyCallStatsResult | undefined = statsQ.data;
+  // The Reaksiya vaqti card's other two speeds (same queries the panel uses, so it opens filled).
+  const answerQ = useQuery({ queryKey: ["call-answer-speed", apiFilter], queryFn: () => getAnswerSpeed(apiFilter), staleTime: 5 * 60_000 });
+  const leadQ = useQuery({ queryKey: ["call-lead-first-call", apiFilter], queryFn: () => getLeadFirstCall(apiFilter), staleTime: 5 * 60_000 });
   const rows: PyResponsibleCallStats[]      = data?.responsibles ?? [];
   const failedCalls = data?.failed_calls ?? 0;
   const ndzCalls = data?.ndz_calls ?? 0;
@@ -559,10 +565,24 @@ export default function CallStatistikasi() {
             icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)"
             onClick={() => setMissedModal("all")} hint="Ro'yxat" />
           <Card loading={statsQ.isLoading && !data} label="Reaksiya vaqti" accentColor="#607D8B"
-            value={<span style={{ fontSize: 22 }}>{fmtDur(data?.reaksiya_vaqti ?? 0)}</span>}
+            value={
+              // Three speeds, each a line: pick-up, missed-call callback, first call to a new lead.
+              <div style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: 10, rowGap: 3, fontSize: 13, lineHeight: 1.25, alignItems: "baseline" }}>
+                {([
+                  ["Javob", answerQ.data?.summary.avg_s],
+                  ["Qayta", data?.reaksiya_vaqti ?? null],
+                  ["Lid", leadQ.data?.summary.median_work_s],
+                ] as const).map(([k, v]) => (
+                  <Fragment key={k}>
+                    <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--text3)" }}>{k}</span>
+                    <span style={{ fontWeight: 700, color: "var(--text)" }}>{v == null ? "…" : fmtSecs(v)}</span>
+                  </Fragment>
+                ))}
+              </div>
+            }
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
-            tip={`Javobsiz qo'ng'iroqdan birinchi bog'lanishgacha — operator qo'ng'irog'i yoki mijozning javob olgan qo'ng'irog'i (24 soat ichida), ish vaqti bo'yicha: ${describeWorkHours(data?.work_hours)}`}
-            onClick={() => setMissedModal("reaction")} hint="Ro'yxat" />
+            tip={`Javob — kiruvchi qo'ng'iroqqa o'rtacha javob berish; Qayta — javobsiz qo'ng'iroqqa qayta bog'lanish (o'rtacha, ish vaqti: ${describeWorkHours(data?.work_hours)}); Lid — reklama/formadan kelgan lidga birinchi qo'ng'iroq (mediana, ish vaqti)`}
+            onClick={() => setReactionOpen(true)} hint="Batafsil" />
           <Card loading={statsQ.isLoading && !data} label="Ne perezvonili" accentColor="#F44336"
             value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
@@ -671,6 +691,7 @@ export default function CallStatistikasi() {
         </SidePanel>
       </div>
       {missedModal && <MissedCallsModal variant={missedModal} filter={apiFilter} portal={portal} onClose={() => setMissedModal(null)} />}
+      {reactionOpen && <ReactionPanel filter={apiFilter} portal={portal} onClose={() => setReactionOpen(false)} />}
     </div>
   );
 }

@@ -1188,3 +1188,32 @@ export function getLeadDaily(filter: DashFilter) {
     mode: filter.mode,
   }, API_URL_CRM);
 }
+
+// ── Reaction times (Reaksiya vaqti card) ─────────────────────────
+export type SpeedBand = { id: string; count: number };
+
+/** Answered incoming calls: how long the customer waited before an operator picked up. */
+export type AnswerSpeed = {
+  summary: { count: number; avg_s: number | null; median_s: number | null; within_20s: number; bands: SpeedBand[] };
+  by_operator: { name: string; count: number; avg_s: number | null; median_s: number | null }[];
+};
+export function getAnswerSpeed(filter: CallDashboardFilter) {
+  return apiGet<AnswerSpeed>("/api/dashboard/call-answer-speed", { from: filter.start_date, to: filter.end_date }, API_URL_CRM);
+}
+
+/** New leads that did not come from a call: time to the first operator call. */
+export type LeadFirstCallItem = {
+  lead_id: number; title: string | null; source: string; responsible: string | null;
+  created_at: string; first_call_at: string | null; answered: boolean | null; caller: string | null;
+  delay_s: number | null; work_delay_s: number | null;
+};
+export type LeadFirstCallGroup = { name: string; total: number; called: number; avg_s: number | null; median_s: number | null };
+export type LeadFirstCall = {
+  summary: { total: number; called: number; not_called: number; avg_work_s: number | null; median_work_s: number | null; avg_clock_s: number | null; bands: SpeedBand[] };
+  by_source: LeadFirstCallGroup[];
+  by_operator: LeadFirstCallGroup[];
+  items: LeadFirstCallItem[];
+};
+export function getLeadFirstCall(filter: CallDashboardFilter) {
+  return apiGet<LeadFirstCall>("/api/dashboard/call-lead-first-call", { from: filter.start_date, to: filter.end_date }, API_URL_CRM);
+}

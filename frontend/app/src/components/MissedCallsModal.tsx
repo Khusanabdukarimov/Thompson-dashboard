@@ -5,6 +5,7 @@ import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboa
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
 import { leadStageLabel } from "@/lib/leadStages";
+import { fmtSecs } from "@/lib/duration";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
 import { InfoTip } from "@/components/InfoTip";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
@@ -24,17 +25,6 @@ export type MissedCallsVariant = "not_recalled" | "all" | "reaction";
 const PAGE = 20;
 /** The server caps one request at this many rows. */
 const MAX_REQUEST = 1000;
-
-/** Seconds in words: 24 → "24 s", 474 → "7 daq 54 s", 2400 → "40 daq", 7600 → "2 soat 6 daq". */
-const fmtSecs = (secs: number | null | undefined): string => {
-  if (secs == null) return "—";
-  const v = Math.round(secs);
-  if (v < 60) return `${v} s`;
-  if (v < 600) return `${Math.floor(v / 60)} daq${v % 60 ? ` ${v % 60} s` : ""}`;
-  if (v < 3600) return `${Math.round(v / 60)} daq`;
-  const h = Math.floor(v / 3600), m = Math.round((v % 3600) / 60);
-  return m ? `${h} soat ${m} daq` : `${h} soat`;
-};
 
 /** "998901234567" / "901234567" → "90 123 45 67", the way people read numbers here. */
 const fmtPhone = (p?: string | null) => {
@@ -131,8 +121,10 @@ function RecalledCell({ it }: { it: MissedCallItem }) {
   return <span style={pill("#F44336")}>Yo'q</span>;
 }
 
-export function MissedCallsModal({ variant, filter, portal, onClose }: {
+export function MissedCallsModal({ variant, filter, portal, onClose, embedded = false }: {
   variant: MissedCallsVariant; filter: CallDashboardFilter; portal: string; onClose: () => void;
+  /** Render just the content (summary + list), for a tab of another panel. */
+  embedded?: boolean;
 }) {
   const all = variant === "all";
   const reaction = variant === "reaction";
@@ -204,18 +196,7 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
   const TD2: React.CSSProperties = { padding: "10px 16px", borderBottom: "1px solid var(--border)", verticalAlign: "top", fontSize: 13 };
   const sub: React.CSSProperties = { fontSize: 11.5, color: "var(--text3)", marginTop: 3, whiteSpace: "nowrap" };
 
-  return (
-    <SidePanel
-      open
-      onClose={onClose}
-      width={1080}
-      title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-        {reaction ? <Clock size={18} color="#607D8B" /> : <PhoneMissed size={18} color={all ? "#E8890C" : "#DC2626"} />}
-        {title}
-        <InfoTip text={helpText} label="Qanday hisoblanadi" size={15} />
-      </span>}
-      subtitle={`${filter.start_date ?? "…"} → ${filter.end_date ?? "…"}`}
-      headerExtra={stats && (
+  const header = stats && (
         <>
           <PanelStats items={stats} />
           {reaction && r && r.bands.some((b) => b.count > 0) && (
@@ -250,7 +231,10 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
             </div>
           )}
         </>
-      )}>
+  );
+
+  const body = (
+    <>
       {q.isLoading ? (
         <LoadingRows rows={8} />
       ) : q.isError || !d || !s ? (
@@ -342,6 +326,25 @@ export function MissedCallsModal({ variant, filter, portal, onClose }: {
           </div>
         </>
       )}
+    </>
+  );
+
+  // Inside the Reaksiya vaqti panel (a tab), the list shows without a panel of its own.
+  if (embedded) return <>{header && <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>{header}</div>}{body}</>;
+
+  return (
+    <SidePanel
+      open
+      onClose={onClose}
+      width={1080}
+      title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        {reaction ? <Clock size={18} color="#607D8B" /> : <PhoneMissed size={18} color={all ? "#E8890C" : "#DC2626"} />}
+        {title}
+        <InfoTip text={helpText} label="Qanday hisoblanadi" size={15} />
+      </span>}
+      subtitle={`${filter.start_date ?? "…"} → ${filter.end_date ?? "…"}`}
+      headerExtra={header}>
+      {body}
     </SidePanel>
   );
 }

@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 const { tzFromOpt, tzToOpt } = require('./tzDate');
 const { computeCallStatsFull, isContact } = require('../services/callStats');
 const { teamOf } = require('../config/calls');
-const { describeSchedules, DEFAULT_SCHEDULE } = require('../config/workHours');
+const { describeSchedules, DEFAULT_SCHEDULE, workSeconds } = require('../config/workHours');
 
 const router = Router();
 
@@ -664,6 +664,157 @@ router.get('/call-filter-options', async (_req, res) => {
     });
   } catch (err) {
     fail(res, 'call-filter-options')(err);
+  }
+});
+
+// ── Reaction times (the Reaksiya vaqti card's three views) ───────
+// 1. how fast an incoming call is picked up   — /call-answer-speed
+// 2. how fast a missed call is called back    — /call-reaction-list (above)
+// 3. how fast a new non-call lead gets a call — /call-lead-first-call
+
+const median = (xs) => {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => x - y), m = Math.floor(a.length / 2);
+  return Math.round(a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2);
+};
+const mean = (xs) => (xs.length ? Math.round(xs.reduce((s, x) => s + x, 0) / xs.length) : null);
+const bandsOf = (xs, edges) => edges.map(([id, lo, hi]) => ({ id, count: xs.filter((x) => x >= lo && x < hi).length }));
+
+/**
+ * GET /call-answer-speed — answered incoming calls: how long the customer waited before an
+ * operator picked up. OnlinePBX: duration − talk time (includes the greeting / menu); Moizvonki:
+ * answer_time − start_time. Per operator and in bands.
+ */
+router.get('/call-answer-speed', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(u.name, c.operator_ext, 'Navbat') AS operator,
+              CASE WHEN c.uuid LIKE 'moizvonki:%'
+                   THEN CASE WHEN (c.raw->'raw'->>'answer_time')::bigint > 0
+                             THEN GREATEST(0, (c.raw->'raw'->>'answer_time')::bigint - (c.raw->'raw'->>'start_time')::bigint) END
+                   ELSE GREATEST(0, c.duration - c.talk_time) END AS wait_s
+       FROM pbx_calls c${INTERNAL_JOINS}
+       LEFT JOIN pbx_users u ON u.ext = c.operator_ext
+       WHERE c.direction = 'inbound' AND c.answered AND NOT ${IS_INTERNAL}
+         AND ${tzFromOpt('c.start_stamp', '$1')} AND ${tzToOpt('c.start_stamp', '$2')}`,
+      [from || null, to || null]);
+    const waits = rows.map((r) => r.wait_s).filter((v) => v != null).map(Number);
+    const byOp = new Map();
+    for (const r of rows) {
+      if (r.wait_s == null) continue;
+      if (!byOp.has(r.operator)) byOp.set(r.operator, []);
+      byOp.get(r.operator).push(Number(r.wait_s));
+    }
+    res.json({
+      summary: {
+        count: waits.length, avg_s: mean(waits), median_s: median(waits),
+        within_20s: waits.filter((w) => w < 20).length,
+        bands: bandsOf(waits, [['lt10s', 0, 10], ['lt20s', 10, 20], ['lt40s', 20, 40], ['lt60s', 40, 60], ['gte60s', 60, Infinity]]),
+      },
+      by_operator: [...byOp.entries()]
+        .map(([name, ws]) => ({ name, count: ws.length, avg_s: mean(ws), median_s: median(ws) }))
+        .sort((a, b) => b.count - a.count),
+    });
+  } catch (err) {
+    fail(res, 'call-answer-speed')(err);
+  }
+});
+
+/**
+ * GET /call-lead-first-call — leads that did NOT come from a phone call (Instagram, Kids,
+ * Maktab baner, site, Telegram...): time from the lead's creation to the first operator call to
+ * its number (picked up or not), within 7 days. Leads created by a call are left out: source
+ * CALL, or a title the telephony gives them ("Входящий / Пропущенный / Клиент не ответил /
+ * Исходящий ..."). The wait is counted in working hours (DEFAULT_SCHEDULE), like Reaksiya vaqti.
+ */
+const CALL_LEAD_TITLE = '^(Входящий|Пропущенный|Клиент не ответил|Исходящий)';
+router.get('/call-lead-first-call', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    // Three plain lookups joined here: a per-lead LATERAL over pbx_calls scanned every call of
+    // the week for each lead (~2 min for a month); this way it is two index lookups (~3 s).
+    const { rows: leads } = await pool.query(
+      `SELECT l.id AS lead_id, l.title, l.date_create, COALESCE(ls.name, l.source_id, 'Manbasiz') AS source,
+              TRIM(COALESCE(r.name, '') || ' ' || COALESCE(r.last_name, '')) AS responsible
+       FROM leads l
+       LEFT JOIN lead_sources ls ON ls.source_id = l.source_id
+       LEFT JOIN responsibles r ON r.id = l.responsible_id
+       WHERE ${tzFromOpt('l.date_create', '$1')} AND ${tzToOpt('l.date_create', '$2')}
+         AND l.source_id IS DISTINCT FROM 'CALL'
+         AND COALESCE(l.title, '') !~* $3
+       ORDER BY l.date_create DESC`,
+      [from || null, to || null, CALL_LEAD_TITLE]);
+    const ids = leads.map((l) => l.lead_id);
+    const { rows: phones } = ids.length ? await pool.query(
+      `SELECT DISTINCT lead_id, RIGHT(regexp_replace(phone, '\\D', '', 'g'), 9) AS norm
+       FROM lead_phones WHERE lead_id = ANY($1::int[])`, [ids]) : { rows: [] };
+    const norms = [...new Set(phones.map((p) => p.norm).filter((n) => n && n.length === 9))];
+    const created = leads.map((l) => new Date(l.date_create).getTime());
+    const { rows: calls } = norms.length ? await pool.query(
+      `SELECT c.customer_norm, c.start_stamp, c.answered, COALESCE(u.name, c.operator_ext) AS caller
+       FROM pbx_calls c LEFT JOIN pbx_users u ON u.ext = c.operator_ext
+       WHERE c.direction = 'outbound' AND c.customer_norm = ANY($1::text[])
+         AND c.start_stamp >= $2 AND c.start_stamp < $3
+       ORDER BY c.start_stamp`,
+      [norms, new Date(Math.min(...created) - 120_000), new Date(Math.max(...created) + 7 * 86_400_000)]) : { rows: [] };
+    const callsByNorm = new Map();
+    for (const c of calls) {
+      if (!callsByNorm.has(c.customer_norm)) callsByNorm.set(c.customer_norm, []);
+      callsByNorm.get(c.customer_norm).push({ at: new Date(c.start_stamp).getTime(), answered: c.answered, caller: c.caller });
+    }
+    const normsByLead = new Map();
+    for (const p of phones) {
+      if (!normsByLead.has(p.lead_id)) normsByLead.set(p.lead_id, []);
+      normsByLead.get(p.lead_id).push(p.norm);
+    }
+    const rows = leads.map((l, i) => {
+      const t0 = created[i] - 120_000, t1 = created[i] + 7 * 86_400_000;
+      let first = null;
+      for (const n of normsByLead.get(l.lead_id) ?? []) {
+        const hit = (callsByNorm.get(n) ?? []).find((c) => c.at >= t0 && c.at < t1);   // calls are sorted
+        if (hit && (!first || hit.at < first.at)) first = hit;
+      }
+      return { ...l, first_call: first ? new Date(first.at) : null, answered: first?.answered ?? null, caller: first?.caller ?? null };
+    });
+
+    const items = rows.map((r) => {
+      const created = new Date(r.date_create).getTime();
+      const called = r.first_call ? new Date(r.first_call).getTime() : null;
+      return {
+        lead_id: r.lead_id, title: r.title, source: r.source, responsible: r.responsible || null,
+        created_at: new Date(created).toISOString(),
+        first_call_at: called ? new Date(called).toISOString() : null,
+        answered: called ? !!r.answered : null,
+        caller: r.caller || null,
+        delay_s: called ? Math.max(0, Math.round((called - created) / 1000)) : null,
+        work_delay_s: called ? workSeconds(created, Math.max(created, called)) : null,
+      };
+    });
+    const calledItems = items.filter((i) => i.work_delay_s != null);
+    const ws = calledItems.map((i) => i.work_delay_s);
+    const group = (keyOf) => {
+      const m = new Map();
+      for (const i of items) {
+        const k = keyOf(i); if (!k) continue;
+        if (!m.has(k)) m.set(k, { name: k, total: 0, called: 0, w: [] });
+        const g = m.get(k); g.total++;
+        if (i.work_delay_s != null) { g.called++; g.w.push(i.work_delay_s); }
+      }
+      return [...m.values()].map(({ w, ...g }) => ({ ...g, avg_s: mean(w), median_s: median(w) })).sort((a, b) => b.total - a.total);
+    };
+    res.json({
+      summary: {
+        total: items.length, called: calledItems.length, not_called: items.length - calledItems.length,
+        avg_work_s: mean(ws), median_work_s: median(ws), avg_clock_s: mean(calledItems.map((i) => i.delay_s)),
+        bands: bandsOf(ws, [['lt5m', 0, 300], ['lt15m', 300, 900], ['lt1h', 900, 3600], ['lt4h', 3600, 14400], ['gte4h', 14400, Infinity]]),
+      },
+      by_source: group((i) => i.source),
+      by_operator: group((i) => i.caller).filter((g) => g.called > 0),
+      items: items.slice(0, Math.min(5000, parseInt(req.query.limit, 10) || 3000)),
+    });
+  } catch (err) {
+    fail(res, 'call-lead-first-call')(err);
   }
 });
 
