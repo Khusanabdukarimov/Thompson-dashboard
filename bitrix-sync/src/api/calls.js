@@ -45,7 +45,7 @@ const params = (q) => [q.from || null, q.to || null, q.operator_ext || null, q.d
 // ── Per-operator call scorecard ─────────────────────────────────
 /**
  * GET /call-stats — one row per PBX extension.
- * answered = a live conversation (talk_time > 0). missed_inbound = a customer
+ * answered = a live conversation (talk_time > 10 s). missed_inbound = a customer
  * call nobody talked to — the call-backs owed.
  */
 router.get('/call-stats', async (req, res) => {
@@ -60,7 +60,7 @@ router.get('/call-stats', async (req, res) => {
               COUNT(*) FILTER (WHERE fc.direction = 'local')::int            AS local_calls,
               COUNT(*) FILTER (WHERE fc.answered)::int                       AS answered_calls,
               COUNT(*) FILTER (WHERE NOT fc.answered)::int                   AS unanswered_calls,
-              COALESCE(SUM(fc.talk_time), 0)::int                            AS total_talk,
+              COALESCE(SUM(fc.talk_time) FILTER (WHERE fc.answered), 0)::int AS total_talk,
               COALESCE(ROUND(AVG(fc.talk_time) FILTER (WHERE fc.answered)), 0)::int AS avg_talk,
               COUNT(DISTINCT fc.customer_norm)::int                          AS unique_customers
        FROM pbx_users u
@@ -92,7 +92,7 @@ router.get('/call-global-stats', async (req, res) => {
               -- share of inbound the team actually picked up
               ROUND(COUNT(*) FILTER (WHERE direction = 'inbound' AND answered)::numeric
                     / NULLIF(COUNT(*) FILTER (WHERE direction = 'inbound'), 0) * 100, 1) AS inbound_answered_pct,
-              COALESCE(SUM(talk_time), 0)::int                          AS total_talk,
+              COALESCE(SUM(talk_time) FILTER (WHERE answered), 0)::int AS total_talk,
               COALESCE(ROUND(AVG(talk_time) FILTER (WHERE answered)), 0)::int AS avg_talk
        FROM fc`,
       params(req.query),

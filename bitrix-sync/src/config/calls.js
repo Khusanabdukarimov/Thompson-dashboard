@@ -16,12 +16,16 @@ const DIRECTIONS = ['inbound', 'outbound', 'local'];
 
 /**
  * "Answered" = an agent actually talked. user_talk_time is the only field that
- * means a live conversation happened — hangup_cause NORMAL_CLEARING and the
- * presence of a "user" ring event both include calls that rang an extension but
- * were never picked up.
+ * means a connection happened — hangup_cause NORMAL_CLEARING and the presence of
+ * a "user" ring event both include calls that rang an extension but were never
+ * picked up. A connection of up to MIN_TALK_S seconds is not a conversation
+ * either: the customer picked up and hung up, or a voicemail / network message
+ * answered (OnlinePBX and Bitrix both mark those "answered"; 5.5% of October's
+ * answered calls). Agreed with the client on 2026-11-02.
  */
+const MIN_TALK_S = 10;
 function isAnswered(rec) {
-  return (rec.user_talk_time || 0) > 0;
+  return (rec.user_talk_time || 0) > MIN_TALK_S;
 }
 
 /**
@@ -62,7 +66,8 @@ function operatorExt(rec, knownExts) {
   }
   // inbound
   if (isExt(rec.destination_number)) return String(rec.destination_number);
-  if (isAnswered(rec)) {
+  // whoever picked up owns the call, even for a connection too short to count as answered
+  if ((rec.user_talk_time || 0) > 0) {
     const userEvents = (rec.events || []).filter((e) => e.type === 'user' && e.number);
     if (userEvents.length) return String(userEvents[userEvents.length - 1].number);
   }
@@ -113,6 +118,7 @@ const NO_ANSWER_CAUSES = new Set([
 module.exports = {
   DIRECTIONS,
   NO_ANSWER_CAUSES,
+  MIN_TALK_S,
   isAnswered,
   isMissedInbound,
   operatorExt,

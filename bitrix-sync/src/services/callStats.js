@@ -9,7 +9,7 @@
  *                    operator row, not in the callback map. OnlinePBX's own "Все"
  *                    does include them, so this total is lower than the panel's by
  *                    exactly `internal_calls`.
- *   answered/success talk_time > 0 (a real conversation)
+ *   answered/success talk_time > 10 s (a real conversation; config/calls.js MIN_TALK_S)
  *   Пропущенные      inbound not answered. WHOSE missed call it is comes from Bitrix24
  *                    (bx_missed_calls: the responsible of the CRM entity the call was
  *                    registered against), because the PBX attributes a call that rang
@@ -142,8 +142,10 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     if (r.direction !== 'inbound' && r.direction !== 'outbound') continue;
 
     const dur = Number(r.duration || 0);
-    const talk = Number(r.talk || 0);
     const answered = !!r.answered;
+    // Talk counts only on answered calls: the few seconds of a connection that was not a
+    // conversation (≤ MIN_TALK_S) would otherwise land in Suhbat and O'rtacha davomiyligi.
+    const talk = answered ? Number(r.talk || 0) : 0;
     const b = getOp(r);
     talkExt += talk; durExt += dur;
     if (r.customer_norm) b._all.add(r.customer_norm);

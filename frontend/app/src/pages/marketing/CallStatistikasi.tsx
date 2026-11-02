@@ -352,13 +352,22 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                       ? <StatusMark tone="neutral" icon={inbound ? PhoneIncoming : PhoneOutgoing} muted>{inbound ? "Kiruvchi" : "Chiquvchi"}</StatusMark>
                       : "—"}
                   </td>
-                  <td style={{ ...TD, whiteSpace: "nowrap" }}
-                    title={ok ? `Suhbat ${fmtShortDur(c.talk_time ?? 0)} · jami ${fmtShortDur(c.duration ?? 0)}` : `Javob berilmadi · ${fmtShortDur(c.duration ?? 0)} jiringladi`}>
-                    <StatusMark tone={ok ? "good" : "critical"} icon={ok ? CheckCircle : PhoneOff}>
-                      {ok ? "Gaplashildi" : "Javobsiz"}
-                      <span style={{ color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{fmtShortDur(ok ? (c.talk_time ?? c.duration ?? 0) : (c.duration ?? 0))}</span>
-                    </StatusMark>
-                  </td>
+                  {(() => {
+                    // Connected for a few seconds (≤ 10 s) but not a conversation: picked up and hung
+                    // up, or a voicemail / network message answered. Counted as not answered.
+                    const brief = !ok && (c.talk_time ?? 0) > 0;
+                    return (
+                      <td style={{ ...TD, whiteSpace: "nowrap" }}
+                        title={ok ? `Suhbat ${fmtShortDur(c.talk_time ?? 0)} · jami ${fmtShortDur(c.duration ?? 0)}`
+                          : brief ? `Ulandi, lekin ${c.talk_time} s — 10 s dan qisqa ulanish suhbat hisoblanmaydi (mijoz darhol uzgan yoki avtojavob)`
+                          : `Javob berilmadi · ${fmtShortDur(c.duration ?? 0)} jiringladi`}>
+                        <StatusMark tone={ok ? "good" : brief ? "warning" : "critical"} icon={ok ? CheckCircle : PhoneOff}>
+                          {ok ? "Gaplashildi" : brief ? "Qisqa ulanish" : "Javobsiz"}
+                          <span style={{ color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{fmtShortDur(ok || brief ? (c.talk_time ?? 0) : (c.duration ?? 0))}</span>
+                        </StatusMark>
+                      </td>
+                    );
+                  })()}
                   <td style={TD}>
                     {stageLabel ? (
                       <div>
