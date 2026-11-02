@@ -448,7 +448,9 @@ export default function CallStatistikasi() {
       <div ref={pageScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "18px 24px 96px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ── Inline filter panel ── */}
-        <div style={{ flexShrink: 0, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10 }}>
+        {/* Sticky under the page's 18px top padding: the shadow paints that strip in the page
+            colour, so cards scrolling up disappear behind it instead of peeking out above. */}
+        <div style={{ flexShrink: 0, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, overflow: filterOpen ? "visible" : "hidden", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 -19px 0 0 var(--bg2)" }}>
           <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
             onClick={() => setFilterOpen(o => !o)}>
             <Search size={14} style={{ color: "var(--text3)" }} />
