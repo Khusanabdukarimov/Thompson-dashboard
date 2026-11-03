@@ -419,8 +419,8 @@ export default function CallStatistikasi() {
   const responsibleOptions = useMemo(() => {
     const rank = (t: string | null | undefined) => { const i = TEAM_ORDER.indexOf(t ?? ""); return i === -1 ? TEAM_ORDER.length : i; };
     return [...(filterOptionsQ.data?.responsibles ?? [])]
-      .sort((a, b) => rank(a.team) - rank(b.team) || (a.team ?? "").localeCompare(b.team ?? "") || a.full_name.localeCompare(b.full_name))
-      .map(r => ({ value: String(r.id), label: r.full_name, group: r.team ?? undefined }));
+      .sort((a, b) => rank(a.team) - rank(b.team) || (a.team ?? "").localeCompare(b.team ?? "") || (a.full_name ?? "").localeCompare(b.full_name ?? ""))
+      .map(r => ({ value: String(r.id), label: r.full_name || `Ext ${r.id}`, group: r.team ?? undefined }));
   }, [filterOptionsQ.data]);
 
   const data: PyCallStatsResult | undefined = statsQ.data;

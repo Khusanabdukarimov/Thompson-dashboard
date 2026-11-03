@@ -653,13 +653,15 @@ router.get('/call-daily', async (req, res) => {
  * GET /call-filter-options — reference shape { responsibles, sources }.
  * A "responsible" is a PBX extension (id = Bitrix user id, else the ext number). Only
  * extensions that actually placed/took a call are offered. `team` is the tag in the
- * extension's name (TLC / TIS / TL, null if none) — the picker groups by it.
+ * extension's name (TLC / TIS / TL, null if none) — the picker groups by it. An extension
+ * the PBX has no name for (a new one) is listed by its number, never with a null name.
  */
 router.get('/call-filter-options', async (_req, res) => {
   try {
     const [ops, stages] = await Promise.all([
       pool.query(
-         `SELECT DISTINCT COALESCE(u.responsible_id, CASE WHEN u.ext ~ '^[0-9]+$' THEN u.ext::int END) AS id, u.name AS full_name
+         `SELECT DISTINCT COALESCE(u.responsible_id, CASE WHEN u.ext ~ '^[0-9]+$' THEN u.ext::int END) AS id,
+                COALESCE(NULLIF(u.name, ''), u.ext) AS full_name
          FROM pbx_users u
          JOIN pbx_calls c ON c.operator_ext = u.ext
          WHERE u.ext ~ '^[0-9]+$' OR u.responsible_id IS NOT NULL
