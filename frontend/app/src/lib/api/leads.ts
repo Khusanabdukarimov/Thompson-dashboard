@@ -959,7 +959,11 @@ export type MissedCallsResponse = {
   window_hours: number;
   /** Working hours per team the delays were measured against, e.g. { TLC: "09:00-20:00", default: "08:00-20:00" }. */
   work_hours: Record<string, string>;
+  /** Where the missed calls of THIS list come from. */
   source: "bitrix24" | "pbx";
+  /** Only when the list was built on the OnlinePBX basis and Bitrix24 data exists: what the page card
+   *  (Bitrix24-based) shows for the same period and filters, so a difference can be explained. */
+  card?: { source: "bitrix24"; ne_perezvonili: number; missed_inbound: number } | null;
   /** Always about the whole period, whichever list or page: `total` is this list's length. */
   summary: {
     total: number; unique_numbers: number;
@@ -1016,11 +1020,17 @@ export type PyCallStatsResult = {
 };
 
 /** The list behind the "Ne perezvonili" card — same filters, so it always adds up to the card. */
-export function getNotRecalledCalls(filter: CallDashboardFilter, page: { offset: number; limit: number } = { offset: 0, limit: 20 }) {
+export function getNotRecalledCalls(
+  filter: CallDashboardFilter,
+  page: { offset: number; limit: number } = { offset: 0, limit: 20 },
+  /** "pbx": the missed calls come from the OnlinePBX call records instead of Bitrix24's registrations. */
+  basis?: "pbx",
+) {
   return apiGet<MissedCallsResponse>("/api/dashboard/call-not-recalled", {
     ...callFilterParams(filter),
     offset: page.offset,
     limit: page.limit,
+    basis,
   }, API_URL_CRM);
 }
 

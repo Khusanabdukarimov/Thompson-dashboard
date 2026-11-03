@@ -128,11 +128,13 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
 }) {
   const all = variant === "all";
   const reaction = variant === "reaction";
+  // "Ne perezvonili" is built from the OnlinePBX call records; the other two lists keep Bitrix24's missed calls.
+  const pbxBasis = !all && !reaction;
   const [sort, setSort] = useState<"new" | "slow">("new");    // reaction list only: newest or slowest first
   const fetchPage = (f: CallDashboardFilter, page: { offset: number; limit: number }) =>
-    reaction ? getReactionCalls(f, page, sort) : all ? getMissedCalls(f, page) : getNotRecalledCalls(f, page);
+    reaction ? getReactionCalls(f, page, sort) : all ? getMissedCalls(f, page) : getNotRecalledCalls(f, page, "pbx");
   const title = reaction ? "Reaksiya vaqti — qayta bog'lanish tezligi" : all ? "Propushenniy — javobsiz qo'ng'iroqlar" : "Ne perezvonili — qayta chiqilmagan";
-  const q = useQuery({ queryKey: [reaction ? "call-reaction-list" : all ? "call-missed-list" : "call-not-recalled", filter, reaction ? sort : null], queryFn: () => fetchPage(filter, { offset: 0, limit: PAGE }) });
+  const q = useQuery({ queryKey: [reaction ? "call-reaction-list" : all ? "call-missed-list" : "call-not-recalled", filter, reaction ? sort : pbxBasis ? "pbx" : null], queryFn: () => fetchPage(filter, { offset: 0, limit: PAGE }) });
   const [more, setMore] = useState<MissedCallItem[]>([]);     // pages loaded after the first
   useEffect(() => { setMore([]); setMoreError(null); }, [sort]);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -174,7 +176,7 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
       <b> Reaksiya</b> — shu bog'lanishgacha o'tgan vaqt, ish vaqti bo'yicha{d?.work_hours && <> ({describeWorkHours(d.work_hours)})</>}; haqiqiy vaqt sichqoncha ustida.
       <b> O'rtacha vaqt</b> — mediana: qo'ng'iroqlarning yarmi shundan tezroq bog'lanilgan (bir nechta juda kech qo'ng'iroq oddiy o'rtachani oshirib yubormasligi uchun). {hours} soat ichida bog'lanilmaganlar "Ne perezvonili"da.</>
   ) : (
-    <>Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i. {hours} soat ichida operator o'sha raqamga qo'ng'iroq qilgan bo'lsa (mijoz ko'tarmagan bo'lsa ham) yoki mijoz o'zi qayta qilib javob olgan bo'lsa — qayta chiqilgan.
+    <>{pbxBasis ? "OnlinePBX'dagi har bir javobsiz kiruvchi qo'ng'iroq (navbatda javobsiz qolganlari ham)." : "Bitrix24'dagi har bir javobsiz kirish qo'ng'irog'i."} {hours} soat ichida operator o'sha raqamga qo'ng'iroq qilgan bo'lsa (mijoz ko'tarmagan bo'lsa ham) yoki mijoz o'zi qayta qilib javob olgan bo'lsa — qayta chiqilgan.
       <b> Kutilmoqda</b> — {hours} soat hali tugamagan. <b>4×</b> — shu raqam ro'yxatda necha marta uchraydi. <b>Sabab</b> — telefoniya yozuvidan (asl PBX kodi sichqoncha ustida).</>
   );
 
@@ -199,6 +201,11 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
   const header = stats && (
         <>
           <PanelStats items={stats} />
+          {pbxBasis && s && d?.card && d.card.ne_perezvonili !== s.total && (
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--text3)" }}>
+              Sahifadagi karta Bitrix24 bo'yicha hisoblanadi: <b>{fmtNum(d.card.ne_perezvonili)}</b> ta; bu ro'yxat OnlinePBX bo'yicha: <b>{fmtNum(s.total)}</b> ta.
+            </div>
+          )}
           {reaction && r && r.bands.some((b) => b.count > 0) && (
             <div style={{ marginTop: 14 }}>
               {/* how the delays spread: one bar, one segment per band */}

@@ -291,7 +291,8 @@ router.get('/call-stats-full', async (req, res) => {
  * filters as /call-stats-full), so the rows always add up to the card:
  *
  *   GET /call-not-recalled  "Ne perezvonili": every missed call nobody talked to the
- *                           customer about within 24h.
+ *                           customer about within 24h. ?basis=pbx builds it from the OnlinePBX
+ *                           call records instead of Bitrix24's missed-call registrations.
  *   GET /call-missed-list   "Propushenniy": every missed call, called back or not.
  *   GET /call-reaction-list "Reaksiya vaqti": the missed calls reached within 24h, with the
  *                           callback (when, who, operator call or the customer's own redial)
@@ -399,8 +400,19 @@ async function serveMissedList(req, res, scope) {
     const limit = Math.min(NOT_RECALLED_MAX_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || NOT_RECALLED_DEFAULT_LIMIT));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
-    const { rows, bxMissed, from, to, respIds } = await loadCallInputs(req.query);
-    const stats = computeCallStatsFull(rows, from || '', to || '', respIds.length ? respIds : null, bxMissed, { detail: true });
+    const loaded = await loadCallInputs(req.query);
+    const { rows, from, to, respIds } = loaded;
+    // ?basis=pbx: the missed calls (and so the list) come from the OnlinePBX call records themselves
+    // instead of Bitrix24's registrations — what the "Ne perezvonili" dialog shows. The same compute
+    // runs either way; Bitrix24 events are just left out. `card` then carries the Bitrix24-based
+    // figure the page card shows, so a difference between the two is visible, not a surprise.
+    const pbxBasis = req.query.basis === 'pbx';
+    const bxMissed = pbxBasis ? null : loaded.bxMissed;
+    const operators = respIds.length ? respIds : null;
+    const stats = computeCallStatsFull(rows, from || '', to || '', operators, bxMissed, { detail: true });
+    const cardStats = pbxBasis && Array.isArray(loaded.bxMissed)
+      ? computeCallStatsFull(rows, from || '', to || '', operators, loaded.bxMissed)
+      : null;
     const detail = stats.missed_detail;
     const events = (scope === 'all' ? detail.recalled_events.concat(detail.not_recalled)
       : scope === 'reaction' ? detail.recalled_events.slice() : detail.not_recalled.slice());
@@ -492,6 +504,8 @@ async function serveMissedList(req, res, scope) {
       window_hours: 24,
       work_hours: describeSchedules(),                              // what work_delay_s is measured against
       source: Array.isArray(bxMissed) ? 'bitrix24' : 'pbx',
+      // The figures the page cards show (Bitrix24-based), only when this list is built another way.
+      card: cardStats ? { source: 'bitrix24', ne_perezvonili: cardStats.ne_perezvonili, missed_inbound: cardStats.missed_inbound } : null,
       summary: {                                                    // always the whole period, whatever the page
         total: base.length,                                         // this list's length == its card
         unique_numbers: new Set(events.map((e) => e.num || e.key)).size,
