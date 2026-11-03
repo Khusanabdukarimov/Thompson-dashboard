@@ -951,8 +951,8 @@ export default function LidlarPage() {
                 </div>
 
                 <div style={{ marginBottom: 14 }}>
-                  <label title="Lead yopilgan sana" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                    <Calendar size={12} />Yopilgan sana
+                  <label title="Bitrix’dagi “Birinchi yakunlangan sana” maydoni" style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    <Calendar size={12} />Birinchi yakunlangan sana
                   </label>
                   <DateRangePicker
                     start={applied.closed_start_date}

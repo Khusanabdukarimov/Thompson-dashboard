@@ -22,16 +22,23 @@ function leadDateCond(mode, p1, p2) {
   return `${tzFromOpt(col, `$${p1}`)}\n           AND ${tzToOpt(col, `$${p2}`)}`;
 }
 
-// Optional Bitrix "Дата закрытия" range. Values are validated before being
+// Optional "Birinchi yakunlangan sana" range (Bitrix UF_CRM_1777520542, datetime): the day a lead
+// was first finished. It replaces the standard Дата закрытия (leads.date_closed), which is empty
+// for almost every lead here — it covered 551 of the 8,984 Zakritiy leads, this field 8,983.
+// The value is ISO text with an offset ("2026-08-19T08:09:50+03:00") in lead_uf_values; the regex
+// guard keeps a stray '' / 'false' from ever reaching the cast. Dates are validated before being
 // placed into SQL because this filter is shared by many dashboard queries.
-function leadClosedCond(q, col = 'l.date_closed') {
+const FIRST_FINISHED_FIELD = 'UF_CRM_1777520542';
+function leadClosedCond(q, leadIdCol = 'l.id') {
   const valid = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
   const from = valid(q?.closed_from);
   const to = valid(q?.closed_to);
   if (!from && !to) return '';
-  return `AND ${col} IS NOT NULL
-          AND ${tzFrom(col, `'${from || '1900-01-01'}'`)}
-          AND ${tzTo(col, `'${to || '2999-12-31'}'`)}`;
+  const at = `(CASE WHEN cv.value ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' THEN cv.value::timestamptz END)`;
+  return `AND EXISTS (SELECT 1 FROM lead_uf_values cv
+                  WHERE cv.lead_id = ${leadIdCol} AND cv.field_code = '${FIRST_FINISHED_FIELD}'
+                    AND ${tzFrom(at, `'${from || '1900-01-01'}'`)}
+                    AND ${tzTo(at, `'${to || '2999-12-31'}'`)})`;
 }
 
 // Istisno-aware list filters ("!a,b" = everything except a and b), shared with Sdelkalar.
