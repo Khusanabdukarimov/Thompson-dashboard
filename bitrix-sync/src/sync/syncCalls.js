@@ -15,7 +15,9 @@ async function ensureSchema() {
       synced_at  TIMESTAMPTZ DEFAULT NOW()
     );
     ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS responsible_id INTEGER;
-    -- Moizvonki accounts: the login email, and a name typed in Sozlamalar that the sync keeps.
+    -- Moizvonki accounts: the login email, the employee found in Bitrix's call log (auto_name,
+    -- see resolveMoizOwners) and a name typed in Sozlamalar, which wins over it.
+    ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS auto_name TEXT;
     ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS email TEXT;
     ALTER TABLE pbx_users ADD COLUMN IF NOT EXISTS custom_name TEXT;
 
@@ -117,7 +119,7 @@ async function upsertUser(ext, name, enabled = true, db = pool, responsibleId = 
      VALUES ($1,$2,$3,$4,NOW())
      ON CONFLICT (ext) DO UPDATE SET
        -- a name set by hand wins; keep a real name if we have one, never overwrite it with NULL
-       name    = COALESCE(pbx_users.custom_name, EXCLUDED.name, pbx_users.name),
+       name    = COALESCE(pbx_users.custom_name, pbx_users.auto_name, EXCLUDED.name, pbx_users.name),
        enabled = EXCLUDED.enabled,
        responsible_id = COALESCE(EXCLUDED.responsible_id, pbx_users.responsible_id),
        synced_at = NOW()`,

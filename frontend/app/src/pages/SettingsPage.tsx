@@ -272,7 +272,7 @@ function MoizvonkiNamesSection() {
   return (
     <Section
       title="Moizvonki akkauntlari"
-      subtitle="Moizvonki qo'ng'iroqlarni pochta (thompson.menejer…@gmail.com) bilan yuboradi. Har bir akkauntga xodim ismini yozing — Call statistikasida shu ism chiqadi."
+      subtitle="Ism avtomatik aniqlanadi: Bitrix qo'ng'iroq jurnalidan, har 3 soatda. Bu yerga faqat ismni o'zgartirmoqchi bo'lsangiz yozing."
     >
       {isLoading ? (
         <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded" />)}</div>

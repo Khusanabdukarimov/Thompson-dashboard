@@ -18,7 +18,7 @@ const callsRouter                        = require('./api/calls');
 const onpbx                              = require('./services/onlinepbx');
 const { ensureSchema: callsEnsureSchema, syncUsers: syncPbxUsers, syncRecentCalls } = require('./sync/syncCalls');
 const moizvonki = require('./services/moizvonki');
-const { syncRecentMoizvonkiCalls } = require('./sync/moizvonkiCalls');
+const { syncRecentMoizvonkiCalls, resolveMoizOwners } = require('./sync/moizvonkiCalls');
 const { ensureSchema: bxMissedEnsureSchema, syncRecentBxMissed } = require('./sync/bxMissedCalls');
 const { linkUsersByInnerPhone } = require('./sync/syncCalls');
 const campaignsRouter  = require('./api/campaigns');
@@ -109,6 +109,14 @@ function startCallSync() {
     .then(run);
   setInterval(run, minutes * 60_000);
   console.log(`[calls] every ${minutes}min, ${lookbackH}h lookback`);
+
+  // Moizvonki account names, from the Bitrix call log (~20 requests a run). The first run after a
+  // start looks further back, so an account that was quiet for a few days still gets its name.
+  if (moizvonki.configured()) {
+    const names = (opts) => resolveMoizOwners(opts).catch((err) => console.warn('[calls] Moizvonki names failed:', err.message));
+    setTimeout(() => names({ days: 14 }), 2 * 60_000);
+    setInterval(() => names(), 3 * 3600_000);
+  }
 }
 
 // Run all migrations before accepting connections

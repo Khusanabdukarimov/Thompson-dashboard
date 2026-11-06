@@ -892,7 +892,7 @@ router.put('/moizvonki-users/:ext', async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE pbx_users
        SET custom_name = NULLIF($2, ''),
-           name = COALESCE(NULLIF($2, ''),
+           name = COALESCE(NULLIF($2, ''), auto_name,
                            CASE WHEN email ~* 'menejer\\D*\\d+'
                                 THEN 'Menejer ' || (substring(email from '(?i)menejer\\D*(\\d+)'))::int
                                 ELSE COALESCE(email, ext) END)

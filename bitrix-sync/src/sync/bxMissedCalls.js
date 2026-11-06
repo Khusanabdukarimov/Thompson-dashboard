@@ -191,5 +191,5 @@ async function syncRecentBxMissed(lookbackHours = 3) {
 }
 
 module.exports = {
-  ensureSchema, fetchMissed, resolveOwners, toRow, upsertRows, syncBxMissedRange, syncRecentBxMissed,
+  bx, ensureSchema, fetchMissed, resolveOwners, toRow, upsertRows, syncBxMissedRange, syncRecentBxMissed,
 };
