@@ -77,9 +77,10 @@ async function syncMoizUsers(records) {
 // ── Who uses each account ───────────────────────────────────────
 // Moizvonki reports only a login email (thompson.menejer3@gmail.com), which matches no Bitrix
 // user. But its Bitrix app also registers every call in the telephony log, under the employee
-// who made it. Matching the two (same number, within 2 minutes) names each account, by itself,
-// including a new account or one that changes hands. Checked by hand on 2026-11-06: 797 of 837
-// calls matched, 79-100% of each account's calls on one employee.
+// who made it. Matching the two (same number, within 2 minutes) links each account to its employee,
+// by itself, including a new account or one that changes hands (its past calls then follow the new
+// owner). The link puts the account's calls on the employee's row. Checked by hand on 2026-11-06:
+// 797 of 837 calls matched, 79-100% of each account's calls on one employee.
 const BITRIX_LINE = process.env.MOIZVONKI_BITRIX_LINE || 'REST_APP:120';   // the app's line in the log
 const OWNER_WINDOW_DAYS = 3;
 const OWNER_MIN_CALLS = 3;      // fewer matches: keep the current name
@@ -130,9 +131,9 @@ async function resolveMoizOwners({ dryRun = false, days = OWNER_WINDOW_DAYS } = 
     const [user, n] = [...t.entries()].sort((a, b) => b[1] - a[1])[0];
     if (total < OWNER_MIN_CALLS || n / total < OWNER_MIN_SHARE || !nameOf.get(user)) continue;
     const name = `${nameOf.get(user)} · Moizvonki`;
-    decided.push({ ext, name, matched: n, of: total });
+    decided.push({ ext, name, responsible_id: Number(user), matched: n, of: total });
     if (!dryRun) {
-      await pool.query('UPDATE pbx_users SET auto_name = $2, name = COALESCE(custom_name, $2) WHERE ext = $1', [ext, name]);
+      await pool.query('UPDATE pbx_users SET auto_name = $2, name = COALESCE(custom_name, $2), responsible_id = $3 WHERE ext = $1', [ext, name, Number(user)]);
     }
   }
   console.log(`[calls] Moizvonki names: ${decided.length} accounts resolved from the Bitrix call log`);

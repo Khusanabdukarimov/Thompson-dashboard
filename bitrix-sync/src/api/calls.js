@@ -2,7 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFromOpt, tzToOpt } = require('./tzDate');
 const { computeCallStatsFull, isContact } = require('../services/callStats');
-const { teamOf } = require('../config/calls');
+const { teamOf, operatorNameRank, operatorDisplayName } = require('../config/calls');
 const { describeSchedules, DEFAULT_SCHEDULE, workSeconds } = require('../config/workHours');
 
 const router = Router();
@@ -433,7 +433,7 @@ async function serveMissedList(req, res, scope) {
         phone: e.phone || e.num || null,
         call_start: new Date(e.at).toISOString(),
         matched: !!p,                                        // false = the PBX has no record of this call
-        operator: p && p.operator_ext ? p.full_name : null,  // null while matched = it rang out in the queue
+        operator: p && p.operator_ext ? operatorDisplayName(p.full_name) : null,  // null while matched = it rang out in the queue
         wait_s: p ? Number(p.duration) || 0 : null,
         reason: p ? p.hangup_cause || null : null,                 // the PBX's raw code
         reason_kind: missReason(p, e.at),                           // ...and what it means (see missReason)
@@ -446,7 +446,7 @@ async function serveMissedList(req, res, scope) {
         // the call that counted as the contact: an operator's callback (outbound) or the customer
         // calling again and getting through (inbound); who talked, and through which system
         callback_dir: cb ? cb.direction : null,
-        callback_by: cb ? (cb.operator_ext ? cb.full_name || cb.operator_ext : null) : null,
+        callback_by: cb ? (cb.operator_ext ? operatorDisplayName(cb.full_name) || cb.operator_ext : null) : null,
         callback_source: cb ? (String(cb.uuid).startsWith('moizvonki:') ? 'moizvonki' : 'onlinepbx') : null,
         callback_answered: cb ? !!cb.answered : null,  // false = the operator called, the customer did not pick up
       };
@@ -665,8 +665,7 @@ router.get('/call-filter-options', async (_req, res) => {
                 COALESCE(NULLIF(u.name, ''), u.ext) AS full_name
          FROM pbx_users u
          JOIN pbx_calls c ON c.operator_ext = u.ext
-         WHERE u.ext ~ '^[0-9]+$' OR u.responsible_id IS NOT NULL
-         ORDER BY full_name`,
+         WHERE u.ext ~ '^[0-9]+$' OR u.responsible_id IS NOT NULL`,
       ),
       // Lead stages as they exist on the portal right now — the Bosqich filter
       // matches against the lead each call resolves to by phone.
@@ -674,8 +673,19 @@ router.get('/call-filter-options', async (_req, res) => {
         `SELECT bitrix_id, name FROM stages WHERE entity = 'lead' ORDER BY sort_order`,
       ),
     ]);
+    // One entry per employee, however many lines they have: the best name, the team of any line.
+    const people = new Map();
+    for (const r of ops.rows) {
+      const p = people.get(r.id) ?? { id: r.id, full_name: '', team: null, rank: -1 };
+      const rank = operatorNameRank(r.full_name);
+      if (rank > p.rank) { p.full_name = operatorDisplayName(r.full_name); p.rank = rank; }
+      p.team = p.team || teamOf(r.full_name);
+      people.set(r.id, p);
+    }
     res.json({
-      responsibles: ops.rows.map((r) => ({ ...r, team: teamOf(r.full_name) })),
+      responsibles: [...people.values()]
+        .map(({ rank, ...p }) => p)
+        .sort((a, b) => a.full_name.localeCompare(b.full_name)),
       sources: [{ id: 'onlinepbx', name: 'OnlinePBX' }, { id: 'moizvonki', name: 'Moizvonki' }],
       stages: stages.rows,
     });
@@ -688,6 +698,18 @@ router.get('/call-filter-options', async (_req, res) => {
 // 1. how fast an incoming call is picked up   — /call-answer-speed
 // 2. how fast a missed call is called back    — /call-reaction-list (above)
 // 3. how fast a new non-call lead gets a call — /call-lead-first-call
+
+/** Line (extension / Moizvonki account) → the one name its employee's lines share. */
+async function lineOwners() {
+  const { rows } = await pool.query('SELECT ext, name, responsible_id FROM pbx_users');
+  const best = new Map();
+  for (const u of rows) {
+    if (u.responsible_id == null) continue;
+    const cur = best.get(u.responsible_id);
+    if (!cur || operatorNameRank(u.name) > operatorNameRank(cur)) best.set(u.responsible_id, u.name);
+  }
+  return new Map(rows.map((u) => [u.ext, operatorDisplayName(best.get(u.responsible_id) ?? u.name) || null]));
+}
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -706,7 +728,7 @@ router.get('/call-answer-speed', async (req, res) => {
   const { from, to } = req.query;
   try {
     const { rows } = await pool.query(
-      `SELECT COALESCE(u.name, c.operator_ext, 'Navbat') AS operator,
+      `SELECT c.operator_ext,
               CASE WHEN c.uuid LIKE 'moizvonki:%'
                    THEN CASE WHEN (c.raw->'raw'->>'answer_time')::bigint > 0
                              THEN GREATEST(0, (c.raw->'raw'->>'answer_time')::bigint - (c.raw->'raw'->>'start_time')::bigint) END
@@ -717,11 +739,13 @@ router.get('/call-answer-speed', async (req, res) => {
          AND ${tzFromOpt('c.start_stamp', '$1')} AND ${tzToOpt('c.start_stamp', '$2')}`,
       [from || null, to || null]);
     const waits = rows.map((r) => r.wait_s).filter((v) => v != null).map(Number);
+    const names = await lineOwners();
     const byOp = new Map();
     for (const r of rows) {
       if (r.wait_s == null) continue;
-      if (!byOp.has(r.operator)) byOp.set(r.operator, []);
-      byOp.get(r.operator).push(Number(r.wait_s));
+      const operator = names.get(r.operator_ext) || r.operator_ext || 'Navbat';
+      if (!byOp.has(operator)) byOp.set(operator, []);
+      byOp.get(operator).push(Number(r.wait_s));
     }
     res.json({
       summary: {
@@ -769,16 +793,17 @@ router.get('/call-lead-first-call', async (req, res) => {
     const norms = [...new Set(phones.map((p) => p.norm).filter((n) => n && n.length === 9))];
     const created = leads.map((l) => new Date(l.date_create).getTime());
     const { rows: calls } = norms.length ? await pool.query(
-      `SELECT c.customer_norm, c.start_stamp, c.answered, COALESCE(u.name, c.operator_ext) AS caller
-       FROM pbx_calls c LEFT JOIN pbx_users u ON u.ext = c.operator_ext
+      `SELECT c.customer_norm, c.start_stamp, c.answered, c.operator_ext
+       FROM pbx_calls c
        WHERE c.direction = 'outbound' AND c.customer_norm = ANY($1::text[])
          AND c.start_stamp >= $2 AND c.start_stamp < $3
        ORDER BY c.start_stamp`,
       [norms, new Date(Math.min(...created) - 120_000), new Date(Math.max(...created) + 7 * 86_400_000)]) : { rows: [] };
+    const owners = await lineOwners();
     const callsByNorm = new Map();
     for (const c of calls) {
       if (!callsByNorm.has(c.customer_norm)) callsByNorm.set(c.customer_norm, []);
-      callsByNorm.get(c.customer_norm).push({ at: new Date(c.start_stamp).getTime(), answered: c.answered, caller: c.caller });
+      callsByNorm.get(c.customer_norm).push({ at: new Date(c.start_stamp).getTime(), answered: c.answered, caller: owners.get(c.operator_ext) || c.operator_ext });
     }
     const normsByLead = new Map();
     for (const p of phones) {

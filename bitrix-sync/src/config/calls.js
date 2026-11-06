@@ -115,8 +115,23 @@ const NO_ANSWER_CAUSES = new Set([
   'SUBSCRIBER_ABSENT', 'RECOVERY_ON_TIMER_EXPIRE',
 ]);
 
+// One employee can own several lines (an OnlinePBX extension and a Moizvonki account), which share
+// one row. Its name comes from the best line: a real PBX name, else the Moizvonki account's (without
+// the tag), and a line still called "Vakant" only when there is nothing better.
+const MOIZVONKI_TAG = ' · Moizvonki';
+function operatorNameRank(name) {
+  const n = String(name || '').trim();
+  if (!n) return 0;
+  if (/^(vakant|вакант)/i.test(n)) return 1;
+  return n.endsWith(MOIZVONKI_TAG) ? 2 : 3;
+}
+const operatorDisplayName = (name) => String(name || '').replace(MOIZVONKI_TAG, '').trim();
+
 module.exports = {
   DIRECTIONS,
+  MOIZVONKI_TAG,
+  operatorNameRank,
+  operatorDisplayName,
   NO_ANSWER_CAUSES,
   MIN_TALK_S,
   isAnswered,

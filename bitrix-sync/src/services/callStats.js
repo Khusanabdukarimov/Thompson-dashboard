@@ -40,7 +40,7 @@
  * missed on the last day can still see its next-day callback.
  */
 
-const { teamOf } = require('../config/calls');
+const { teamOf, operatorNameRank, operatorDisplayName } = require('../config/calls');
 const { scheduleOf, workSeconds, describeSchedules } = require('../config/workHours');
 
 const RECALL_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -109,9 +109,10 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
   }
 
   const ops = new Map();
-  // One row per Bitrix user. An operator the PBX knows but Bitrix does not (a Moizvonki
-  // manager) keeps their own row, keyed by extension — before, they all shared the "queue"
-  // row, which then took its name from whichever call happened to come first. Only calls
+  // One row per Bitrix user, whichever of their lines the call was on (OnlinePBX extension,
+  // Moizvonki account). A line linked to no Bitrix user keeps its own row, keyed by extension —
+  // before, they all shared the "queue" row, which then took its name from whichever call
+  // happened to come first. Only calls
   // that rang out with NO operator (and Bitrix owners without a row) share the queue row.
   const getOp = (r) => {
     const key = r.responsible_id != null ? String(r.responsible_id)
@@ -121,7 +122,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
         responsible_id: r.responsible_id != null ? Number(r.responsible_id) : null,
         // the line of an operator Bitrix does not know (a Moizvonki manager, "mz:3"): their call list is asked for by it
         operator_ext: r.responsible_id == null && r.operator_ext ? r.operator_ext : null,
-        full_name: r.full_name || 'Call Centre — javobsiz', photo_url: r.photo_url || null,
+        full_name: operatorDisplayName(r.full_name) || 'Call Centre — javobsiz', _nameRank: operatorNameRank(r.full_name), photo_url: r.photo_url || null,
         inbound_calls: 0, outbound_calls: 0, callback_calls: 0,
         success_calls: 0, failed_calls: 0, ndz_calls: 0,
         missed_inbound: 0, missed_recalled: 0, missed_unrecalled: 0,
@@ -129,7 +130,10 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
         _in: new Set(), _out: new Set(), _all: new Set(), _missed: [],
       });
     }
-    return ops.get(key);
+    const op = ops.get(key);
+    const rank = operatorNameRank(r.full_name);
+    if (rank > op._nameRank) { op.full_name = operatorDisplayName(r.full_name); op._nameRank = rank; }
+    return op;
   };
 
   let inbound = 0, outbound = 0, internal = 0, missed = 0, ndz = 0, talkExt = 0, durExt = 0;
