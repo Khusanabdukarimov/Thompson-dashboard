@@ -133,6 +133,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
   };
 
   let inbound = 0, outbound = 0, internal = 0, missed = 0, ndz = 0, talkExt = 0, durExt = 0;
+  const answeredTalks = [];   // for the median next to avg_duration
   const missedEvents = [];
 
   for (const r of rows) {
@@ -148,6 +149,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     const talk = answered ? Number(r.talk || 0) : 0;
     const b = getOp(r);
     talkExt += talk; durExt += dur;
+    if (answered) answeredTalks.push(talk);
     if (r.customer_norm) b._all.add(r.customer_norm);
 
     if (r.direction === 'inbound') {
@@ -257,6 +259,8 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     total_duration: talkExt,                    // разговоров (talk) — shown by the total card
     call_duration_total: durExt,                // длительность (call length)
     avg_duration: success ? Math.round(talkExt / success) : 0, // talk per answered call
+    // the middle answered call: a few very long conversations pull the average up
+    median_duration: answeredTalks.length ? (() => { const a = [...answeredTalks].sort((x, y) => x - y), m = a.length >> 1; return Math.round(a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2); })() : 0,
     success_pct: pctOf(success, external), failed_pct: pctOf(missed + ndz, external),
     ne_perezvonili: nePerezvonili,
     work_hours: describeSchedules(),            // what reaksiya_vaqti was measured against

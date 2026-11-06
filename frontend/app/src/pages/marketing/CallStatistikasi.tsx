@@ -410,6 +410,7 @@ export default function CallStatistikasi() {
   const [selectedResp, setSelectedResp] = useState<{ id: string; name: string } | null>(null);
   const [missedModal, setMissedModal] = useState<MissedCallsVariant | null>(null);
   const [reactionOpen, setReactionOpen] = useState(false);
+  const [durBoth, setDurBoth] = useState(false);   // O'rtacha davomiyligi card: average only, or average + median
   const portal = useBitrixPortal();
   const pageScrollRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -575,8 +576,17 @@ export default function CallStatistikasi() {
         {/* ── Row 2 ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
           <Card loading={statsQ.isLoading && !data} label="O'rtacha davomiyligi" accentColor="#9C27B0"
-            value={fmtAvgDur(data?.avg_duration ?? 0)}
-            icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)" />
+            value={durBoth ? (
+              <div style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: 10, rowGap: 4, alignItems: "baseline", fontSize: 18 }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>O'rtacha</span>
+                <span>{fmtAvgDur(data?.avg_duration ?? 0)}</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text3)" }}>Mediana</span>
+                <span>{data?.median_duration != null ? fmtAvgDur(data.median_duration) : "—"}</span>
+              </div>
+            ) : fmtAvgDur(data?.avg_duration ?? 0)}
+            icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)"
+            tip="Bosing — o'rtacha va mediana. Mediana: suhbatlarning yarmi shundan qisqa"
+            onClick={() => setDurBoth((v) => !v)} />
           <Card loading={statsQ.isLoading && !data} label="NDZ (javob berilmagan)" accentColor="#607D8B"
             value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />

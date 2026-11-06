@@ -1008,6 +1008,8 @@ export type PyCallStatsResult = {
   missed_inbound: number;
   total_duration: number;
   avg_duration:   number;
+  /** Median talk time of the answered calls (the card shows it on click). */
+  median_duration?: number;
   success_pct:    number;
   failed_pct:     number;
   ne_perezvonili: number;
