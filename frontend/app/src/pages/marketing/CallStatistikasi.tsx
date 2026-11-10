@@ -23,7 +23,7 @@ import { fmtNum } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
 import { ReactionPanel } from "@/components/ReactionPanel";
-import { fmtSecs } from "@/lib/duration";
+import { fmtSecs, fmtClock } from "@/lib/duration";
 
 // The portal comes from /api/config (BITRIX24_PORTAL) — never hardcode it, or the
 // links point at whichever portal the code was copied from.
@@ -44,7 +44,7 @@ function Num({ v, time, color, style }: { v: number; time?: boolean; color?: str
   const zero = !v;
   return (
     <td style={{ ...style, fontVariantNumeric: "tabular-nums", color: zero ? "var(--text3)" : (color ?? "var(--text)"), fontWeight: zero ? 400 : style.fontWeight }}>
-      {zero ? "—" : time ? fmtClock(v) : fmtNum(v)}
+      {time ? fmtClock(v) : fmtNum(v ?? 0)}
     </td>
   );
 }
@@ -65,27 +65,10 @@ const TABLE_CSS = `
   .cl-row:hover .cl-go { opacity: 1; }
 `;
 
-/** Table time: 1:28:32, 28:53, 0:41 — no padded zero hours, "—" for nothing. */
-function fmtClock(secs: number): string {
-  if (!secs) return "—";
-  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
-  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function fmtDur(secs: number): string {
-  if (!secs) return "00:00:00";
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
-}
-
-/** "1 min 48 s" / "57 s". Spelled out: decimal minutes ("0,9 min") read as seconds-in-a-minute and mislead. */
-function fmtAvgDur(secs: number): string {
-  if (!secs) return "0 s";
-  const m = Math.floor(secs / 60), s = secs % 60;
-  return m > 0 ? `${m} min ${s} s` : `${s} s`;
-}
+// Time formats are shared (lib/duration): fmtClock for totals ("117:19:34" → "117:19:34", 0 → "0:00"),
+// fmtSecs for averages and waits ("1 daq 37 s") — one way of writing time across the page.
+const fmtDur = (secs: number) => fmtClock(secs);
+const fmtAvgDur = (secs: number) => fmtSecs(secs);
 
 function fmtPct(pct: number): string {
   if (pct > 0 && pct < 1) return "<1%";
@@ -175,8 +158,10 @@ function activeFilterCount(filter: CallFilterState) {
 
 
 // ── Metric Card ───────────────────────────────────────────────────
-function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint, tip, loading }: {
+function Card({ label, term, value, sub, icon, iconBg, badge, badgeColor, valueColor, accentColor, onClick, hint, tip, loading }: {
   label: string; value: React.ReactNode; sub?: string;
+  /** The call centre's own word for it (Propushenniy, NDZ, ...), shown small under the Uzbek label. */
+  term?: string;
   /** Numbers still on their way: a shimmer instead of a 0. */
   loading?: boolean;
   icon: React.ReactNode; iconBg: string;
@@ -196,7 +181,10 @@ function Card({ label, value, sub, icon, iconBg, badge, badgeColor, valueColor, 
       title={onClick ? (tip ? `${hint} — ${tip}` : hint) : tip}
       style={{ position: "relative", minHeight: 112, background: `linear-gradient(145deg, ${accent}12 0%, var(--bg) 42%, var(--bg) 100%)`, border: `1px solid ${accent}33`, borderRadius: 14, padding: "18px 20px 18px", display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-        <span style={{ fontSize: 12.5, color: accent, fontWeight: 700, lineHeight: 1.3 }}>{label}</span>
+        <span style={{ fontSize: 12.5, color: accent, fontWeight: 700, lineHeight: 1.3 }}>
+          {label}
+          {term && <span style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--text3)", marginTop: 2 }}>{term}</span>}
+        </span>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, alignSelf: "flex-start" }}>
@@ -433,6 +421,24 @@ function freshnessLine(asOf?: Partial<Record<string, string>>): string | undefin
   return parts.length ? `Yangilangan: ${parts.join(" · ")}` : undefined;
 }
 
+/** The operator table as a CSV file (opens in Excel; ";" separated, BOM for Cyrillic names). */
+function exportCsv(rows: PyResponsibleCallStats[], from: string, to: string) {
+  const cols: [string, (r: PyResponsibleCallStats) => string | number][] = [
+    ["Xodim", (r) => r.full_name], ["Kiruvchi", (r) => r.inbound_calls], ["Chiquvchi", (r) => r.outbound_calls],
+    ["Jami", (r) => r.total_calls], ["Gaplashildi", (r) => r.success_calls],
+    ["Unikal kiruvchi", (r) => r.unique_inbound], ["Unikal chiquvchi", (r) => r.unique_outbound], ["Unikal jami", (r) => r.unique_total],
+    ["Suhbat kiruvchi", (r) => fmtClock(r.inbound_duration)], ["Suhbat chiquvchi", (r) => fmtClock(r.outbound_duration)],
+    ["Suhbat jami", (r) => fmtClock(r.total_duration)], ["Jiringlash bilan", (r) => fmtClock(r.call_dur_total)],
+    ["Javobsiz kiruvchi", (r) => r.missed_inbound], ["Qayta chiqilgan", (r) => r.missed_recalled], ["Qayta chiqilmagan", (r) => r.missed_unrecalled],
+  ];
+  const esc = (v: string | number) => { const t = String(v ?? ""); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const csv = [cols.map((c) => c[0]), ...rows.map((r) => cols.map((c) => c[1](r)))].map((line) => line.map(esc).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `qongiroqlar_${from}_${to}.csv`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // ── Page ──────────────────────────────────────────────────────────
 export default function CallStatistikasi() {
   const [filters, setFilters]       = useState<CallFilterState>(() => defaultCallFilters());
@@ -581,32 +587,33 @@ export default function CallStatistikasi() {
         </div>
 
         {/* ── Row 1 ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
           <Card loading={statsQ.isLoading && !data} label="Qo'ng'iroq jami" accentColor="#2196F3"
-            value={<>{data?.total_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            value={<>{fmtNum(data?.total_calls ?? 0)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             sub={fmtDur(data?.total_duration ?? 0)}
             icon={<Phone size={19} color="#2196F3" />} iconBg="rgba(33,150,243,0.12)" />
           <Card loading={statsQ.isLoading && !data} label="Chiquvchi qo'ng'iroq" accentColor="#2196F3"
-            value={<>{data?.outbound_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            value={<>{fmtNum(data?.outbound_calls ?? 0)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             sub={fmtDur(rows.reduce((s, r) => s + r.outbound_duration, 0))}
             icon={<PhoneOutgoing size={19} color="#2196F3" />} iconBg="rgba(33,150,243,0.12)" />
           <Card loading={statsQ.isLoading && !data} label="Kiruvchi qo'ng'iroq" accentColor="#4CAF50"
-            value={<>{data?.inbound_calls ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+            value={<>{fmtNum(data?.inbound_calls ?? 0)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             sub={fmtDur(rows.reduce((s, r) => s + r.inbound_duration, 0))}
             icon={<PhoneIncoming size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)" />
           <Card loading={statsQ.isLoading && !data} label="Muvaffaqiyatli" accentColor="#4CAF50"
-            value={<span style={{ color: "#4CAF50" }}>{data?.success_calls ?? 0}</span>}
+            value={<span style={{ color: "#4CAF50" }}>{fmtNum(data?.success_calls ?? 0)}</span>}
             icon={<CheckCircle size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)"
             badge={`${Math.round(data?.success_pct ?? 0)}%`} badgeColor="#4CAF50"
             tip="Ulangan qo'ng'iroqlar (gaplashish vaqti 1 s dan ko'p) — Bitrix24 'Разговор согласен' deb hisoblaganlari bilan bir xil. 10 s gacha ulanishlar ro'yxatda 'Qisqa ulanish' deb belgilanadi" />
           <Card loading={statsQ.isLoading && !data} label="Muvaffaqiyatsiz" accentColor="#F44336"
-            value={<span style={{ color: "#F44336" }}>{failedCalls}</span>}
+            value={<span style={{ color: "#F44336" }}>{fmtNum(failedCalls)}</span>}
+            tip="Javob berilmagan qo'ng'iroqlar = chiquvchi javobsiz (NDZ) + kiruvchi javobsiz"
             icon={<XCircle size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
             badge={failedCalls > 0 ? fmtPct(data?.failed_pct ?? 0) : undefined} badgeColor="#F44336" />
         </div>
 
         {/* ── Row 2 ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
           <Card loading={statsQ.isLoading && !data} label="O'rtacha davomiyligi" accentColor="#9C27B0"
             value={durBoth ? (
               <div style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: 10, rowGap: 4, alignItems: "baseline", fontSize: 18 }}>
@@ -619,20 +626,23 @@ export default function CallStatistikasi() {
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)"
             tip="Faqat haqiqiy suhbatlar (10 s dan uzun) bo'yicha — mijoz ko'tarib darhol uzgan qisqa ulanishlar o'rtachani tushirmasligi uchun. Bosing — o'rtacha va mediana. Mediana: suhbatlarning yarmi shundan qisqa"
             onClick={() => setDurBoth((v) => !v)} />
-          <Card loading={statsQ.isLoading && !data} label="NDZ (javob berilmagan)" accentColor="#607D8B"
-            value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+          <Card loading={statsQ.isLoading && !data} label="Chiquvchi javobsiz" term="NDZ" accentColor="#607D8B"
+            tip="Operator qilgan, lekin mijoz ko'tarmagan qo'ng'iroqlar"
+            value={<>{fmtNum(ndzCalls)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
-          <Card loading={statsQ.isLoading && !data} label="Propushenniy" accentColor="#FF9800"
-            value={<span style={{ color: "#FF9800" }}>{data?.missed_inbound ?? 0} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
+          <Card loading={statsQ.isLoading && !data} label="Javobsiz kiruvchi" term="Propushenniy" accentColor="#FF9800"
+            tip="Mijoz qilgan, hech kim ko'tarmagan qo'ng'iroqlar — Bitrix24 'Пропущенный' deb yozganlari bilan bir xil. Xodimlarga lid egasi bo'yicha yoziladi"
+            value={<span style={{ color: "#FF9800" }}>{fmtNum(data?.missed_inbound ?? 0)} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
             icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)"
             onClick={() => setMissedModal("all")} hint="Ro'yxat" />
           <Card loading={statsQ.isLoading && !data} label="Reaksiya vaqti" accentColor="#607D8B"
             value={<span style={{ fontSize: 24 }}>{fmtSecs(data?.reaksiya_median ?? data?.reaksiya_vaqti ?? 0)}</span>}
             icon={<Clock size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)"
-            tip={`Propushenniy'ga qayta qo'ng'iroq — mediana, ish vaqti bo'yicha (${describeWorkHours(data?.work_hours)}). Bosing: javob berish tezligi, qayta qo'ng'iroq va yangi lidga qo'ng'iroq batafsil`}
+            term="mediana"
+            tip={`Javobsiz kiruvchiga (Propushenniy) qayta bog'lanish — mediana, ish vaqti bo'yicha (${describeWorkHours(data?.work_hours)}). Bosing: javob berish tezligi, qayta qo'ng'iroq va yangi lidga qo'ng'iroq batafsil`}
             onClick={() => setReactionOpen(true)} hint="Batafsil" />
-          <Card loading={statsQ.isLoading && !data} label="Ne perezvonili" accentColor="#F44336"
-            value={<>{data?.ne_perezvonili ?? 0} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
+          <Card loading={statsQ.isLoading && !data} label="Qayta chiqilmagan" term="Ne perezvonili" accentColor="#F44336"
+            value={<>{fmtNum(data?.ne_perezvonili ?? 0)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
             tip="Javobsiz kirish qo'ng'iroqlari: 24 soat ichida operator o'sha raqamga qo'ng'iroq qilmagan (ko'tarilmagan qo'ng'iroq ham hisobga olinadi) va mijoz ham qayta qilib javob olmagan"
             onClick={() => setMissedModal("not_recalled")} hint="Ro'yxat" />
@@ -644,7 +654,7 @@ export default function CallStatistikasi() {
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Xodimlar bo'yicha hisobot</div>
             </div>
-            <button title="Export" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", cursor: "pointer" }}><Download size={15} /></button>
+            <button title="Jadvalni CSV (Excel) faylga yuklab olish" onClick={() => exportCsv(rows, filters.start_date, filters.end_date)} disabled={!rows.length} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text2)", cursor: "pointer" }}><Download size={15} /></button>
           </div>
 
           {statsQ.isLoading ? (
@@ -654,15 +664,16 @@ export default function CallStatistikasi() {
           ) : rows.length === 0 ? (
             <EmptyState title="Bu davrda qo'ng'iroq yo'q" hint="Sana oralig'ini kengaytiring yoki filtrlarni tozalang." />
           ) : (
-            <div style={{ overflowX: "auto", maxHeight: "min(64vh, 640px)", overflowY: "auto", overscrollBehavior: "contain" }}>
+            <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
                   <tr>
                     <th className="cs-sticky" style={TH({ textAlign: "left", minWidth: 200 })} rowSpan={2}>OPERATORLAR</th>
                     <th style={TH({ color: "#2196F3", borderLeft: "2px solid rgba(33,150,243,0.2)" })} colSpan={3}>QO'NG'IROQLAR SONI</th>
                     <th style={TH({ color: "#4CAF50", borderLeft: "2px solid rgba(76,175,80,0.2)" })} colSpan={3}>UNIKAL QO'NG'IROQLAR</th>
-                    <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={4}>DAVOMIYLIK</th>
-                    <th style={TH({ color: "#FF9800", borderLeft: "2px solid rgba(255,152,0,0.24)" })} colSpan={3}>PROPUSHENNIY</th>
+                    <th style={TH({ color: "#9C27B0", borderLeft: "2px solid rgba(156,39,176,0.2)" })} colSpan={4}>SUHBAT VAQTI</th>
+                    <th style={TH({ color: "#FF9800", borderLeft: "2px solid rgba(255,152,0,0.24)" })} colSpan={3}
+                      title="Javobsiz kiruvchi qo'ng'iroqlar lid egasiga yoziladi (Bitrix24'dagi kabi), qo'ng'iroqni qaysi liniya olganiga emas — shuning uchun bu ustun 'Kiruvchi'dan katta bo'lishi mumkin">JAVOBSIZ KIRUVCHI (PROPUSHENNIY)</th>
                   </tr>
                   <tr>
                     <th style={TH({ borderLeft: "2px solid rgba(33,150,243,0.2)" })}>Kiruvchi</th>
@@ -672,9 +683,9 @@ export default function CallStatistikasi() {
                     <th style={TH()}>Chiquvchi</th>
                     <th style={TH()}>Umumiy</th>
                     <th style={TH({ borderLeft: "2px solid rgba(156,39,176,0.2)" })}>Kiruvchi</th>
-                    <th style={TH()}>Isxodyashie</th>
-                    <th style={TH()}>Suhbat</th>
-                    <th style={TH()}>Davomiylik</th>
+                    <th style={TH()}>Chiquvchi</th>
+                    <th style={TH()}>Jami</th>
+                    <th style={TH()} title="Qo'ng'iroqlarning to'liq uzunligi, jiringlash bilan — Bitrix24'dagi 'Qo'ng'iroq davomiyligi'">Jiringlash bilan</th>
                     <th style={TH({ borderLeft: "2px solid rgba(255,152,0,0.24)" })}>Umumiy</th>
                     <th style={TH()}>Qayta chiqilgan</th>
                     <th style={TH()}>Chiqilmagan</th>
@@ -713,6 +724,28 @@ export default function CallStatistikasi() {
                       </Fragment>
                     );
                   })}
+                  {/* JAMI — the sum of the rows (= the cards). Unique numbers do not add up across operators. */}
+                  {rows.length > 1 && (() => {
+                    const sum = (k: keyof PyResponsibleCallStats) => rows.reduce((t, r) => t + (Number(r[k]) || 0), 0);
+                    const T = (extra?: React.CSSProperties) => TD({ fontWeight: 700, background: "var(--bg2)", borderTop: "2px solid var(--border)", ...extra });
+                    const na = <td style={T({ color: "var(--text3)" })} title="Bir raqam bir nechta xodimda bo'lishi mumkin — yig'ib bo'lmaydi">—</td>;
+                    return (
+                      <tr>
+                        <td className="cs-sticky" style={T({ textAlign: "left", letterSpacing: "0.06em", fontSize: 12, color: "var(--text2)" })}>JAMI</td>
+                        <Num v={sum("inbound_calls")} style={T({ borderLeft: "2px solid rgba(33,150,243,0.10)" })} />
+                        <Num v={sum("outbound_calls")} style={T()} />
+                        <Num v={sum("total_calls")} style={T()} />
+                        {na}{na}{na}
+                        <Num v={sum("inbound_duration")} time style={T({ borderLeft: "2px solid rgba(156,39,176,0.10)" })} />
+                        <Num v={sum("outbound_duration")} time style={T()} />
+                        <Num v={sum("total_duration")} time style={T()} />
+                        <Num v={sum("call_dur_total")} time style={T()} />
+                        <Num v={sum("missed_inbound")} color="#E8890C" style={T({ borderLeft: "2px solid rgba(255,152,0,0.12)" })} />
+                        <Num v={sum("missed_recalled")} color="#2E9D4F" style={T()} />
+                        <Num v={sum("missed_unrecalled")} color="#E5484D" style={T()} />
+                      </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>

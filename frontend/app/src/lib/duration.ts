@@ -8,3 +8,15 @@ export function fmtSecs(secs: number | null | undefined): string {
   const h = Math.floor(v / 3600), m = Math.round((v % 3600) / 60);
   return m ? `${h} soat ${m} daq` : `${h} soat`;
 }
+
+/**
+ * A total of time, as a clock: 1:28:32 / 28:53 / 0:41 — for sums (Suhbat vaqti) and table cells.
+ * Averages and waits use fmtSecs ("1 daq 37 s"). `zero` is what 0 shows ("0:00" by default).
+ */
+export function fmtClock(secs: number | null | undefined, zero = "0:00"): string {
+  if (secs == null) return "—";
+  const v = Math.round(secs);
+  if (!v) return zero;
+  const h = Math.floor(v / 3600), m = Math.floor((v % 3600) / 60), s = v % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
