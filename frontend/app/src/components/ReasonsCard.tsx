@@ -86,8 +86,8 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
             <span style={{ textTransform: "none", letterSpacing: 0 }}>
               <InfoTip
                 text={kind === "cancel"
-                  ? "Hozir “Bekor bo‘ldi” bosqichida turgan leadlar, Bitrix’da yozilgan bekor qilish sababi bo‘yicha guruhlangan. Har bir loyihaning (O‘quv markaz, School, Land) o‘z sabab maydoni o‘qiladi. “Noma’lum” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."
-                  : "Hozir “Sifatsiz” bosqichida turgan leadlar, Bitrix’da yozilgan sifatsizlik sababi bo‘yicha guruhlangan. Har bir loyihaning (O‘quv markaz, School, Land) o‘z sabab maydoni o‘qiladi. “Noma’lum” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."}
+                  ? "Hozir “Закрыт” bosqichida turgan leadlar, Bitrix’da yozilgan bekor qilish sababi bo‘yicha guruhlangan. Har bir loyihaning (O‘quv markaz, School, Land) o‘z sabab maydoni o‘qiladi. “Noma’lum” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."
+                  : "Hozir “Горячие звонки (NO)” bosqichida turgan leadlar, Bitrix’da yozilgan sifatsizlik sababi bo‘yicha guruhlangan. Har bir loyihaning (O‘quv markaz, School, Land) o‘z sabab maydoni o‘qiladi. “Noma’lum” — sababi yozilmagan leadlar. Sababni bossangiz, o‘sha leadlar ro‘yxati ochiladi."}
                 label={`${title} — izoh`} size={14} />
             </span>
           </div>

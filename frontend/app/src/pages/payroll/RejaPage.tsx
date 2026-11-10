@@ -45,7 +45,7 @@ const STATUS_PRESETS: {
   },
   {
     id: "consulted",
-    label: "Uspeshniy lid",
+    label: "Успешный лид",
     status_id: "CONVERTED",
   },
   { id: "sifatsiz", label: "Sifatsiz", status_id: "UC_F8K4GI" },

@@ -1,6 +1,6 @@
 /**
  * The lead funnel by one grouping (Manba, Sabab, Manba 1, Hudud): one compact row per group —
- * leads, sifatli, tashrif belgilandi / uspeshniy lid, sifatsiz, bekor, and the two rates — sized to
+ * leads, sifatli, tashrif belgilandi / Успешный лид, sifatsiz, bekor, and the two rates — sized to
  * the screen instead of scrolling sideways. A row opens its leads (the page owns the panel).
  */
 import { useState } from "react";
@@ -23,10 +23,10 @@ export type FunnelRow = {
 const COLS = [
   { k: "umumiy",   label: "Lidlar",          full: "Umumiy lidlar",                          color: "#2563EB" },
   { k: "sifatli",  label: "Sifatli",         full: "Sifatli lidlar",                         color: "#0891B2" },
-  { k: "konsB",    label: "Tashrif belg.",   full: "Tashrif belgilandi",                     color: "#7C3AED" },
-  { k: "konsO",    label: "Uspeshniy lid",   full: "Uspeshniy lid (Успешный лид bosqichi)",  color: "#16A34A" },
-  { k: "sifatsiz", label: "Sifatsiz",        full: "Sifatsiz",                               color: "#DC2626" },
-  { k: "bekor",    label: "Bekor",           full: "Bekor bo'ldi",                           color: "#D97706" },
+  { k: "konsB",    label: "Визит назначен", full: "Визит назначен",                          color: "#7C3AED" },
+  { k: "konsO",    label: "Успешный лид",   full: "Успешный лид",  color: "#16A34A" },
+  { k: "sifatsiz", label: "Горячие звонки (NO)", full: "Горячие звонки (NO)",              color: "#DC2626" },
+  { k: "bekor",    label: "Закрыт",           full: "Закрыт",                                  color: "#D97706" },
 ] as const;
 
 const CSS = `
@@ -64,7 +64,7 @@ export function FunnelTable({ title, info, nameLabel, rows, loading, error, onRe
   const max = Object.fromEntries(COLS.map((c) => [c.k, Math.max(1, ...rows.map((r) => r[c.k]))])) as Record<string, number>;
   const total = COLS.reduce((t, c) => ({ ...t, [c.k]: rows.reduce((s, r) => s + r[c.k], 0) }), {} as Record<string, number>);
 
-  const TH: React.CSSProperties = { padding: "10px 12px", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", textAlign: "left", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+  const TH: React.CSSProperties = { padding: "10px 12px", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text3)", textAlign: "left", borderBottom: "1px solid var(--border)", lineHeight: 1.25, verticalAlign: "bottom" };
   const TD: React.CSSProperties = { padding: "9px 12px", borderBottom: "1px solid var(--border)", verticalAlign: "middle" };
 
   const metric = (v: number, m: number, color: string, bold = false) =>
@@ -106,7 +106,7 @@ export function FunnelTable({ title, info, nameLabel, rows, loading, error, onRe
                   <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: c.color, marginRight: 6, verticalAlign: "middle" }} />{c.label}
                 </th>
               ))}
-              <th title="Uspeshniy lid ÷ umumiy lidlar" style={{ ...TH, textAlign: "right" }}>Konv.</th>
+              <th title="Успешный лид ÷ umumiy lidlar" style={{ ...TH, textAlign: "right" }}>Konv.</th>
               <th title="Sifatli ÷ umumiy lidlar" style={{ ...TH, textAlign: "right" }}>Sifatli %</th>
             </tr>
           </thead>

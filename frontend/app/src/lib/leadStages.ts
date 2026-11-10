@@ -1,58 +1,47 @@
 /**
- * Uzbek names for the lead stages. Bitrix names them in Russian ("Горячие
- * звонки (NO)", "Закрыт", ...) and the API passes those through, so every
- * place that shows a lead stage goes through leadStageLabel().
+ * Lead stage names exactly as Bitrix24 writes them ("Успешный лид", "Закрыт", "Визит назначен", ...) —
+ * nothing is translated. Every place that shows a lead stage goes through leadStageLabel().
  *
- * Keyed by Bitrix STATUS_ID first; the Russian name is a second key for the
- * endpoints that send only stage_name. A stage missing from both (a new one
- * added in Bitrix) shows its Bitrix name.
+ * The live name (the one the stage list / an endpoint sends) wins, so a rename in Bitrix shows up with
+ * no code change. BY_ID, keyed by STATUS_ID, covers the places that only have the id (a lead list row,
+ * a stage chip); it mirrors crm.status.list for the lead pipeline.
  */
 const BY_ID: Record<string, string> = {
-  NEW:       "Qo‘ng‘iroqlar",
-  UC_IX1SKS: "Yangi lid",
-  UC_O7Y5NT: "O‘tkazib yuborilgan",
-  UC_63QL7L: "Qayta aloqa",
-  "1":       "O‘ylab ko‘radi (1-30)",
-  UC_N0PI5R: "Tashrif belgilandi",
-  UC_SWPARQ: "Kelmadi",
-  UC_QJUDCL: "Ro‘yxatdan o‘tish kutilmoqda",
-  CONVERTED: "Uspeshniy lid",
-  JUNK:      "Sifatsiz",
-  UC_GSPVUS: "Arxiv 30+",
-  UC_L8G2B9: "Bekor bo‘ldi",
-  UC_W02434: "Student | Shikoyat | HR",
+  NEW:       "Звонки",
+  UC_IX1SKS: "Новый лид",
+  UC_O7Y5NT: "Пропущенный",
+  "7":       "DPU 1 (11:00-13:00)",
+  UC_S5YC0D: "DPU 2 (14:00-16:00)",
+  UC_X316SW: "DPU 3 (17:00-19:00)",
+  UC_63QL7L: "Обратная связь",
+  "1":       "Думает (1-30)",
+  UC_N0PI5R: "Визит назначен",
+  UC_SWPARQ: "Не пришёл",
+  UC_QJUDCL: "Ожидается регистрация",
+  CONVERTED: "Успешный лид",
+  JUNK:      "Горячие звонки (NO)",
+  UC_GSPVUS: "Архив 30+",
+  UC_L8G2B9: "Закрыт",
+  UC_W02434: "Cтудент | Жалоба | HR",   // Bitrix spells the first letter with a Latin C
 };
 
-const BY_RU: Record<string, string> = {
-  "Звонки": BY_ID.NEW,
-  "Новый лид": BY_ID.UC_IX1SKS,
-  "Пропущенный": BY_ID.UC_O7Y5NT,
-  "Обратная связь": BY_ID.UC_63QL7L,
-  "Думает (1-30)": BY_ID["1"],
-  "Визит назначен": BY_ID.UC_N0PI5R,
-  "Не пришёл": BY_ID.UC_SWPARQ,
-  "Ожидается регистрация": BY_ID.UC_QJUDCL,
-  "Успешный лид": BY_ID.CONVERTED,
-  "Горячие звонки (NO)": BY_ID.JUNK,
-  "Архив 30+": BY_ID.UC_GSPVUS,
-  "Закрыт": BY_ID.UC_L8G2B9,
-  "Cтудент | Жалоба | HR": BY_ID.UC_W02434,
-  "Студент | Жалоба | HR": BY_ID.UC_W02434,
-};
+const clean = (name?: string | null) => name?.replace(/\s+/g, " ").trim() || "";
 
-/** Bitrix STATUS_ID from a stage's Russian name (for endpoints that send only the name). */
+// Stage id from a stage's name (for endpoints that send only the name); both spellings of the Студент stage.
+const ID_BY_NAME = new Map<string, string>([
+  ...Object.entries(BY_ID).map(([id, n]) => [n, id] as [string, string]),
+  ["Студент | Жалоба | HR", "UC_W02434"],
+]);
+
+/** Bitrix STATUS_ID from a stage's name (for endpoints that send only the name). */
 export function leadStageId(name?: string | null): string | null {
-  const n = name?.replace(/\s+/g, " ").trim();
-  if (!n) return null;
-  const uz = BY_RU[n];
-  return uz ? Object.keys(BY_ID).find((id) => BY_ID[id] === uz) ?? null : null;
+  const n = clean(name);
+  return n ? ID_BY_NAME.get(n) ?? null : null;
 }
 
+/** The stage's name as Bitrix24 writes it. */
 export function leadStageLabel(id?: string | null, name?: string | null): string {
-  if (id && BY_ID[id]) return BY_ID[id];
-  const n = name?.replace(/\s+/g, " ").trim();
-  if (n && BY_RU[n]) return BY_RU[n];
-  return n || id || "—";
+  return clean(name) || (id && BY_ID[id]) || id || "—";
 }
 
 /** Badge colour per lead stage (same hues the Lidlar tables use). */
