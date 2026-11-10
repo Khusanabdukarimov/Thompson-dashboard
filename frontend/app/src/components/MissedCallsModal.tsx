@@ -129,11 +129,13 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
 }) {
   const all = variant === "all";
   const reaction = variant === "reaction";
-  // "Ne perezvonili" is built from the OnlinePBX call records; the other two lists keep Bitrix24's missed calls.
-  const pbxBasis = !all && !reaction;
+  // All three lists use the cards' own basis (Bitrix24's missed calls, the same ones Bitrix shows as
+  // "Пропущенный"), so a list always adds up to its card. The OnlinePBX basis (?basis=pbx) also counted
+  // 1–10 s connections that Bitrix records as answered, and showed e.g. 470 next to a card of 455.
+  const pbxBasis = false;
   const [sort, setSort] = useState<"new" | "slow">("new");    // reaction list only: newest or slowest first
   const fetchPage = (f: CallDashboardFilter, page: { offset: number; limit: number }) =>
-    reaction ? getReactionCalls(f, page, sort) : all ? getMissedCalls(f, page) : getNotRecalledCalls(f, page, "pbx");
+    reaction ? getReactionCalls(f, page, sort) : all ? getMissedCalls(f, page) : getNotRecalledCalls(f, page, pbxBasis ? "pbx" : undefined);
   const title = reaction ? "Reaksiya vaqti — qayta bog'lanish tezligi" : all ? "Propushenniy — javobsiz qo'ng'iroqlar" : "Ne perezvonili — qayta chiqilmagan";
   const q = useQuery({ queryKey: [reaction ? "call-reaction-list" : all ? "call-missed-list" : "call-not-recalled", filter, reaction ? sort : pbxBasis ? "pbx" : null], queryFn: () => fetchPage(filter, { offset: 0, limit: PAGE }) });
   const [more, setMore] = useState<MissedCallItem[]>([]);     // pages loaded after the first

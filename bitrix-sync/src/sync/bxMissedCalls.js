@@ -59,7 +59,7 @@ async function bx(method, params) {
   let lastErr;
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
-      const res = await bitrixPost(method, params);
+      const res = await bitrixPost(method, params, { fast: true });   // a few requests every 10 min — never behind a webhook backlog
       if (res && res.error) {
         if (res.error === 'QUERY_LIMIT_EXCEEDED' || res.error === 'OVERLOAD_LIMIT') {
           await sleep(attempt * 3000);
@@ -181,6 +181,10 @@ async function syncBxMissedRange(fromUnix, toUnix) {
   const owners = await resolveOwners(records);
   const rows = records.map((r) => toRow(r, owners));
   await upsertRows(rows);
+  // when this feed last completed — the call page shows "yangilangan N daq oldin" from it
+  await pool.query(
+    `INSERT INTO sync_state (entity, last_sync, total_rows) VALUES ('bx_missed', NOW(), $1)
+     ON CONFLICT (entity) DO UPDATE SET last_sync = NOW(), total_rows = $1`, [rows.length]);
   return { total: rows.length, unresolved: rows.filter((r) => r.responsible_id == null).length };
 }
 

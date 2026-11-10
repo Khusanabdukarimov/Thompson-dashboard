@@ -78,7 +78,15 @@ function startCallSync() {
   const minutes = parseInt(process.env.CALL_SYNC_INTERVAL_MIN || '10', 10);
   const lookbackH = parseInt(process.env.CALL_SYNC_LOOKBACK_HOURS || '3', 10);
 
+  // One run at a time: setInterval does not wait, and a run stuck behind a slow Bitrix queue used to
+  // pile up further runs behind it.
+  let running = false;
   const run = async () => {
+    if (running) { console.warn('[calls] previous sync still running — skipped this tick'); return; }
+    running = true;
+    try { await runOnce(); } finally { running = false; }
+  };
+  const runOnce = async () => {
     try {
       if (onpbx.DOMAIN) {
         const { total, stubbed } = await syncRecentCalls(lookbackH);

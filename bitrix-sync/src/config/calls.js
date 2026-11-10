@@ -15,15 +15,30 @@
 const DIRECTIONS = ['inbound', 'outbound', 'local'];
 
 /**
- * "Answered" = an agent actually talked. user_talk_time is the only field that
- * means a connection happened — hangup_cause NORMAL_CLEARING and the presence of
- * a "user" ring event both include calls that rang an extension but were never
- * picked up. A connection of up to MIN_TALK_S seconds is not a conversation
- * either: the customer picked up and hung up, or a voicemail / network message
- * answered (OnlinePBX and Bitrix both mark those "answered"; 5.5% of October's
- * answered calls). Agreed with the client on 2026-11-02.
+ * "Answered" = a connection happened: user_talk_time > 0 — the same rule Bitrix24 uses (its call log
+ * code 200, "Разговор согласен" in the Qo'ng'iroq tab), so answered / missed / Ne perezvonili match
+ * Bitrix call for call. Client's decision of 2026-11-10 (replacing the "talk > 10 s" rule of
+ * 2026-11-02, which made the dashboard ~30 answered calls a day lower than Bitrix).
+ * hangup_cause NORMAL_CLEARING and a "user" ring event both include calls that rang an extension
+ * but were never picked up, so talk time is the only field that means a connection.
  */
-const MIN_TALK_S = 10;
+const MIN_TALK_S = 0;
+
+/**
+ * A REAL conversation, for the duration figures only (O'rtacha davomiyligi, its median): a connection
+ * of up to this many seconds is the customer picking up and hanging up, or a voicemail / network
+ * message — counted as answered, shown as "Qisqa ulanish", but it would pull the average talk down.
+ */
+const MIN_CONVERSATION_S = 10;
+
+/**
+ * An operator's outbound call counts as calling a missed customer back (answered or not — the client's
+ * rule: "ko'tarmasa ham biz chiqgan") only if it really rang: at least this many seconds long. A dial
+ * that failed at once (0–4 s: a wrong / unallocated number, the operator cancelling immediately) did
+ * not reach the customer's phone — 29 of November's "called back" misses rested on one of those.
+ */
+const MIN_CALLBACK_DIAL_S = 5;
+
 function isAnswered(rec) {
   return (rec.user_talk_time || 0) > MIN_TALK_S;
 }
@@ -134,6 +149,8 @@ module.exports = {
   operatorDisplayName,
   NO_ANSWER_CAUSES,
   MIN_TALK_S,
+  MIN_CONVERSATION_S,
+  MIN_CALLBACK_DIAL_S,
   isAnswered,
   isMissedInbound,
   operatorExt,

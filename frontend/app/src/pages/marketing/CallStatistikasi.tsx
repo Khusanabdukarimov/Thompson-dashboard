@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useMemo } from "react";
+import { Fragment, useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Phone, PhoneOutgoing, PhoneIncoming, CheckCircle, XCircle,
@@ -269,6 +269,11 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
   const [dir, setDir] = useState<DirFilter>("all");
   const [res, setRes] = useState<ResFilter>("all");
   const [search, setSearch] = useState("");
+  // The panel gets the operator's whole period (it used to be cut at 1 000, so its counts disagreed
+  // with the table row); rows are drawn in steps so a 5 000-call month stays smooth.
+  const STEP = 300;
+  const [limit, setLimit] = useState(STEP);
+  useEffect(() => setLimit(STEP), [dir, res, search, q.data]);
 
   const calls = q.data ?? [];
   const isIn = (c: CallListRow) => c.call_type === 2 || c.call_type === 3;
@@ -299,7 +304,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
 
   return (
     <div>
-      {/* Quick filters — narrow 1 000 calls to the ones you are looking for */}
+      {/* Quick filters — narrow the operator's calls to the ones you are looking for */}
       <div style={{ position: "sticky", top: 0, zIndex: 3, height: 56, boxSizing: "border-box", display: "flex", alignItems: "center", gap: 8, padding: "0 16px", borderBottom: "1px solid var(--border)", background: "var(--bg2)", overflowX: "auto" }}>
         <button style={chip(dir === "all", "#64748B")} onClick={() => setDir("all")}>Hammasi {count(counts.all)}</button>
         <button style={chip(dir === "in", "#16A34A")} onClick={() => setDir(dir === "in" ? "all" : "in")}><PhoneIncoming size={13} /> Kiruvchi {count(counts.in)}</button>
@@ -322,7 +327,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
             </tr>
           </thead>
           <tbody>
-            {shown.map((c) => {
+            {shown.slice(0, limit).map((c) => {
               const inbound = isIn(c);
               // 200 = the operator talked (talk time > 0). Duration also counts ringing,
               // so a long unanswered call is not a success.
@@ -353,18 +358,23 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                       : "—"}
                   </td>
                   {(() => {
-                    // Connected for a few seconds (≤ 10 s) but not a conversation: picked up and hung
-                    // up, or a voicemail / network message answered. Counted as not answered.
-                    const brief = !ok && (c.talk_time ?? 0) > 0;
+                    // Connected (answered, as Bitrix counts it) but only for a few seconds (≤ 10 s): picked
+                    // up and hung up, or a voicemail / network message. Answered, flagged as short.
+                    const brief = ok && (c.talk_time ?? 0) <= 10;
                     return (
                       <td style={{ ...TD, whiteSpace: "nowrap" }}
-                        title={ok ? `Suhbat ${fmtShortDur(c.talk_time ?? 0)} · jami ${fmtShortDur(c.duration ?? 0)}`
-                          : brief ? `Ulandi, lekin ${c.talk_time} s — 10 s dan qisqa ulanish suhbat hisoblanmaydi (mijoz darhol uzgan yoki avtojavob)`
+                        title={brief ? `Ulandi, ${c.talk_time} s — javob berilgan hisoblanadi (Bitrix'da ham), lekin 10 s dan qisqa: mijoz darhol uzgan yoki avtojavob. O'rtacha davomiylikka kirmaydi`
+                          : ok ? `Suhbat ${fmtShortDur(c.talk_time ?? 0)} · jami ${fmtShortDur(c.duration ?? 0)} (jiringlash bilan)`
                           : `Javob berilmadi · ${fmtShortDur(c.duration ?? 0)} jiringladi`}>
-                        <StatusMark tone={ok ? "good" : brief ? "warning" : "critical"} icon={ok ? CheckCircle : PhoneOff}>
-                          {ok ? "Gaplashildi" : brief ? "Qisqa ulanish" : "Javobsiz"}
+                        <StatusMark tone={brief ? "warning" : ok ? "good" : "critical"} icon={ok ? CheckCircle : PhoneOff}>
+                          {brief ? "Qisqa ulanish" : ok ? "Gaplashildi" : "Javobsiz"}
                           <span style={{ color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{fmtShortDur(ok || brief ? (c.talk_time ?? 0) : (c.duration ?? 0))}</span>
                         </StatusMark>
+                        {/* Bitrix's "Qo'ng'iroq davomiyligi" is the whole call, ringing included — shown
+                            under the talk time so the two can be compared at a glance. */}
+                        {(ok || brief) && (c.duration ?? 0) > (c.talk_time ?? 0) && (
+                          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2, paddingLeft: 20, fontVariantNumeric: "tabular-nums" }}>jami {fmtShortDur(c.duration ?? 0)}</div>
+                        )}
                       </td>
                     );
                   })()}
@@ -394,13 +404,33 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
           </tbody>
         </table>
       </div>
-      {calls.length >= 1000 && (
+      {shown.length > limit && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderTop: "1px solid var(--border)" }}>
+          <button onClick={() => setLimit((n) => n + STEP)} style={{ ...chip(false, "#64748B"), cursor: "pointer" }}>Yana {Math.min(STEP, shown.length - limit)} ta</button>
+          <button onClick={() => setLimit(shown.length)} style={{ ...chip(false, "#64748B"), cursor: "pointer" }}>Barchasi ({fmtNum(shown.length)})</button>
+          <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--text3)" }}>{fmtNum(limit)} / {fmtNum(shown.length)}</span>
+        </div>
+      )}
+      {calls.length >= 20000 && (
         <div style={{ padding: "8px 16px", fontSize: 11.5, color: "var(--text3)", borderTop: "1px solid var(--border)" }}>
-          Oxirgi 1 000 ta qo'ng'iroq ko'rsatilmoqda — eskilarini ko'rish uchun sana oralig'ini qisqartiring.
+          Oxirgi 20 000 ta qo'ng'iroq ko'rsatilmoqda — eskilarini ko'rish uchun sana oralig'ini qisqartiring.
         </div>
       )}
     </div>
   );
+}
+
+/** "Yangilangan: OnlinePBX 3 daq · Moizvonki 3 daq · Bitrix 12 daq oldin" — how fresh the page's numbers are. */
+function freshnessLine(asOf?: Partial<Record<string, string>>): string | undefined {
+  if (!asOf) return undefined;
+  const ago = (iso?: string) => {
+    if (!iso) return null;
+    const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    return min < 1 ? "hozirgina" : min < 60 ? `${min} daq oldin` : `${Math.floor(min / 60)} soat ${min % 60} daq oldin`;
+  };
+  const parts = [["OnlinePBX", ago(asOf.calls)], ["Moizvonki", ago(asOf.moizvonki_calls)], ["Bitrix javobsizlari", ago(asOf.bx_missed)]]
+    .filter(([, v]) => v).map(([k, v]) => `${k} ${v}`);
+  return parts.length ? `Yangilangan: ${parts.join(" · ")}` : undefined;
 }
 
 // ── Page ──────────────────────────────────────────────────────────
@@ -422,6 +452,7 @@ export default function CallStatistikasi() {
   const statsQ = useQuery({
     queryKey: ["py-call-stats", apiFilter],
     queryFn:  () => getPyCallStats(apiFilter),
+    refetchInterval: 5 * 60_000,   // the calls sync every 10 min — an open page keeps up on its own
   });
 
   const filterOptionsQ = useQuery({
@@ -452,7 +483,7 @@ export default function CallStatistikasi() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden", background: "var(--bg2)" }}>
-      <Topbar title="Call statistikasi" />
+      <Topbar title="Call statistikasi" sub={freshnessLine(statsQ.data?.data_as_of)} />
       <style>{TABLE_CSS}</style>
 
       <div ref={pageScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "18px 24px 96px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -566,7 +597,8 @@ export default function CallStatistikasi() {
           <Card loading={statsQ.isLoading && !data} label="Muvaffaqiyatli" accentColor="#4CAF50"
             value={<span style={{ color: "#4CAF50" }}>{data?.success_calls ?? 0}</span>}
             icon={<CheckCircle size={19} color="#4CAF50" />} iconBg="rgba(76,175,80,0.12)"
-            badge={`${Math.round(data?.success_pct ?? 0)}%`} badgeColor="#4CAF50" />
+            badge={`${Math.round(data?.success_pct ?? 0)}%`} badgeColor="#4CAF50"
+            tip="Ulangan qo'ng'iroqlar (gaplashish vaqti 1 s dan ko'p) — Bitrix24 'Разговор согласен' deb hisoblaganlari bilan bir xil. 10 s gacha ulanishlar ro'yxatda 'Qisqa ulanish' deb belgilanadi" />
           <Card loading={statsQ.isLoading && !data} label="Muvaffaqiyatsiz" accentColor="#F44336"
             value={<span style={{ color: "#F44336" }}>{failedCalls}</span>}
             icon={<XCircle size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
@@ -585,7 +617,7 @@ export default function CallStatistikasi() {
               </div>
             ) : fmtAvgDur(data?.avg_duration ?? 0)}
             icon={<Timer size={19} color="#9C27B0" />} iconBg="rgba(156,39,176,0.10)"
-            tip="Bosing — o'rtacha va mediana. Mediana: suhbatlarning yarmi shundan qisqa"
+            tip="Faqat haqiqiy suhbatlar (10 s dan uzun) bo'yicha — mijoz ko'tarib darhol uzgan qisqa ulanishlar o'rtachani tushirmasligi uchun. Bosing — o'rtacha va mediana. Mediana: suhbatlarning yarmi shundan qisqa"
             onClick={() => setDurBoth((v) => !v)} />
           <Card loading={statsQ.isLoading && !data} label="NDZ (javob berilmagan)" accentColor="#607D8B"
             value={<>{ndzCalls} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}

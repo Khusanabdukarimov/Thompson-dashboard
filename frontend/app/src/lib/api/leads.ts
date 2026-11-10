@@ -1018,6 +1018,8 @@ export type MissedCallsResponse = {
 };
 
 export type PyCallStatsResult = {
+  /** When each feed last completed: calls (OnlinePBX), moizvonki_calls, bx_missed (Bitrix24 missed calls). */
+  data_as_of?: Partial<Record<"calls" | "moizvonki_calls" | "bx_missed", string>>;
   date_from:      string;
   date_to:        string;
   total_calls:    number;

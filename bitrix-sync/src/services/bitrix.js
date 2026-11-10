@@ -17,8 +17,19 @@ function sleep(ms) {
 // of hitting the limit. Override with BITRIX_MIN_GAP_MS.
 const MIN_GAP_MS = parseInt(process.env.BITRIX_MIN_GAP_MS || '600', 10);
 let nextSlot = 0;
-function waitForSlot() {
+// A second, small lane for the few requests a person or the page is waiting on right now (the
+// missed-call sweep, "whose number is this"): behind a webhook backlog the main lane's next free
+// slot can be 30+ minutes away (2026-11-10: ~3 700 queued lead updates). It is spaced so both
+// lanes together stay under the portal's 2 req/s: main 1/0.6 s + fast 1/3 s ≈ 2.0/s.
+const FAST_GAP_MS = parseInt(process.env.BITRIX_FAST_GAP_MS || '3000', 10);
+let nextFastSlot = 0;
+function waitForSlot(fast = false) {
   const now = Date.now();
+  if (fast) {
+    const at = Math.max(now, nextFastSlot);
+    nextFastSlot = at + FAST_GAP_MS;
+    return at > now ? sleep(at - now) : Promise.resolve();
+  }
   const at = Math.max(now, nextSlot);
   nextSlot = at + MIN_GAP_MS;
   return at > now ? sleep(at - now) : Promise.resolve();
@@ -156,8 +167,8 @@ async function bitrixCall(method, params = {}, timeoutMs = undefined) {
 /**
  * POST request to Bitrix24 (for crm.lead.add, crm.lead.update, etc.)
  */
-async function httpPost(url, data, timeoutMs = 30000) {
-  await waitForSlot();
+async function httpPost(url, data, timeoutMs = 30000, fast = false) {
+  await waitForSlot(fast);
   return rawPost(url, data, timeoutMs);
 }
 
@@ -193,9 +204,10 @@ function rawPost(url, data, timeoutMs = 30000) {
   });
 }
 
-async function bitrixPost(method, params = {}) {
+/** opts.fast: use the fast lane (see waitForSlot) — only for small requests someone is waiting on. */
+async function bitrixPost(method, params = {}, opts = {}) {
   const url = `${WEBHOOK_URL}/${method}`;
-  return httpPost(url, params);
+  return httpPost(url, params, undefined, !!opts.fast);
 }
 
 module.exports = { fetchAll, fetchOne, bitrixCall, bitrixPost };
