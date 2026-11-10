@@ -113,12 +113,19 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     if (!contact.has(r.customer_norm)) contact.set(r.customer_norm, []);
     contact.get(r.customer_norm).push(t);
   }
-  const contactedWithin = (num, missMs) =>
-    (contact.get(num) || []).some((t) => t > missMs && t <= missMs + RECALL_WINDOW_MS);
+  // The client's rule (2026-11-10): a missed call is "Ne perezvonili" only if NOBODY touched that number —
+  // no operator call to it (any length, any time after the miss) and no answered call from it, and none in
+  // the 24h before the miss either (the customer had just been talked to). Late callbacks still count as
+  // reached; Reaksiya vaqti shows how late they were.
   const firstContactAfter = (num, missMs) => {
-    const c = (contact.get(num) || []).filter((t) => t > missMs && t <= missMs + RECALL_WINDOW_MS);
+    const c = (contact.get(num) || []).filter((t) => t > missMs);
     return c.length ? Math.min(...c) : null;
   };
+  const lastContactBefore = (num, missMs) => {
+    const c = (contact.get(num) || []).filter((t) => t < missMs && t >= missMs - RECALL_WINDOW_MS);
+    return c.length ? Math.max(...c) : null;
+  };
+  const contactedWithin = (num, missMs) => firstContactAfter(num, missMs) != null || lastContactBefore(num, missMs) != null;
 
   // Missed inbound times per number — an operator's outbound call within 24h after one is a callback
   // (the "Callback" call type and the callback_calls column).
@@ -126,7 +133,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
   const addMiss = (num, t) => { if (!num || t == null) return; if (!missTimes.has(num)) missTimes.set(num, []); missTimes.get(num).push(t); };
   // From the PBX records on both bases, so the card and the operator's call list (which can only read
   // pbx_calls) agree; misses before the period's first day are not looked at by either.
-  for (const r of rows) if (r.direction === 'inbound' && !r.answered && !r.internal) addMiss(r.customer_norm, ms(r.start_stamp));
+  for (const r of rows) if (r.in_range && r.direction === 'inbound' && !r.answered && !r.internal) addMiss(r.customer_norm, ms(r.start_stamp));
   const isCallback = (r) => {
     if (r.direction !== 'outbound' || !r.customer_norm) return false;
     if (!r.answered && Number(r.duration || 0) < MIN_CALLBACK_DIAL_S) return false;
@@ -226,7 +233,15 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     return op;
   };
 
-  let inbound = 0, outbound = 0, internal = 0, missed = 0, ndz = 0, talkExt = 0, durExt = 0, callbacks = 0, convTalk = 0;
+  let inbound = 0, outbound = 0, internal = 0, ndz = 0, talkExt = 0, durExt = 0, callbacks = 0, convTalk = 0, successTotal = 0;
+  // A missed call joins its owner's row as an inbound, unanswered call (+ its ringing time).
+  const addMissed = (b, ev) => {
+    b.missed_inbound += 1; b._missed.push(ev); missedEvents.push(ev);
+    b.inbound_calls += 1; b.failed_calls += 1; inbound += 1;
+    const d = ev.dur != null ? ev.dur : (ev.num && ev.at != null ? pbxDurOf(ev.num, ev.at) : null) || 0;
+    b.dur_in += d; durExt += d;
+    if (ev.num) { b._in.add(ev.num); b._all.add(ev.num); }
+  };
   const answeredTalks = [];   // for the median next to avg_duration
   const missedEvents = [];
 
@@ -237,6 +252,10 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     if (r.direction === 'local' || r.internal) { internal += 1; continue; }
     if (r.direction !== 'inbound' && r.direction !== 'outbound') continue;
     if (!passRow(r)) continue;
+    // An unanswered inbound is counted once, as a missed-call event below — on its OWNER's row (the lead's
+    // responsible, as Bitrix does), together with its inbound count. Counting it here too, on the line
+    // that rang (mostly the queue), made a person's "Javobsiz kiruvchi" bigger than their "Kiruvchi".
+    if (r.direction === 'inbound' && !r.answered) continue;
 
     const dur = Number(r.duration || 0);
     const answered = !!r.answered;
@@ -253,14 +272,11 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     if (r.direction === 'inbound') {
       inbound += 1; b.inbound_calls += 1; b.talk_in += talk; b.dur_in += dur;
       if (r.customer_norm) b._in.add(r.customer_norm);
-      if (answered) b.success_calls += 1;
-      else {
-        missed += 1; b.failed_calls += 1;
-      }
+      b.success_calls += 1; successTotal += 1;          // only answered inbound reaches here
     } else {
       outbound += 1; b.outbound_calls += 1; b.talk_out += talk; b.dur_out += dur;
       if (r.customer_norm) b._out.add(r.customer_norm);
-      if (answered) b.success_calls += 1;
+      if (answered) { b.success_calls += 1; successTotal += 1; }
       else { ndz += 1; b.ndz_calls += 1; b.failed_calls += 1; }
       if (isCallback(r)) { callbacks += 1; b.callback_calls += 1; }
     }
@@ -287,7 +303,7 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
         rid: b.responsible_id, hint: 0, team: (rid != null && teamByRid.get(rid)) || teamOf(r.full_name), dur: Number(r.duration || 0),
       };
       if (!passMiss(ev)) continue;
-      b.missed_inbound += 1; b._missed.push(ev); missedEvents.push(ev);
+      addMissed(b, ev);
     }
   }
 
@@ -313,14 +329,14 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
       // Bitrix registers Moizvonki's missed calls too (line REST_APP:120): under a Manba filter an
       // event takes the system of the PBX record it matches (none = OnlinePBX, the main line).
       if (source) { const p = pbxMissOf(ev.num, at); if ((p ? sourceOf(p) : 'onlinepbx') !== source) continue; }
-      b.missed_inbound += 1; b._missed.push(ev); missedEvents.push(ev);
+      addMissed(b, ev);
     }
   }
 
   let nePerezvonili = 0, recalledCount = 0;
   const reactions = [];
   const notRecalled = [];      // only filled when opts.detail
-  const recalledEvents = [];   // ditto: the misses that WERE called back within 24h, with when
+  const recalledEvents = [];   // ditto: the misses that WERE reached (after, or in the 24h before), with when
   const now = opts.now ?? Date.now();
   for (const ev of missedEvents) {
     if (!ev.num || ev.at == null) {
@@ -330,22 +346,24 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     }
     const fc = firstContactAfter(ev.num, ev.at);
     if (fc) {
+      // reached after the miss: within 24h ("recalled") or later ("late") — both are callbacks
       const work = workSeconds(ev.at, fc, scheduleOf(ev.team));   // working time only
       reactions.push(work); recalledCount += 1;
-      if (opts.detail) recalledEvents.push({ ...ev, status: 'recalled', callback_at: fc, work_delay_s: work });
+      if (opts.detail) recalledEvents.push({ ...ev, status: fc - ev.at <= RECALL_WINDOW_MS ? 'recalled' : 'late', callback_at: fc, work_delay_s: work });
+      continue;
+    }
+    const before = lastContactBefore(ev.num, ev.at);
+    if (before) {
+      // touched in the 24h before the miss (an operator called, or the customer got through): not owed a
+      // callback. Not a callback either, so it has no reaction time.
+      recalledCount += 1;
+      if (opts.detail) recalledEvents.push({ ...ev, status: 'before', callback_at: before, work_delay_s: null });
       continue;
     }
     nePerezvonili += 1;
     if (opts.detail) {
-      // open: the 24h are not over, a callback may still come. late: reached, but after
-      // the 24h. never: nobody has talked to this number since.
-      let status = 'never', callbackAt = null;
-      if (ev.at + RECALL_WINDOW_MS > now) status = 'open';
-      else {
-        const later = (contact.get(ev.num) || []).filter((t) => t > ev.at);
-        if (later.length) { status = 'late'; callbackAt = Math.min(...later); }
-      }
-      notRecalled.push({ ...ev, status, callback_at: callbackAt, work_delay_s: callbackAt ? workSeconds(ev.at, callbackAt, scheduleOf(ev.team)) : null });
+      // open: the 24h are not over, a callback may still come. never: nobody has touched this number.
+      notRecalled.push({ ...ev, status: ev.at + RECALL_WINDOW_MS > now ? 'open' : 'never', callback_at: null, work_delay_s: null });
     }
   }
 
@@ -375,7 +393,8 @@ function computeCallStatsFull(rows, dateFrom, dateTo, filterOpId = null, bxMisse
     .sort((a, b) => b.total_calls - a.total_calls);
 
   const external = inbound + outbound;
-  const success = external - missed - ndz;
+  const success = successTotal;
+  const missed = missedEvents.length;
   const result = {
     date_from: dateFrom || '', date_to: dateTo || '',
     total_calls: external,                      // Все, without internal calls

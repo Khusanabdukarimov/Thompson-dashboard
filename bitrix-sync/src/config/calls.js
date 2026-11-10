@@ -32,12 +32,11 @@ const MIN_TALK_S = 0;
 const MIN_CONVERSATION_S = 10;
 
 /**
- * An operator's outbound call counts as calling a missed customer back (answered or not — the client's
- * rule: "ko'tarmasa ham biz chiqgan") only if it really rang: at least this many seconds long. A dial
- * that failed at once (0–4 s: a wrong / unallocated number, the operator cancelling immediately) did
- * not reach the customer's phone — 29 of November's "called back" misses rested on one of those.
+ * An operator's outbound call counts as touching the customer (answered or not, any length — the client's
+ * rule of 2026-11-10: "if a person was contacted at least once, it is not Ne perezvonili").
+ * Kept as a constant so a minimum ring time can be brought back in one place.
  */
-const MIN_CALLBACK_DIAL_S = 5;
+const MIN_CALLBACK_DIAL_S = 0;
 
 function isAnswered(rec) {
   return (rec.user_talk_time || 0) > MIN_TALK_S;

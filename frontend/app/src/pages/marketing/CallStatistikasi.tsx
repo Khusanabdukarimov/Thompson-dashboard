@@ -631,7 +631,7 @@ export default function CallStatistikasi() {
             value={<>{fmtNum(ndzCalls)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneOff size={19} color="#607D8B" />} iconBg="rgba(96,125,139,0.10)" />
           <Card loading={statsQ.isLoading && !data} label="Javobsiz kiruvchi" term="Propushenniy" accentColor="#FF9800"
-            tip="Mijoz qilgan, hech kim ko'tarmagan qo'ng'iroqlar — Bitrix24 'Пропущенный' deb yozganlari bilan bir xil. Xodimlarga lid egasi bo'yicha yoziladi"
+            tip="Mijoz qilgan, hech kim ko'tarmagan qo'ng'iroqlar — Bitrix24 'Пропущенный' deb yozganlari bilan bir xil. Xodimga lid egasi bo'yicha yoziladi va uning 'Kiruvchi' soniga ham kiradi"
             value={<span style={{ color: "#FF9800" }}>{fmtNum(data?.missed_inbound ?? 0)} <span style={{ fontSize: 16, fontWeight: 500 }}>ta</span></span>}
             icon={<PhoneMissed size={19} color="#FF9800" />} iconBg="rgba(255,152,0,0.10)"
             onClick={() => setMissedModal("all")} hint="Ro'yxat" />
@@ -644,7 +644,7 @@ export default function CallStatistikasi() {
           <Card loading={statsQ.isLoading && !data} label="Qayta chiqilmagan" term="Ne perezvonili" accentColor="#F44336"
             value={<>{fmtNum(data?.ne_perezvonili ?? 0)} <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text2)" }}>ta</span></>}
             icon={<PhoneMissed size={19} color="#F44336" />} iconBg="rgba(244,67,54,0.10)"
-            tip="Javobsiz kirish qo'ng'iroqlari: 24 soat ichida operator o'sha raqamga qo'ng'iroq qilmagan (ko'tarilmagan qo'ng'iroq ham hisobga olinadi) va mijoz ham qayta qilib javob olmagan"
+            tip="Javobsiz kiruvchi qo'ng'iroqlar, ularning raqami bilan hech kim bog'lanmagan: undan keyin operator o'sha raqamga bir marta ham qo'ng'iroq qilmagan (ko'tarilmagan yoki qisqa bo'lsa ham hisob) va mijoz qayta qilib javob olmagan, undan oldingi 24 soatda ham bog'lanilmagan. 'Kutilmoqda' — 24 soat hali tugamagan"
             onClick={() => setMissedModal("not_recalled")} hint="Ro'yxat" />
         </div>
 

@@ -266,7 +266,8 @@ async function readCallInputs({ from, to, phone, stage }) {
      FROM pbx_calls c
      LEFT JOIN pbx_users u ON u.ext = c.operator_ext${INTERNAL_JOINS}
      WHERE c.start_stamp IS NOT NULL
-       AND ${tzFromOpt('c.start_stamp', '$1')}
+       -- $6 = from - 1 day: a contact in the 24h BEFORE a miss also means the number was touched
+       AND ${tzFromOpt('c.start_stamp', '$6')}
        -- $3 = to + LOOKAHEAD_DAYS, the callback look-ahead
        AND ${tzToOpt('c.start_stamp', '$3')}
        AND ($4::text IS NULL OR c.customer_norm LIKE '%' || $4 || '%')
@@ -281,7 +282,7 @@ async function readCallInputs({ from, to, phone, stage }) {
          LIMIT 1
        ))
      ORDER BY c.start_stamp DESC`,
-    [from, to, to ? addDaysISO(to, LOOKAHEAD_DAYS) : null, phone, stage],
+    [from, to, to ? addDaysISO(to, LOOKAHEAD_DAYS) : null, phone, stage, from ? addDaysISO(from, -1) : null],
   );
   // Whose missed call is it? Bitrix24 knows (the CRM entity's responsible); the PBX does
   // not — a queue call that rang out has no operator. Bitrix registers the misses of both
@@ -313,6 +314,31 @@ async function readCallInputs({ from, to, phone, stage }) {
       ));
     } catch (err) {
       console.warn(`[calls/call-stats-full] bx_missed_calls unavailable, using PBX missed calls: ${err.message}`);
+    }
+  }
+
+  // A callback can come any time later ("contacted at least once" — no 24h limit): for every number with a
+  // miss in the period, the first contact after the look-ahead window, if any. Added as out-of-range rows
+  // so the callback map sees it (counted nowhere else).
+  if (to) {
+    const nums = [...new Set([
+      ...rows.filter((r) => r.in_range && r.direction === 'inbound' && !r.answered && r.customer_norm).map((r) => r.customer_norm),
+      ...(bxMissed || []).map((e) => e.phone_norm).filter(Boolean),
+    ])];
+    if (nums.length) {
+      const { rows: later } = await pool.query(
+        `SELECT DISTINCT ON (c.customer_norm)
+                c.uuid, u.responsible_id, c.operator_ext, ${LINE_NAME('u')} AS full_name,
+                c.direction, c.customer_norm, c.customer_number, c.start_stamp, c.duration, c.talk_time AS talk, c.answered,
+                FALSE AS internal, FALSE AS in_range
+         FROM pbx_calls c
+         LEFT JOIN pbx_users u ON u.ext = c.operator_ext
+         WHERE c.customer_norm = ANY($1::text[])
+           AND NOT ${tzToOpt('c.start_stamp', '$2')}
+           AND c.direction <> 'local' AND (c.answered OR c.direction = 'outbound')
+         ORDER BY c.customer_norm, c.start_stamp`,
+        [nums, addDaysISO(to, LOOKAHEAD_DAYS)]);
+      for (const r of later) rows.push(r);
     }
   }
 
@@ -409,7 +435,8 @@ router.get('/call-stats-full', async (req, res) => {
  * status: recalled reached within the 24h (callback_at / delay_s say when) — only in the
  *                   full list;
  *         never   no conversation with that number since;
- *         late    reached, but after the 24h (callback_at / delay_s say when);
+ *         late    reached, but after the 24h (callback_at / delay_s say when) — in the full list;
+ *         before  touched in the 24h BEFORE the miss (callback_at = that contact) — in the full list;
  *         open    the 24h are not over yet — a callback may still come.
  *
  * summary is always about the whole period, whichever list or page: total (this list's
@@ -508,7 +535,8 @@ async function serveMissedList(req, res, scope) {
       : null;
     const detail = stats.missed_detail;
     const events = (scope === 'all' ? detail.recalled_events.concat(detail.not_recalled)
-      : scope === 'reaction' ? detail.recalled_events.slice() : detail.not_recalled.slice());
+      // the reaction list is about callbacks: a miss "reached" only by a contact BEFORE it has no callback
+      : scope === 'reaction' ? detail.recalled_events.filter((e) => e.status !== 'before') : detail.not_recalled.slice());
     if (scope === 'reaction' && req.query.sort === 'slow') events.sort((a, b) => (b.work_delay_s - a.work_delay_s) || (b.at - a.at));
     else events.sort((a, b) => b.at - a.at);
 
@@ -577,7 +605,7 @@ async function serveMissedList(req, res, scope) {
     });
 
     const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
-    const lateCount = detail.not_recalled.filter((e) => e.status === 'late').length;
+    const lateCount = detail.recalled_events.filter((e) => e.status === 'late').length;   // reached, but after 24h
     let reaction;
     if (scope === 'reaction') {
       const works = base.map((x) => x.work_delay_s || 0);
@@ -604,8 +632,9 @@ async function serveMissedList(req, res, scope) {
         unique_numbers: new Set(events.map((e) => e.num || e.key)).size,
         recalled: detail.recalled,                                  // called back within the 24h
         not_recalled: detail.not_recalled.length,                   // == the "Ne perezvonili" card
-        late: lateCount,                                            // ...of which reached, but after the 24h
-        not_reached: detail.not_recalled.length - lateCount,        // ...never, or the 24h is still running
+        late: lateCount,                                            // reached after the 24h (not in Ne perezvonili)
+        before: detail.recalled_events.filter((e) => e.status === 'before').length,   // touched in the 24h before the miss
+        not_reached: detail.not_recalled.length,                    // never touched, or the 24h is still running
         still_open: detail.not_recalled.filter((e) => e.status === 'open').length,
         avg_wait_s: avg(base.filter((x) => x.wait_s != null).map((x) => x.wait_s)),
         missed_total: detail.total,                                 // == the "Propushenniy" card
@@ -683,9 +712,10 @@ router.get('/call-list', async (req, res) => {
              OR ($10 = 'ndz' AND c.direction = 'outbound' AND NOT c.answered)
              OR ($10 IN ('recalled', 'unrecalled') AND c.direction = 'inbound' AND NOT c.answered
                  AND ($10 = 'recalled') = EXISTS (
+                   -- touched: any contact after the miss (no time limit), or in the 24h before it
                    SELECT 1 FROM pbx_calls k WHERE k.customer_norm = c.customer_norm AND k.direction <> 'local'
                      AND (k.answered OR (k.direction = 'outbound' AND k.duration >= ${MIN_CALLBACK_DIAL_S}))
-                     AND k.start_stamp > c.start_stamp AND k.start_stamp <= c.start_stamp + interval '24 hours')))
+                     AND k.start_stamp <> c.start_stamp AND k.start_stamp >= c.start_stamp - interval '24 hours')))
          ORDER BY c.start_stamp DESC
          LIMIT ${CALL_LIST_MAX}
        ),

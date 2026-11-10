@@ -955,7 +955,9 @@ export type MissedCallItem = {
   attempts: number;
   /** recalled: reached within the 24h · never: not reached since · late: reached, but after the
    *  24h · open: the 24h are still running. ("recalled" only appears in the full list.) */
-  status: "recalled" | "never" | "late" | "open" | "nophone";
+  /** recalled / late: reached after the miss (within / after 24h); before: touched in the 24h before it;
+   *  open / never / nophone: nobody touched the number (the "Ne perezvonili" list). */
+  status: "recalled" | "never" | "late" | "open" | "nophone" | "before";
   callback_at: string | null;
   /** Real time until the callback. */
   delay_s: number | null;
@@ -992,7 +994,7 @@ export type MissedCallsResponse = {
     /** Called back within the 24h. */
     recalled: number;
     /** Not called back = the "Ne perezvonili" card; `late` of them were reached after the 24h. */
-    not_recalled: number; late: number; not_reached: number; still_open: number;
+    not_recalled: number; late: number; not_reached: number; still_open: number; before?: number;
     avg_wait_s: number;
     /** Every missed call = the "Propushenniy" card. */
     missed_total: number;

@@ -17,7 +17,8 @@ import { EmptyState, ErrorState, LoadingRows } from "@/components/DataState";
 
 /**
  * The lists behind three cards of the call page, one dialog for all:
- *   "not_recalled"  Ne perezvonili — the missed calls nobody talked to the customer about within 24h;
+ *   "not_recalled"  Ne perezvonili — the missed calls whose number nobody touched (no contact after the miss,
+ *                   at any time, and none in the 24h before it);
  *   "all"           Propushenniy   — every missed call, with whether and when it was called back;
  *   "reaction"      Reaksiya vaqti — the missed calls reached within 24h: how fast, and by whom.
  * Each row: who it rang, how long the customer waited, why it ended, and the lead /
@@ -118,6 +119,13 @@ function RecalledCell({ it }: { it: MissedCallItem }) {
       </div>
     );
   }
+  if (it.status === "before" && it.callback_at) return (
+    // touched in the 24h before the miss: the customer had just been talked to / called
+    <div title={`${fmtWhen(it.callback_at)} — o'tkazib yuborilgan qo'ng'iroqdan oldingi 24 soat ichida bog'lanilgan`}>
+      <StatusMark tone="good" icon={CheckCircle2}>Oldin bog'lanilgan</StatusMark>
+      <div style={{ fontSize: 11.5, marginTop: 4, color: "var(--text3)", paddingLeft: 20 }}>{fmtTime(it.callback_at)} {fmtDay(it.callback_at)}</div>
+    </div>
+  );
   if (it.status === "open") return <StatusMark tone="warning" icon={Hourglass} muted title="24 soat hali tugamagan: qayta qo'ng'iroq bo'lishi mumkin">Kutilmoqda</StatusMark>;
   return <StatusMark tone="critical" icon={XCircle}>Qayta chiqilmagan</StatusMark>;
 }
@@ -192,8 +200,9 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
   ] : [
     { label: "Jami", value: fmtNum(s.total), color: "#DC2626" },
     { label: "Unikal raqam", value: fmtNum(s.unique_numbers) },
-    { label: "Qayta chiqilgan", value: fmtNum(all ? s.recalled : s.late), color: "#16A34A" },
-    { label: "Chiqilmagan", value: fmtNum(all ? s.not_recalled : s.not_reached), color: "#DC2626" },
+    // Ne perezvonili = nobody touched the number; it splits into "24h not over yet" and "never".
+    all ? { label: "Bog'lanilgan", value: fmtNum(s.recalled), color: "#16A34A" } : { label: "Kutilmoqda (24 soat)", value: fmtNum(s.still_open), color: "#D97706" },
+    { label: all ? "Bog'lanilmagan" : "Hech kim bog'lanmagan", value: fmtNum(all ? s.not_recalled : s.not_recalled - s.still_open), color: "#DC2626" },
     { label: "O'rt. kutish", value: fmtSecs(s.avg_wait_s) },
   ];
 
