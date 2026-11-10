@@ -70,6 +70,19 @@ function sel(filter: object, key: ListKey): string | undefined {
   return (f.excludes?.[key] ? '!' : '') + v.join(',');
 }
 
+/** The enum pickers (Kurslar / Manba 1 / Filial / Sabab / Hudud / Proekt 2 / Viloyat) as query params. */
+function pickerParams(filter: object) {
+  return {
+    course: sel(filter, 'courses'),
+    source1: sel(filter, 'source1s'),
+    filial: sel(filter, 'filials'),
+    reason: sel(filter, 'reasons'),
+    hudud: sel(filter, 'hududs'),
+    proekt2: sel(filter, 'proekt2s'),
+    region: sel(filter, 'regions'),
+  };
+}
+
 export type DashFilter = {
   start_date?: string;
   end_date?: string;
@@ -171,6 +184,7 @@ export function getTransferDirectionStats(filter: DashFilter) {
   return apiGet<TransferDirectionResponse>("/api/dashboard/transfer-direction-responsibles", {
     from: filter.start_date,
     to: filter.end_date,
+    ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
     stage: sel(filter, 'stages'),
     source: sel(filter, 'sources'),
@@ -298,12 +312,13 @@ export type ReasonsResponse = {
   items: { reason: string; total: number }[];
 };
 
-export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<ReasonsResponse>("/api/dashboard/cancel-reasons", {
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -316,12 +331,13 @@ export function getCancelReasons(filter: Pick<DashFilter, "start_date" | "end_da
   }, API_URL_CRM);
 }
 
-export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getJunkReasons(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<ReasonsResponse>("/api/dashboard/junk-reasons", {
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -350,11 +366,12 @@ export type UtmStatRow = {
   campaign_count: number;
 };
 
-export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "mode" | "form_ids" | "proekts" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getUtmStats(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "mode" | "form_ids" | "proekts" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<UtmStatRow[]>("/api/dashboard/utm-stats", {
     from: filter.start_date,
     to:   filter.end_date,
     ...closedDateParams(filter),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -498,12 +515,13 @@ export type SourceStatsRow = {
   bekor_boldi: number;
 };
 
-export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getSourceStats(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<SourceStatsRow[]>("/api/dashboard/source-stats", {
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -528,12 +546,13 @@ export type UfBreakdownRow = {
   bekor_boldi: number;
 };
 
-export function getSource1Stats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getSource1Stats(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<UfBreakdownRow[]>("/api/dashboard/source1-stats", {
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -546,12 +565,13 @@ export function getSource1Stats(filter: Pick<DashFilter, "start_date" | "end_dat
   }, API_URL_CRM);
 }
 
-export function getHududStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getHududStats(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<UfBreakdownRow[]>("/api/dashboard/hudud-stats", {
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -566,12 +586,13 @@ export function getHududStats(filter: Pick<DashFilter, "start_date" | "end_date"
 
 /** "Sabab bo'yicha" — the Причина enum field, distinct from the cancel/junk
  *  "reason" panels above (getReasonLeads), which use a different Bitrix field. */
-export function getPrichinaStats(filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
+export function getPrichinaStats(filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">) {
   return apiGet<UfBreakdownRow[]>("/api/dashboard/prichina-stats", {
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -586,7 +607,7 @@ export function getPrichinaStats(filter: Pick<DashFilter, "start_date" | "end_da
 
 export function getPrichinaLeads(
   enumId: string,
-  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  filter: DashFilter,
   opts: { limit?: number; offset?: number } = {},
 ) {
   return getUfBreakdownLeads("prichina-leads", enumId, filter, opts);
@@ -790,13 +811,14 @@ export type ResponsibleLeadRow = {
 
 export function getResponsibleLeads(
   responsibleId: number,
-  filter: Pick<DashFilter, "start_date" | "end_date" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">,
+  filter: Pick<DashFilter, "start_date" | "end_date" | "stages" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions">,
 ) {
   return apiGet<ResponsibleLeadRow[]>("/api/dashboard/responsible-leads", {
     responsible_id: responsibleId,
     from: filter.start_date,
     to: filter.end_date,
     ...closedDateParams(filter),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
     course: sel(filter, 'courses'),
     source1: sel(filter, 'source1s'),
@@ -1071,17 +1093,18 @@ export type ReasonLeadRow = {
 
 /** Leads behind one bar of the Bekor / Sifatsiz panels. */
 export function getReasonLeads(
-  args: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode" | "courses" | "source1s" | "filials" | "reasons" | "hududs" | "proekt2s" | "regions"> & {
-    kind: "cancel" | "junk"; reason: string; limit?: number; offset?: number;
-  },
+  args: DashFilter & { kind: "cancel" | "junk"; reason: string; limit?: number; offset?: number },
 ) {
   return apiGet<{ items: ReasonLeadRow[] }>("/api/dashboard/reason-leads", {
+    ...pickerParams(args),
     kind: args.kind,
+    // Not the Sabab picker: on this endpoint `reason` is the bar's own label.
     reason: args.reason,
     from: args.start_date,
     to: args.end_date,
     ...closedDateParams(args),
     responsible_id: sel(args, 'responsible_ids'),
+    stage: sel(args, 'stages'),
     proekt: args.proekts?.join(','),
     mode: args.mode,
     limit: args.limit,
@@ -1119,7 +1142,7 @@ export function getResponsibleTasks(
 /** Leads behind one row of Manba bo'yicha. */
 export function getSourceLeads(
   sourceId: string,
-  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  filter: DashFilter,
   opts: { limit?: number; offset?: number } = {},
 ) {
   return apiGet<{ items: ResponsibleLeadRow[] }>("/api/dashboard/source-leads", {
@@ -1128,7 +1151,9 @@ export function getSourceLeads(
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
+    ...pickerParams(filter),
     mode: filter.mode,
     limit: opts.limit,
     offset: opts.offset,
@@ -1138,7 +1163,7 @@ export function getSourceLeads(
 function getUfBreakdownLeads(
   path: "source1-leads" | "hudud-leads" | "prichina-leads",
   enumId: string,
-  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  filter: DashFilter,
   opts: { limit?: number; offset?: number } = {},
 ) {
   return apiGet<{ items: ResponsibleLeadRow[] }>(`/api/dashboard/${path}`, {
@@ -1147,7 +1172,9 @@ function getUfBreakdownLeads(
     to: filter.end_date,
     ...closedDateParams(filter),
     responsible_id: sel(filter, 'responsible_ids'),
+    stage: sel(filter, 'stages'),
     proekt: filter.proekts?.join(','),
+    ...pickerParams(filter),
     mode: filter.mode,
     limit: opts.limit,
     offset: opts.offset,
@@ -1156,7 +1183,7 @@ function getUfBreakdownLeads(
 
 export function getSource1Leads(
   enumId: string,
-  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  filter: DashFilter,
   opts: { limit?: number; offset?: number } = {},
 ) {
   return getUfBreakdownLeads("source1-leads", enumId, filter, opts);
@@ -1164,7 +1191,7 @@ export function getSource1Leads(
 
 export function getHududLeads(
   enumId: string,
-  filter: Pick<DashFilter, "start_date" | "end_date" | "responsible_ids" | "proekts" | "mode">,
+  filter: DashFilter,
   opts: { limit?: number; offset?: number } = {},
 ) {
   return getUfBreakdownLeads("hudud-leads", enumId, filter, opts);

@@ -41,8 +41,21 @@ function leadClosedCond(q, leadIdCol = 'l.id') {
                     AND ${tzTo(at, `'${to || '2999-12-31'}'`)})`;
 }
 
+// The Bosqich picker (?stage=a,b, or "!a,b" = Istisno) for the blocks that group leads by
+// something other than stage — Manba, Manba 1, Viloyat, Sabab, UTM, Bekor/Sifatsiz sabablari and the
+// lead lists behind them. They ignored it, so picking a stage changed the cards but not these
+// tables. Not for the lead-stats funnel: that deliberately shows every stage. Needs the stages
+// join as `s`. Ids are validated before they are placed into SQL.
+function leadStageCond(q, col = 's.bitrix_id') {
+  const { exclude, values } = splitSel(q?.stage);
+  const ids = values.filter((v) => /^[A-Za-z0-9_]+$/.test(v));
+  if (!ids.length) return '';
+  const list = `ARRAY[${ids.map((v) => `'${v}'`).join(',')}]::text[]`;
+  return exclude ? `AND COALESCE(${col}, '') <> ALL(${list})` : `AND ${col} = ANY(${list})`;
+}
+
 // Istisno-aware list filters ("!a,b" = everything except a and b), shared with Sdelkalar.
-const { isExcl, listOf, listCond } = require('./listFilter');
+const { isExcl, listOf, listCond, splitSel } = require('./listFilter');
 
 function leadSrcCond(mode, pi) {
   if (mode === 'amocrm') return `($${pi}::text IS NULL OR l.uf_filial::text = ANY(string_to_array($${pi}, ',')))`;
@@ -159,6 +172,7 @@ function ufBreakdownHandler(fieldCode, { excludeUnknown = false } = {}) {
          ${excludeUnknown ? 'JOIN' : 'LEFT JOIN'} lead_uf_enums  e ON e.field_code = v.field_code AND e.enum_id = v.value
          WHERE ${leadDateCond(mode, 1, 2)}
            ${leadClosedCond(req.query)}
+           ${leadStageCond(req.query)}
            AND ${listCond('l.responsible_id::text', '$3')}
            AND ${leadProektCond(4, req.query)}
            ${leadModeClause(mode)}
@@ -632,6 +646,7 @@ router.get('/cancel-reasons', async (req, res) => {
        ${cancelReasonJoin}
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
@@ -681,6 +696,7 @@ router.get('/reason-leads', async (req, res) => {
        ${reasonJoinSql}
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          AND (${unknown ? reasonUnknownSql : reasonMatchSql})
@@ -709,6 +725,7 @@ router.get('/junk-reasons', async (req, res) => {
        ${junkReasonJoin}
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
@@ -1322,6 +1339,7 @@ router.get('/transfer-direction-responsibles', async (req, res) => {
            LEFT JOIN lead_uf_values v ON v.lead_id = l.id
                  AND v.field_code = '${TRANSFER_DIRECTION_FIELD}'
            WHERE ${leadDateCond(mode, 1, 2)}
+             ${leadClosedCond(req.query)}
              AND ${listCond('l.responsible_id::text', '$3')}
              AND ${listCond('s.bitrix_id', '$4')}
              AND ${leadSrcCond(mode, 5)}
@@ -1882,6 +1900,8 @@ router.get('/utm-stats', async (req, res) => {
                     WHERE lp.lead_id = l.id AND fl.form_id = cf2.fb_form_id
                   )
               ))
+         ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
        GROUP BY TRIM(l.utm_source)
@@ -1947,6 +1967,7 @@ router.get('/source-leads', async (req, res) => {
        JOIN stages s ON s.id = l.stage_id
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          AND (${unknown ? "NULLIF(l.source_id, '') IS NULL"
@@ -1987,6 +2008,7 @@ router.get('/source-stats', async (req, res) => {
        -- matched the KPI card above it.
        WHERE ${leadDateCond(mode, 1, 2)}
          ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${listCond('l.responsible_id::text', '$3')}
          AND ${leadProektCond(4, req.query)}
          ${leadModeClause(mode)}
@@ -2032,6 +2054,7 @@ function ufBreakdownLeadsHandler(fieldCode) {
          JOIN stages s ON s.id = l.stage_id
          WHERE ${leadDateCond(mode, 1, 2)}
            ${leadClosedCond(req.query)}
+           ${leadStageCond(req.query)}
            AND ${listCond('l.responsible_id::text', '$3')}
            AND ${leadProektCond(4, req.query)}
            AND (${unknown
@@ -2199,6 +2222,8 @@ router.get('/responsible-leads', async (req, res) => {
        WHERE l.responsible_id = $1
          AND ($2::date IS NULL OR l.date_create::date >= $2::date)
          AND ($3::date IS NULL OR l.date_create::date <= $3::date)
+         ${leadClosedCond(req.query)}
+         ${leadStageCond(req.query)}
          AND ${leadProektCond(4, req.query)}
          ${mode === 'amocrm' ? `AND l.source_id = 'UC_1WUFJB'` : ``}
        ORDER BY l.date_create DESC

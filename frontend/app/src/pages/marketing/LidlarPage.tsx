@@ -1825,12 +1825,12 @@ export default function LidlarPage() {
         ══════════════════════════════════════════════════════════ */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <ReasonsCard
-            title="Bekor bo'lish sabablari" barColor="#FFC107" kind="cancel" filter={applied}
+            title="Bekor bo'lish sabablari" barColor="#FFC107" kind="cancel" filter={appliedWithMode}
             loading={cancelQ.isLoading}
             items={(cancelQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
           />
           <ReasonsCard
-            title="Sifatsiz sabablari" barColor="#F44336" kind="junk" filter={applied}
+            title="Sifatsiz sabablari" barColor="#F44336" kind="junk" filter={appliedWithMode}
             loading={junkQ.isLoading}
             items={(junkQ.data?.items ?? []).map((r) => ({ reason: r.reason, total: parseInt(String(r.total), 10) || 0 }))}
           />

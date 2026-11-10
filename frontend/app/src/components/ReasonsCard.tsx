@@ -45,12 +45,7 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
   const fetchPage = async (reason: string, offset: number) => {
     setLeadsLoading(true); setLeadsError(null);
     try {
-      const resp = await getReasonLeads({
-        kind, reason,
-        start_date: filter.start_date, end_date: filter.end_date,
-        responsible_ids: filter.responsible_ids, proekts: filter.proekts, mode: filter.mode,
-        limit: PAGE, offset,
-      });
+      const resp = await getReasonLeads({ ...filter, kind, reason, limit: PAGE, offset });
       const rows = Array.isArray(resp?.items) ? resp.items : [];
       setLeads(prev => (offset === 0 ? rows : [...prev, ...rows]));
       setHasMore(rows.length === PAGE);
@@ -64,12 +59,7 @@ export function ReasonsCard({ title, items, loading, barColor, kind, filter }: {
   const fetchAll = async (reason: string, total: number) => {
     setLeadsLoading(true); setLeadsError(null);
     try {
-      const resp = await getReasonLeads({
-        kind, reason,
-        start_date: filter.start_date, end_date: filter.end_date,
-        responsible_ids: filter.responsible_ids, proekts: filter.proekts, mode: filter.mode,
-        limit: Math.max(total, 1), offset: 0,
-      });
+      const resp = await getReasonLeads({ ...filter, kind, reason, limit: Math.max(total, 1), offset: 0 });
       setLeads(Array.isArray(resp?.items) ? resp.items : []);
       setHasMore(false);
     } catch {
