@@ -21,7 +21,7 @@ export const METRIC_COLORS = {
   sifatli:   "#00BCD4", // cyan   — qualified
   jarayonda: "#FF9800", // orange — in progress
   belgilandi:"#26C6DA", // teal   — visits scheduled
-  tashrif:   "#4CAF50", // green  — visits conducted
+  tashrif:   "#4CAF50", // green  — uspeshniy lid (the Успешный лид stage)
   konversiya:"#9C27B0", // purple — conversion
   sifatsiz:  "#F44336", // red    — unqualified / lost
   bekor:     "#FFC107", // gold   — cancelled
@@ -92,9 +92,9 @@ export function OperatorTable({ rows, loading, selected, onSelect, onHover }: {
   const leaders = useMemo(() => {
     const best = (pick: (r: Row) => number) => rows.reduce<Row | null>((b, r) => (!b || pick(r) > pick(b) ? r : b), null);
     return [
-      { key: "otkazildi", medal: "🥇", label: "Eng ko'p tashrif o'tkazildi", info: "Mijozlari eng ko‘p kelib ketgan (tashrif o‘tkazilgan) operator. Kartani bossangiz, top-5 ochiladi.", row: best(r => r.tashrif_buyurdi), pick: (r: Row) => r.tashrif_buyurdi, val: (r: Row) => fmtNum(r.tashrif_buyurdi), color: METRIC_COLORS.tashrif },
+      { key: "otkazildi", medal: "🥇", label: "Eng ko'p uspeshniy lid", info: "Eng ko‘p uspeshniy lid (Bitrix’dagi “Успешный лид” bosqichi) olgan operator. Kartani bossangiz, top-5 ochiladi.", row: best(r => r.tashrif_buyurdi), pick: (r: Row) => r.tashrif_buyurdi, val: (r: Row) => fmtNum(r.tashrif_buyurdi), color: METRIC_COLORS.tashrif },
       { key: "belgilandi", medal: "🥈", label: "Eng ko'p tashrif belgilandi", info: "Eng ko‘p tashrif (uchrashuv) belgilagan operator. Kartani bossangiz, top-5 ochiladi.", row: best(r => r.tashrif_belgilandi ?? 0), pick: (r: Row) => r.tashrif_belgilandi ?? 0, val: (r: Row) => fmtNum(r.tashrif_belgilandi ?? 0), color: METRIC_COLORS.belgilandi },
-      { key: "konversiya", medal: "🥉", label: "Eng yuqori konversiya", info: "Konversiyasi eng yuqori operator: tashrif o‘tkazildi ÷ umumiy leadlar × 100. Leadlari kam operatorda foiz tasodifan yuqori chiqishi mumkin — umumiy lidlar sonini ham qarang. Kartani bossangiz, top-5 ochiladi.", row: best(conversionOf), pick: conversionOf, val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
+      { key: "konversiya", medal: "🥉", label: "Eng yuqori konversiya", info: "Konversiyasi eng yuqori operator: uspeshniy lid ÷ umumiy leadlar × 100. Leadlari kam operatorda foiz tasodifan yuqori chiqishi mumkin — umumiy lidlar sonini ham qarang. Kartani bossangiz, top-5 ochiladi.", row: best(conversionOf), pick: conversionOf, val: (r: Row) => `${conversionOf(r).toFixed(1)}%`, color: METRIC_COLORS.konversiya },
     ].filter(l => l.row);
   }, [rows]);
 
@@ -197,7 +197,7 @@ export function OperatorTable({ rows, loading, selected, onSelect, onHover }: {
               <th style={{ ...TH, width: "12%" }}>Sifatsiz</th>
               <th style={{ ...TH, width: "12%" }}>Bekor bo'ldi</th>
               <th style={{ ...TH, width: "13%" }}>Tashrif belgilandi</th>
-              <th style={{ ...TH, width: "13%" }}>Tashrif o'tkazildi</th>
+              <th style={{ ...TH, width: "13%" }}>Uspeshniy lid</th>
               <th style={{ ...TH, width: "12%", textAlign: "right" }}>Konversiya</th>
             </tr>
           </thead>

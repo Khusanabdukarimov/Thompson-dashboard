@@ -211,7 +211,7 @@ export type ConversionStatsResponse = {
     bekor_boldi: number;
     /** "Tashrif belgilandiga tushgan sana" stamped (visit scheduled). */
     tashrif_belgilandi: number;
-    /** "Tashrif buyurdiga tushgan sana" stamped (visit actually attended). */
+    /** "Tashrif buyurdiga tushgan sana" stamped — the lead reached Uspeshniy lid (Успешный лид). */
     tashrif_buyurdi: number;
   }[];
 };
@@ -236,7 +236,7 @@ export function getConversionStats(filter: DashFilter) {
   }, API_URL_CRM);
 }
 
-/** A lead that reached Muvaffaqiyatli after Bekor bo'ldi / Sifatsiz / Arxiv 30+. */
+/** A lead that reached Uspeshniy lid after Bekor bo'ldi / Sifatsiz / Arxiv 30+. */
 export type RevivedLead = {
   lead_id: number;
   title: string | null;
@@ -248,7 +248,7 @@ export type RevivedLead = {
   converted_at: string;
 };
 
-/** Leads won back in the window — by the date they became Muvaffaqiyatli, not their creation date. */
+/** Leads won back in the window — by the date they became Uspeshniy lid, not their creation date. */
 export function getRevivedLeads(filter: DashFilter) {
   return apiGet<{ items: RevivedLead[] }>("/api/dashboard/revived-leads", {
     from: filter.start_date,

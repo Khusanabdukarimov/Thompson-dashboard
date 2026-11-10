@@ -100,7 +100,7 @@ const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   UC_X316SW:         { label: "DPU 3",               color: "#FF8A65" },
   UC_63QL7L:         { label: "Qayta aloqa",         color: "#26C6DA" },
   UC_SWPARQ:         { label: "Kelmadi",             color: "#FF00FF" },
-  CONVERTED:         { label: "Muvaffaqiyatli",      color: "#4CAF50" },
+  CONVERTED:         { label: "Uspeshniy lid",       color: "#4CAF50" },
   JUNK:              { label: "Sifatsiz",            color: "#42A5F5" },
   UC_GSPVUS:         { label: "Arxiv 30+",           color: "#8D6E63" },
   UC_L8G2B9:         { label: "Bekor bo'ldi",        color: "#616161" },
@@ -122,7 +122,7 @@ const STAGE_BADGE_MAP: Record<string, { label: string; color: string }> = {
   UC_F8K4GI:         { label: "Sifatsiz",            color: "#F44336" },
   UC_NAZK5J:         { label: "Bekor bo'ldi",        color: "#FFC107" },
   RECYCLED:          { label: "Bekor bo'ldi",        color: "#FFC107" },
-  CONVERTED_CONSULT: { label: "Tashrif buyurdi",     color: "#4CAF50" },
+  CONVERTED_CONSULT: { label: "Uspeshniy lid",       color: "#4CAF50" },
 };
 
 
@@ -205,7 +205,7 @@ const UTM_COLS_DEF = [
   { key: "jarayonda"                as const, label: "JARAYONDA",                 color: "#FF9800" },
   { key: "sifatli_lid"              as const, label: "SIFATLI LID",               color: "#9C27B0" },
   { key: "konsultatsiya_belgilandi" as const, label: "TASHRIF BELGILANDI",        color: "#2196F3" },
-  { key: "konsultatsiya_otkazildi"  as const, label: "TASHRIF O'TKAZILDI",        color: "#4CAF50" },
+  { key: "konsultatsiya_otkazildi"  as const, label: "USPESHNIY LID",              color: "#4CAF50" },
   { key: "sifatsiz"                 as const, label: "SIFATSIZ",                  color: "#F44336" },
   { key: "bekor_boldi"              as const, label: "BEKOR BO'LDI",              color: "#FFC107" },
 ] as const;
@@ -385,7 +385,7 @@ function UfBreakdownTable({
       <FunnelTable
         title={title}
         nameLabel={title.split(" bo'yicha")[0]}
-        info={<>{info} Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli % = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari o‘ng tomonda ochiladi.</>}
+        info={<>{info} Konversiya = uspeshniy lid ÷ umumiy × 100; Sifatli % = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha guruhning leadlari o‘ng tomonda ochiladi.</>}
         rows={rows.map((r) => ({ key: rowKey(r), name: r.name, umumiy: r.umumiy_lidlar, sifatli: r.sifatli_lid, konsB: r.konsultatsiya_belgilandi, konsO: r.konsultatsiya_otkazildi, sifatsiz: r.sifatsiz, bekor: r.bekor_boldi }))}
         loading={q.isLoading}
         selectedKey={selected}
@@ -398,7 +398,7 @@ function UfBreakdownTable({
             { label: "Umumiy", value: fmtNum(selectedRow.umumiy_lidlar) },
             { label: "Sifatli", value: fmtNum(selectedRow.sifatli_lid), color: "#0891B2" },
             { label: "Tashrif belgilandi", value: fmtNum(selectedRow.konsultatsiya_belgilandi), color: "#7C3AED" },
-            { label: "Tashrif o'tkazildi", value: fmtNum(selectedRow.konsultatsiya_otkazildi), color: "#16A34A" },
+            { label: "Uspeshniy lid", value: fmtNum(selectedRow.konsultatsiya_otkazildi), color: "#16A34A" },
             { label: "Sifatsiz", value: fmtNum(selectedRow.sifatsiz), color: "#DC2626" },
             { label: "Bekor bo'ldi", value: fmtNum(selectedRow.bekor_boldi), color: "#D97706" },
           ]} />
@@ -1097,7 +1097,7 @@ export default function LidlarPage() {
               <GradCard gradient="linear-gradient(135deg,#002a2a,#005555)" lightGradient="linear-gradient(135deg,rgba(0,188,212,0.07),rgba(0,188,212,0.03))"
                         border="rgba(0,188,212,0.3)" lightBorder="rgba(0,188,212,0.25)"
                         shadow="0 4px 20px rgba(0,188,212,0.15)" icon={<Star size={20} style={{ color:"#00BCD4" }} />}
-                        title="Sifatli Lidlar" description="Mijoz bilan gaplashilgan, haqiqiy leadlar: hozirgi bosqichi O‘ylab ko‘radi, Tashrif belgilandi, Kelmadi, Bekor bo‘ldi yoki Muvaffaqiyatli bo‘lganlar. Sifatsiz leadlar bu yerga kirmaydi." sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
+                        title="Sifatli Lidlar" description="Mijoz bilan gaplashilgan, haqiqiy leadlar: hozirgi bosqichi O‘ylab ko‘radi, Tashrif belgilandi, Kelmadi, Bekor bo‘ldi yoki Uspeshniy lid bo‘lganlar. Sifatsiz leadlar bu yerga kirmaydi." sparkColor="#00BCD4" sparkVariant={1} sparkData={daily?.sifatli} sparkLabels={daily?.labels}>
                 <div style={{ fontSize:36, fontWeight:800, color:"#00BCD4", lineHeight:1.1, marginBottom:3 }}>{fmtNum(sifatliLid)}</div>
                 <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Sifatli Lid</div>
               </GradCard>
@@ -1111,9 +1111,9 @@ export default function LidlarPage() {
               <GradCard gradient="linear-gradient(135deg,#0a2e0a,#1b5e20)" lightGradient="linear-gradient(135deg,rgba(76,175,80,0.07),rgba(76,175,80,0.03))"
                         border="rgba(76,175,80,0.3)" lightBorder="rgba(76,175,80,0.25)"
                         shadow="0 4px 20px rgba(76,175,80,0.15)" icon={<TrendingUp size={20} style={{ color:"#4CAF50" }} />}
-                        title="Yakuniy Konversiya" description="Kelib ketgan mijozlar ulushi: tashrif o‘tkazildi ÷ umumiy leadlar × 100. Pastdagi grafik — har kungi konversiya." sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
+                        title="Yakuniy Konversiya" description="Uspeshniy lidlar ulushi (Bitrix’dagi “Успешный лид” bosqichiga yetganlar): uspeshniy lid ÷ umumiy leadlar × 100. Pastdagi grafik — har kungi konversiya." sparkColor="#4CAF50" sparkVariant={3} sparkData={daily?.convPct} sparkLabels={daily?.labels} sparkUnit="%" sparkFmt={(v) => v.toFixed(1)}>
                 <div style={{ fontSize:36, fontWeight:800, color: isDark ? "#fff" : "var(--text)", lineHeight:1.1, marginBottom:3 }}>{overallConvPct.toFixed(1)}%</div>
-                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Tashrif o'tkazildi / umumiy lid</div>
+                <div style={{ fontSize:11, color: isDark ? "#9E9E9E" : "var(--text3)" }}>Uspeshniy lid / umumiy lid</div>
               </GradCard>
             </div>
 
@@ -1140,8 +1140,8 @@ export default function LidlarPage() {
                   {[
                     { icon:<Percent size={24} />,        val:sifatliKonvPct,  color:"#2196F3", title:"Sifatli Konversiya",     sub:"Sifatli / Umumiy",      num:sifatliLid,       den:total, info:"Umumiy leadlarning qancha qismi sifatli bo‘ldi: sifatli ÷ umumiy × 100." },
                     { icon:<ArrowLeftRight size={24} />, val:leadToConsultPct, color:"#22C55E", title:"Lid \u2192 Tashrif",       sub:"T.Belgilandi / Umumiy", num:konsultBelgilandi, den:total, info:"Nechta leadga tashrif (uchrashuv) belgilandi: tashrif belgilangan ÷ umumiy × 100." },
-                    { icon:<Target size={24} />,         val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9333EA", title:"T.O'tkazildi / Belgilandi", sub:"O'tkazildi / Belgilandi", num:konsultOtkazildi, den:konsultBelgilandi, info:"Tashrif belgilanganlardan nechtasi haqiqatda kelib ketdi: tashrif o‘tkazildi ÷ tashrif belgilandi × 100." },
-                    { icon:<Target size={24} />,         val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0,               color:"#4F46E5", title:"Sifatli \u2192 Uchrashuv",   sub:"O'tkazildi / Sifatli",    num:konsultOtkazildi, den:sifatliLid, info:"Sifatli leadlardan nechtasi kelib ketdi: tashrif o‘tkazildi ÷ sifatli × 100." },
+                    { icon:<Target size={24} />,         val: konsultBelgilandi > 0 ? (konsultOtkazildi / konsultBelgilandi) * 100 : 0, color:"#9333EA", title:"Uspeshniy / Belgilandi", sub:"Uspeshniy / Belgilandi", num:konsultOtkazildi, den:konsultBelgilandi, info:"Tashrif belgilanganlardan nechtasi uspeshniy lidga aylandi: uspeshniy lid ÷ tashrif belgilandi × 100." },
+                    { icon:<Target size={24} />,         val: sifatliLid > 0 ? (konsultOtkazildi / sifatliLid) * 100 : 0,               color:"#4F46E5", title:"Sifatli \u2192 Uspeshniy lid", sub:"Uspeshniy / Sifatli",    num:konsultOtkazildi, den:sifatliLid, info:"Sifatli leadlardan nechtasi uspeshniy lidga aylandi: uspeshniy lid ÷ sifatli × 100." },
                   ].flatMap((m, i) => [
                     <div key={m.title} style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"6px 16px", gap:12 }}>
                       <div style={{ width:56, height:56, borderRadius:"50%", background:`${m.color}1A`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -1184,8 +1184,8 @@ export default function LidlarPage() {
                     </div>
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color: isDark ? "#fff" : "var(--text)" }}>
-                        Tashriflar
-                        <InfoTip text="Chap raqam — tashrif (uchrashuv) belgilangan leadlar, yashil raqam — haqiqatda kelib ketganlari. Bitrix’dagi “Tashrif belgilandiga tushgan sana” va “Tashrif buyurdiga tushgan sana” maydonlaridan olinadi, shuning uchun lead keyin boshqa bosqichga o‘tgan bo‘lsa ham sanaladi." label="Tashriflar — izoh" size={14} />
+                        Tashrif / Uspeshniy lid
+                        <InfoTip text="Chap raqam — tashrif (uchrashuv) belgilangan leadlar (“Визит назначен”), yashil raqam — Uspeshniy lid bosqichiga yetganlari (“Успешный лид”). Bitrix’dagi “Tashrif belgilandiga tushgan sana” va “Tashrif buyurdiga tushgan sana” maydonlaridan olinadi, shuning uchun lead keyin boshqa bosqichga o‘tgan bo‘lsa ham sanaladi." label="Tashrif / Uspeshniy lid — izoh" size={14} />
                       </div>
                       <div style={{ display:"flex", alignItems:"baseline", gap:5, lineHeight:1.1, marginTop:2 }}>
                         <span style={{ fontSize:34, fontWeight:800, color: isDark ? "#fff" : "var(--text)" }}>{fmtNum(konsultBelgilandi)}</span>
@@ -1195,7 +1195,7 @@ export default function LidlarPage() {
                       <div style={{ fontSize:11, marginTop:2 }}>
                         <span style={{ color: isDark ? "#9E9E9E" : "var(--text3)" }}>Belgilandi</span>
                         <span style={{ color: isDark ? "#555" : "var(--text3)" }}> / </span>
-                        <span style={{ color:"#4CAF50" }}>O'tkazildi</span>
+                        <span style={{ color:"#4CAF50" }}>Uspeshniy lid</span>
                       </div>
                     </div>
                   </div>
@@ -1259,7 +1259,7 @@ export default function LidlarPage() {
           <div style={{ padding:"16px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"baseline", gap:10 }}>
             <span style={{ display:"flex", alignItems:"center", gap:6, fontSize:18, fontWeight:700, color:"var(--text)", alignSelf:"center" }}>
               Lid va Konversiya
-              <InfoTip text="Har bir operator (lead mas’uli) bo‘yicha: nechta lead olgan, ulardan nechtasi sifatli, jarayonda, sifatsiz yoki bekor bo‘lgan, nechtasiga tashrif belgilangan va nechtasi kelib ketgan. Konversiya = tashrif o‘tkazildi ÷ umumiy leadlar × 100. Yuqoridagi uchta karta — har bir ko‘rsatkich bo‘yicha yetakchi, bosilsa top-5 ochiladi. Operator qatorini bossangiz, uning leadlari chiqadi." label="Lid va Konversiya — izoh" size={15} />
+              <InfoTip text="Har bir operator (lead mas’uli) bo‘yicha: nechta lead olgan, ulardan nechtasi sifatli, jarayonda, sifatsiz yoki bekor bo‘lgan, nechtasiga tashrif belgilangan va nechtasi uspeshniy lid bo‘lgan. Konversiya = uspeshniy lid ÷ umumiy leadlar × 100. Yuqoridagi uchta karta — har bir ko‘rsatkich bo‘yicha yetakchi, bosilsa top-5 ochiladi. Operator qatorini bossangiz, uning leadlari chiqadi." label="Lid va Konversiya — izoh" size={15} />
             </span>
           </div>
           <div style={{ paddingTop:16 }}>
@@ -1286,7 +1286,7 @@ export default function LidlarPage() {
               { label: "Jarayonda", value: fmtNum(selectedConvRow.jarayonda), color: "#E8890C" },
               { label: "Sifatsiz", value: fmtNum(selectedConvRow.sifatsiz_lid), color: "#DC2626" },
               { label: "Tashrif belgilandi", value: fmtNum(selectedConvRow.tashrif_belgilandi ?? 0), color: "#7C3AED" },
-              { label: "Tashrif o'tkazildi", value: fmtNum(selectedConvRow.tashrif_buyurdi), color: "#16A34A" },
+              { label: "Uspeshniy lid", value: fmtNum(selectedConvRow.tashrif_buyurdi), color: "#16A34A" },
               { label: "Konversiya", value: `${(selectedConvRow.total ? (selectedConvRow.tashrif_buyurdi / selectedConvRow.total) * 100 : 0).toFixed(1)}%`, color: "#9333EA" },
             ]} />
           )}>
@@ -1734,7 +1734,7 @@ export default function LidlarPage() {
                   </span>
                 ))}
                 <span style={{ display: "flex", marginLeft: 4 }}>
-                  <InfoTip text="Leadlar reklama belgilariga (UTM) qarab guruhlanadi: manba → medium → kampaniya → ad set → reklama → mas’ul. Qatorni bossangiz keyingi darajaga tushasiz; yuqoridagi ko‘k yozuvlarni bosib orqaga qaytasiz. Konversiya = tashrif o‘tkazildi ÷ umumiy leadlar × 100." label="UTM bo'yicha — izoh" size={14} />
+                  <InfoTip text="Leadlar reklama belgilariga (UTM) qarab guruhlanadi: manba → medium → kampaniya → ad set → reklama → mas’ul. Qatorni bossangiz keyingi darajaga tushasiz; yuqoridagi ko‘k yozuvlarni bosib orqaga qaytasiz. Konversiya = uspeshniy lid ÷ umumiy leadlar × 100." label="UTM bo'yicha — izoh" size={14} />
                 </span>
                 <span style={{ marginLeft: "auto", fontSize: 12, color: "#555", flexShrink: 0 }}>
                   {loading ? "..." : `${rows.length} ta ${UTM_COUNT_LABELS[utmLevel]}`}
@@ -1865,7 +1865,7 @@ export default function LidlarPage() {
               <FunnelTable
                 title="Manba bo'yicha"
                 nameLabel="Manba"
-                info="Leadlar Bitrix’dagi “Manba” maydoni bo‘yicha guruhlangan. Konversiya = tashrif o‘tkazildi ÷ umumiy × 100; Sifatli % = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari o‘ng tomonda ochiladi."
+                info="Leadlar Bitrix’dagi “Manba” maydoni bo‘yicha guruhlangan. Konversiya = uspeshniy lid ÷ umumiy × 100; Sifatli % = sifatli ÷ umumiy × 100. Qatorni bossangiz, o‘sha manbaning leadlari o‘ng tomonda ochiladi."
                 rows={srcRows.map((r) => ({ key: r.source_id, name: r.source_name, umumiy: r.umumiy_lidlar, sifatli: r.sifatli_lid, konsB: r.konsultatsiya_belgilandi, konsO: r.konsultatsiya_otkazildi, sifatsiz: r.sifatsiz, bekor: r.bekor_boldi }))}
                 loading={sourceQ.isLoading}
                 error={sourceQ.isError}
@@ -1880,7 +1880,7 @@ export default function LidlarPage() {
                     { label: "Umumiy", value: fmtNum(selSrc.umumiy_lidlar) },
                     { label: "Sifatli", value: fmtNum(selSrc.sifatli_lid), color: "#0891B2" },
                     { label: "Tashrif belgilandi", value: fmtNum(selSrc.konsultatsiya_belgilandi), color: "#7C3AED" },
-                    { label: "Tashrif o'tkazildi", value: fmtNum(selSrc.konsultatsiya_otkazildi), color: "#16A34A" },
+                    { label: "Uspeshniy lid", value: fmtNum(selSrc.konsultatsiya_otkazildi), color: "#16A34A" },
                     { label: "Sifatsiz", value: fmtNum(selSrc.sifatsiz), color: "#DC2626" },
                     { label: "Bekor bo'ldi", value: fmtNum(selSrc.bekor_boldi), color: "#D97706" },
                   ]} />

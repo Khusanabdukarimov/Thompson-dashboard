@@ -1,6 +1,6 @@
 /**
  * The lead funnel by one grouping (Manba, Sabab, Manba 1, Hudud): one compact row per group —
- * leads, sifatli, tashrif belgilandi / o'tkazildi, sifatsiz, bekor, and the two rates — sized to
+ * leads, sifatli, tashrif belgilandi / uspeshniy lid, sifatsiz, bekor, and the two rates — sized to
  * the screen instead of scrolling sideways. A row opens its leads (the page owns the panel).
  */
 import { useState } from "react";
@@ -24,7 +24,7 @@ const COLS = [
   { k: "umumiy",   label: "Lidlar",          full: "Umumiy lidlar",                          color: "#2563EB" },
   { k: "sifatli",  label: "Sifatli",         full: "Sifatli lidlar",                         color: "#0891B2" },
   { k: "konsB",    label: "Tashrif belg.",   full: "Tashrif belgilandi",                     color: "#7C3AED" },
-  { k: "konsO",    label: "Tashrif o'tk.",   full: "Tashrif o'tkazildi (kelib ketgan)",      color: "#16A34A" },
+  { k: "konsO",    label: "Uspeshniy lid",   full: "Uspeshniy lid (Успешный лид bosqichi)",  color: "#16A34A" },
   { k: "sifatsiz", label: "Sifatsiz",        full: "Sifatsiz",                               color: "#DC2626" },
   { k: "bekor",    label: "Bekor",           full: "Bekor bo'ldi",                           color: "#D97706" },
 ] as const;
@@ -106,7 +106,7 @@ export function FunnelTable({ title, info, nameLabel, rows, loading, error, onRe
                   <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: c.color, marginRight: 6, verticalAlign: "middle" }} />{c.label}
                 </th>
               ))}
-              <th title="Tashrif o'tkazildi ÷ umumiy lidlar" style={{ ...TH, textAlign: "right" }}>Konv.</th>
+              <th title="Uspeshniy lid ÷ umumiy lidlar" style={{ ...TH, textAlign: "right" }}>Konv.</th>
               <th title="Sifatli ÷ umumiy lidlar" style={{ ...TH, textAlign: "right" }}>Sifatli %</th>
             </tr>
           </thead>

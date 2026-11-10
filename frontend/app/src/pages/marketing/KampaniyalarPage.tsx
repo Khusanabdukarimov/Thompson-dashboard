@@ -1036,7 +1036,7 @@ export default function KampaniyalarPage() {
                           <th className={`${TH} text-right`}>META LIDLAR</th>
                           <th className={`${TH} text-right`}>BITRIX24</th>
                           <th className={`${TH} text-right`}>SIFATLI</th>
-                          <th className={`${TH} text-right`}>KONSULT.</th>
+                          <th className={`${TH} text-right`} title="Uspeshniy lid (Успешный лид bosqichi)">USPESHNIY</th>
                           <th className={`${TH} text-right`}>SOTUV BO'LDI</th>
                           <th className={`${TH} text-right`}>SIFATSIZ</th>
                           <th className={`${TH} text-right`}>BEKOR</th>

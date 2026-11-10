@@ -16,7 +16,7 @@ const BY_ID: Record<string, string> = {
   UC_N0PI5R: "Tashrif belgilandi",
   UC_SWPARQ: "Kelmadi",
   UC_QJUDCL: "Ro‘yxatdan o‘tish kutilmoqda",
-  CONVERTED: "Muvaffaqiyatli",
+  CONVERTED: "Uspeshniy lid",
   JUNK:      "Sifatsiz",
   UC_GSPVUS: "Arxiv 30+",
   UC_L8G2B9: "Bekor bo‘ldi",

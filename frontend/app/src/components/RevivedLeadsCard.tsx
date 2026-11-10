@@ -1,5 +1,5 @@
 /**
- * "Qayta tiklangan lidlar" — leads an operator won back: Muvaffaqiyatli after having been
+ * "Qayta tiklangan lidlar" — leads an operator won back: Uspeshniy lid after having been
  * Bekor bo'ldi, Sifatsiz or Arxiv 30+. One row per operator, split by where the lead came
  * back from; a row opens that operator's leads.
  */
@@ -58,7 +58,7 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
           <RotateCcw size={18} style={{ color: WON }} />
           Qayta tiklangan lidlar
           <InfoTip
-            text="Bekor bo‘ldi, Sifatsiz yoki Arxiv 30+ bosqichida bo‘lgan, keyin Muvaffaqiyatli bo‘lgan leadlar — operator qaytarib olgan mijozlar. Davr — lead Muvaffaqiyatli bo‘lgan sana bo‘yicha (yaratilgan sana emas). Lead hozirgi mas’uliga yoziladi. “Qayerdan” — Muvaffaqiyatlidan oldin oxirgi turgan o‘sha bosqich. Ma’lumot 2026-yil iyuldan beri bor. Qatorni bossangiz, leadlar ro‘yxati ochiladi."
+            text="Bekor bo‘ldi, Sifatsiz yoki Arxiv 30+ bosqichida bo‘lgan, keyin Uspeshniy lid bo‘lgan leadlar — operator qaytarib olgan mijozlar. Davr — lead Uspeshniy lid bo‘lgan sana bo‘yicha (yaratilgan sana emas). Lead hozirgi mas’uliga yoziladi. “Qayerdan” — Uspeshniy liddan oldin oxirgi turgan o‘sha bosqich. Ma’lumot 2026-yil iyuldan beri bor. Qatorni bossangiz, leadlar ro‘yxati ochiladi."
             label="Qayta tiklangan lidlar — izoh" size={15} />
         </span>
         {/* Totals by where the leads came back from */}
@@ -141,7 +141,7 @@ export function RevivedLeadsCard({ filter }: { filter: DashFilter }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                               <thead>
                                 <tr>
-                                  {["Lid", "Qayerdan", "O'sha bosqichga tushgan", "Muvaffaqiyatli bo'lgan", "Oraliq"].map((h) => (
+                                  {["Lid", "Qayerdan", "O'sha bosqichga tushgan", "Uspeshniy lid bo'lgan", "Oraliq"].map((h) => (
                                     <th key={h} style={{ ...TH, position: "sticky", top: 0, background: "var(--bg)", fontSize: 10.5 }}>{h}</th>
                                   ))}
                                 </tr>
