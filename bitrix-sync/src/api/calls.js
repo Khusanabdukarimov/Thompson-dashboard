@@ -2,7 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const { tzFromOpt, tzToOpt } = require('./tzDate');
 const { computeCallStatsFull, isContact } = require('../services/callStats');
-const { teamOf, operatorNameRank, operatorDisplayName, MIN_CALLBACK_DIAL_S } = require('../config/calls');
+const { teamOf, operatorNameRank, operatorDisplayName, MIN_CALLBACK_DIAL_S, normalizePhone } = require('../config/calls');
 const { describeSchedules, DEFAULT_SCHEDULE, workSeconds } = require('../config/workHours');
 
 const router = Router();
@@ -515,6 +515,44 @@ function buildPbxMatcher(rows) {
   };
 }
 
+/**
+ * Where Bitrix24 filed each call — the record its "Детализация звонков" shows in the CRM column:
+ * a LEAD, a CONTACT (an existing client), a DEAL or a COMPANY. A call row opens THAT record; the
+ * lead that merely shares the number is only a guess (a third of the calls sit under a Contact).
+ *
+ * `calls`: [{ key, num (last 9 digits), at (ms), inbound }]. The PBX call is matched to its Bitrix
+ * record by number and start time (±2.5 min, the same direction first, then the nearest); 99% match
+ * (bx_calls, see sync/bxCallLog.js). Returns Map key → { type, id, title }. A call Bitrix has no
+ * record for, or a table not there yet, is simply absent: the rows fall back to the number-based lead.
+ */
+async function crmOfCalls(calls) {
+  const out = new Map();
+  const usable = calls.filter((c) => c.num && Number.isFinite(c.at));
+  if (!usable.length) return out;
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.k AS key, b.crm_entity_type AS type, b.crm_entity_id AS id,
+              CASE b.crm_entity_type WHEN 'LEAD' THEN l.title ELSE COALESCE(NULLIF(n.title, ''), d.title) END AS title
+       FROM unnest($1::text[], $2::text[], $3::timestamptz[], $4::bool[]) AS e(k, num, t0, inbound)
+       JOIN LATERAL (
+         SELECT x.crm_entity_type, x.crm_entity_id FROM bx_calls x
+         WHERE x.phone_norm = e.num AND x.crm_entity_id IS NOT NULL
+           AND x.call_start BETWEEN e.t0 - interval '150 seconds' AND e.t0 + interval '150 seconds'
+         ORDER BY ((x.call_type IN (2, 3)) <> e.inbound), abs(extract(epoch FROM x.call_start - e.t0))
+         LIMIT 1
+       ) b ON TRUE
+       LEFT JOIN leads l ON b.crm_entity_type = 'LEAD' AND l.id = b.crm_entity_id
+       LEFT JOIN bx_entity_names n ON n.type = b.crm_entity_type AND n.id = b.crm_entity_id
+       LEFT JOIN deals d ON b.crm_entity_type = 'DEAL' AND d.id = b.crm_entity_id`,
+      [usable.map((c) => c.key), usable.map((c) => c.num), usable.map((c) => new Date(c.at).toISOString()), usable.map((c) => !!c.inbound)],
+    );
+    for (const r of rows) out.set(r.key, { type: r.type, id: Number(r.id), title: r.title || null });
+  } catch (err) {
+    console.warn('[calls] CRM record lookup skipped:', err.message);
+  }
+  return out;
+}
+
 async function serveMissedList(req, res, scope) {
   try {
     const limit = Math.min(NOT_RECALLED_MAX_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || NOT_RECALLED_DEFAULT_LIMIT));
@@ -575,6 +613,10 @@ async function serveMissedList(req, res, scope) {
 
     // Lead / stage / responsible — only for the rows being returned.
     const pageEvents = events.slice(offset, offset + limit);
+    // Where Bitrix24 filed each call (lead / contact / deal / company): the row's link. When it is a
+    // LEAD, that lead (not the newest one with this number) supplies the stage and responsible.
+    const crmByKey = await crmOfCalls(pageEvents.map((e) => ({ key: e.key, num: e.num, at: e.at, inbound: true })));
+    const hintOf = (e) => { const c = crmByKey.get(e.key); return c && c.type === 'LEAD' ? c.id : (e.hint || 0); };
     const { rows: lookup } = pageEvents.length ? await pool.query(
       `SELECT e.k AS key, lead.lead_id, lead.stage_name, lead.stage_bid,
               TRIM(COALESCE(r.name, '') || ' ' || COALESCE(r.last_name, '')) AS responsible,
@@ -589,13 +631,17 @@ async function serveMissedList(req, res, scope) {
            ORDER BY l2.date_create DESC NULLS LAST LIMIT 1) END
        ) lead ON TRUE
        LEFT JOIN responsibles r ON r.id = COALESCE(e.rid, lead.lead_resp)`,
-      [pageEvents.map((e) => e.key), pageEvents.map((e) => e.num || ''), pageEvents.map((e) => e.rid), pageEvents.map((e) => e.hint || 0)],
+      [pageEvents.map((e) => e.key), pageEvents.map((e) => e.num || ''), pageEvents.map((e) => e.rid), pageEvents.map(hintOf)],
     ) : { rows: [] };
     const leadByKey = new Map(lookup.map((l) => [l.key, l]));
     const items = base.slice(offset, offset + limit).map((it) => {
       const l = leadByKey.get(it.key) || {};
+      const crm = crmByKey.get(it.key);
       return {
         ...it,
+        crm_type: crm ? crm.type : null,                 // LEAD | CONTACT | DEAL | COMPANY, as Bitrix24 filed the call
+        crm_id: crm ? crm.id : null,
+        crm_title: crm ? crm.title : null,
         lead_id: l.lead_id != null ? Number(l.lead_id) : null,
         stage_name: l.stage_name || null,
         stage_bid: l.stage_bid || null,
@@ -768,6 +814,28 @@ router.get('/call-list', async (req, res) => {
       [from, to, exts, phone, cf.kind === 'inbound' || cf.kind === 'outbound' ? cf.kind : null, stage, source,
         REASON_FIELDS.bekor, REASON_FIELDS.sifatsiz, cf.status, cf.durFrom, cf.durTo, cf.kind === 'callback'],
     );
+    // Where Bitrix24 filed each call. A call under a LEAD takes that lead's data (the number-based
+    // match may have picked another lead with the same phone); under a CONTACT / DEAL / COMPANY the row
+    // names that record and keeps the number-based lead only for the Bosqich filter above.
+    const crm = await crmOfCalls(rows.map((r) => ({ key: r.id, num: normalizePhone(r.phone_number), at: new Date(r.call_start).getTime(), inbound: r.call_type === 2 })));
+    const swap = [...new Set(rows.filter((r) => { const c = crm.get(r.id); return c && c.type === 'LEAD' && c.id !== r.lead_id; }).map((r) => crm.get(r.id).id))];
+    const bound = swap.length ? new Map((await pool.query(
+      `SELECT l.id, l.title, s.name AS stage_name, s.bitrix_id AS stage_bitrix_id
+       FROM leads l LEFT JOIN stages s ON s.id = l.stage_id WHERE l.id = ANY($1::int[])`, [swap])).rows.map((l) => [Number(l.id), l])) : new Map();
+    for (const r of rows) {
+      const c = crm.get(r.id);
+      r.crm_type = c ? c.type : null;
+      r.crm_id = c ? c.id : null;
+      r.crm_title = c ? c.title : null;
+      if (c && c.type === 'LEAD' && c.id !== r.lead_id) {
+        const l = bound.get(c.id);
+        r.lead_id = c.id;
+        r.lead_title = l ? l.title : c.title;
+        r.stage_name = l ? l.stage_name : null;
+        r.stage_bitrix_id = l ? l.stage_bitrix_id : null;
+        r.stage_reason = null;
+      }
+    }
     res.json(rows);
   } catch (err) {
     fail(res, 'call-list')(err);

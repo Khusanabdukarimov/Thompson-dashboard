@@ -20,6 +20,7 @@ const { ensureSchema: callsEnsureSchema, syncUsers: syncPbxUsers, syncRecentCall
 const moizvonki = require('./services/moizvonki');
 const { syncRecentMoizvonkiCalls, resolveMoizOwners } = require('./sync/moizvonkiCalls');
 const { ensureSchema: bxMissedEnsureSchema, syncRecentBxMissed } = require('./sync/bxMissedCalls');
+const { ensureSchema: bxCallLogEnsureSchema, syncRecentBxCallLog } = require('./sync/bxCallLog');
 const { linkUsersByInnerPhone } = require('./sync/syncCalls');
 const campaignsRouter  = require('./api/campaigns');
 const { router: rejaRouter, ensureSchema: rejaEnsureSchema } = require('./api/reja');
@@ -109,6 +110,14 @@ function startCallSync() {
     } catch (err) {
       console.error('[calls] Bitrix24 missed-call sync failed:', err.message);
     }
+    // The whole Bitrix24 call log: which CRM record (lead / contact / deal / company) each call is
+    // filed under — the link a call row opens. Its own try, like the missed-call feed above.
+    try {
+      const { total, bound, named } = await syncRecentBxCallLog(lookbackH);
+      if (total) console.log(`[calls] Bitrix24 call log: ${total} calls refreshed (${bound} filed under a CRM record${named ? `, ${named} names fetched` : ''})`);
+    } catch (err) {
+      console.error('[calls] Bitrix24 call-log sync failed:', err.message);
+    }
   };
 
   // PBX extensions must exist before calls reference them (FK on operator_ext).
@@ -192,6 +201,7 @@ Promise.all([
   require('./services/ufSync').ensureSchema().catch(err => console.error('[startup] ufSync migration failed:', err.message)),
   callsEnsureSchema().catch(err => console.error('[startup] pbx migration failed:', err.message)),
   bxMissedEnsureSchema().catch(err => console.error('[startup] bx missed-calls migration failed:', err.message)),
+  bxCallLogEnsureSchema().catch(err => console.error('[startup] bx call-log migration failed:', err.message)),
 ]).then(() => {
   app.listen(PORT, () => {
     startCallSync();

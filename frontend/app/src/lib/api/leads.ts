@@ -660,6 +660,10 @@ export type CallListRow = {
   status_name: string | null;
   lead_id: number | null;
   crm_entity_type: string | null;
+  /** The CRM record Bitrix24 filed the call under (see MissedCallItem.crm_type). */
+  crm_type?: "LEAD" | "CONTACT" | "DEAL" | "COMPANY" | null;
+  crm_id?: number | null;
+  crm_title?: string | null;
   lead_title: string | null;
   stage_name: string | null;
   stage_bitrix_id: string | null;
@@ -972,6 +976,11 @@ export type MissedCallItem = {
   callback_source?: "onlinepbx" | "moizvonki" | null;
   /** false = the operator called back but the customer did not pick up. */
   callback_answered?: boolean | null;
+  /** The CRM record Bitrix24 filed this call under (its "Детализация звонков" CRM column): LEAD, CONTACT, DEAL or
+   *  COMPANY. null = Bitrix has no record for the call; the row then falls back to the lead matched by number. */
+  crm_type?: "LEAD" | "CONTACT" | "DEAL" | "COMPANY" | null;
+  crm_id?: number | null;
+  crm_title?: string | null;
   lead_id: number | null;
   stage_name: string | null;
   stage_bid: string | null;

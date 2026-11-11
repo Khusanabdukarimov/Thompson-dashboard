@@ -5,7 +5,8 @@ import {
   CheckCircle2, XCircle, Timer, ExternalLink, type LucideIcon,
 } from "lucide-react";
 import { StatusMark, Dot } from "@/components/StatusMark";
-import { TONE, speedTone, openLead, openByPhone, type Tone } from "@/lib/status";
+import { TONE, speedTone, openLead, openCrm, openByPhone, crmKind, type Tone } from "@/lib/status";
+import { CrmTag } from "@/components/CrmTag";
 import { getMissedCalls, getNotRecalledCalls, getReactionCalls, type CallDashboardFilter, type MissedCallItem } from "@/lib/api/leads";
 import { fmtNum } from "@/lib/utils";
 import { describeWorkHours } from "@/lib/workHours";
@@ -292,20 +293,25 @@ export function MissedCallsModal({ variant, filter, portal, onClose, embedded = 
             </thead>
             <tbody>
               {items.map((it) => (
-                // The whole row opens the lead in Bitrix.
+                // The whole row opens the CRM record Bitrix24 filed the call under (lead / contact / deal / company).
                 <tr key={it.key} className="mc-row mc-link"
-                  title={it.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Lid yo'q — bosing, raqam Bitrix'da kimga tegishli ekani ochiladi (odatda kontakt)"}
-                  onClick={() => (it.lead_id ? openLead(portal, it.lead_id) : openByPhone(portal, it.phone))}>
+                  title={it.crm_type ? `Bosing — Bitrix24'da ${crmKind(it.crm_type)?.label ?? "yozuv"} ochiladi` : it.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Bitrix24'da yozuv yo'q — bosing, raqam Bitrix'da kimga tegishli ekani ochiladi"}
+                  onClick={() => (it.crm_type ? openCrm(portal, it.crm_type, it.crm_id) : it.lead_id ? openLead(portal, it.lead_id) : openByPhone(portal, it.phone))}>
                   {/* Mijoz: the number and where its lead stands */}
                   <td style={TD2}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>
                       {fmtPhone(it.phone)}
                       <ExternalLink size={12} className="mc-go" />
                     </div>
-                    <div style={sub}>
-                      {it.lead_id
+                    <div style={{ ...sub, whiteSpace: "normal" }}>
+                      {it.crm_type ? (
+                        <>
+                          <CrmTag type={it.crm_type} id={it.crm_id} title={it.crm_title} />
+                          {it.crm_type === "LEAD" && it.stage_name && <div style={{ marginTop: 2 }}><Dot color={leadStageColor(leadStageId(it.stage_name))}>{leadStageLabel(null, it.stage_name)}</Dot></div>}
+                        </>
+                      ) : it.lead_id
                         ? (it.stage_name ? <Dot color={leadStageColor(leadStageId(it.stage_name))}>{leadStageLabel(null, it.stage_name)}</Dot> : "Lid")
-                        : <>Lid yo'q · Bitrix'da topish</>}
+                        : <>Bitrix24'da yozuv yo'q · topish</>}
                     </div>
                   </td>
                   {/* the missed call: when, how long they waited, how many times */}

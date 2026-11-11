@@ -18,7 +18,8 @@ import {
 } from "@/lib/api/leads";
 import { leadStageColor, leadStageLabel } from "@/lib/leadStages";
 import { StatusMark, Dot } from "@/components/StatusMark";
-import { openLead, openByPhone } from "@/lib/status";
+import { openLead, openCrm, openByPhone, crmKind } from "@/lib/status";
+import { CrmTag } from "@/components/CrmTag";
 import { fmtNum } from "@/lib/utils";
 import { EmptyState, ErrorState, LoadingRows, LoadingValue } from "@/components/DataState";
 import { SidePanel, PanelStats } from "@/components/SidePanel";
@@ -311,7 +312,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
         <table style={{ width: "100%", minWidth: 860, borderCollapse: "collapse", fontSize: 12.5 }}>
           <thead>
             <tr>
-              {["Vaqt", "Mijoz", "Yo'nalish", "Natija", "Lid holati"].map((h) => <th key={h} style={TH}>{h}</th>)}
+              {["Vaqt", "Mijoz", "Yo'nalish", "Natija", "CRM (Bitrix24)"].map((h) => <th key={h} style={TH}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -324,10 +325,10 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
               const stageLabel = c.stage_name || c.stage_bitrix_id ? leadStageLabel(c.stage_bitrix_id, c.stage_name) : null;
               const dead = c.stage_bitrix_id === "JUNK" || c.stage_bitrix_id === "UC_L8G2B9";
               return (
-                // The whole row opens the lead in Bitrix (no lead column with the long title).
+                // The whole row opens the CRM record Bitrix24 filed the call under (lead / contact / deal / company).
                 <tr key={c.id} className="cl-row cl-link"
-                  title={c.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Lid yo'q — bosing, raqam Bitrix'da kimga tegishli ekani ochiladi (odatda kontakt)"}
-                  onClick={() => (c.lead_id ? openLead(portal, c.lead_id) : openByPhone(portal, c.phone_number))}>
+                  title={c.crm_type ? `Bosing — Bitrix24'da ${crmKind(c.crm_type)?.label ?? "yozuv"} ochiladi` : c.lead_id ? "Bosing — lidni Bitrix'da ochish" : "Bitrix24'da yozuv yo'q — bosing, raqam Bitrix'da kimga tegishli ekani ochiladi"}
+                  onClick={() => (c.crm_type ? openCrm(portal, c.crm_type, c.crm_id) : c.lead_id ? openLead(portal, c.lead_id) : openByPhone(portal, c.phone_number))}>
                   <td style={{ ...TD, whiteSpace: "nowrap" }}>
                     {when ? <>
                       <span style={{ fontWeight: 600, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{when.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
@@ -367,8 +368,11 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                     );
                   })()}
                   <td style={TD}>
-                    {stageLabel ? (
+                    {c.crm_type && c.crm_type !== "LEAD" ? (
+                      <CrmTag type={c.crm_type} id={c.crm_id} title={c.crm_title} />
+                    ) : stageLabel ? (
                       <div>
+                        {c.crm_type === "LEAD" && <div style={{ marginBottom: 3 }}><CrmTag type={c.crm_type} id={c.crm_id} title={c.crm_title ?? c.lead_title} /></div>}
                         <Dot color={leadStageColor(c.stage_bitrix_id)}><span style={{ color: "var(--text)" }}>{stageLabel}</span></Dot>
                         {dead && (
                           <div style={{ fontSize: 11.5, marginTop: 3, paddingLeft: 13, color: c.stage_reason ? "var(--text2)" : "var(--text3)", fontStyle: c.stage_reason ? "normal" : "italic" }}
@@ -379,7 +383,7 @@ function CallSubTable({ responsibleId, ext, filter }: { responsibleId: number | 
                       </div>
                     ) : c.lead_id ? <span style={{ color: "var(--text3)" }}>—</span> : (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text2)" }}>
-                        <Search size={13} style={{ color: "var(--text3)" }} />Lid yo'q · Bitrix'da topish
+                        <Search size={13} style={{ color: "var(--text3)" }} />Bitrix24'da yozuv yo'q · topish
                       </span>
                     )}
                   </td>

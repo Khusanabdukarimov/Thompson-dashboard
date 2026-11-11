@@ -18,6 +18,21 @@ export const TONE: Record<Tone, string> = {
 export const speedTone = (s: number | null | undefined, [ok, slow]: [number, number]): Tone =>
   s == null ? "neutral" : s < ok ? "good" : s < slow ? "warning" : "critical";
 
+/** The CRM records Bitrix24 files a call under: its own word for each, its URL segment, a colour. */
+export const CRM_KINDS: Record<string, { label: string; path: string; color: string }> = {
+  LEAD:    { label: "Лид",      path: "lead",    color: "#2563EB" },
+  CONTACT: { label: "Контакт",  path: "contact", color: "#7C3AED" },
+  DEAL:    { label: "Сделка",   path: "deal",    color: "#16A34A" },
+  COMPANY: { label: "Компания", path: "company", color: "#D97706" },
+};
+export const crmKind = (type?: string | null) => (type ? CRM_KINDS[type] ?? null : null);
+
+/** Opens the CRM record a call is filed under (lead / contact / deal / company) in Bitrix24. */
+export const openCrm = (portal: string, type?: string | null, id?: number | null) => {
+  const k = crmKind(type);
+  if (portal && k && id) window.open(`${portal}/crm/${k.path}/details/${id}/`, "_blank", "noopener");
+};
+
 /** Opens a lead in Bitrix — rows of lead lists are links as a whole. */
 export const openLead = (portal: string, leadId?: number | null) => {
   if (portal && leadId) window.open(`${portal}/crm/lead/details/${leadId}/`, "_blank", "noopener");
